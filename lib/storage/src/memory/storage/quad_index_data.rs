@@ -658,7 +658,7 @@ impl MemColumnChunk {
             .data
             .values()
             .chunks_exact(4)
-            .map(|v| EncodedObjectId::from_4_byte_slice(v))
+            .map(EncodedObjectId::from_4_byte_slice)
             .position(|v| v >= from);
         let count_first_larger_value = match find_result {
             None => unreachable!("Should have been caught by fast path"),
@@ -677,7 +677,7 @@ impl MemColumnChunk {
 
         let contained_count = self.data.values()[count_first_larger_value * 4..]
             .chunks_exact(4)
-            .map(|v| EncodedObjectId::from_4_byte_slice(v))
+            .map(EncodedObjectId::from_4_byte_slice)
             .take_while(|v| *v <= to)
             .count();
 
@@ -704,7 +704,7 @@ impl MemColumnChunk {
 mod tests {
     use super::*;
     use crate::index::IndexQuad;
-    use crate::memory::object_id::{EncodedObjectId, DEFAULT_GRAPH_ID};
+    use crate::memory::object_id::{DEFAULT_GRAPH_ID, EncodedObjectId};
     use crate::memory::storage::scan_instructions::{
         MemIndexScanInstruction, MemIndexScanPredicate,
     };

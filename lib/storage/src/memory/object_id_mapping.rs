@@ -21,8 +21,8 @@ use rdf_fusion_model::{
 };
 use rustc_hash::FxHasher;
 use std::hash::BuildHasherDefault;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Maintains a mapping between RDF terms and object IDs in memory.
 ///
@@ -203,7 +203,7 @@ impl ObjectIdMapping for MemObjectIdMapping {
         term: &PlainTermScalar,
     ) -> Result<Option<ObjectId>, ObjectIdMappingError> {
         let term_ref = term.as_term().map_err(|e| {
-            ObjectIdMappingError::IllegalArgument(format!("Invalid term: {}", e))
+            ObjectIdMappingError::IllegalArgument(format!("Invalid term: {e}"))
         })?;
 
         let result = self
@@ -240,7 +240,7 @@ impl ObjectIdMapping for MemObjectIdMapping {
         term: &PlainTermScalar,
     ) -> Result<ObjectId, ObjectIdMappingError> {
         let term_ref = term.as_term().map_err(|e| {
-            ObjectIdMappingError::IllegalArgument(format!("Invalid term: {}", e))
+            ObjectIdMappingError::IllegalArgument(format!("Invalid term: {e}"))
         })?;
 
         let encoded_term = self.obtain_encoded_term(term_ref);
@@ -310,8 +310,9 @@ impl ObjectIdMapping for MemObjectIdMapping {
                 .expect("Encoding default graph should always work."));
         }
 
-        let encoded_id =
-            EncodedObjectId::from_4_byte_slice(scalar.as_bytes().expect("Not default graph"));
+        let encoded_id = EncodedObjectId::from_4_byte_slice(
+            scalar.as_bytes().expect("Not default graph"),
+        );
         let term = self
             .try_get_encoded_term_from_object_id(encoded_id)
             .ok_or_else(|| {
@@ -383,8 +384,9 @@ impl ObjectIdMapping for MemObjectIdMapping {
             return Ok(encoding.encode_term(ThinError::expected()).expect("TODO"));
         }
 
-        let encoded_id =
-            EncodedObjectId::from_4_byte_slice(scalar.as_bytes().expect("Not default graph"));
+        let encoded_id = EncodedObjectId::from_4_byte_slice(
+            scalar.as_bytes().expect("Not default graph"),
+        );
         let typed_value = self
             .try_get_encoded_typed_value_from_object_id(encoded_id)
             .ok_or_else(|| {
@@ -405,8 +407,8 @@ impl ObjectIdMapping for MemObjectIdMapping {
 mod tests {
     use super::*;
     use datafusion::arrow::array::AsArray;
-    use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
     use rdf_fusion_encoding::EncodingArray;
+    use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
     use rdf_fusion_model::vocab::xsd;
     use rdf_fusion_model::{BlankNodeRef, DFResult, LiteralRef, NamedNodeRef, TermRef};
 
@@ -487,12 +489,16 @@ mod tests {
         let term2 = TermRef::BlankNode(BlankNodeRef::new_unchecked("b1"));
 
         // Before encoding, should be None
-        assert!(mapping
-            .try_get_object_id(&PlainTermScalar::from(term1))?
-            .is_none());
-        assert!(mapping
-            .try_get_object_id(&PlainTermScalar::from(term2))?
-            .is_none());
+        assert!(
+            mapping
+                .try_get_object_id(&PlainTermScalar::from(term1))?
+                .is_none()
+        );
+        assert!(
+            mapping
+                .try_get_object_id(&PlainTermScalar::from(term2))?
+                .is_none()
+        );
 
         // Encode an array to populate the mapping
         let mut builder = PlainTermArrayElementBuilder::new(2);
@@ -519,9 +525,11 @@ mod tests {
 
         // A term not in the mapping
         let term3 = NamedNodeRef::new_unchecked("http://example.com/c");
-        assert!(mapping
-            .try_get_object_id(&PlainTermScalar::from(term3))?
-            .is_none());
+        assert!(
+            mapping
+                .try_get_object_id(&PlainTermScalar::from(term3))?
+                .is_none()
+        );
 
         Ok(())
     }

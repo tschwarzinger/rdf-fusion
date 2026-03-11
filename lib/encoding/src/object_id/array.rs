@@ -1,6 +1,6 @@
+use crate::TermEncoding;
 use crate::encoding::EncodingArray;
 use crate::object_id::ObjectIdEncoding;
-use crate::TermEncoding;
 use datafusion::arrow::array::{Array, ArrayRef, FixedSizeBinaryArray};
 use datafusion::common::exec_err;
 use rdf_fusion_model::DFResult;

@@ -184,8 +184,8 @@ mod test {
     use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
     use rdf_fusion_logical::ActiveGraph;
     use rdf_fusion_model::{
-        BlankNodeMatchingMode, NamedNode, NamedNodePattern, TermPattern,
-        TriplePattern, Variable,
+        BlankNodeMatchingMode, NamedNode, NamedNodePattern, TermPattern, TriplePattern,
+        Variable,
     };
     use std::sync::Arc;
 
@@ -288,7 +288,10 @@ mod test {
         Arc::new(BinaryExpr::new(
             Arc::new(Column::new("object", 1)),
             operator,
-            Arc::new(Literal::new(ScalarValue::FixedSizeBinary(4, Some(value.to_be_bytes().to_vec())))),
+            Arc::new(Literal::new(ScalarValue::FixedSizeBinary(
+                4,
+                Some(value.to_be_bytes().to_vec()),
+            ))),
         ))
     }
 

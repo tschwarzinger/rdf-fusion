@@ -9,16 +9,16 @@ use datafusion::common::internal_err;
 use datafusion::physical_planner::ExtensionPlanner;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::object_id::{
-    ObjectIdEncodingRef, ObjectIdMapping, ObjectIdMappingError, ObjectIdMappingExtensions,
-    ObjectIdSize,
+    ObjectIdEncodingRef, ObjectIdMapping, ObjectIdMappingError,
+    ObjectIdMappingExtensions, ObjectIdSize,
 };
 use rdf_fusion_encoding::plain_term::{
     PlainTermQuads, PlainTermQuadsBuilder, PlainTermScalar,
 };
-use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_extensions::RdfFusionContextView;
-use rdf_fusion_model::StorageError;
+use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_model::DFResult;
+use rdf_fusion_model::StorageError;
 use rdf_fusion_model::{
     GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
 };
@@ -82,10 +82,7 @@ impl MemQuadStorage {
         &self,
         quad: QuadRef<'_>,
     ) -> Result<EncodedQuad<EncodedObjectId>, ObjectIdMappingError> {
-        let graph_name = self
-            .encoding
-            .mapping()
-            .encode_graph_name(quad.graph_name)?;
+        let graph_name = self.encoding.mapping().encode_graph_name(quad.graph_name)?;
         let graph_name = EncodedObjectId::from(graph_name);
 
         let subject = self

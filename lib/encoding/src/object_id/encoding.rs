@@ -1,10 +1,10 @@
+use crate::EncodingName;
 use crate::encoding::TermEncoding;
 use crate::object_id::{
     ObjectIdArray, ObjectIdMapping, ObjectIdMappingError, ObjectIdMappingRef,
     ObjectIdScalar, ObjectIdSize,
 };
 use crate::plain_term::{PlainTermArray, PlainTermScalar};
-use crate::EncodingName;
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::ScalarValue;

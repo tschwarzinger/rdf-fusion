@@ -12,12 +12,12 @@ use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::physical_plan::EmptyRecordBatchStream;
 use datafusion::physical_plan::metrics::BaselineMetrics;
+use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::object_id::{
     ObjectIdEncodingRef, ObjectIdMapping, ObjectIdMappingError,
     ObjectIdMappingExtensions, ObjectIdSize,
 };
 use rdf_fusion_encoding::plain_term::PlainTermScalar;
-use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_logical::patterns::compute_schema_for_triple_pattern;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -234,7 +234,7 @@ impl MemQuadStorageSnapshot {
             .map(|res| {
                 let res = res?;
                 let term_ref = res.as_term().map_err(|e| {
-                    ObjectIdMappingError::IllegalArgument(format!("Invalid term: {}", e))
+                    ObjectIdMappingError::IllegalArgument(format!("Invalid term: {e}"))
                 })?;
                 let named_graph = match term_ref {
                     TermRef::NamedNode(nn) => {

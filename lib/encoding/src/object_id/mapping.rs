@@ -1,5 +1,5 @@
 use crate::object_id::{ObjectId, ObjectIdSize};
-use crate::plain_term::{PlainTermArray, PlainTermScalar, PLAIN_TERM_ENCODING};
+use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray, PlainTermScalar};
 use crate::typed_value::{TypedValueArray, TypedValueEncodingRef, TypedValueScalar};
 use crate::{EncodingArray, EncodingScalar};
 use datafusion::arrow::array::{AsArray, FixedSizeBinaryArray};
