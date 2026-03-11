@@ -1,4 +1,5 @@
 use crate::index::{IndexComponents, IndexPermutations, QuadIndex, ScanInstructions};
+use crate::memory::object_id::EncodedObjectId;
 use crate::memory::storage::predicate_pushdown::{
     DynamicFilterScanPredicateSource, MemStoragePredicateExpr,
 };
@@ -10,7 +11,7 @@ use crate::memory::storage::scan_instructions::{
 };
 use crate::memory::storage::stream::MemIndexScanStream;
 use datafusion::arrow::array::{
-    Array, BooleanArray, RecordBatch, RecordBatchOptions, UInt32Array,
+    Array, BooleanArray, FixedSizeBinaryArray, RecordBatch, RecordBatchOptions,
 };
 use datafusion::arrow::compute::kernels::cmp::{eq, gt_eq, lt_eq};
 use datafusion::arrow::compute::{and, filter, or};
@@ -262,7 +263,7 @@ fn combine_instructions_with_dynamic_filters(
 
 impl<TIndexRef: IndexRef> MemQuadIndexScanIterator<TIndexRef> {
     fn compute_selection_vector(
-        data: &[Arc<UInt32Array>; 4],
+        data: &[Arc<FixedSizeBinaryArray>; 4],
         instructions: &[Option<MemIndexScanInstruction>; 4],
     ) -> Option<BooleanArray> {
         data.iter()
@@ -290,9 +291,9 @@ impl<TIndexRef: IndexRef> MemQuadIndexScanIterator<TIndexRef> {
     /// over the array and consulting the set. In the future, one could check the size of the
     /// set and switch to the different strategy for large predicates.
     fn apply_predicate(
-        all_data: &[Arc<UInt32Array>; 4],
+        all_data: &[Arc<FixedSizeBinaryArray>; 4],
         instructions: &[Option<MemIndexScanInstruction>; 4],
-        data: &UInt32Array,
+        data: &FixedSizeBinaryArray,
         predicate: &MemIndexScanPredicate,
     ) -> Option<BooleanArray> {
         match predicate {
@@ -301,7 +302,12 @@ impl<TIndexRef: IndexRef> MemQuadIndexScanIterator<TIndexRef> {
                 .map(|id| {
                     eq(
                         data,
-                        &ScalarValue::UInt32(Some(id.as_u32())).to_scalar().unwrap(),
+                        &ScalarValue::FixedSizeBinary(
+                            EncodedObjectId::SIZE_I32,
+                            Some(id.as_bytes().to_vec()),
+                        )
+                        .to_scalar()
+                        .unwrap(),
                     )
                     .expect("Array length must match, Data Types match")
                 })
@@ -319,16 +325,22 @@ impl<TIndexRef: IndexRef> MemQuadIndexScanIterator<TIndexRef> {
             MemIndexScanPredicate::Between(from, to) => {
                 let ge = gt_eq(
                     data,
-                    &ScalarValue::UInt32(Some(from.as_u32()))
-                        .to_scalar()
-                        .expect("UInt32 can be converted to a Scalar"),
+                    &ScalarValue::FixedSizeBinary(
+                        EncodedObjectId::SIZE_I32,
+                        Some(from.as_bytes().to_vec()),
+                    )
+                    .to_scalar()
+                    .expect("UInt32 can be converted to a Scalar"),
                 )
                 .expect("gt_eq supports UInt32");
                 let le = lt_eq(
                     data,
-                    &ScalarValue::UInt32(Some(to.as_u32()))
-                        .to_scalar()
-                        .expect("UInt32 can be converted to a Scalar"),
+                    &ScalarValue::FixedSizeBinary(
+                        EncodedObjectId::SIZE_I32,
+                        Some(to.as_bytes().to_vec()),
+                    )
+                    .to_scalar()
+                    .expect("UInt32 can be converted to a Scalar"),
                 )
                 .expect("lt_eq supports UInt32");
                 Some(and(&ge, &le).expect("Inputs are bools and of same length"))

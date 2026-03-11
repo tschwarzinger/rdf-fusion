@@ -16,7 +16,7 @@ fn create_storage() -> MemQuadStorage {
     let encoding = Arc::new(ObjectIdEncoding::new(
         Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>
     ));
-    MemQuadStorage::new(mapping, encoding, 10)
+    MemQuadStorage::try_new(encoding, 10).unwrap()
 }
 
 fn create_function_registry(

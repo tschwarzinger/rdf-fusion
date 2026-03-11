@@ -63,40 +63,63 @@ async fn insert_quad_then_read() {
             fields: [
                 Field {
                     name: "g",
-                    data_type: UInt32,
+                    data_type: FixedSizeBinary(
+                        4,
+                    ),
                     nullable: true,
                 },
                 Field {
                     name: "s",
-                    data_type: UInt32,
+                    data_type: FixedSizeBinary(
+                        4,
+                    ),
                 },
                 Field {
                     name: "p",
-                    data_type: UInt32,
+                    data_type: FixedSizeBinary(
+                        4,
+                    ),
                 },
                 Field {
                     name: "o",
-                    data_type: UInt32,
+                    data_type: FixedSizeBinary(
+                        4,
+                    ),
                 },
             ],
             metadata: {},
         },
         columns: [
-            PrimitiveArray<UInt32>
+            FixedSizeBinaryArray<4>
             [
               null,
             ],
-            PrimitiveArray<UInt32>
+            FixedSizeBinaryArray<4>
             [
-              1,
+              [
+                0,
+                0,
+                0,
+                1,
             ],
-            PrimitiveArray<UInt32>
-            [
-              2,
             ],
-            PrimitiveArray<UInt32>
+            FixedSizeBinaryArray<4>
             [
-              3,
+              [
+                0,
+                0,
+                0,
+                2,
+            ],
+            ],
+            FixedSizeBinaryArray<4>
+            [
+              [
+                0,
+                0,
+                0,
+                3,
+            ],
             ],
         ],
         row_count: 1,
@@ -256,5 +279,5 @@ fn create_storage() -> MemQuadStorage {
     let encoding = Arc::new(ObjectIdEncoding::new(
         Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>
     ));
-    MemQuadStorage::new(mapping, encoding, 10)
+    MemQuadStorage::try_new(encoding, 10).unwrap()
 }

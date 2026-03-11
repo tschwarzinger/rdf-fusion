@@ -7,11 +7,8 @@ use datafusion::logical_expr::utils::merge_schema;
 use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, lit};
 use datafusion::optimizer::utils::NamePreserver;
 use datafusion::optimizer::{ApplyOrder, OptimizerConfig, OptimizerRule};
-use rdf_fusion_encoding::object_id::ObjectIdMappingError;
-use rdf_fusion_encoding::plain_term::encoders::DefaultPlainTermEncoder;
-use rdf_fusion_encoding::{
-    EncodingName, EncodingScalar, RdfFusionEncodings, TermEncoder,
-};
+use rdf_fusion_encoding::plain_term::PlainTermScalar;
+use rdf_fusion_encoding::{EncodingName, EncodingScalar, RdfFusionEncodings};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
 };
@@ -220,12 +217,8 @@ fn replace_equality_with_same_term(
                 return plan_err!("No Object ID mapping registerd.");
             };
 
-            let scalar = DefaultPlainTermEncoder.encode_term(Ok(term.as_ref()))?;
-            match encoding.encode_scalar(&scalar) {
+            match encoding.encode_scalar(&PlainTermScalar::from(term.as_ref())) {
                 Ok(scalar) => scalar.into_scalar_value(),
-                Err(ObjectIdMappingError::UnknownObjectId) => {
-                    return Ok(Transformed::yes(lit(false)));
-                }
                 Err(err) => plan_err!("Failed to encode term: {}", err)?,
             }
         }

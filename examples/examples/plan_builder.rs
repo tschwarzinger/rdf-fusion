@@ -72,5 +72,8 @@ fn create_storage(config: &SessionConfig) -> Arc<MemQuadStorage> {
     let encoding = Arc::new(ObjectIdEncoding::new(
         Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>
     ));
-    Arc::new(MemQuadStorage::new(mapping, encoding, config.batch_size()))
+    Arc::new(
+        MemQuadStorage::try_new(encoding, config.batch_size())
+            .expect("MemObjectIdMapping has 4-byte wide object ids"),
+    )
 }

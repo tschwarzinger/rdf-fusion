@@ -19,17 +19,17 @@ Projection: ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_PT(productLabel))
                             Inner Join: lhs.prodFeature = rhs.prodFeature, lhs.product = rhs.product
                               SubqueryAlias: lhs
                                 Cross Join: 
-                                  Filter: product != UInt32(<object id>)
+                                  Filter: product != FixedSizeBinary(<object id>)
                                     QuadPattern (?product <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel)
                                   QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature)
                               SubqueryAlias: rhs
-                                Filter: product != UInt32(<object id>)
+                                Filter: product != FixedSizeBinary(<object id>)
                                   QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature)
                           QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?origProperty1)
                       SubqueryAlias: rhs
-                        Filter: product != UInt32(<object id>)
+                        Filter: product != FixedSizeBinary(<object id>)
                           QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?simProperty1)
                   QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?origProperty2)
               SubqueryAlias: rhs
-                Filter: product != UInt32(<object id>)
+                Filter: product != FixedSizeBinary(<object id>)
                   QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?simProperty2)

@@ -1,13 +1,15 @@
-use crate::object_id::{ObjectId, ObjectIdScalar, ObjectIdSize};
-use crate::plain_term::{PlainTermArray, PlainTermScalar};
+use crate::object_id::{ObjectId, ObjectIdSize};
+use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray, PlainTermScalar};
 use crate::typed_value::{TypedValueArray, TypedValueEncodingRef, TypedValueScalar};
 use crate::{EncodingArray, EncodingScalar};
-use datafusion::arrow::array::UInt32Array;
+use datafusion::arrow::array::{AsArray, FixedSizeBinaryArray};
 use datafusion::arrow::error::ArrowError;
+use datafusion::common::ScalarValue;
 use datafusion::error::DataFusionError;
-use rdf_fusion_model::{CorruptionError, StorageError};
+use rdf_fusion_model::{CorruptionError, GraphNameRef, StorageError, ThinError};
 use std::error::Error;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -16,12 +18,14 @@ use thiserror::Error;
 pub enum ObjectIdMappingError {
     #[error("An error occurred while encoding the result. {0}")]
     ArrowError(ArrowError),
+    #[error("Corruption. {0}")]
+    IllegalArgument(String),
     #[error("A literal was encountered at a position where a graph name is expected.")]
     LiteralAsGraphName,
-    #[error("An unknown object ID was encountered in an unexpected place.")]
-    UnknownObjectId,
     #[error("An error occurred while accessing the object id storage.")]
     Storage(Box<dyn Error + Sync + Send>),
+    #[error("Unexpected object id format: {0}")]
+    UnexpectedObjectIdFormat(String),
 }
 
 #[derive(Error, Debug)]
@@ -68,63 +72,82 @@ pub type ObjectIdMappingRef = Arc<dyn ObjectIdMapping>;
 /// Contrary to the mapping between RDF terms and object ids, the mapping between typed values and
 /// object ids is not bijective. A single typed value can map to multiple object ids. For example,
 /// this is the case for the two RDF terms `"01"^^xsd:integer` and `"1"^^xsd:integer`.
+///
+/// # Default Graph
+///
+/// The default graph is represented as the `None` value of the [`ObjectId`] struct.
+/// Furthermore, the implementation is responsible for ensuring that all Arrow arrays will have the
+/// valid bit set to false for entries that are the default graph (i.e., set them to null).
+///
+/// Note that some storage implementations might still use a special byte sequence (e.g., all
+/// bytes zero) to represent the default graph internally. However, this byte sequence needs then
+/// needs to be mapped for implementing this trait.
 pub trait ObjectIdMapping: Debug + Send + Sync {
     /// Returns the [`ObjectIdSize`] of the mapped ids.
     fn object_id_size(&self) -> ObjectIdSize;
 
-    /// Try to retrieve the object id of the given `scalar`.
+    /// Try to retrieve the object id of the given `term`.
     ///
     /// This method *does not* automatically create a mapping. See [Self::encode_scalar] for this
     /// functionality.
     fn try_get_object_id(
         &self,
-        scalar: &PlainTermScalar,
+        term: &PlainTermScalar,
     ) -> Result<Option<ObjectId>, ObjectIdMappingError>;
 
-    /// Encodes the entire `array` as an [`UInt32Array`]. Automatically creates a mapping for a
+    /// Encodes the entire `array` as an [`FixedSizeBinaryArray`]. Automatically creates a mapping for a
     /// fresh object id if a term is not yet mapped.
     fn encode_array(
         &self,
         array: &PlainTermArray,
-    ) -> Result<UInt32Array, ObjectIdMappingError>;
+    ) -> Result<FixedSizeBinaryArray, ObjectIdMappingError>;
 
-    /// Encodes a single `scalar` as an [ObjectIdScalar]. Automatically creates a mapping for a
+    /// Encodes a single `term` as an [`ObjectId`]. Automatically creates a mapping for a
     /// fresh object id if the term is not yet mapped.
     fn encode_scalar(
         &self,
-        scalar: &PlainTermScalar,
+        term: &PlainTermScalar,
     ) -> Result<ObjectId, ObjectIdMappingError> {
-        let array = scalar
+        let array = term
             .to_array(1)
             .expect("Data type is supported for to_array");
         let encoded = self.encode_array(&array)?;
-        let object_id = ObjectId::try_new_from_array(&encoded, 0)
-            .expect("Encoding does not return null values");
+        let object_id = ObjectId::from_array_at_index(&encoded, 0);
         Ok(object_id)
     }
 
     /// Decodes the entire `array` as a [PlainTermArray].
     fn decode_array(
         &self,
-        array: &UInt32Array,
+        array: &FixedSizeBinaryArray,
     ) -> Result<PlainTermArray, ObjectIdMappingError>;
 
     /// Decodes the entire `array` as a [TypedValueArray].
     fn decode_array_to_typed_value(
         &self,
         encoding: &TypedValueEncodingRef,
-        array: &UInt32Array,
+        array: &FixedSizeBinaryArray,
     ) -> Result<TypedValueArray, ObjectIdMappingError>;
 
     /// Decodes a single `scalar` as a [PlainTermScalar].
     fn decode_scalar(
         &self,
-        scalar: &ObjectIdScalar,
+        scalar: &ObjectId,
     ) -> Result<PlainTermScalar, ObjectIdMappingError> {
-        let array = scalar
-            .to_array(1)
-            .expect("Data type is supported for to_array");
-        let encoded = self.decode_array(array.object_ids())?;
+        if scalar.is_default_graph() {
+            return Ok(PLAIN_TERM_ENCODING
+                .encode_term(ThinError::expected())
+                .expect("TODO"));
+        }
+
+        let array = ScalarValue::FixedSizeBinary(
+            self.object_id_size().into(),
+            Some(scalar.as_bytes().expect("Not default graph").to_vec()),
+        )
+        .to_array()
+        .expect("Data type is supported for to_array");
+
+        let encoded = self.decode_array(array.as_fixed_size_binary())?;
         Ok(encoded.try_as_scalar(0).expect("Row 0 always exists"))
     }
 
@@ -132,12 +155,72 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
     fn decode_scalar_to_typed_value(
         &self,
         encoding: &TypedValueEncodingRef,
-        scalar: &ObjectIdScalar,
+        scalar: &ObjectId,
     ) -> Result<TypedValueScalar, ObjectIdMappingError> {
-        let array = scalar
-            .to_array(1)
-            .expect("Data type is supported for to_array");
-        let decoded = self.decode_array_to_typed_value(encoding, array.object_ids())?;
+        if scalar.is_default_graph() {
+            return Ok(encoding.encode_term(ThinError::expected()).expect("TODO"));
+        }
+
+        let array = ScalarValue::FixedSizeBinary(
+            self.object_id_size().into(),
+            Some(scalar.as_bytes().expect("Not default graph").to_vec()),
+        )
+        .to_array()
+        .expect("Data type is supported for to_array");
+
+        let decoded =
+            self.decode_array_to_typed_value(encoding, array.as_fixed_size_binary())?;
         Ok(decoded.try_as_scalar(0).expect("Row 0 always exists"))
+    }
+}
+
+/// A collection of blanked implementation for [`ObjectIdMapping`].
+pub trait ObjectIdMappingExtensions {
+    /// Tries to get an object id for a term. Returns the default graph id if the graph is the
+    /// default graph.
+    fn try_get_object_id_for_graph(
+        &self,
+        graph_name: GraphNameRef<'_>,
+    ) -> Result<Option<ObjectId>, ObjectIdMappingError>;
+
+    /// Encodes the given `graph_name`, simply returning the default graph id if the graph is the
+    /// default graph.
+    fn encode_graph_name(
+        &self,
+        graph_name: GraphNameRef<'_>,
+    ) -> Result<ObjectId, ObjectIdMappingError>;
+}
+
+impl<T, U> ObjectIdMappingExtensions for T
+where
+    T: Deref<Target = U>,
+    U: ObjectIdMapping + ?Sized,
+{
+    fn try_get_object_id_for_graph(
+        &self,
+        graph_name: GraphNameRef<'_>,
+    ) -> Result<Option<ObjectId>, ObjectIdMappingError> {
+        match graph_name {
+            GraphNameRef::NamedNode(nn) => {
+                self.try_get_object_id(&PlainTermScalar::from(nn))
+            }
+            GraphNameRef::BlankNode(bnode) => {
+                self.try_get_object_id(&PlainTermScalar::from(bnode))
+            }
+            GraphNameRef::DefaultGraph => Ok(Some(ObjectId::new_default_graph())),
+        }
+    }
+
+    fn encode_graph_name(
+        &self,
+        graph_name: GraphNameRef<'_>,
+    ) -> Result<ObjectId, ObjectIdMappingError> {
+        match graph_name {
+            GraphNameRef::NamedNode(nn) => self.encode_scalar(&PlainTermScalar::from(nn)),
+            GraphNameRef::BlankNode(bnode) => {
+                self.encode_scalar(&PlainTermScalar::from(bnode))
+            }
+            GraphNameRef::DefaultGraph => Ok(ObjectId::new_default_graph()),
+        }
     }
 }

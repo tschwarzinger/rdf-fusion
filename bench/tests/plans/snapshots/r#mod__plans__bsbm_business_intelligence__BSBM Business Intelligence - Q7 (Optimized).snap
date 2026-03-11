@@ -26,5 +26,5 @@ Projection: ENC_PT(product) AS product
                   QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
           SubqueryAlias: rhs
             Projection: vendor
-              Filter: country = UInt32(<object id>)
+              Filter: country = FixedSizeBinary(<object id>)
                 QuadPattern (?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country)

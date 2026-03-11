@@ -37,6 +37,16 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 /// in-memory RDF store will use a different implementation as an on-disk RDF store. The
 /// [`ObjectIdMapping`](crate::object_id::ObjectIdMapping) trait defines the contract.
 ///
+/// # Default Graph
+///
+/// The default graph is represented as the `None` value of the [`ObjectId`] struct.
+/// In addition, functions that return Arrow arrays with object ids need to highlight the default
+/// graph by setting the valid bit to `false` (i.e., making them null).
+///
+/// Note that some storage implementations might still use a special byte sequence (e.g., all
+/// bytes zero) to represent the default graph internally. However, this is abstracted away by
+/// the [`ObjectId`] struct.
+///
 /// # Strengths and Weaknesses
 ///
 /// The object id encoding is very well suited for evaluating joins, as instead of joining
@@ -65,6 +75,8 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 pub struct ObjectIdEncoding {
     /// The number of bytes in a single object id.
     object_id_size: ObjectIdSize,
+    /// The data type of the object ids.
+    data_type: DataType,
     /// The mapping that is used to encode and decode object ids.
     mapping: Arc<dyn ObjectIdMapping>,
 }
@@ -74,6 +86,7 @@ impl ObjectIdEncoding {
     pub fn new(mapping: Arc<dyn ObjectIdMapping>) -> Self {
         Self {
             object_id_size: mapping.object_id_size(),
+            data_type: DataType::FixedSizeBinary(mapping.object_id_size().into()),
             mapping,
         }
     }
@@ -93,18 +106,14 @@ impl ObjectIdEncoding {
     /// See also [`ObjectIdMapping::encode_scalar`].
     pub fn encode_scalar(
         self: &Arc<Self>,
-        scalar: &PlainTermScalar,
+        term: &PlainTermScalar,
     ) -> Result<ObjectIdScalar, ObjectIdMappingError> {
-        let object_id = self.mapping.encode_scalar(scalar)?;
-        let bytes = object_id
-            .as_bytes()
-            .try_into()
-            .expect("Currently only 4-byte object ids are supported.");
-        Ok(ObjectIdScalar::try_new(
-            Arc::clone(self),
-            ScalarValue::UInt32(Some(u32::from_be_bytes(bytes))),
-        )
-        .unwrap())
+        let object_id = self.mapping.encode_scalar(term)?;
+        ObjectIdScalar::from_object_id(Arc::clone(self), object_id).map_err(|_| {
+            ObjectIdMappingError::IllegalArgument(
+                "Wrong object id length returned by mapping".to_owned(),
+            )
+        })
     }
 
     /// Encodes a [`PlainTermArray`] into an [`ObjectIdArray`].
@@ -129,7 +138,7 @@ impl TermEncoding for ObjectIdEncoding {
     }
 
     fn data_type(&self) -> &DataType {
-        &DataType::UInt32
+        &self.data_type
     }
 
     fn try_new_array(self: &Arc<Self>, array: ArrayRef) -> DFResult<Self::Array> {

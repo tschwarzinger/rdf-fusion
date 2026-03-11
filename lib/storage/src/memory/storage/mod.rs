@@ -66,10 +66,20 @@ mod tests {
 
         assert_debug_snapshot!(result.columns, @r#"
         {
-            "d": PrimitiveArray<UInt32>
+            "d": FixedSizeBinaryArray<4>
             [
-              3,
-              4,
+              [
+                0,
+                0,
+                0,
+                3,
+            ],
+              [
+                0,
+                0,
+                0,
+                4,
+            ],
             ],
         }
         "#);
@@ -93,10 +103,20 @@ mod tests {
 
         assert_debug_snapshot!(result.columns, @r#"
         {
-            "c": PrimitiveArray<UInt32>
+            "c": FixedSizeBinaryArray<4>
             [
-              2,
-              3,
+              [
+                0,
+                0,
+                0,
+                2,
+            ],
+              [
+                0,
+                0,
+                0,
+                3,
+            ],
             ],
         }
         "#);
@@ -503,8 +523,8 @@ mod tests {
         ]));
 
         let schema = Arc::new(Schema::new(Fields::from(vec![
-            Field::new("subject", DataType::UInt32, false),
-            Field::new("object", DataType::UInt32, false),
+            Field::new("subject", DataType::FixedSizeBinary(4), false),
+            Field::new("object", DataType::FixedSizeBinary(4), false),
         ])));
 
         let set_lock = Arc::new(Arc::new(set).read_owned().await);
@@ -526,23 +546,37 @@ mod tests {
                 fields: [
                     Field {
                         name: "subject",
-                        data_type: UInt32,
+                        data_type: FixedSizeBinary(
+                            4,
+                        ),
                     },
                     Field {
                         name: "object",
-                        data_type: UInt32,
+                        data_type: FixedSizeBinary(
+                            4,
+                        ),
                     },
                 ],
                 metadata: {},
             },
             columns: [
-                PrimitiveArray<UInt32>
+                FixedSizeBinaryArray<4>
                 [
-                  2,
+                  [
+                    0,
+                    0,
+                    0,
+                    2,
                 ],
-                PrimitiveArray<UInt32>
+                ],
+                FixedSizeBinaryArray<4>
                 [
-                  4,
+                  [
+                    0,
+                    0,
+                    0,
+                    4,
+                ],
                 ],
             ],
             row_count: 1,

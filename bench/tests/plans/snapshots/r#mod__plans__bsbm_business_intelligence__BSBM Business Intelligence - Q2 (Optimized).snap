@@ -7,7 +7,7 @@ Projection: ENC_PT(otherProduct) AS otherProduct, ENC_PT(sameFeatures) AS sameFe
     Projection: lhs.otherProduct AS otherProduct, rhs.sameFeatures AS sameFeatures
       Inner Join: lhs.otherProduct = rhs.otherProduct
         SubqueryAlias: lhs
-          Filter: otherProduct != UInt32(<object id>)
+          Filter: otherProduct != FixedSizeBinary(<object id>)
             QuadPattern (?otherProduct <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Product>)
         SubqueryAlias: rhs
           Projection: otherProduct, INT64_AS_TERM(<uuid>) AS sameFeatures
@@ -15,5 +15,5 @@ Projection: ENC_PT(otherProduct) AS otherProduct, ENC_PT(sameFeatures) AS sameFe
               Projection: otherProduct, otherFeature
                 Inner Join:  Filter: EBV(EQ(ENC_TV(feature), ENC_TV(otherFeature)))
                   QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature)
-                  Filter: otherProduct != UInt32(<object id>)
+                  Filter: otherProduct != FixedSizeBinary(<object id>)
                     QuadPattern (?otherProduct <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?otherFeature)

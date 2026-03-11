@@ -5,6 +5,7 @@ use datafusion::logical_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
     Signature, TypeSignature, Volatility,
 };
+use rdf_fusion_encoding::object_id::ObjectId;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::plain_term::encoders::TypedValueRefPlainTermEncoder;
 use rdf_fusion_encoding::typed_value::decoders::DefaultTypedValueDecoder;
@@ -94,8 +95,8 @@ impl WithPlainTermEncoding {
             EncodingName::ObjectId => match self.encodings.object_id() {
                 None => exec_err!("Cannot from object id as no encoding is provided."),
                 Some(encoding) => {
-                    let scalar = encoding.try_new_scalar(scalar)?;
-                    let decoded = encoding.mapping().decode_scalar(&scalar)?;
+                    let oid = ObjectId::from(encoding.try_new_scalar(scalar)?);
+                    let decoded = encoding.mapping().decode_scalar(&oid)?;
                     Ok(ColumnarValue::Scalar(decoded.into_scalar_value()))
                 }
             },

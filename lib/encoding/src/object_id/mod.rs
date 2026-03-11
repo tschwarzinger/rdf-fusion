@@ -4,7 +4,7 @@ mod mapping;
 mod scalar;
 
 pub use array::*;
-use datafusion::arrow::array::{Array, UInt32Array};
+use datafusion::arrow::array::{Array, FixedSizeBinaryArray};
 pub use encoding::*;
 pub use mapping::*;
 pub use scalar::*;
@@ -50,6 +50,12 @@ impl TryFrom<usize> for ObjectIdSize {
     }
 }
 
+impl From<ObjectIdSize> for usize {
+    fn from(value: ObjectIdSize) -> Self {
+        value.0 as usize // This works because non-negativity is checked in the constructor
+    }
+}
+
 impl Display for ObjectIdSize {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} Bytes", self.0)
@@ -60,38 +66,51 @@ impl Display for ObjectIdSize {
 /// related to a specific encoding see [`ObjectIdScalar`].
 ///
 /// This struct guarantees that the slice length fits into a non-negative `i32`.
+///
+/// # Default Graph
+///
+/// The default graph is represented as `None` in the underlying [`Option<Box<[u8]>>`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ObjectId {
-    size: i32,
-    slice: Box<[u8]>,
-}
+pub struct ObjectId(Option<Box<[u8]>>);
 
 impl ObjectId {
     /// Creates a new [`ObjectId`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the slice length does not fit in an `i32`.
     pub fn try_new(bytes: impl Into<Box<[u8]>>) -> Result<Self, ObjectIdCreationError> {
         let bytes = bytes.into();
-        let len = i32::try_from(bytes.len()).map_err(|_| ObjectIdCreationError)?;
-        Ok(Self {
-            size: len,
-            slice: bytes,
-        })
+        i32::try_from(bytes.len()).map_err(|_| ObjectIdCreationError)?;
+        Ok(Self(Some(bytes)))
     }
 
-    /// Creates a new [`ObjectId`].
-    pub fn try_new_from_array(array: &UInt32Array, index: usize) -> Option<Self> {
-        array.is_valid(index).then(|| ObjectId {
-            size: 4,
-            slice: Box::new(array.value(index).to_be_bytes()),
-        })
+    /// Creates a new [`ObjectId`] for the default graph.
+    pub fn new_default_graph() -> Self {
+        Self(None)
     }
 
-    /// Returns the length of the object id in bytes.
-    pub fn size(&self) -> i32 {
-        self.size
+    /// Returns true if the object id is the default graph.
+    pub fn is_default_graph(&self) -> bool {
+        self.0.is_none()
+    }
+
+    /// Creates a new [`ObjectId`] from the given `array` at `index`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given index is out-of-range.
+    pub fn from_array_at_index(array: &FixedSizeBinaryArray, index: usize) -> Self {
+        match array.is_valid(index) {
+            true => Self(Some(array.value(index).into())),
+            false => Self(None),
+        }
     }
 
     /// Returns a reference to the underlying bytes.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.slice
+    ///
+    /// Returns `None` if the object id represents the default graph.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        self.0.as_deref()
     }
 }

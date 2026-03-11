@@ -1,6 +1,6 @@
 use crate::index::{IndexComponents, ScanInstructions};
 use crate::memory::encoding::{EncodedActiveGraph, EncodedTermPattern};
-use crate::memory::object_id::{DEFAULT_GRAPH_ID, EncodedObjectId};
+use crate::memory::object_id::{DEFAULT_GRAPH_ID, EncodedObjectId, FIRST_OBJECT_ID};
 use crate::memory::storage::predicate_pushdown::MemStoragePredicateExpr;
 use datafusion::common::{exec_datafusion_err, plan_datafusion_err};
 use rdf_fusion_model::{DFResult, Variable};
@@ -337,20 +337,23 @@ impl MemIndexScanInstruction {
 
         match active_graph {
             EncodedActiveGraph::DefaultGraph => {
-                let object_ids = BTreeSet::from([DEFAULT_GRAPH_ID.0]);
+                let object_ids = BTreeSet::from([DEFAULT_GRAPH_ID]);
                 instruction_with_predicate(Some(MemIndexScanPredicate::In(object_ids)))
             }
             EncodedActiveGraph::AllGraphs => instruction_with_predicate(None),
             EncodedActiveGraph::Union(graphs) => {
-                let object_ids = BTreeSet::from_iter(graphs.iter().map(|g| g.0));
-                instruction_with_predicate(Some(MemIndexScanPredicate::In(object_ids)))
+                let object_ids = BTreeSet::from_iter(graphs.iter().copied());
+                if object_ids.is_empty() {
+                    instruction_with_predicate(Some(MemIndexScanPredicate::False))
+                } else {
+                    instruction_with_predicate(Some(MemIndexScanPredicate::In(
+                        object_ids,
+                    )))
+                }
             }
-            EncodedActiveGraph::AnyNamedGraph => {
-                instruction_with_predicate(Some(MemIndexScanPredicate::Between(
-                    DEFAULT_GRAPH_ID.0.next().unwrap(),
-                    EncodedObjectId::MAX,
-                )))
-            }
+            EncodedActiveGraph::AnyNamedGraph => instruction_with_predicate(Some(
+                MemIndexScanPredicate::Between(FIRST_OBJECT_ID, EncodedObjectId::MAX),
+            )),
         }
     }
 }
@@ -390,6 +393,8 @@ impl From<&MemIndexScanInstructions> for MemIndexPruningPredicates {
 /// row groups.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MemIndexPruningPredicate {
+    /// Always returns false.
+    False,
     /// Checks whether the object id is in the given set.
     EqualTo(EncodedObjectId),
     /// Checks whether the object id is between the given object ids (end is inclusive).
@@ -399,14 +404,15 @@ pub enum MemIndexPruningPredicate {
 impl From<&MemIndexScanPredicate> for Option<MemIndexPruningPredicate> {
     fn from(value: &MemIndexScanPredicate) -> Self {
         match value {
+            MemIndexScanPredicate::False => Some(MemIndexPruningPredicate::False),
             MemIndexScanPredicate::In(ids) => {
-                let predicate = if ids.len() == 1 {
-                    MemIndexPruningPredicate::EqualTo(*ids.first().unwrap())
-                } else {
-                    MemIndexPruningPredicate::Between(
+                let predicate = match ids.len() {
+                    0 => MemIndexPruningPredicate::False,
+                    1 => MemIndexPruningPredicate::EqualTo(*ids.first().unwrap()),
+                    _ => MemIndexPruningPredicate::Between(
                         *ids.first().unwrap(),
                         *ids.last().unwrap(),
-                    )
+                    ),
                 };
                 Some(predicate)
             }

@@ -4,7 +4,9 @@ use crate::memory::storage::scan_instructions::{
     MemIndexPruningPredicate, MemIndexPruningPredicates, MemIndexScanInstructions,
     MemIndexScanPredicate,
 };
-use datafusion::arrow::array::{Array, UInt32Array};
+use datafusion::arrow::array::{Array, ArrayDataBuilder, FixedSizeBinaryArray};
+use datafusion::arrow::buffer::{Buffer, NullBuffer};
+use datafusion::arrow::datatypes::DataType;
 use itertools::Itertools;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -157,6 +159,24 @@ impl MemIndexData {
         instructions: &MemIndexScanInstructions,
     ) -> RowGroupPruningResult {
         let pruning_predicates = MemIndexPruningPredicates::from(instructions);
+
+        if pruning_predicates
+            .0
+            .contains(&Some(MemIndexPruningPredicate::False))
+        {
+            return RowGroupPruningResult {
+                row_groups: Vec::new(),
+                new_instructions: {
+                    let new_instructions =
+                        instructions.inner().clone().map(|i| i.without_predicate());
+                    Some(MemIndexScanInstructions::new(
+                        instructions.index_components(),
+                        new_instructions,
+                    ))
+                },
+            };
+        }
+
         let mut relevant_row_groups = self.row_groups.clone();
 
         for (column_idx, predicate) in pruning_predicates.0.iter().enumerate() {
@@ -168,6 +188,7 @@ impl MemIndexData {
             let (from_oid, to_oid) = match predicate {
                 MemIndexPruningPredicate::EqualTo(oid) => (*oid, *oid),
                 MemIndexPruningPredicate::Between(from, to) => (*from, *to),
+                MemIndexPruningPredicate::False => unreachable!("Handled above"),
             };
 
             // Find the first row group for which the given id is not before the first value of the
@@ -434,10 +455,7 @@ impl MemRowGroup {
             .map(|idx| {
                 quads
                     .iter()
-                    .map(|quad| {
-                        let v = quad.0[idx].as_u32();
-                        (v != 0).then_some(v)
-                    })
+                    .map(|quad| quad.0[idx].as_bytes())
                     .collect::<Vec<_>>()
             })
             .map(MemColumnChunk::new)
@@ -522,10 +540,10 @@ impl MemRowGroup {
         (0..n)
             .map(|i| {
                 IndexQuad([
-                    self.column_chunks[0].data.value(i).into(),
-                    self.column_chunks[1].data.value(i).into(),
-                    self.column_chunks[2].data.value(i).into(),
-                    self.column_chunks[3].data.value(i).into(),
+                    self.column_chunks[0].data.value(i).try_into().unwrap(),
+                    self.column_chunks[1].data.value(i).try_into().unwrap(),
+                    self.column_chunks[2].data.value(i).try_into().unwrap(),
+                    self.column_chunks[3].data.value(i).try_into().unwrap(),
                 ])
             })
             .collect()
@@ -547,7 +565,7 @@ impl MemRowGroup {
     }
 
     /// Returns the [MemColumnChunk] arrays of this row group.
-    pub fn into_arrays(self) -> [Arc<UInt32Array>; 4] {
+    pub fn into_arrays(self) -> [Arc<FixedSizeBinaryArray>; 4] {
         self.column_chunks.map(|c| c.data)
     }
 }
@@ -571,14 +589,26 @@ pub(super) enum FindRangeResult {
 
 #[derive(Debug, Clone)]
 pub(super) struct MemColumnChunk {
-    data: Arc<UInt32Array>,
+    data: Arc<FixedSizeBinaryArray>,
 }
 
 impl MemColumnChunk {
     /// Creates a new [MemColumnChunk].
-    pub fn new(data: Vec<Option<u32>>) -> Self {
+    pub fn new(data: Vec<[u8; 4]>) -> Self {
+        let null = data
+            .iter()
+            .map(|slice| *slice != [0; 4])
+            .collect::<NullBuffer>();
+
+        let array_data = ArrayDataBuilder::new(DataType::FixedSizeBinary(4))
+            .len(data.len())
+            .add_buffer(Buffer::from(data.into_flattened()))
+            .nulls((null.null_count() > 0).then_some(null))
+            .build()
+            .expect("Should yield a valid array");
+
         Self {
-            data: Arc::new(UInt32Array::from(data)),
+            data: Arc::new(FixedSizeBinaryArray::from(array_data)),
         }
     }
 
@@ -602,35 +632,42 @@ impl MemColumnChunk {
         from: EncodedObjectId,
         to: EncodedObjectId,
     ) -> FindRangeResult {
-        let values = self.data.values();
-
         // Fast path for before check
-        if to.as_u32() < *values.first().expect("Chunks are never empty") {
+        let first = EncodedObjectId::from_4_byte_slice(self.data.value(0));
+        if to < first {
             return FindRangeResult::Before;
         }
 
         // Fast path for after check
-        if values.last().expect("Chunks are never empty") < &from.as_u32() {
+        let last =
+            EncodedObjectId::from_4_byte_slice(self.data.value(self.data.len() - 1));
+        if last < from {
             return FindRangeResult::After;
         }
 
         // Fast path for null handling
         let null_count = self.data.null_count();
-        if from.as_u32() == 0 && to.as_u32() == 0 {
+        if from.is_default_graph() && to.is_default_graph() {
             if null_count == 0 {
                 return FindRangeResult::Before;
             }
             return FindRangeResult::Contained(0, null_count);
         }
 
-        let values = self.data.values();
-        let find_result = values.iter().position(|v| *v >= from.as_u32());
+        let find_result = self
+            .data
+            .values()
+            .chunks_exact(4)
+            .map(EncodedObjectId::from_4_byte_slice)
+            .position(|v| v >= from);
         let count_first_larger_value = match find_result {
             None => unreachable!("Should have been caught by fast path"),
             Some(position) => {
-                if position == 0 && values[0] > to.as_u32() {
+                let found_value = &self.data.values()[position * 4..position * 4 + 4];
+
+                if position == 0 && first > to {
                     unreachable!("Should have been caught by fast path");
-                } else if values[position] > to.as_u32() {
+                } else if EncodedObjectId::from_4_byte_slice(found_value) > to {
                     return FindRangeResult::NotContained(position);
                 } else {
                     position
@@ -638,9 +675,10 @@ impl MemColumnChunk {
             }
         };
 
-        let contained_count = values[count_first_larger_value..]
-            .iter()
-            .take_while(|v| **v <= to.as_u32())
+        let contained_count = self.data.values()[count_first_larger_value * 4..]
+            .chunks_exact(4)
+            .map(EncodedObjectId::from_4_byte_slice)
+            .take_while(|v| *v <= to)
             .count();
 
         FindRangeResult::Contained(
@@ -666,7 +704,7 @@ impl MemColumnChunk {
 mod tests {
     use super::*;
     use crate::index::IndexQuad;
-    use crate::memory::object_id::EncodedObjectId;
+    use crate::memory::object_id::{DEFAULT_GRAPH_ID, EncodedObjectId};
     use crate::memory::storage::scan_instructions::{
         MemIndexScanInstruction, MemIndexScanPredicate,
     };
@@ -674,13 +712,16 @@ mod tests {
 
     #[test]
     fn test_memcolumnchunk_slice_simple() {
-        let chunk = MemColumnChunk::new(vec![Some(10), Some(20), Some(30), Some(40)]);
-        assert_eq!(chunk.slice(1, 3).data.values(), &[20, 30]);
+        let chunk = create_mem_column_chunk(vec![Some(10), Some(20), Some(30), Some(40)]);
+        assert_eq!(
+            chunk.slice(1, 3).data.values().as_slice(),
+            &[20u32.to_be_bytes(), 30u32.to_be_bytes()].concat()
+        );
     }
 
     #[test]
     fn test_memcolumnchunk_slice_of_slice() {
-        let chunk = MemColumnChunk::new(vec![
+        let chunk = create_mem_column_chunk(vec![
             Some(5),
             Some(6),
             Some(7),
@@ -689,7 +730,10 @@ mod tests {
             Some(10),
         ]);
         let mid_slice = chunk.slice(1, 5); // [6, 7, 8, 9]
-        assert_eq!(mid_slice.slice(1, 3).data.values(), &[7, 8]);
+        assert_eq!(
+            mid_slice.slice(1, 3).data.values().as_slice(),
+            &[7u32.to_be_bytes(), 8u32.to_be_bytes()].concat()
+        );
     }
 
     #[test]
@@ -773,8 +817,14 @@ mod tests {
 
         group.insert(quads.into_iter().collect());
         let arrays = group.clone().into_arrays();
-        let values = arrays[0].values();
-        assert_eq!(values, &[10, 20, 30]);
+        assert_eq!(
+            &arrays[0].iter().collect_vec(),
+            &[
+                Some(10u32.to_be_bytes().as_slice()),
+                Some(20u32.to_be_bytes().as_slice()),
+                Some(30u32.to_be_bytes().as_slice())
+            ]
+        );
     }
 
     #[test]
@@ -788,8 +838,15 @@ mod tests {
 
         group.insert(new_quads.into_iter().collect());
         let arrays = group.clone().into_arrays();
-        let values = arrays[0].values();
-        assert_eq!(values, &[10, 20, 30, 40]);
+        assert_eq!(
+            &arrays[0].iter().collect_vec(),
+            &[
+                Some(10u32.to_be_bytes().as_slice()),
+                Some(20u32.to_be_bytes().as_slice()),
+                Some(30u32.to_be_bytes().as_slice()),
+                Some(40u32.to_be_bytes().as_slice())
+            ]
+        )
     }
 
     #[test]
@@ -803,8 +860,14 @@ mod tests {
 
         group.insert(new_quads.into_iter().collect());
         let arrays = group.clone().into_arrays();
-        let values = arrays[0].values();
-        assert_eq!(values, &[10, 20, 30]);
+        assert_eq!(
+            &arrays[0].iter().collect_vec(),
+            &[
+                Some(10u32.to_be_bytes().as_slice()),
+                Some(20u32.to_be_bytes().as_slice()),
+                Some(30u32.to_be_bytes().as_slice()),
+            ]
+        )
     }
 
     #[test]
@@ -818,7 +881,14 @@ mod tests {
         group.insert(new_quads.into_iter().collect());
 
         let arrays = group.clone().into_arrays();
-        assert_eq!(arrays[0].values(), &[0, 1, 2]);
+        assert_eq!(
+            &arrays[0].iter().collect_vec(),
+            &[
+                None,
+                Some(1u32.to_be_bytes().as_slice()),
+                Some(2u32.to_be_bytes().as_slice()),
+            ]
+        )
     }
 
     #[test]
@@ -880,27 +950,47 @@ mod tests {
         MemRowGroup {
             column_chunks: [
                 MemColumnChunk {
-                    data: PrimitiveArray<UInt32>
+                    data: FixedSizeBinaryArray<4>
                     [
-                      30,
+                      [
+                        0,
+                        0,
+                        0,
+                        30,
+                    ],
                     ],
                 },
                 MemColumnChunk {
-                    data: PrimitiveArray<UInt32>
+                    data: FixedSizeBinaryArray<4>
                     [
-                      30,
+                      [
+                        0,
+                        0,
+                        0,
+                        30,
+                    ],
                     ],
                 },
                 MemColumnChunk {
-                    data: PrimitiveArray<UInt32>
+                    data: FixedSizeBinaryArray<4>
                     [
-                      30,
+                      [
+                        0,
+                        0,
+                        0,
+                        30,
+                    ],
                     ],
                 },
                 MemColumnChunk {
-                    data: PrimitiveArray<UInt32>
+                    data: FixedSizeBinaryArray<4>
                     [
-                      30,
+                      [
+                        0,
+                        0,
+                        0,
+                        30,
+                    ],
                     ],
                 },
             ],
@@ -1199,8 +1289,46 @@ mod tests {
     }
 
     #[test]
+    fn test_prune_relevant_row_groups_in_empty_set_returns_empty_result() {
+        let mut index = MemIndexData::new(2, 0);
+        let items = quad_set([1, 2, 3, 4]);
+        index.insert(&items);
+
+        let instructions = MemIndexScanInstructions::new_gspo([
+            MemIndexScanInstruction::Traverse(Some(MemIndexScanPredicate::In(
+                BTreeSet::new(),
+            ))),
+            MemIndexScanInstruction::Traverse(None),
+            MemIndexScanInstruction::Traverse(None),
+            MemIndexScanInstruction::Traverse(None),
+        ]);
+
+        let result = index.prune_relevant_row_groups(&instructions);
+
+        assert_eq!(result.row_groups.len(), 0);
+    }
+
+    #[test]
+    fn test_prune_relevant_row_groups_false_predicate_returns_empty_result() {
+        let mut index = MemIndexData::new(2, 0);
+        let items = quad_set([1, 2, 3, 4]);
+        index.insert(&items);
+
+        let instructions = MemIndexScanInstructions::new_gspo([
+            MemIndexScanInstruction::Traverse(Some(MemIndexScanPredicate::False)),
+            MemIndexScanInstruction::Traverse(None),
+            MemIndexScanInstruction::Traverse(None),
+            MemIndexScanInstruction::Traverse(None),
+        ]);
+
+        let result = index.prune_relevant_row_groups(&instructions);
+
+        assert_eq!(result.row_groups.len(), 0);
+    }
+
+    #[test]
     fn test_find_range_all_nulls() {
-        let chunk = MemColumnChunk::new(vec![None, None, None]);
+        let chunk = create_mem_column_chunk(vec![None, None, None]);
         let value = EncodedObjectId::from(0u32);
         let result = chunk.find_range(value);
         assert_eq!(result, FindRangeResult::Contained(0, 3));
@@ -1208,7 +1336,7 @@ mod tests {
 
     #[test]
     fn test_find_range_nulls_before_data() {
-        let chunk = MemColumnChunk::new(vec![None, None, Some(3), Some(5), Some(7)]);
+        let chunk = create_mem_column_chunk(vec![None, None, Some(3), Some(5), Some(7)]);
         let result_null = chunk.find_range(EncodedObjectId::from(0u32));
         assert_eq!(result_null, FindRangeResult::Contained(0, 2));
 
@@ -1218,21 +1346,21 @@ mod tests {
 
     #[test]
     fn test_find_range_value_present_single() {
-        let chunk = MemColumnChunk::new(vec![Some(2), Some(4), Some(6)]);
+        let chunk = create_mem_column_chunk(vec![Some(2), Some(4), Some(6)]);
         let result = chunk.find_range(EncodedObjectId::from(4u32));
         assert_eq!(result, FindRangeResult::Contained(1, 2));
     }
 
     #[test]
     fn test_find_range_value_present_multiple() {
-        let chunk = MemColumnChunk::new(vec![Some(4), Some(4), Some(4), Some(5)]);
+        let chunk = create_mem_column_chunk(vec![Some(4), Some(4), Some(4), Some(5)]);
         let result = chunk.find_range(EncodedObjectId::from(4u32));
         assert_eq!(result, FindRangeResult::Contained(0, 3));
     }
 
     #[test]
     fn test_find_range_value_not_present_between() {
-        let chunk = MemColumnChunk::new(vec![Some(1), Some(3), Some(5), Some(7)]);
+        let chunk = create_mem_column_chunk(vec![Some(1), Some(3), Some(5), Some(7)]);
         let result = chunk.find_range(EncodedObjectId::from(4u32));
         // 4 is not present, but would fall between 3 (idx 1) and 5 (idx 2)
         assert_eq!(result, FindRangeResult::NotContained(2));
@@ -1240,7 +1368,7 @@ mod tests {
 
     #[test]
     fn test_find_range_value_too_small_and_too_big() {
-        let chunk = MemColumnChunk::new(vec![Some(10), Some(20), Some(30)]);
+        let chunk = create_mem_column_chunk(vec![Some(10), Some(20), Some(30)]);
         // Value smaller than any element
         let result_before = chunk.find_range(EncodedObjectId::from(2u32));
         assert_eq!(result_before, FindRangeResult::Before);
@@ -1293,8 +1421,8 @@ mod tests {
         index.clear_all_with_value_in_column(EncodedObjectId::from(100), 1);
 
         assert_eq!(index.len(), 2);
-        for value in index.row_groups[0].column_chunks[1].data.values() {
-            assert_ne!(*value, 100);
+        for value in index.row_groups[0].column_chunks[1].data.iter() {
+            assert_ne!(value, Some(100u32.to_be_bytes().as_slice()));
         }
     }
 
@@ -1314,6 +1442,19 @@ mod tests {
         index.clear_all_with_value_in_column(EncodedObjectId::from(99), 0);
 
         assert_eq!(index.len(), 2);
+    }
+
+    /// Creates a new [`MemColumnChunk`] from `u32`.
+    fn create_mem_column_chunk(values: Vec<Option<u32>>) -> MemColumnChunk {
+        MemColumnChunk::new(
+            values
+                .into_iter()
+                .map(|opt| {
+                    opt.map(|v| v.to_be_bytes())
+                        .unwrap_or(DEFAULT_GRAPH_ID.as_bytes())
+                })
+                .collect(),
+        )
     }
 
     /// Creates a quad where all four terms have the same u32 value

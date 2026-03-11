@@ -1008,10 +1008,9 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 None => {
                     return plan_err!("The context has not ObjectID encoding registered");
                 }
-                Some(encoding) => {
-                    let scalar = PlainTermScalar::from(scalar);
-                    encoding.encode_scalar(&scalar)?.into_scalar_value()
-                }
+                Some(encoding) => encoding
+                    .encode_scalar(&PlainTermScalar::from(scalar))?
+                    .into_scalar_value(),
             },
         };
         self.build_same_term(lit(literal))

@@ -1,8 +1,8 @@
 use crate::index::IndexPermutations;
-use crate::memory::MemObjectIdMapping;
 use crate::memory::encoding::{
     EncodedActiveGraph, EncodedTermPattern, EncodedTriplePattern,
 };
+use crate::memory::object_id::EncodedObjectId;
 use crate::memory::storage::quad_index::MemQuadIndex;
 use crate::memory::storage::scan::PlannedPatternScan;
 use crate::memory::storage::scan_instructions::{
@@ -13,11 +13,15 @@ use datafusion::execution::SendableRecordBatchStream;
 use datafusion::physical_plan::EmptyRecordBatchStream;
 use datafusion::physical_plan::metrics::BaselineMetrics;
 use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_encoding::object_id::UnknownObjectIdError;
+use rdf_fusion_encoding::object_id::{
+    ObjectIdEncodingRef, ObjectIdMapping, ObjectIdMappingError,
+    ObjectIdMappingExtensions, ObjectIdSize,
+};
+use rdf_fusion_encoding::plain_term::PlainTermScalar;
 use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_logical::patterns::compute_schema_for_triple_pattern;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{BlankNodeMatchingMode, DFResult, NamedNodePattern};
+use rdf_fusion_model::{BlankNodeMatchingMode, DFResult, NamedNodePattern, TermRef};
 use rdf_fusion_model::{
     NamedOrBlankNode, NamedOrBlankNodeRef, TermPattern, TriplePattern, Variable,
 };
@@ -29,9 +33,7 @@ use tokio::sync::OwnedRwLockReadGuard;
 #[derive(Debug, Clone)]
 pub struct MemQuadStorageSnapshot {
     /// The encoding of the storage.
-    encoding: QuadStorageEncoding,
-    /// Object id mapping
-    object_id_mapping: Arc<MemObjectIdMapping>,
+    encoding: ObjectIdEncodingRef,
     /// Holds a read lock on the index set. Holding the lock prevents concurrent modifications to
     /// the index.
     index_permutations: Arc<OwnedRwLockReadGuard<IndexPermutations<MemQuadIndex>>>,
@@ -63,20 +65,23 @@ impl PlanPatternScanResult {
 impl MemQuadStorageSnapshot {
     /// Create a new [MemQuadStorageSnapshot].
     pub fn new(
-        encoding: QuadStorageEncoding,
-        object_id_mapping: Arc<MemObjectIdMapping>,
+        encoding: ObjectIdEncodingRef,
         index_set: Arc<OwnedRwLockReadGuard<IndexPermutations<MemQuadIndex>>>,
     ) -> Self {
+        if encoding.object_id_size() != ObjectIdSize::try_from(4).unwrap() {
+            // Should be checked by MemQuadStorage::try_new.
+            panic!("Only object id size 4 is supported for now.");
+        }
+
         Self {
             encoding,
-            object_id_mapping,
             index_permutations: index_set,
         }
     }
 
     /// Returns the encoding of the underlying storage.
-    pub fn storage_encoding(&self) -> &QuadStorageEncoding {
-        &self.encoding
+    pub fn storage_encoding(&self) -> QuadStorageEncoding {
+        QuadStorageEncoding::ObjectId(Arc::clone(&self.encoding))
     }
 
     /// Returns a stream that evaluates the given pattern.
@@ -90,7 +95,7 @@ impl MemQuadStorageSnapshot {
     ) -> DFResult<PlanPatternScanResult> {
         let schema = Arc::clone(
             compute_schema_for_triple_pattern(
-                self.storage_encoding(),
+                &self.storage_encoding(),
                 graph_variable.as_ref().map(|v| v.as_ref()),
                 &pattern,
                 blank_node_mode,
@@ -103,7 +108,7 @@ impl MemQuadStorageSnapshot {
             return Ok(PlanPatternScanResult::Empty(schema));
         };
 
-        let Ok(enc_pattern) = self.encode_triple_pattern(&pattern, blank_node_mode)
+        let Some(enc_pattern) = self.encode_triple_pattern(&pattern, blank_node_mode)?
         else {
             // For the pattern, a single unknown term causes the result to be empty.
             return Ok(PlanPatternScanResult::Empty(schema));
@@ -155,27 +160,33 @@ impl MemQuadStorageSnapshot {
         &self,
         pattern: &TriplePattern,
         blank_node_mode: BlankNodeMatchingMode,
-    ) -> Result<EncodedTriplePattern, UnknownObjectIdError> {
+    ) -> Result<Option<EncodedTriplePattern>, ObjectIdMappingError> {
         let subject = encode_term_pattern(
-            self.object_id_mapping.as_ref(),
+            self.encoding.mapping().as_ref(),
             &pattern.subject,
             blank_node_mode,
         )?;
         let predicate = encode_term_pattern(
-            self.object_id_mapping.as_ref(),
+            self.encoding.mapping().as_ref(),
             &pattern.predicate.clone().into(),
             blank_node_mode,
         )?;
         let object = encode_term_pattern(
-            self.object_id_mapping.as_ref(),
+            self.encoding.mapping().as_ref(),
             &pattern.object,
             blank_node_mode,
         )?;
-        Ok(EncodedTriplePattern {
-            subject,
-            predicate,
-            object,
-        })
+
+        match (subject, predicate, object) {
+            (Some(subject), Some(predicate), Some(object)) => {
+                Ok(Some(EncodedTriplePattern {
+                    subject,
+                    predicate,
+                    object,
+                }))
+            }
+            _ => Ok(None),
+        }
     }
 
     /// Encodes the active graph.
@@ -186,22 +197,21 @@ impl MemQuadStorageSnapshot {
     fn encode_active_graph(
         &self,
         active_graph: &ActiveGraph,
-    ) -> Result<EncodedActiveGraph, UnknownObjectIdError> {
+    ) -> Result<EncodedActiveGraph, ObjectIdMappingError> {
         Ok(match active_graph {
             ActiveGraph::DefaultGraph => EncodedActiveGraph::DefaultGraph,
             ActiveGraph::AllGraphs => EncodedActiveGraph::AllGraphs,
             ActiveGraph::Union(graphs) => {
                 let decoded = graphs
                     .iter()
-                    .filter_map(|g| {
-                        self.object_id_mapping
-                            .try_get_encoded_object_id_from_graph_name(g.as_ref())
+                    .flat_map(|g| {
+                        self.encoding
+                            .mapping()
+                            .try_get_object_id_for_graph(g.as_ref())
+                            .transpose()
                     })
-                    .collect::<Vec<_>>();
-
-                if decoded.is_empty() {
-                    return Err(UnknownObjectIdError);
-                }
+                    .map(|res| res.map(EncodedObjectId::from))
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 EncodedActiveGraph::Union(decoded)
             }
@@ -215,62 +225,77 @@ impl MemQuadStorageSnapshot {
     }
 
     /// Returns the number of quads in the storage.
-    pub fn named_graphs(&self) -> Vec<NamedOrBlankNode> {
+    pub fn named_graphs(&self) -> Result<Vec<NamedOrBlankNode>, ObjectIdMappingError> {
         self.index_permutations
             .as_ref()
             .named_graphs()
             .into_iter()
-            .map(|g| self.object_id_mapping.decode_named_graph(g))
-            .collect::<Result<Vec<_>, _>>()
-            .expect("Index only contains valid named graphs")
+            .map(|g| self.encoding.mapping().decode_scalar(&g.as_object_id()))
+            .map(|res| {
+                let res = res?;
+                let term_ref = res.as_term().map_err(|e| {
+                    ObjectIdMappingError::IllegalArgument(format!("Invalid term: {e}"))
+                })?;
+                let named_graph = match term_ref {
+                    TermRef::NamedNode(nn) => {
+                        NamedOrBlankNode::NamedNode(nn.into_owned())
+                    }
+                    TermRef::BlankNode(bnode) => {
+                        NamedOrBlankNode::BlankNode(bnode.into_owned())
+                    }
+                    _ => panic!("Index should only contain valid named graphs."),
+                };
+                Ok(named_graph)
+            })
+            .collect()
     }
 
     /// Returns whether the storage contains the named graph `graph_name`.
-    pub fn contains_named_graph(&self, graph_name: NamedOrBlankNodeRef<'_>) -> bool {
+    pub fn contains_named_graph(
+        &self,
+        graph_name: NamedOrBlankNodeRef<'_>,
+    ) -> Result<bool, ObjectIdMappingError> {
         let Some(object_id) = self
-            .object_id_mapping
-            .try_get_encoded_object_id_from_term(graph_name)
+            .encoding
+            .mapping()
+            .try_get_object_id(&PlainTermScalar::from(graph_name))?
         else {
-            return false;
+            return Ok(false);
         };
 
-        self.index_permutations
+        let encoded_oid = EncodedObjectId::from(object_id);
+        Ok(self
+            .index_permutations
             .as_ref()
-            .contains_named_graph(object_id)
+            .contains_named_graph(encoded_oid))
     }
 }
 
 fn encode_term_pattern(
-    object_id_mapping: &MemObjectIdMapping,
+    object_id_mapping: &dyn ObjectIdMapping,
     pattern: &TermPattern,
     blank_node_mode: BlankNodeMatchingMode,
-) -> Result<EncodedTermPattern, UnknownObjectIdError> {
+) -> Result<Option<EncodedTermPattern>, ObjectIdMappingError> {
     Ok(match pattern {
-        TermPattern::NamedNode(nn) => {
-            let object_id = object_id_mapping
-                .try_get_encoded_object_id_from_term(nn.as_ref())
-                .ok_or(UnknownObjectIdError)?;
-            EncodedTermPattern::ObjectId(object_id)
-        }
+        TermPattern::NamedNode(nn) => object_id_mapping
+            .try_get_object_id(&PlainTermScalar::from(nn.as_ref()))?
+            .map(EncodedObjectId::from)
+            .map(EncodedTermPattern::ObjectId),
         TermPattern::BlankNode(bnode) => match blank_node_mode {
             BlankNodeMatchingMode::Variable => {
-                EncodedTermPattern::Variable(bnode.as_str().to_owned())
+                Some(EncodedTermPattern::Variable(bnode.as_str().to_owned()))
             }
-            BlankNodeMatchingMode::Filter => {
-                let object_id = object_id_mapping
-                    .try_get_encoded_object_id_from_term(bnode.as_ref())
-                    .ok_or(UnknownObjectIdError)?;
-                EncodedTermPattern::ObjectId(object_id)
-            }
+            BlankNodeMatchingMode::Filter => object_id_mapping
+                .try_get_object_id(&PlainTermScalar::from(bnode.as_ref()))?
+                .map(EncodedObjectId::from)
+                .map(EncodedTermPattern::ObjectId),
         },
-        TermPattern::Literal(lit) => {
-            let object_id = object_id_mapping
-                .try_get_encoded_object_id_from_term(lit.as_ref())
-                .ok_or(UnknownObjectIdError)?;
-            EncodedTermPattern::ObjectId(object_id)
-        }
+        TermPattern::Literal(lit) => object_id_mapping
+            .try_get_object_id(&PlainTermScalar::from(lit.as_ref()))?
+            .map(EncodedObjectId::from)
+            .map(EncodedTermPattern::ObjectId),
         TermPattern::Variable(var) => {
-            EncodedTermPattern::Variable(var.as_str().to_owned())
+            Some(EncodedTermPattern::Variable(var.as_str().to_owned()))
         }
     })
 }

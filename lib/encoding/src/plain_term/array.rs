@@ -9,7 +9,7 @@ use datafusion::error::DataFusionError;
 use std::sync::Arc;
 
 /// Represents an Arrow array with a [PlainTermEncoding].
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PlainTermArray {
     inner: ArrayRef,
 }
