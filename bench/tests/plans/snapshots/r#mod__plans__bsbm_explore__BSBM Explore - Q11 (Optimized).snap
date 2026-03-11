@@ -1,10 +1,10 @@
 ---
 source: bench/tests/plans/bsbm_explore.rs
-expression: canonicalize_uuids(&explanation.optimized_logical_plan.to_string())
+expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(property) AS property, ENC_PT(hasValue) AS hasValue, ENC_PT(isValueOf) AS isValueOf
   Union
-    Projection: property, hasValue, UInt32(NULL) AS isValueOf
+    Projection: property, hasValue, FixedSizeBinary(4, NULL) AS isValueOf
       QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250> ?property ?hasValue)
-    Projection: property, UInt32(NULL) AS hasValue, isValueOf
+    Projection: property, FixedSizeBinary(4, NULL) AS hasValue, isValueOf
       QuadPattern (?isValueOf ?property <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250>)

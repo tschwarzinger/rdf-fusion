@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 /// Represents a quad with encoded terms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EncodedQuad<TTerm: EncodedTerm> {
     /// The graph name.
     pub graph_name: TTerm,

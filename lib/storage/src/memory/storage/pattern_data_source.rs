@@ -184,7 +184,7 @@ mod test {
     use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
     use rdf_fusion_logical::ActiveGraph;
     use rdf_fusion_model::{
-        BlankNodeMatchingMode, NamedNode, NamedNodePattern, NamedNodeRef, TermPattern,
+        BlankNodeMatchingMode, NamedNode, NamedNodePattern, TermPattern,
         TriplePattern, Variable,
     };
     use std::sync::Arc;
@@ -250,7 +250,9 @@ mod test {
 
         let object_id_mapping = Arc::new(MemObjectIdMapping::default());
         object_id_mapping
-            .encode_scalar(NamedNodeRef::new_unchecked("http://example.com/test").into())
+            .encode_scalar(&rdf_fusion_encoding::plain_term::PlainTermScalar::from(
+                rdf_fusion_model::NamedNodeRef::new_unchecked("http://example.com/test"),
+            ))
             .unwrap();
         let encoding = Arc::new(ObjectIdEncoding::new(object_id_mapping));
 

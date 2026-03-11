@@ -3,7 +3,7 @@ use datafusion::common::{plan_datafusion_err, plan_err};
 use datafusion::functions_aggregate::count::{count, count_distinct};
 use datafusion::functions_aggregate::first_last::first_value;
 use datafusion::logical_expr::{Expr, ExprSchemable, lit};
-use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermScalar};
 use rdf_fusion_encoding::{EncodingName, EncodingScalar, TermEncoder};
 use rdf_fusion_extensions::functions::{BuiltinName, FunctionName};
 use rdf_fusion_model::DFResult;
@@ -1008,7 +1008,9 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 None => {
                     return plan_err!("The context has not ObjectID encoding registered");
                 }
-                Some(encoding) => encoding.encode_scalar(scalar)?.into_scalar_value(),
+                Some(encoding) => encoding
+                    .encode_scalar(&PlainTermScalar::from(scalar))?
+                    .into_scalar_value(),
             },
         };
         self.build_same_term(lit(literal))

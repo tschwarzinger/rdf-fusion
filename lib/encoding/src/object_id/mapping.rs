@@ -6,7 +6,7 @@ use datafusion::arrow::array::{AsArray, FixedSizeBinaryArray};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
 use datafusion::error::DataFusionError;
-use rdf_fusion_model::{CorruptionError, GraphNameRef, StorageError, TermRef, ThinError};
+use rdf_fusion_model::{CorruptionError, GraphNameRef, StorageError, ThinError};
 use std::error::Error;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -80,13 +80,13 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
     /// Returns the [`ObjectIdSize`] of the mapped ids.
     fn object_id_size(&self) -> ObjectIdSize;
 
-    /// Try to retrieve the object id of the given `scalar`.
+    /// Try to retrieve the object id of the given `term`.
     ///
     /// This method *does not* automatically create a mapping. See [Self::encode_scalar] for this
     /// functionality.
     fn try_get_object_id(
         &self,
-        term: TermRef<'_>,
+        term: &PlainTermScalar,
     ) -> Result<Option<ObjectId>, ObjectIdMappingError>;
 
     /// Encodes the entire `array` as an [`FixedSizeBinaryArray`]. Automatically creates a mapping for a
@@ -96,13 +96,13 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
         array: &PlainTermArray,
     ) -> Result<FixedSizeBinaryArray, ObjectIdMappingError>;
 
-    /// Encodes a single `scalar` as an [`ObjectId`]. Automatically creates a mapping for a
+    /// Encodes a single `term` as an [`ObjectId`]. Automatically creates a mapping for a
     /// fresh object id if the term is not yet mapped.
     fn encode_scalar(
         &self,
-        scalar: TermRef<'_>,
+        term: &PlainTermScalar,
     ) -> Result<ObjectId, ObjectIdMappingError> {
-        let array = PlainTermScalar::from(scalar)
+        let array = term
             .to_array(1)
             .expect("Data type is supported for to_array");
         let encoded = self.encode_array(&array)?;
@@ -195,8 +195,12 @@ where
         graph_name: GraphNameRef<'_>,
     ) -> Result<Option<ObjectId>, ObjectIdMappingError> {
         match graph_name {
-            GraphNameRef::NamedNode(nn) => self.try_get_object_id(nn.into()),
-            GraphNameRef::BlankNode(bnode) => self.try_get_object_id(bnode.into()),
+            GraphNameRef::NamedNode(nn) => {
+                self.try_get_object_id(&PlainTermScalar::from(nn))
+            }
+            GraphNameRef::BlankNode(bnode) => {
+                self.try_get_object_id(&PlainTermScalar::from(bnode))
+            }
             GraphNameRef::DefaultGraph => {
                 Ok(Some(ObjectId::new_default_graph(self.object_id_size())))
             }
@@ -208,8 +212,10 @@ where
         graph_name: GraphNameRef<'_>,
     ) -> Result<ObjectId, ObjectIdMappingError> {
         match graph_name {
-            GraphNameRef::NamedNode(nn) => self.encode_scalar(nn.into()),
-            GraphNameRef::BlankNode(bnode) => self.encode_scalar(bnode.into()),
+            GraphNameRef::NamedNode(nn) => self.encode_scalar(&PlainTermScalar::from(nn)),
+            GraphNameRef::BlankNode(bnode) => {
+                self.encode_scalar(&PlainTermScalar::from(bnode))
+            }
             GraphNameRef::DefaultGraph => {
                 Ok(ObjectId::new_default_graph(self.object_id_size()))
             }

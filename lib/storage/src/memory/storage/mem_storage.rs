@@ -4,17 +4,21 @@ use crate::memory::planner::MemQuadStorePlanner;
 use crate::memory::storage::quad_index::{MemIndexConfiguration, MemQuadIndex};
 use crate::memory::storage::snapshot::MemQuadStorageSnapshot;
 use async_trait::async_trait;
+use datafusion::arrow::array::Array;
 use datafusion::common::internal_err;
 use datafusion::physical_planner::ExtensionPlanner;
-use itertools::Itertools;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::object_id::{
-    ObjectIdEncodingRef, ObjectIdMapping, ObjectIdMappingError, ObjectIdSize,
+    ObjectIdEncodingRef, ObjectIdMapping, ObjectIdMappingError, ObjectIdMappingExtensions,
+    ObjectIdSize,
 };
-use rdf_fusion_extensions::RdfFusionContextView;
+use rdf_fusion_encoding::plain_term::{
+    PlainTermQuads, PlainTermQuadsBuilder, PlainTermScalar,
+};
 use rdf_fusion_extensions::storage::QuadStorage;
+use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_model::StorageError;
-use rdf_fusion_model::{DFResult, TermRef};
+use rdf_fusion_model::DFResult;
 use rdf_fusion_model::{
     GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
 };
@@ -78,35 +82,64 @@ impl MemQuadStorage {
         &self,
         quad: QuadRef<'_>,
     ) -> Result<EncodedQuad<EncodedObjectId>, ObjectIdMappingError> {
-        let terms: [TermRef<'_>; 3] =
-            [quad.subject.into(), quad.predicate.into(), quad.object];
+        let graph_name = self
+            .encoding
+            .mapping()
+            .encode_graph_name(quad.graph_name)?;
+        let graph_name = EncodedObjectId::from_4_byte_slice(graph_name.as_bytes());
 
-        let graph_name = match quad.graph_name {
-            GraphNameRef::NamedNode(nn) => {
-                let oid = self.encoding.mapping().encode_scalar(nn.into())?;
-                EncodedObjectId::from_4_byte_slice(oid.as_bytes())
-            }
-            GraphNameRef::BlankNode(bnode) => {
-                let oid = self.encoding.mapping().encode_scalar(bnode.into())?;
-                EncodedObjectId::from_4_byte_slice(oid.as_bytes())
-            }
-            GraphNameRef::DefaultGraph => DEFAULT_GRAPH_ID,
-        };
+        let subject = self
+            .encoding
+            .mapping()
+            .encode_scalar(&PlainTermScalar::from(quad.subject))?;
+        let subject = EncodedObjectId::from_4_byte_slice(subject.as_bytes());
 
-        let terms = terms
-            .iter()
-            .map(|t| self.encoding.mapping().encode_scalar(*t))
-            .collect::<Result<Vec<_>, _>>()?
-            .iter()
-            .map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
-            .collect_vec();
+        let predicate = self
+            .encoding
+            .mapping()
+            .encode_scalar(&PlainTermScalar::from(quad.predicate))?;
+        let predicate = EncodedObjectId::from_4_byte_slice(predicate.as_bytes());
+
+        let object = self
+            .encoding
+            .mapping()
+            .encode_scalar(&PlainTermScalar::from(quad.object))?;
+        let object = EncodedObjectId::from_4_byte_slice(object.as_bytes());
 
         Ok(EncodedQuad {
             graph_name,
-            subject: terms[0],
-            predicate: terms[1],
-            object: terms[2],
+            subject,
+            predicate,
+            object,
         })
+    }
+
+    async fn encode_quads(
+        &self,
+        quads: &PlainTermQuads,
+    ) -> Result<Vec<EncodedQuad<EncodedObjectId>>, ObjectIdMappingError> {
+        let graphs = self.encoding.mapping().encode_array(&quads.graphs)?;
+        let subjects = self.encoding.mapping().encode_array(&quads.subjects)?;
+        let predicates = self.encoding.mapping().encode_array(&quads.predicates)?;
+        let objects = self.encoding.mapping().encode_array(&quads.objects)?;
+
+        let mut encoded = Vec::with_capacity(quads.len());
+        for i in 0..quads.len() {
+            let graph_name = if graphs.is_valid(i) {
+                EncodedObjectId::from_4_byte_slice(graphs.value(i))
+            } else {
+                DEFAULT_GRAPH_ID
+            };
+
+            encoded.push(EncodedQuad {
+                graph_name,
+                subject: EncodedObjectId::from_4_byte_slice(subjects.value(i)),
+                predicate: EncodedObjectId::from_4_byte_slice(predicates.value(i)),
+                object: EncodedObjectId::from_4_byte_slice(objects.value(i)),
+            });
+        }
+
+        Ok(encoded)
     }
 }
 
@@ -130,12 +163,13 @@ impl QuadStorage for MemQuadStorage {
     }
 
     async fn extend(&self, quads: Vec<Quad>) -> Result<usize, StorageError> {
-        let mut encoded = Vec::with_capacity(quads.len());
-
+        let mut builder = PlainTermQuadsBuilder::new(quads.len());
         for quad in quads {
-            let enc_quad = self.encode_quad(quad.as_ref()).await?;
-            encoded.push(enc_quad);
+            builder.append_quad(quad.as_ref());
         }
+
+        let quads = builder.finish();
+        let encoded = self.encode_quads(&quads).await?;
 
         self.indexes.write().await.insert(encoded.as_ref())
     }
@@ -150,7 +184,10 @@ impl QuadStorage for MemQuadStorage {
         &self,
         graph_name: NamedOrBlankNodeRef<'a>,
     ) -> Result<bool, StorageError> {
-        let object_id = self.encoding.mapping().encode_scalar(graph_name.into())?;
+        let object_id = self
+            .encoding
+            .mapping()
+            .encode_scalar(&PlainTermScalar::from(graph_name))?;
 
         let encoded = EncodedObjectId::try_from(object_id.as_bytes())
             .expect("Object id size checked in try_new.");
@@ -179,11 +216,17 @@ impl QuadStorage for MemQuadStorage {
     ) -> Result<(), StorageError> {
         let encoded = match graph_name {
             GraphNameRef::NamedNode(nn) => {
-                let oid = self.encoding.mapping().encode_scalar(nn.into())?;
+                let oid = self
+                    .encoding
+                    .mapping()
+                    .encode_scalar(&PlainTermScalar::from(nn))?;
                 EncodedObjectId::from_4_byte_slice(oid.as_bytes())
             }
             GraphNameRef::BlankNode(bnode) => {
-                let oid = self.encoding.mapping().encode_scalar(bnode.into())?;
+                let oid = self
+                    .encoding
+                    .mapping()
+                    .encode_scalar(&PlainTermScalar::from(bnode))?;
                 EncodedObjectId::from_4_byte_slice(oid.as_bytes())
             }
             GraphNameRef::DefaultGraph => DEFAULT_GRAPH_ID,
@@ -200,7 +243,7 @@ impl QuadStorage for MemQuadStorage {
         let Some(encoded) = self
             .encoding
             .mapping()
-            .try_get_object_id(graph_name.into())?
+            .try_get_object_id(&PlainTermScalar::from(graph_name))?
         else {
             return Ok(false);
         };

@@ -8,12 +8,17 @@ use rdf_fusion_encoding::object_id::{
     ObjectId, ObjectIdMapping, ObjectIdMappingError, ObjectIdSize,
 };
 use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
-use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
+use rdf_fusion_encoding::plain_term::{
+    PLAIN_TERM_ENCODING, PlainTermArray, PlainTermArrayElementBuilder, PlainTermScalar,
+};
 use rdf_fusion_encoding::typed_value::{
     TypedValueArray, TypedValueArrayElementBuilder, TypedValueEncodingRef,
+    TypedValueScalar,
 };
-use rdf_fusion_encoding::TermDecoder;
-use rdf_fusion_model::{BlankNodeRef, LiteralRef, NamedNodeRef, TermRef, TypedValueRef};
+use rdf_fusion_encoding::{TermDecoder, TermEncoder};
+use rdf_fusion_model::{
+    BlankNodeRef, LiteralRef, NamedNodeRef, TermRef, ThinError, TypedValueRef,
+};
 use rustc_hash::FxHasher;
 use std::hash::BuildHasherDefault;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -195,10 +200,14 @@ impl ObjectIdMapping for MemObjectIdMapping {
 
     fn try_get_object_id(
         &self,
-        term: TermRef<'_>,
+        term: &PlainTermScalar,
     ) -> Result<Option<ObjectId>, ObjectIdMappingError> {
+        let term_ref = term.as_term().map_err(|e| {
+            ObjectIdMappingError::IllegalArgument(format!("Invalid term: {}", e))
+        })?;
+
         let result = self
-            .try_get_encoded_term(term)
+            .try_get_encoded_term(term_ref)
             .and_then(|term| self.try_get_encoded_object_id(&term))
             .map(|oid| oid.as_object_id());
         Ok(result)
@@ -224,6 +233,19 @@ impl ObjectIdMapping for MemObjectIdMapping {
         }
 
         Ok(result.finish())
+    }
+
+    fn encode_scalar(
+        &self,
+        term: &PlainTermScalar,
+    ) -> Result<ObjectId, ObjectIdMappingError> {
+        let term_ref = term.as_term().map_err(|e| {
+            ObjectIdMappingError::IllegalArgument(format!("Invalid term: {}", e))
+        })?;
+
+        let encoded_term = self.obtain_encoded_term(term_ref);
+        let object_id = self.obtain_object_id(&encoded_term);
+        Ok(object_id.as_object_id())
     }
 
     fn decode_array(
@@ -278,6 +300,45 @@ impl ObjectIdMapping for MemObjectIdMapping {
         Ok(builder.finish())
     }
 
+    fn decode_scalar(
+        &self,
+        scalar: &ObjectId,
+    ) -> Result<PlainTermScalar, ObjectIdMappingError> {
+        if scalar.is_default_graph() {
+            return Ok(PLAIN_TERM_ENCODING
+                .encode_term(ThinError::expected())
+                .expect("Encoding default graph should always work."));
+        }
+
+        let encoded_id = EncodedObjectId::from_4_byte_slice(scalar.as_bytes());
+        let term = self
+            .try_get_encoded_term_from_object_id(encoded_id)
+            .ok_or_else(|| {
+                ObjectIdMappingError::IllegalArgument("Unknown object id".to_string())
+            })?;
+
+        let term_ref = match &term {
+            EncodedTerm::NamedNode(value) => {
+                TermRef::NamedNode(NamedNodeRef::new_unchecked(value.as_ref()))
+            }
+            EncodedTerm::BlankNode(value) => {
+                TermRef::BlankNode(BlankNodeRef::new_unchecked(value.as_ref()))
+            }
+            EncodedTerm::TypedLiteral(value, data_type) => {
+                let data_type = NamedNodeRef::new_unchecked(data_type.as_ref());
+                TermRef::Literal(LiteralRef::new_typed_literal(value.as_ref(), data_type))
+            }
+            EncodedTerm::LangString(value, language) => {
+                TermRef::Literal(LiteralRef::new_language_tagged_literal_unchecked(
+                    value.as_ref(),
+                    language.as_ref(),
+                ))
+            }
+        };
+
+        Ok(PlainTermScalar::from(term_ref))
+    }
+
     fn decode_array_to_typed_value(
         &self,
         encoding: &TypedValueEncodingRef,
@@ -310,6 +371,31 @@ impl ObjectIdMapping for MemObjectIdMapping {
         }
 
         Ok(builder.finish())
+    }
+
+    fn decode_scalar_to_typed_value(
+        &self,
+        encoding: &TypedValueEncodingRef,
+        scalar: &ObjectId,
+    ) -> Result<TypedValueScalar, ObjectIdMappingError> {
+        if scalar.is_default_graph() {
+            return Ok(encoding.encode_term(ThinError::expected()).expect("TODO"));
+        }
+
+        let encoded_id = EncodedObjectId::from_4_byte_slice(scalar.as_bytes());
+        let typed_value = self
+            .try_get_encoded_typed_value_from_object_id(encoded_id)
+            .ok_or_else(|| {
+                ObjectIdMappingError::IllegalArgument("Unknown object id".to_string())
+            })?;
+
+        let typed_value_ref = Option::<TypedValueRef>::from(&typed_value)
+            .ok_or_else(|| ObjectIdMappingError::IllegalArgument("TODO".to_string()))?;
+
+        Ok(encoding
+            .default_encoder()
+            .encode_term(Ok(typed_value_ref))
+            .expect("Always Ok given"))
     }
 }
 
@@ -399,8 +485,12 @@ mod tests {
         let term2 = TermRef::BlankNode(BlankNodeRef::new_unchecked("b1"));
 
         // Before encoding, should be None
-        assert!(mapping.try_get_object_id(term1)?.is_none());
-        assert!(mapping.try_get_object_id(term2)?.is_none());
+        assert!(mapping
+            .try_get_object_id(&PlainTermScalar::from(term1))?
+            .is_none());
+        assert!(mapping
+            .try_get_object_id(&PlainTermScalar::from(term2))?
+            .is_none());
 
         // Encode an array to populate the mapping
         let mut builder = PlainTermArrayElementBuilder::new(2);
@@ -410,9 +500,9 @@ mod tests {
         let object_id_array = mapping.encode_array(&plain_term_array)?;
 
         // After encoding, should be Some
-        let object_id1 = mapping.try_get_object_id(term1)?;
+        let object_id1 = mapping.try_get_object_id(&PlainTermScalar::from(term1))?;
         assert!(object_id1.is_some());
-        let object_id2 = mapping.try_get_object_id(term2)?;
+        let object_id2 = mapping.try_get_object_id(&PlainTermScalar::from(term2))?;
         assert!(object_id2.is_some());
 
         // Check if IDs match what's in the array
@@ -420,8 +510,10 @@ mod tests {
         assert_eq!(object_id2.unwrap().as_bytes(), object_id_array.value(1));
 
         // A term not in the mapping
-        let term3 = NamedNodeRef::new_unchecked("http://example.com/c").into();
-        assert!(mapping.try_get_object_id(term3)?.is_none());
+        let term3 = NamedNodeRef::new_unchecked("http://example.com/c");
+        assert!(mapping
+            .try_get_object_id(&PlainTermScalar::from(term3))?
+            .is_none());
 
         Ok(())
     }

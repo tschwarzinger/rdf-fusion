@@ -132,13 +132,17 @@ impl QuadIndex for MemQuadIndex {
         &mut self,
         quads: impl IntoIterator<Item = IndexQuad<EncodedObjectId>>,
     ) -> usize {
-        let mut to_insert = BTreeSet::new();
-
-        for quad in quads {
-            to_insert.insert(quad);
+        let mut to_insert: Vec<_> = quads.into_iter().collect();
+        if to_insert.is_empty() {
+            return 0;
         }
 
-        self.data.insert(&to_insert)
+        to_insert.sort_unstable();
+        to_insert.dedup();
+
+        let to_insert_set: BTreeSet<_> = to_insert.into_iter().collect();
+
+        self.data.insert(&to_insert_set)
     }
 
     fn remove(

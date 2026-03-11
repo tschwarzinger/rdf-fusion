@@ -7,6 +7,7 @@ use datafusion::logical_expr::utils::merge_schema;
 use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, lit};
 use datafusion::optimizer::utils::NamePreserver;
 use datafusion::optimizer::{ApplyOrder, OptimizerConfig, OptimizerRule};
+use rdf_fusion_encoding::plain_term::PlainTermScalar;
 use rdf_fusion_encoding::{EncodingName, EncodingScalar, RdfFusionEncodings};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
@@ -216,7 +217,7 @@ fn replace_equality_with_same_term(
                 return plan_err!("No Object ID mapping registerd.");
             };
 
-            match encoding.encode_scalar(term.as_ref()) {
+            match encoding.encode_scalar(&PlainTermScalar::from(term.as_ref())) {
                 Ok(scalar) => scalar.into_scalar_value(),
                 Err(err) => plan_err!("Failed to encode term: {}", err)?,
             }

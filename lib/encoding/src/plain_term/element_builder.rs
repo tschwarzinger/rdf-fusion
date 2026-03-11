@@ -1,7 +1,9 @@
 use crate::plain_term::encoding::{PlainTermEncodingField, PlainTermType};
 use crate::plain_term::{PlainTermArray, PlainTermEncoding};
 use datafusion::arrow::array::{StringBuilder, StructBuilder, UInt8Builder};
-use rdf_fusion_model::{BlankNodeRef, LiteralRef, NamedNodeRef, TermRef};
+use rdf_fusion_model::{
+    BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, TermRef,
+};
 use std::sync::Arc;
 
 /// Provides a convenient API for building arrays (element-by-element) of RDF terms with the
@@ -54,6 +56,23 @@ impl PlainTermArrayElementBuilder {
     /// Appends a blank node to the array.
     pub fn append_blank_node(&mut self, blank_node: BlankNodeRef<'_>) {
         self.append(PlainTermType::BlankNode, blank_node.as_str(), None, None);
+    }
+
+    /// Appends a named or blank node to the array.
+    pub fn append_named_or_blank_node(&mut self, node: NamedOrBlankNodeRef<'_>) {
+        match node {
+            NamedOrBlankNodeRef::NamedNode(nn) => self.append_named_node(nn),
+            NamedOrBlankNodeRef::BlankNode(bnode) => self.append_blank_node(bnode),
+        }
+    }
+
+    /// Appends a graph name to the array.
+    pub fn append_graph_name(&mut self, graph_name: GraphNameRef<'_>) {
+        match graph_name {
+            GraphNameRef::NamedNode(nn) => self.append_named_node(nn),
+            GraphNameRef::BlankNode(bnode) => self.append_blank_node(bnode),
+            GraphNameRef::DefaultGraph => self.append_null(),
+        }
     }
 
     /// Appends a literal to the array.

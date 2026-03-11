@@ -25,10 +25,10 @@ fn run_plan_assertions(assertions: impl FnOnce()) {
         r"\[([0-9a-fA-F]+,?\s?)+\]\.\.\[([0-9a-fA-F]+,?\s?)+\]",
         "<object id range>",
     );
-    settings.add_filter(r"!= [0-9a-fA-F]{2,}", "!= <object id>");
+    settings.add_filter(r"= \[([0-9a-fA-F]{1,2},?\s?){4}\]", "= <object id>");
     settings.add_filter(r"= [0-9a-fA-F]{2,}", "= <object id>");
     settings.add_filter(
-        r#"FixedSizeBinary\(4,\s"\d+,\d+,\d+,\d+"\)"#,
+        r#"FixedSizeBinary\(4,\s"[0-9a-fA-F]+,[0-9a-fA-F]+,[0-9a-fA-F]+,[0-9a-fA-F]+"\)"#,
         "FixedSizeBinary(<object id>)",
     );
 

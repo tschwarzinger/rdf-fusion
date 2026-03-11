@@ -16,8 +16,8 @@ use rdf_fusion_encoding::object_id::{
     ObjectIdEncodingRef, ObjectIdMapping, ObjectIdMappingError,
     ObjectIdMappingExtensions, ObjectIdSize,
 };
-use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
-use rdf_fusion_encoding::{QuadStorageEncoding, TermDecoder};
+use rdf_fusion_encoding::plain_term::PlainTermScalar;
+use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_logical::patterns::compute_schema_for_triple_pattern;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -234,11 +234,15 @@ impl MemQuadStorageSnapshot {
             .into_iter()
             .map(|g| self.encoding.mapping().decode_scalar(&g.as_object_id()))
             .map(|res| {
-                let named_graph = match DefaultPlainTermDecoder::decode_term(&res?) {
-                    Ok(TermRef::NamedNode(nn)) => {
+                let res = res?;
+                let term_ref = res.as_term().map_err(|e| {
+                    ObjectIdMappingError::IllegalArgument(format!("Invalid term: {}", e))
+                })?;
+                let named_graph = match term_ref {
+                    TermRef::NamedNode(nn) => {
                         NamedOrBlankNode::NamedNode(nn.into_owned())
                     }
-                    Ok(TermRef::BlankNode(bnode)) => {
+                    TermRef::BlankNode(bnode) => {
                         NamedOrBlankNode::BlankNode(bnode.into_owned())
                     }
                     _ => panic!("Index should only contain valid named graphs."),
@@ -256,7 +260,7 @@ impl MemQuadStorageSnapshot {
         let Some(object_id) = self
             .encoding
             .mapping()
-            .try_get_object_id(graph_name.into())?
+            .try_get_object_id(&PlainTermScalar::from(graph_name))?
         else {
             return Ok(false);
         };
@@ -277,7 +281,7 @@ fn encode_term_pattern(
 ) -> Result<Option<EncodedTermPattern>, ObjectIdMappingError> {
     Ok(match pattern {
         TermPattern::NamedNode(nn) => object_id_mapping
-            .try_get_object_id(nn.into())?
+            .try_get_object_id(&PlainTermScalar::from(nn.as_ref()))?
             .map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
             .map(EncodedTermPattern::ObjectId),
         TermPattern::BlankNode(bnode) => match blank_node_mode {
@@ -285,12 +289,12 @@ fn encode_term_pattern(
                 Some(EncodedTermPattern::Variable(bnode.as_str().to_owned()))
             }
             BlankNodeMatchingMode::Filter => object_id_mapping
-                .try_get_object_id(bnode.into())?
+                .try_get_object_id(&PlainTermScalar::from(bnode.as_ref()))?
                 .map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
                 .map(EncodedTermPattern::ObjectId),
         },
         TermPattern::Literal(lit) => object_id_mapping
-            .try_get_object_id(lit.into())?
+            .try_get_object_id(&PlainTermScalar::from(lit.as_ref()))?
             .map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
             .map(EncodedTermPattern::ObjectId),
         TermPattern::Variable(var) => {

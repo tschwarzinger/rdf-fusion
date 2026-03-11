@@ -3,12 +3,12 @@ use crate::object_id::{
     ObjectIdArray, ObjectIdMapping, ObjectIdMappingError, ObjectIdMappingRef,
     ObjectIdScalar, ObjectIdSize,
 };
-use crate::plain_term::PlainTermArray;
+use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use crate::EncodingName;
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::ScalarValue;
-use rdf_fusion_model::{DFResult, TermRef};
+use rdf_fusion_model::DFResult;
 use std::clone::Clone;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -102,9 +102,9 @@ impl ObjectIdEncoding {
     /// See also [`ObjectIdMapping::encode_scalar`].
     pub fn encode_scalar(
         self: &Arc<Self>,
-        scalar: TermRef<'_>,
+        term: &PlainTermScalar,
     ) -> Result<ObjectIdScalar, ObjectIdMappingError> {
-        let object_id = self.mapping.encode_scalar(scalar)?;
+        let object_id = self.mapping.encode_scalar(term)?;
 
         Ok(ObjectIdScalar::try_new(
             Arc::clone(self),
