@@ -69,10 +69,9 @@ impl Display for ObjectIdSize {
 ///
 /// # Default Graph
 ///
-/// The default graph is always encoded as the object id with all bytes set to zero. The number of
-/// zero bytes depends on the [`ObjectIdSize`].
+/// The default graph is represented as `None` in the underlying [`Option<Box<[u8]>>`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ObjectId(Box<[u8]>);
+pub struct ObjectId(Option<Box<[u8]>>);
 
 impl ObjectId {
     /// Creates a new [`ObjectId`].
@@ -83,35 +82,35 @@ impl ObjectId {
     pub fn try_new(bytes: impl Into<Box<[u8]>>) -> Result<Self, ObjectIdCreationError> {
         let bytes = bytes.into();
         i32::try_from(bytes.len()).map_err(|_| ObjectIdCreationError)?;
-        Ok(Self(bytes))
+        Ok(Self(Some(bytes)))
     }
 
-    /// Creates a new [`ObjectId`] for the default graph with the given `size`.
-    pub fn new_default_graph(size: ObjectIdSize) -> Self {
-        Self(vec![0; size.0 as usize].into_boxed_slice())
+    /// Creates a new [`ObjectId`] for the default graph.
+    pub fn new_default_graph() -> Self {
+        Self(None)
     }
 
     /// Returns true if the object id is the default graph.
     pub fn is_default_graph(&self) -> bool {
-        self.0.iter().all(|b| *b == 0)
+        self.0.is_none()
     }
 
-    /// Creates a new [`ObjectId`].
-    pub fn try_new_from_array(array: &FixedSizeBinaryArray, index: usize) -> Self {
-        let len = array.value_length() as usize;
+    /// Creates a new [`ObjectId`] from the given `array` at `index`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given index is out-of-range.
+    pub fn from_array_at_index(array: &FixedSizeBinaryArray, index: usize) -> Self {
         match array.is_valid(index) {
-            true => Self(array.value(index).into()),
-            false => Self(vec![0; len].into_boxed_slice()),
+            true => Self(Some(array.value(index).into())),
+            false => Self(None),
         }
     }
 
-    /// Returns the length of the object id in bytes.
-    pub fn size(&self) -> i32 {
-        self.0.len() as i32 // Conversion checked in Self::try_new
-    }
-
     /// Returns a reference to the underlying bytes.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
+    ///
+    /// Returns `None` if the object id represents the default graph.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        self.0.as_deref()
     }
 }

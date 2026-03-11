@@ -42,7 +42,11 @@ impl EncodedObjectId {
 
     /// Returns a [`ObjectId`] from this encoded id.
     pub fn as_object_id(&self) -> ObjectId {
-        ObjectId::try_new(self.0).expect("Object ID valid")
+        if self.is_default_graph() {
+            ObjectId::new_default_graph()
+        } else {
+            ObjectId::try_new(self.0).expect("Object ID valid")
+        }
     }
 
     /// Returns the bytes within the encoded object id.
@@ -79,6 +83,15 @@ impl EncodedObjectId {
 impl EncodedTerm for EncodedObjectId {
     fn is_default_graph(&self) -> bool {
         *self == DEFAULT_GRAPH_ID
+    }
+}
+
+impl From<ObjectId> for EncodedObjectId {
+    fn from(value: ObjectId) -> Self {
+        match value.as_bytes() {
+            Some(bytes) => Self::from_4_byte_slice(bytes),
+            None => DEFAULT_GRAPH_ID,
+        }
     }
 }
 

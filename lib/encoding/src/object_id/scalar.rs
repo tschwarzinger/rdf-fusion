@@ -47,11 +47,8 @@ impl ObjectIdScalar {
         encoding: Arc<ObjectIdEncoding>,
         object_id: ObjectId,
     ) -> Result<Self, ObjectIdCreationError> {
-        let bytes = object_id
-            .as_bytes()
-            .try_into()
-            .map_err(|_| ObjectIdCreationError)?;
-        let scalar = ScalarValue::FixedSizeBinary(encoding.object_id_size().0, Some(bytes));
+        let bytes = object_id.as_bytes().map(|b| b.to_vec());
+        let scalar = ScalarValue::FixedSizeBinary(encoding.object_id_size().0, bytes);
         Ok(Self::new_unchecked(encoding, scalar))
     }
 }
@@ -72,13 +69,14 @@ impl EncodingScalar for ObjectIdScalar {
     }
 }
 
-impl From<ObjectIdScalar> for Option<ObjectId> {
+impl From<ObjectIdScalar> for ObjectId {
     fn from(value: ObjectIdScalar) -> Self {
         match value.inner {
-            ScalarValue::FixedSizeBinary(_, value) => {
-                value.map(|oid| ObjectId::try_new(oid.to_vec()).unwrap())
-            }
-            _ => unreachable!("ObjectID scalar is UInt32."),
+            ScalarValue::FixedSizeBinary(_, value) => match value {
+                Some(oid) => ObjectId::try_new(oid).unwrap(),
+                None => ObjectId::new_default_graph(),
+            },
+            _ => unreachable!("ObjectID scalar is FixedSizeBinary."),
         }
     }
 }

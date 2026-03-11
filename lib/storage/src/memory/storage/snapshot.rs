@@ -210,9 +210,7 @@ impl MemQuadStorageSnapshot {
                             .try_get_object_id_for_graph(g.as_ref())
                             .transpose()
                     })
-                    .map(|res| {
-                        res.map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
-                    })
+                    .map(|res| res.map(EncodedObjectId::from))
                     .collect::<Result<Vec<_>, _>>()?;
 
                 EncodedActiveGraph::Union(decoded)
@@ -265,8 +263,7 @@ impl MemQuadStorageSnapshot {
             return Ok(false);
         };
 
-        let encoded_oid = EncodedObjectId::try_from(object_id.as_bytes())
-            .expect("Object id size checked in try_new.");
+        let encoded_oid = EncodedObjectId::from(object_id);
         Ok(self
             .index_permutations
             .as_ref()
@@ -282,7 +279,7 @@ fn encode_term_pattern(
     Ok(match pattern {
         TermPattern::NamedNode(nn) => object_id_mapping
             .try_get_object_id(&PlainTermScalar::from(nn.as_ref()))?
-            .map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
+            .map(EncodedObjectId::from)
             .map(EncodedTermPattern::ObjectId),
         TermPattern::BlankNode(bnode) => match blank_node_mode {
             BlankNodeMatchingMode::Variable => {
@@ -290,12 +287,12 @@ fn encode_term_pattern(
             }
             BlankNodeMatchingMode::Filter => object_id_mapping
                 .try_get_object_id(&PlainTermScalar::from(bnode.as_ref()))?
-                .map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
+                .map(EncodedObjectId::from)
                 .map(EncodedTermPattern::ObjectId),
         },
         TermPattern::Literal(lit) => object_id_mapping
             .try_get_object_id(&PlainTermScalar::from(lit.as_ref()))?
-            .map(|oid| EncodedObjectId::from_4_byte_slice(oid.as_bytes()))
+            .map(EncodedObjectId::from)
             .map(EncodedTermPattern::ObjectId),
         TermPattern::Variable(var) => {
             Some(EncodedTermPattern::Variable(var.as_str().to_owned()))

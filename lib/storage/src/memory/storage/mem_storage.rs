@@ -86,25 +86,25 @@ impl MemQuadStorage {
             .encoding
             .mapping()
             .encode_graph_name(quad.graph_name)?;
-        let graph_name = EncodedObjectId::from_4_byte_slice(graph_name.as_bytes());
+        let graph_name = EncodedObjectId::from(graph_name);
 
         let subject = self
             .encoding
             .mapping()
             .encode_scalar(&PlainTermScalar::from(quad.subject))?;
-        let subject = EncodedObjectId::from_4_byte_slice(subject.as_bytes());
+        let subject = EncodedObjectId::from(subject);
 
         let predicate = self
             .encoding
             .mapping()
             .encode_scalar(&PlainTermScalar::from(quad.predicate))?;
-        let predicate = EncodedObjectId::from_4_byte_slice(predicate.as_bytes());
+        let predicate = EncodedObjectId::from(predicate);
 
         let object = self
             .encoding
             .mapping()
             .encode_scalar(&PlainTermScalar::from(quad.object))?;
-        let object = EncodedObjectId::from_4_byte_slice(object.as_bytes());
+        let object = EncodedObjectId::from(object);
 
         Ok(EncodedQuad {
             graph_name,
@@ -189,8 +189,7 @@ impl QuadStorage for MemQuadStorage {
             .mapping()
             .encode_scalar(&PlainTermScalar::from(graph_name))?;
 
-        let encoded = EncodedObjectId::try_from(object_id.as_bytes())
-            .expect("Object id size checked in try_new.");
+        let encoded = EncodedObjectId::from(object_id);
         Ok(self.indexes.write().await.insert_named_graph(encoded))
     }
 
@@ -220,14 +219,14 @@ impl QuadStorage for MemQuadStorage {
                     .encoding
                     .mapping()
                     .encode_scalar(&PlainTermScalar::from(nn))?;
-                EncodedObjectId::from_4_byte_slice(oid.as_bytes())
+                EncodedObjectId::from(oid)
             }
             GraphNameRef::BlankNode(bnode) => {
                 let oid = self
                     .encoding
                     .mapping()
                     .encode_scalar(&PlainTermScalar::from(bnode))?;
-                EncodedObjectId::from_4_byte_slice(oid.as_bytes())
+                EncodedObjectId::from(oid)
             }
             GraphNameRef::DefaultGraph => DEFAULT_GRAPH_ID,
         };
@@ -248,8 +247,7 @@ impl QuadStorage for MemQuadStorage {
             return Ok(false);
         };
 
-        let encoded = EncodedObjectId::try_from(encoded.as_bytes())
-            .expect("Object id size checked in try_new.");
+        let encoded = EncodedObjectId::from(encoded);
         Ok(self.indexes.write().await.drop_named_graph(&encoded))
     }
 

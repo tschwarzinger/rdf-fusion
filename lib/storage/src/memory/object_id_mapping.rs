@@ -310,7 +310,8 @@ impl ObjectIdMapping for MemObjectIdMapping {
                 .expect("Encoding default graph should always work."));
         }
 
-        let encoded_id = EncodedObjectId::from_4_byte_slice(scalar.as_bytes());
+        let encoded_id =
+            EncodedObjectId::from_4_byte_slice(scalar.as_bytes().expect("Not default graph"));
         let term = self
             .try_get_encoded_term_from_object_id(encoded_id)
             .ok_or_else(|| {
@@ -382,7 +383,8 @@ impl ObjectIdMapping for MemObjectIdMapping {
             return Ok(encoding.encode_term(ThinError::expected()).expect("TODO"));
         }
 
-        let encoded_id = EncodedObjectId::from_4_byte_slice(scalar.as_bytes());
+        let encoded_id =
+            EncodedObjectId::from_4_byte_slice(scalar.as_bytes().expect("Not default graph"));
         let typed_value = self
             .try_get_encoded_typed_value_from_object_id(encoded_id)
             .ok_or_else(|| {
@@ -506,8 +508,14 @@ mod tests {
         assert!(object_id2.is_some());
 
         // Check if IDs match what's in the array
-        assert_eq!(object_id1.unwrap().as_bytes(), object_id_array.value(0));
-        assert_eq!(object_id2.unwrap().as_bytes(), object_id_array.value(1));
+        assert_eq!(
+            object_id1.unwrap().as_bytes().unwrap(),
+            object_id_array.value(0)
+        );
+        assert_eq!(
+            object_id2.unwrap().as_bytes().unwrap(),
+            object_id_array.value(1)
+        );
 
         // A term not in the mapping
         let term3 = NamedNodeRef::new_unchecked("http://example.com/c");

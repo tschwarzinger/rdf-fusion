@@ -24,6 +24,8 @@ pub enum ObjectIdMappingError {
     LiteralAsGraphName,
     #[error("An error occurred while accessing the object id storage.")]
     Storage(Box<dyn Error + Sync + Send>),
+    #[error("Unexpected object id format: {0}")]
+    UnexpectedObjectIdFormat(String),
 }
 
 #[derive(Error, Debug)]
@@ -73,9 +75,13 @@ pub type ObjectIdMappingRef = Arc<dyn ObjectIdMapping>;
 ///
 /// # Default Graph
 ///
-/// The default graph always needs to be encoded as the object id with all bytes set to zero.
+/// The default graph is represented as the `None` value of the [`ObjectId`] struct.
 /// Furthermore, the implementation is responsible for ensuring that all Arrow arrays will have the
-/// valid bit set to false for entries that are the default graph (i.e., set them null).
+/// valid bit set to false for entries that are the default graph (i.e., set them to null).
+///
+/// Note that some storage implementations might still use a special byte sequence (e.g., all
+/// bytes zero) to represent the default graph internally. However, this byte sequence needs then
+/// needs to be mapped for implementing this trait.
 pub trait ObjectIdMapping: Debug + Send + Sync {
     /// Returns the [`ObjectIdSize`] of the mapped ids.
     fn object_id_size(&self) -> ObjectIdSize;
@@ -106,7 +112,7 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
             .to_array(1)
             .expect("Data type is supported for to_array");
         let encoded = self.encode_array(&array)?;
-        let object_id = ObjectId::try_new_from_array(&encoded, 0);
+        let object_id = ObjectId::from_array_at_index(&encoded, 0);
         Ok(object_id)
     }
 
@@ -136,7 +142,7 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
 
         let array = ScalarValue::FixedSizeBinary(
             self.object_id_size().into(),
-            Some(scalar.as_bytes().to_vec()),
+            Some(scalar.as_bytes().expect("Not default graph").to_vec()),
         )
         .to_array()
         .expect("Data type is supported for to_array");
@@ -157,7 +163,7 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
 
         let array = ScalarValue::FixedSizeBinary(
             self.object_id_size().into(),
-            Some(scalar.as_bytes().to_vec()),
+            Some(scalar.as_bytes().expect("Not default graph").to_vec()),
         )
         .to_array()
         .expect("Data type is supported for to_array");
@@ -201,9 +207,7 @@ where
             GraphNameRef::BlankNode(bnode) => {
                 self.try_get_object_id(&PlainTermScalar::from(bnode))
             }
-            GraphNameRef::DefaultGraph => {
-                Ok(Some(ObjectId::new_default_graph(self.object_id_size())))
-            }
+            GraphNameRef::DefaultGraph => Ok(Some(ObjectId::new_default_graph())),
         }
     }
 
@@ -216,9 +220,7 @@ where
             GraphNameRef::BlankNode(bnode) => {
                 self.encode_scalar(&PlainTermScalar::from(bnode))
             }
-            GraphNameRef::DefaultGraph => {
-                Ok(ObjectId::new_default_graph(self.object_id_size()))
-            }
+            GraphNameRef::DefaultGraph => Ok(ObjectId::new_default_graph()),
         }
     }
 }

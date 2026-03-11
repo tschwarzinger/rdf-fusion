@@ -104,21 +104,12 @@ impl WithTypedValueEncoding {
             EncodingName::ObjectId => match self.encodings.object_id() {
                 None => exec_err!("Cannot from object id as no encoding is provided."),
                 Some(encoding) => {
-                    let decoded =
-                        Option::<ObjectId>::from(encoding.try_new_scalar(scalar)?)
-                            .map(|oid| {
-                                encoding.mapping().decode_scalar_to_typed_value(
-                                    self.encodings.typed_value(),
-                                    &oid,
-                                )
-                            })
-                            .transpose()?
-                            .map(|oid| oid.into_scalar_value())
-                            .unwrap_or(ScalarValue::FixedSizeBinary(
-                                encoding.object_id_size().into(),
-                                None,
-                            ));
-                    Ok(ColumnarValue::Scalar(decoded))
+                    let oid = ObjectId::from(encoding.try_new_scalar(scalar)?);
+                    let decoded = encoding.mapping().decode_scalar_to_typed_value(
+                        self.encodings.typed_value(),
+                        &oid,
+                    )?;
+                    Ok(ColumnarValue::Scalar(decoded.into_scalar_value()))
                 }
             },
         }

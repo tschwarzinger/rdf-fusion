@@ -39,9 +39,13 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 ///
 /// # Default Graph
 ///
-/// The default graph always needs to be modeled as the object id with all bytes set to zero. In
-/// addition, functions that return Arrow arrays with object ids need to highlight the default graph
-/// by setting the valid bit to `false`.
+/// The default graph is represented as the `None` value of the [`ObjectId`] struct.
+/// In addition, functions that return Arrow arrays with object ids need to highlight the default
+/// graph by setting the valid bit to `false` (i.e., making them null).
+///
+/// Note that some storage implementations might still use a special byte sequence (e.g., all
+/// bytes zero) to represent the default graph internally. However, this is abstracted away by
+/// the [`ObjectId`] struct.
 ///
 /// # Strengths and Weaknesses
 ///
@@ -105,15 +109,11 @@ impl ObjectIdEncoding {
         term: &PlainTermScalar,
     ) -> Result<ObjectIdScalar, ObjectIdMappingError> {
         let object_id = self.mapping.encode_scalar(term)?;
-
-        Ok(ObjectIdScalar::try_new(
-            Arc::clone(self),
-            ScalarValue::FixedSizeBinary(
-                object_id.size(),
-                Some(object_id.as_bytes().to_vec()),
-            ),
-        )
-        .unwrap())
+        ObjectIdScalar::from_object_id(Arc::clone(self), object_id).map_err(|_| {
+            ObjectIdMappingError::IllegalArgument(
+                "Wrong object id length returned by mapping".to_owned(),
+            )
+        })
     }
 
     /// Encodes a [`PlainTermArray`] into an [`ObjectIdArray`].
