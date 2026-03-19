@@ -36,6 +36,9 @@ jobs:
         with:
           lfs: true
 
+      - name: Prepare Benches for Tests
+        run: just prepare-benches-tests
+
       - name: Tests
         run: just test
 
