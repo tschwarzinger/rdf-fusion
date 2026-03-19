@@ -2,11 +2,16 @@
 default:
     @just --list
 
+# Runs all relevant formatters
+fmt:
+    cargo fmt
+    taplo fmt **.toml
+
 # Run all lints (e.g., formatting, clippy)
 lint:
-    taplo fmt **.toml --check
     cargo fmt -- --check
     cargo clippy -- -D warnings -D clippy::all
+    taplo fmt **.toml --check
 
 # Run all tests
 test:
