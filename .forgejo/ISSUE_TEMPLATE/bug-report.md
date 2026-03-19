@@ -1,5 +1,5 @@
 ---
-name: Bug report
+name: Bug Report
 about: Create a report to help us improve
 title: ''
 labels: bug
@@ -12,5 +12,5 @@ A clear and concise description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Which version of RDF Fusion are you using? On which platform?
+1. Which version of PolyArrow are you using? On which platform?
 2. A command-line or a code snippet that triggers the bug.
