@@ -39,6 +39,9 @@ jobs:
           lfs: true
           fetch-depth: 0
 
+      - name: Prepare Benches
+        run: just prepare-benches
+
       - name: Run Benchmarks Candidate Branch
         run: |
           cargo bench --bench scalar -- --save-baseline candidate-scalar
