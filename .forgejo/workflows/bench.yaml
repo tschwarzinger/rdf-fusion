@@ -15,7 +15,8 @@ jobs:
       - name: Install System Dependencies
         run: |
           apt-get update
-          apt-get install -y git-lfs build-essential cmake openjdk-21-jre 
+          apt-cache search openjdk-25
+          apt-get install -y git-lfs build-essential cmake default-jre-headless
           git lfs install
 
       - name: Setup Rust
