@@ -15,7 +15,6 @@ jobs:
       - name: Install System Dependencies
         run: |
           apt-get update
-          apt-cache search openjdk-25
           apt-get install -y git-lfs build-essential cmake default-jre-headless
           git lfs install
 
@@ -23,25 +22,55 @@ jobs:
         uses: https://github.com/dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.94
-          components: rustfmt, clippy
 
       - name: Rust Cache
         uses: https://github.com/Swatinem/rust-cache@v2
 
       - name: Install Cargo Dependencies
         run: |
-          cargo install just
-          cargo install taplo-cli
-          cargo install critcmp
+          cargo install just taplo-cli critcmp
 
-      - name: Checkout Code
+      - name: Checkout PR Code
         uses: actions/checkout@v4
         with:
           lfs: true
-          fetch-depth: 0
+          fetch-depth: 0 # Required to checkout the base SHA later
 
-      - name: Prepare Benches
-        run: just prepare-benches
+      - name: Cache Main Baselines
+        id: cache-main-benches
+        uses: actions/cache@v4
+        with:
+          # Caching the entire Criterion directory will cache both main and old candidate runs.
+          # The candidate runs will just get overwritten later in the workflow.
+          path: target/criterion
+          key: benchmark-main-${{ github.event.pull_request.base.sha }}
+
+      - name: Compute Main Baselines (On Cache Miss)
+        if: steps.cache-main-benches.outputs.cache-hit != 'true'
+        run: |
+          echo "No cached main benchmarks found. Computing them now..."
+          
+          # 1. Switch to the commit on main that this PR targets
+          git checkout ${{ github.event.pull_request.base.sha }}
+          git clean -fd
+          
+          # 2. Run benches for main
+          just prepare-benches
+          cargo bench --bench scalar -- --save-baseline main-scalar
+          cargo bench --bench scalar_binary -- --save-baseline main-scalar_binary
+          cargo bench --bench store -- --save-baseline main-store
+          cargo bench --bench bsbm_explore -- --save-baseline main-bsbm_explore
+          cargo bench --bench bsbm_business_intelligence -- --save-baseline main-bsbm_business_intelligence
+          cargo bench --bench wind_farm -- --save-baseline main-wind_farm
+          
+          # 3. Switch back to the PR merge commit to continue
+          git checkout ${{ github.sha }} 
+          git clean -fd
+
+      - name: Prepare Benches (Candidate)
+        run: |
+          # Ensure we are on the PR commit and prep again if needed
+          just prepare-benches
 
       - name: Run Benchmarks Candidate Branch
         run: |
@@ -51,20 +80,6 @@ jobs:
           cargo bench --bench bsbm_explore -- --save-baseline candidate-bsbm_explore
           cargo bench --bench bsbm_business_intelligence -- --save-baseline candidate-bsbm_business_intelligence
           cargo bench --bench wind_farm -- --save-baseline candidate-wind_farm
-
-      - name: Checkout Main Branch
-        run: |
-          git checkout main
-          git clean -fd
-
-      - name: Benchmark Main Branch
-        run: |
-          cargo bench --bench scalar -- --save-baseline main-scalar
-          cargo bench --bench scalar_binary -- --save-baseline main-scalar_binary
-          cargo bench --bench store -- --save-baseline main-store
-          cargo bench --bench bsbm_explore -- --save-baseline main-bsbm_explore
-          cargo bench --bench bsbm_business_intelligence -- --save-baseline main-bsbm_business_intelligence
-          cargo bench --bench wind_farm -- --save-baseline main-wind_farm
 
       - name: Compare Benchmarks
         run: |
