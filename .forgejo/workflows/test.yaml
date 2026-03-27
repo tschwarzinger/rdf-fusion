@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: tuw-runner
+
+    steps:
+      - name: Install System Dependencies
+        run: |
+          apt-get update
+          apt-get install -y git-lfs build-essential cmake default-jre-headless
+          git lfs install
+
+      - name: Setup Rust
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.94
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: https://github.com/Swatinem/rust-cache@v2
+
+      - name: Install Cargo Dependencies
+        run: |
+          cargo install just
+          cargo install taplo-cli
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Prepare Benches for Tests
+        run: just prepare-benches-tests
+
+      - name: Tests
+        run: just test
+
+      - name: Lints
+        run: just lint
+
+      - name: Docs
+        run: just rustdoc

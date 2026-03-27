@@ -2,20 +2,16 @@
 default:
     @just --list
 
-# Install development tools. Assumes Rustup and toolchain is installed.
-configure-toolchain:
-    rustup component add clippy rustfmt
-    cargo install cargo-deny
-
-# Install development tools. Assumes Rustup and toolchain is installed.
-configure-toolchain-ci: configure-toolchain
-    cargo install cargo-codspeed
+# Runs all relevant formatters
+fmt:
+    cargo fmt
+    taplo fmt **.toml
 
 # Run all lints (e.g., formatting, clippy)
 lint:
     cargo fmt -- --check
     cargo clippy -- -D warnings -D clippy::all
-    # cargo deny check
+    taplo fmt **.toml --check
 
 # Run all tests
 test:
@@ -31,7 +27,7 @@ test-examples:
 
 # Build and check documentation
 rustdoc:
-    RUSTDOCFLAGS="-D warnings" cargo doc
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
 
 [working-directory: 'bench']
 prepare-benches-tests:

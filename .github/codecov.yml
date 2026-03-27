@@ -1,4 +1,0 @@
-ignore:
-  - fuzz
-  - lib/sparql-smith
-  - testsuite

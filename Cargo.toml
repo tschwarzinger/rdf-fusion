@@ -1,19 +1,19 @@
 [workspace]
 members = [
-    "bench",
-    "cli",
-    "examples",
-    "lib/extensions",
-    "lib/model",
-    "lib/encoding",
-    "lib/execution",
-    "lib/functions",
-    "lib/logical",
-    "lib/physical",
-    "lib/storage",
-    "lib/rdf-fusion",
-    "lib/web",
-    "testsuite",
+  "bench",
+  "cli",
+  "examples",
+  "lib/extensions",
+  "lib/model",
+  "lib/encoding",
+  "lib/execution",
+  "lib/functions",
+  "lib/logical",
+  "lib/physical",
+  "lib/storage",
+  "lib/rdf-fusion",
+  "lib/web",
+  "testsuite",
 ]
 resolver = "2"
 
@@ -22,7 +22,7 @@ version = "0.1.0"
 authors = ["Tobias Schwarzinger <tobias.schwarzinger@tuwien.ac.at>"]
 license = "Apache-2.0"
 edition = "2024"
-rust-version = "1.86" # Minimum Supported Rust Version (Adopt from DataFusion)
+rust-version = "1.86"                                                # Minimum Supported Rust Version (Adopt from DataFusion)
 repository = "https://github.com/tobixdev/rdf-fusion"
 
 [workspace.dependencies]
@@ -157,8 +157,8 @@ clone_on_ref_ptr = "warn"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(datafusion_coop, values("tokio", "tokio_fallback", "per_stream"))',
-    "cfg(tarpaulin)",
-    "cfg(tarpaulin_include)",
+  'cfg(datafusion_coop, values("tokio", "tokio_fallback", "per_stream"))',
+  "cfg(tarpaulin)",
+  "cfg(tarpaulin_include)",
 ] }
 unused_qualifications = "deny"
