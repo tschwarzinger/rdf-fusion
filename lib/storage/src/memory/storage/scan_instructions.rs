@@ -429,7 +429,7 @@ impl From<&MemIndexScanPredicate> for Option<MemIndexPruningPredicate> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::index::{IndexComponents, ScanInstructions};
     use crate::memory::storage::scan_instructions::{
         MemIndexScanInstruction, MemIndexScanInstructions,

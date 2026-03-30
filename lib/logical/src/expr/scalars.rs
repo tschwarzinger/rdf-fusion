@@ -29,13 +29,18 @@ pub fn try_extract_scalar_term(
                     let term = scalar.as_term().ok()?;
                     Some(term.into())
                 }
-                EncodingName::TypedValue => {
+                EncodingName::TypedFamily => {
                     let scalar = encodings
-                        .typed_value()
+                        .typed_family()
                         .try_new_scalar(sv.clone())
                         .expect("Encoding name already validated");
-                    let typed_value = scalar.as_typed_value().ok()?;
-                    Some(typed_value.into())
+                    let pt_sv = scalar.as_plain_term_scalar().ok()?;
+                    let pt_scalar = encodings
+                        .plain_term()
+                        .try_new_scalar(pt_sv)
+                        .expect("Should be a valid plain term scalar");
+                    let term = pt_scalar.as_term().ok()?;
+                    Some(term.into())
                 }
                 EncodingName::Sortable => {
                     unreachable!("Sortable encoding shoudl never create a literal")
@@ -54,7 +59,7 @@ mod tests {
     use rdf_fusion_encoding::EncodingScalar;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-    use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+    use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
     use rdf_fusion_extensions::functions::{
         BuiltinName, FunctionName, RdfFusionFunctionRegistry,
     };
@@ -71,9 +76,9 @@ mod tests {
     }
 
     #[test]
-    fn test_typed_value_literal() {
+    fn test_typed_family_literal() {
         let enc = encodings();
-        let expr = iri_literal_tv("http://example.org/test");
+        let expr = iri_literal_tf("http://example.org/test");
         let result = try_extract_scalar_term(&enc, &expr);
         assert!(result.is_some());
     }
@@ -84,19 +89,19 @@ mod tests {
         let expr = wrap_encoding(
             &enc,
             iri_literal_pt("http://example.org/test"),
-            BuiltinName::WithTypedValueEncoding,
+            BuiltinName::WithTypedFamilyEncoding,
         );
         let result = try_extract_scalar_term(&enc, &expr);
         assert!(result.is_some());
     }
 
     #[test]
-    fn test_wrapped_typed_value() {
+    fn test_wrapped_typed_family() {
         let enc = encodings();
         let expr = wrap_encoding(
             &enc,
-            iri_literal_tv("http://example.org/test"),
-            BuiltinName::WithTypedValueEncoding,
+            iri_literal_tf("http://example.org/test"),
+            BuiltinName::WithTypedFamilyEncoding,
         );
         let result = try_extract_scalar_term(&enc, &expr);
         assert!(result.is_some());
@@ -125,11 +130,17 @@ mod tests {
         Expr::Literal(sv.into_scalar_value(), None)
     }
 
-    fn iri_literal_tv(s: &str) -> Expr {
+    fn iri_literal_tf(s: &str) -> Expr {
         let enc = encodings();
         let term = Term::from(NamedNode::new(s).unwrap());
-        let sv = enc.typed_value().encode_term(Ok(term.as_ref())).unwrap();
-        Expr::Literal(sv.into_scalar_value(), None)
+        let pt_sv = enc.plain_term().encode_term(Ok(term.as_ref())).unwrap();
+        let pt_array = pt_sv.to_array(1).unwrap();
+        let tf_array = enc
+            .typed_family()
+            .cast_from_plain_term_array(&pt_array)
+            .unwrap();
+        let tf_scalar = ScalarValue::try_from_array(tf_array.inner(), 0).unwrap();
+        Expr::Literal(tf_scalar, None)
     }
 
     fn wrap_encoding(
@@ -148,7 +159,7 @@ mod tests {
     fn encodings() -> RdfFusionEncodings {
         RdfFusionEncodings::new(
             Arc::clone(&PLAIN_TERM_ENCODING),
-            Arc::new(TypedValueEncoding::default()),
+            Arc::new(TypedFamilyEncoding::default()),
             None,
             Arc::clone(&SORTABLE_TERM_ENCODING),
         )

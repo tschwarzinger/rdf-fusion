@@ -21,7 +21,7 @@ impl TermDecoder<PlainTermEncoding> for DefaultPlainTermDecoder {
     fn decode_terms(
         array: &<PlainTermEncoding as TermEncoding>::Array,
     ) -> impl Iterator<Item = ThinResult<Self::Term<'_>>> {
-        let array = array.array().as_struct();
+        let array = array.inner().as_struct();
 
         let term_type = array.column(0).as_primitive::<UInt8Type>();
 

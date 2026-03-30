@@ -1,4 +1,4 @@
-use datafusion::arrow::array::{ArrayRef, AsArray};
+use datafusion::arrow::array::{Array, ArrayRef, AsArray, StringArray};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::plan_err;
 use datafusion::logical_expr::expr::AggregateFunction;
@@ -10,19 +10,17 @@ use datafusion::logical_expr::{
 };
 use datafusion::scalar::ScalarValue;
 use datafusion::{error::Result, physical_plan::Accumulator};
-use rdf_fusion_encoding::typed_value::TypedValueEncodingRef;
-use rdf_fusion_encoding::typed_value::decoders::{
-    DefaultTypedValueDecoder, StringLiteralRefTermValueDecoder,
+use rdf_fusion_encoding::typed_family::{
+    DowncastTypedFamilyArray, StringFamily, StringFamilyArray, TypedFamilyEncodingRef,
+    TypedFamilyScalar,
 };
-use rdf_fusion_encoding::typed_value::encoders::StringLiteralRefTermValueEncoder;
-use rdf_fusion_encoding::{TermDecoder, TermEncoder, TermEncoding};
+use rdf_fusion_encoding::{EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{StringLiteralRef, ThinError, TypedValueRef};
 use std::any::Any;
 use std::sync::Arc;
 
-pub fn group_concat_typed_value(encoding: TypedValueEncodingRef) -> AggregateUDF {
+pub fn group_concat_typed_family(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
     AggregateUDF::new_from_impl(SparqlGroupConcat::new(encoding))
 }
 
@@ -32,17 +30,20 @@ pub fn group_concat_typed_value(encoding: TypedValueEncodingRef) -> AggregateUDF
 /// - [SPARQL 1.1 - GROUP CONCAT](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat)
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct SparqlGroupConcat {
-    encoding: TypedValueEncodingRef,
+    encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
 }
 
 impl SparqlGroupConcat {
     /// Creates a new [SparqlGroupConcat] aggregate UDF.
-    pub fn new(encoding: TypedValueEncodingRef) -> Self {
+    pub fn new(encoding: TypedFamilyEncodingRef) -> Self {
         let name = BuiltinName::GroupConcat.to_string();
-        let signature =
-            Signature::uniform(2, vec![encoding.data_type().clone()], Volatility::Stable);
+        let signature = Signature::uniform(
+            2,
+            vec![encoding.data_type().clone()],
+            Volatility::Immutable,
+        );
         SparqlGroupConcat {
             encoding,
             name,
@@ -84,12 +85,19 @@ impl AggregateUDFImpl for SparqlGroupConcat {
             let separator = match separator_expr {
                 Expr::Literal(value, _) => {
                     let scalar = encoding.try_new_scalar(value.clone())?;
-                    let term = DefaultTypedValueDecoder::decode_term(&scalar);
-                    match term {
-                        Ok(TypedValueRef::SimpleLiteral(literal)) => {
-                            literal.value.to_owned()
+                    let arr = scalar.to_array(1)?;
+                    let children = arr.non_empty_children();
+                    if children.len() != 1 {
+                        return plan_err!("Separator should be a simple literal");
+                    }
+                    match children[0].downcast() {
+                        DowncastTypedFamilyArray::String(s_arr) => {
+                            if s_arr.language_array().is_null(0) {
+                                s_arr.value_array().value(0).to_owned()
+                            } else {
+                                return plan_err!("Separator should be a simple literal");
+                            }
                         }
-                        Err(_) => " ".to_owned(),
                         _ => return plan_err!("Separator should be a simple literal"),
                     }
                 }
@@ -114,7 +122,7 @@ impl AggregateUDFImpl for SparqlGroupConcat {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct SparqlGroupConcatWithSeparator {
-    encoding: TypedValueEncodingRef,
+    encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
     separator: String,
@@ -122,14 +130,12 @@ struct SparqlGroupConcatWithSeparator {
 
 impl SparqlGroupConcatWithSeparator {
     /// Creates a new [SparqlGroupConcatWithSeparator] aggregate UDF.
-    pub fn new(encoding: TypedValueEncodingRef, separator: String) -> Self {
-        let name = BuiltinName::GroupConcat.to_string();
-        let signature =
-            Signature::exact(vec![encoding.data_type().clone()], Volatility::Stable);
+    pub fn new(encoding: TypedFamilyEncodingRef, separator: String) -> Self {
+        let data_type = encoding.data_type().clone();
         SparqlGroupConcatWithSeparator {
             encoding,
-            name,
-            signature,
+            name: BuiltinName::GroupConcat.to_string(),
+            signature: Signature::exact(vec![data_type], Volatility::Immutable),
             separator,
         }
     }
@@ -162,7 +168,7 @@ impl AggregateUDFImpl for SparqlGroupConcatWithSeparator {
 
 #[derive(Debug)]
 struct SparqlGroupConcatAccumulator {
-    encoding: TypedValueEncodingRef,
+    encoding: TypedFamilyEncodingRef,
     separator: String,
     error: bool,
     value: Option<String>,
@@ -171,7 +177,7 @@ struct SparqlGroupConcatAccumulator {
 }
 
 impl SparqlGroupConcatAccumulator {
-    pub fn new(encoding: TypedValueEncodingRef, separator: String) -> Self {
+    pub fn new(encoding: TypedFamilyEncodingRef, separator: String) -> Self {
         SparqlGroupConcatAccumulator {
             encoding,
             separator,
@@ -181,56 +187,92 @@ impl SparqlGroupConcatAccumulator {
             language: None,
         }
     }
-}
 
-impl Accumulator for SparqlGroupConcatAccumulator {
-    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
-        if self.error || values.is_empty() {
-            return Ok(());
-        }
+    /// Updates the accumulator for a [`StringFamilyArray`].
+    fn update_accumulator_for_string(
+        &mut self,
+        array: &StringFamilyArray,
+    ) -> DFResult<()> {
+        let val_arr = array.value_array();
+        let lang_arr = array.language_array();
 
-        let mut value_exists = self.value.is_some();
-        let mut value = self.value.take().unwrap_or_default();
+        for i in 0..val_arr.len() {
+            if !self.language_error {
+                let lang = if lang_arr.is_null(i) {
+                    None
+                } else {
+                    Some(lang_arr.value(i))
+                };
 
-        let arr = self.encoding.try_new_array(Arc::clone(&values[0]))?;
-        for string in StringLiteralRefTermValueDecoder::decode_terms(&arr) {
-            if let Ok(string) = string {
-                if value_exists {
-                    value += self.separator.as_str();
-                }
-                value += string.0;
-                value_exists = true;
-                if let Some(lang) = &self.language {
-                    if Some(lang.as_str()) != string.1 {
+                if self.value.is_some() {
+                    if self.language.as_deref() != lang {
                         self.language_error = true;
                         self.language = None;
                     }
                 } else {
-                    self.language = string.1.map(ToOwned::to_owned);
+                    self.language = lang.map(ToOwned::to_owned);
                 }
+            }
+
+            if let Some(mut current) = self.value.take() {
+                current += self.separator.as_str();
+                current += val_arr.value(i);
+                self.value = Some(current);
             } else {
-                self.error = true;
-                self.value = None;
-                return Ok(());
+                self.value = Some(val_arr.value(i).to_owned());
             }
         }
 
-        self.value = Some(value);
+        Ok(())
+    }
+
+    fn encode_result(&self) -> DFResult<TypedFamilyScalar> {
+        if self.error {
+            return Ok(self.encoding.create_scalar_null());
+        }
+
+        let value = self.value.as_deref().unwrap_or("");
+        let language = if self.language_error {
+            None
+        } else {
+            self.language.as_deref()
+        };
+
+        let val_arr = Arc::new(StringArray::from(vec![value])) as ArrayRef;
+        let lang_arr = Arc::new(StringArray::from(vec![language])) as ArrayRef;
+        let struct_arr = StringFamily::create_strings_array(val_arr, lang_arr);
+
+        self.encoding.create_scalar_from_family::<StringFamily>(
+            ScalarValue::try_from_array(&struct_arr, 0)?,
+        )
+    }
+}
+
+impl Accumulator for SparqlGroupConcatAccumulator {
+    fn update_batch(&mut self, values: &[ArrayRef]) -> DFResult<()> {
+        if self.error || values.is_empty() {
+            return Ok(());
+        }
+
+        let arr = self.encoding.try_new_array(Arc::clone(&values[0]))?;
+        for child in arr.non_empty_children() {
+            match child.downcast() {
+                DowncastTypedFamilyArray::Null(_) => continue,
+                DowncastTypedFamilyArray::String(array) => {
+                    self.update_accumulator_for_string(&array)?;
+                }
+                _ => {
+                    self.error = true;
+                    return Ok(());
+                }
+            }
+        }
+
         Ok(())
     }
 
     fn evaluate(&mut self) -> DFResult<ScalarValue> {
-        if self.error {
-            return StringLiteralRefTermValueEncoder::new(Arc::clone(&self.encoding))
-                .encode_term(ThinError::expected())
-                .map(rdf_fusion_encoding::EncodingScalar::into_scalar_value);
-        }
-
-        let value = self.value.as_deref().unwrap_or("");
-        let literal = StringLiteralRef(value, self.language.as_deref());
-        StringLiteralRefTermValueEncoder::new(Arc::clone(&self.encoding))
-            .encode_term(Ok(literal))
-            .map(rdf_fusion_encoding::EncodingScalar::into_scalar_value)
+        Ok(self.encode_result()?.into_scalar_value())
     }
 
     fn size(&self) -> usize {
@@ -246,48 +288,197 @@ impl Accumulator for SparqlGroupConcatAccumulator {
         ])
     }
 
-    #[allow(clippy::missing_asserts_for_indexing)]
     fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        if states.is_empty() {
+            return Ok(());
+        }
+
         let error = states[0].as_boolean().iter().any(|e| e == Some(true));
         if error {
             self.error = true;
-            self.value = None;
-            self.language = None;
             return Ok(());
         }
 
-        let old_values = states[1].as_string::<i32>();
-        for old_value in old_values.iter().flatten() {
-            self.value = match self.value.take() {
-                None => Some(old_value.to_owned()),
-                Some(value) => Some(value + self.separator.as_str() + old_value),
-            };
-        }
-
-        let existing_language_error =
-            states[2].as_boolean().iter().any(|e| e == Some(true));
-        if existing_language_error {
+        let language_error = states[2].as_boolean().iter().any(|e| e == Some(true));
+        if language_error {
             self.language_error = true;
             self.language = None;
-            return Ok(());
         }
 
-        let old_languages = states[3].as_string::<i32>();
-        for old_language in old_languages {
-            self.language = match (self.language.take(), old_language) {
-                (None, other) => other.map(ToOwned::to_owned),
-                (other, None) => other,
-                (Some(language), Some(old_language)) => {
-                    if language.as_str() == old_language {
-                        Some(language)
-                    } else {
-                        self.language_error = true;
-                        None
-                    }
-                }
-            };
-        }
+        let values = states[1].as_string::<i32>();
+        let languages = states[3].as_string::<i32>();
+        let family_array = StringFamilyArray::try_new(values.clone(), languages.clone())?;
+        self.update_accumulator_for_string(&family_array)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::evaluate_aggregate_with_args_for_test;
+    use datafusion::arrow::array::{BooleanArray, StringArray};
+    use datafusion::logical_expr::{col, lit};
+    use insta::assert_snapshot;
+    use rdf_fusion_encoding::EncodingArray;
+    use rdf_fusion_encoding::typed_family::{
+        StringFamilyArray, TypedFamilyArray, TypedFamilyEncoding,
+    };
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_group_concat_typed_family() {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let values = StringArray::from(vec!["a", "b", "c"]);
+        let typed_array = encoding
+            .create_array_from_family(StringFamilyArray::new_simple(values))
+            .unwrap();
+        let separator_lit = create_separator_lit(&encoding, ";");
+
+        assert_snapshot!(run_test(typed_array, separator_lit).await, @r"
+        +-----------------------------------------------------+
+        | GROUP_CONCAT(?table?.a,Union 2:{value:;,language:}) |
+        +-----------------------------------------------------+
+        | {rdf-fusion.strings={value: a;b;c, language: }}     |
+        +-----------------------------------------------------+");
+    }
+
+    #[tokio::test]
+    async fn test_group_concat_matching_languages() {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let typed_array = create_test_string_array(
+            &encoding,
+            &[Some("hello"), Some("world")],
+            &[Some("en"), Some("en")],
+        );
+        let separator_lit = create_separator_lit(&encoding, " ");
+
+        assert_snapshot!(run_test(typed_array, separator_lit).await, @r"
+        +---------------------------------------------------------+
+        | GROUP_CONCAT(?table?.a,Union 2:{value: ,language:})     |
+        +---------------------------------------------------------+
+        | {rdf-fusion.strings={value: hello world, language: en}} |
+        +---------------------------------------------------------+
+        ");
+    }
+
+    #[tokio::test]
+    async fn test_group_concat_differing_languages() {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let typed_array = create_test_string_array(
+            &encoding,
+            &[Some("bonjour"), Some("world")],
+            &[Some("fr"), Some("en")],
+        );
+        let separator_lit = create_separator_lit(&encoding, "-");
+
+        assert_snapshot!(run_test(typed_array, separator_lit).await, @r"
+        +---------------------------------------------------------+
+        | GROUP_CONCAT(?table?.a,Union 2:{value:-,language:})     |
+        +---------------------------------------------------------+
+        | {rdf-fusion.strings={value: bonjour-world, language: }} |
+        +---------------------------------------------------------+
+        ");
+    }
+
+    #[test]
+    fn test_accumulator_merge_batch_success() {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let mut accum =
+            SparqlGroupConcatAccumulator::new(Arc::clone(&encoding), "|".to_string());
+
+        // Simulate state arrays produced by multiple partitions
+        let error_arr = Arc::new(BooleanArray::from(vec![false, false])) as ArrayRef;
+        let value_arr = Arc::new(StringArray::from(vec!["a", "b"])) as ArrayRef;
+        let lang_err_arr = Arc::new(BooleanArray::from(vec![false, false])) as ArrayRef;
+        let lang_arr =
+            Arc::new(StringArray::from(vec![Some("en"), Some("en")])) as ArrayRef;
+
+        accum
+            .merge_batch(&[error_arr, value_arr, lang_err_arr, lang_arr])
+            .unwrap();
+
+        let state = accum.state().unwrap();
+        assert_eq!(state[0], ScalarValue::Boolean(Some(false))); // error
+        assert_eq!(state[1], ScalarValue::Utf8(Some("a|b".to_string()))); // value
+        assert_eq!(state[2], ScalarValue::Boolean(Some(false))); // language_error
+        assert_eq!(state[3], ScalarValue::Utf8(Some("en".to_string()))); // language
+    }
+
+    #[test]
+    fn test_accumulator_merge_batch_error_propagation() {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let mut accum =
+            SparqlGroupConcatAccumulator::new(Arc::clone(&encoding), "|".to_string());
+
+        // Simulate an error occurring in one of the partitions
+        let error_arr = Arc::new(BooleanArray::from(vec![false, true])) as ArrayRef;
+        let value_arr = Arc::new(StringArray::from(vec!["a", "b"])) as ArrayRef;
+        let lang_err_arr = Arc::new(BooleanArray::from(vec![false, false])) as ArrayRef;
+        let lang_arr =
+            Arc::new(StringArray::from(vec![Some("en"), Some("en")])) as ArrayRef;
+
+        accum
+            .merge_batch(&[error_arr, value_arr, lang_err_arr, lang_arr])
+            .unwrap();
+
+        // The accumulator itself should now be in an error state
+        assert!(accum.error);
+    }
+
+    #[test]
+    fn test_accumulator_update_batch_empty() {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let mut accum =
+            SparqlGroupConcatAccumulator::new(Arc::clone(&encoding), "|".to_string());
+
+        // Empty update
+        accum.update_batch(&[]).unwrap();
+        assert_eq!(accum.value, None);
+
+        // Empty array update
+        let empty_arr = create_test_string_array(&encoding, &[], &[]);
+        accum.update_batch(&[empty_arr.into_array_ref()]).unwrap();
+        assert_eq!(accum.value, None);
+    }
+
+    /// Creates an test array with the given values and languages.
+    fn create_test_string_array(
+        encoding: &TypedFamilyEncodingRef,
+        values: &[Option<&str>],
+        languages: &[Option<&str>],
+    ) -> TypedFamilyArray {
+        let val_arr = StringArray::from(values.to_vec());
+        let lang_arr = StringArray::from(languages.to_vec());
+        encoding
+            .create_array_from_family(
+                StringFamilyArray::try_new(val_arr, lang_arr).unwrap(),
+            )
+            .unwrap()
+    }
+
+    /// Helper function to create a separator literal.
+    fn create_separator_lit(encoding: &TypedFamilyEncodingRef, value: &str) -> Expr {
+        let val_arr = Arc::new(StringArray::from(vec![Some(value)])) as ArrayRef;
+        let lang_arr = Arc::new(StringArray::new_null(1)) as ArrayRef;
+        let struct_arr = StringFamily::create_strings_array(val_arr, lang_arr);
+        let separator_scalar = encoding
+            .create_scalar_from_family::<StringFamily>(
+                ScalarValue::try_from_array(&struct_arr, 0).unwrap(),
+            )
+            .unwrap();
+        lit(separator_scalar.into_scalar_value())
+    }
+
+    /// Executes a test and returns the pretty-printed result.
+    async fn run_test(typed_array: TypedFamilyArray, separator_lit: Expr) -> String {
+        let encoding = Arc::clone(typed_array.encoding());
+        let df = evaluate_aggregate_with_args_for_test(
+            typed_array.into_array_ref(),
+            Arc::new(group_concat_typed_family(encoding)),
+            vec![col("a"), separator_lit],
+        );
+        df.to_string().await.unwrap()
     }
 }

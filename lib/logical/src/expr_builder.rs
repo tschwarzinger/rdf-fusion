@@ -3,14 +3,13 @@ use datafusion::common::{plan_datafusion_err, plan_err};
 use datafusion::functions_aggregate::count::{count, count_distinct};
 use datafusion::functions_aggregate::first_last::first_value;
 use datafusion::logical_expr::{Expr, ExprSchemable, lit};
-use rdf_fusion_encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermScalar};
-use rdf_fusion_encoding::{EncodingName, EncodingScalar, TermEncoder};
+use rdf_fusion_encoding::plain_term::{
+    PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder, PlainTermScalar,
+};
+use rdf_fusion_encoding::{EncodingArray, EncodingName, EncodingScalar};
 use rdf_fusion_extensions::functions::{BuiltinName, FunctionName};
 use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{
-    Iri, LiteralRef, SimpleLiteralRef, TermRef, ThinError, TypedValueRef,
-};
-use std::collections::HashSet;
+use rdf_fusion_model::{Iri, LiteralRef, TermRef, ThinError};
 use std::ops::Not;
 
 /// A builder for expressions that make use of RDF Fusion built-ins.
@@ -160,14 +159,24 @@ impl<'root> RdfFusionExprBuilder<'root> {
     /// # Relevant Resources
     /// - [SPARQL 1.1 - IRI](https://www.w3.org/TR/sparql11-query/#func-iri)
     pub fn iri(self, base_iri: Option<&Iri<String>>) -> DFResult<Self> {
-        let typed_value_encoding = self.context.encodings().typed_value();
+        let typed_family_encoding = self.context.encodings().typed_family();
 
-        let arg = match base_iri {
-            None => typed_value_encoding.encode_term(ThinError::expected())?,
-            Some(value) => typed_value_encoding.encode_term(Ok(TermRef::Literal(
-                LiteralRef::new_simple_literal(value.as_str()),
-            )))?,
+        let term_res = match base_iri {
+            None => ThinError::expected(),
+            Some(value) => Ok(TermRef::Literal(LiteralRef::new_simple_literal(
+                value.as_str(),
+            ))),
         };
+
+        let mut pt_builder = PlainTermArrayElementBuilder::new(1);
+        match term_res {
+            Ok(term) => pt_builder.append_term(term),
+            Err(_) => pt_builder.append_null(),
+        }
+        let pt_array = pt_builder.finish();
+        let tf_array = typed_family_encoding.cast_from_plain_term_array(&pt_array)?;
+        let arg = tf_array.try_as_scalar(0)?;
+
         self.apply_builtin_with_args(BuiltinName::Iri, vec![lit(arg.into_scalar_value())])
     }
 
@@ -572,7 +581,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
     /// # Relevant Resources
     /// - [SPARQL 1.1 - XPath Constructor Functions](https://www.w3.org/TR/sparql11-query/#FunctionMapping)
     pub fn cast_int(self) -> DFResult<Self> {
-        self.apply_builtin(BuiltinName::AsInt, vec![])
+        self.apply_builtin(BuiltinName::CastInt, vec![])
     }
 
     /// Casts the inner expression to an `xsd:boolean`.
@@ -779,18 +788,16 @@ impl<'root> RdfFusionExprBuilder<'root> {
     /// # Relevant Resources
     /// - [SPARQL 1.1 - GroupConcat](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat)
     pub fn group_concat(self, distinct: bool, separator: Option<&str>) -> DFResult<Self> {
-        let arg = self
-            .context
-            .encodings()
-            .typed_value()
-            .default_encoder()
-            .encode_term(
-                separator
-                    .map(|sep| {
-                        TypedValueRef::SimpleLiteral(SimpleLiteralRef { value: sep })
-                    })
-                    .ok_or(ThinError::ExpectedError),
-            )?;
+        let typed_family_encoding = self.context.encodings().typed_family();
+
+        let mut pt_builder = PlainTermArrayElementBuilder::new(1);
+        let sep = separator.unwrap_or(" ");
+        pt_builder.append_literal(LiteralRef::new_simple_literal(sep));
+
+        let pt_array = pt_builder.finish();
+        let tf_array = typed_family_encoding.cast_from_plain_term_array(&pt_array)?;
+        let arg = tf_array.try_as_scalar(0)?;
+
         self.context.apply_builtin_udaf(
             BuiltinName::GroupConcat,
             vec![self.expr, lit(arg.into_scalar_value())],
@@ -855,25 +862,29 @@ impl<'root> RdfFusionExprBuilder<'root> {
         for target_encoding in target_encodings {
             let functions_to_apply = match (source_encoding, target_encoding) {
                 (
-                    EncodingName::ObjectId | EncodingName::TypedValue,
+                    EncodingName::ObjectId | EncodingName::TypedFamily,
                     EncodingName::PlainTerm,
                 ) => {
                     vec![BuiltinName::WithPlainTermEncoding]
                 }
-                (EncodingName::PlainTerm, EncodingName::TypedValue) => {
-                    vec![BuiltinName::WithTypedValueEncoding]
-                }
-                (EncodingName::ObjectId, EncodingName::TypedValue) => {
-                    vec![BuiltinName::WithTypedValueEncoding]
-                }
                 (
-                    EncodingName::PlainTerm | EncodingName::TypedValue,
-                    EncodingName::Sortable,
+                    EncodingName::PlainTerm | EncodingName::ObjectId,
+                    EncodingName::TypedFamily,
                 ) => {
+                    vec![BuiltinName::WithTypedFamilyEncoding]
+                }
+                (EncodingName::PlainTerm, EncodingName::Sortable) => {
+                    vec![
+                        BuiltinName::WithTypedFamilyEncoding,
+                        BuiltinName::WithSortableEncoding,
+                    ]
+                }
+                (EncodingName::TypedFamily, EncodingName::Sortable) => {
                     vec![BuiltinName::WithSortableEncoding]
                 }
                 (EncodingName::ObjectId, EncodingName::Sortable) => vec![
                     BuiltinName::WithPlainTermEncoding,
+                    BuiltinName::WithTypedFamilyEncoding,
                     BuiltinName::WithSortableEncoding,
                 ],
                 _ => continue,
@@ -929,28 +940,14 @@ impl<'root> RdfFusionExprBuilder<'root> {
     ///
     /// This is a terminating builder function as it no longer produces an RDF term as output.
     pub fn build_same_term(self, rhs: Expr) -> DFResult<Expr> {
-        let encodings: HashSet<EncodingName> = self
-            .context
-            .get_encodings(&[self.expr.clone(), rhs.clone()])?
-            .into_iter()
-            .collect();
-
-        if encodings.len() == 1 {
-            return Ok(self.expr.eq(rhs));
-        }
-
-        let encoding = encodings
-            .iter()
-            .find(|e| **e == EncodingName::TypedValue || **e == EncodingName::PlainTerm)
-            .ok_or(plan_datafusion_err!(
-                "Cannot determine fitting encoding for sameTerm."
-            ))?;
-
-        let lhs = self.clone().with_encoding(*encoding)?.build()?;
+        let lhs = self
+            .clone()
+            .with_encoding(EncodingName::PlainTerm)?
+            .build()?;
         let rhs = self
             .context
             .try_create_builder(rhs)?
-            .with_encoding(*encoding)?
+            .with_encoding(EncodingName::PlainTerm)?
             .build()?;
         Ok(lhs.eq(rhs))
     }
@@ -964,7 +961,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
             .map(|e| {
                 self.context
                     .try_create_builder(e)?
-                    .with_encoding(EncodingName::TypedValue)?
+                    .with_encoding(EncodingName::TypedFamily)?
                     .build()
             })
             .collect::<DFResult<Vec<_>>>()?;
@@ -995,12 +992,16 @@ impl<'root> RdfFusionExprBuilder<'root> {
             EncodingName::PlainTerm => PLAIN_TERM_ENCODING
                 .encode_term(Ok(scalar))?
                 .into_scalar_value(),
-            EncodingName::TypedValue => self
-                .context
-                .encodings()
-                .typed_value()
-                .encode_term(Ok(scalar))?
-                .into_scalar_value(),
+            EncodingName::TypedFamily => {
+                let typed_family_encoding = self.context.encodings().typed_family();
+                let mut pt_builder = PlainTermArrayElementBuilder::new(1);
+                pt_builder.append_term(scalar);
+                let pt_array = pt_builder.finish();
+                let tf_array =
+                    typed_family_encoding.cast_from_plain_term_array(&pt_array)?;
+                let arg = tf_array.try_as_scalar(0)?;
+                arg.into_scalar_value()
+            }
             EncodingName::Sortable => {
                 return plan_err!("Filtering not supported for Sortable encoding.");
             }

@@ -18,5 +18,6 @@ anyhow = { workspace = true }
 async-trait.workspace = true
 datafusion = { workspace = true }
 futures = { workspace = true }
+insta = { workspace = true }
 rdf-fusion = { workspace = true }
 tokio = { workspace = true }

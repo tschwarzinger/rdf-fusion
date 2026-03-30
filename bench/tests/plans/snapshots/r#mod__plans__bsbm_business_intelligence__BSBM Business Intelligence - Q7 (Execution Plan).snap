@@ -5,7 +5,7 @@ expression: "&string"
 ProjectionExec: expr=[ENC_PT(product@0) as product]
   HashJoinExec: mode=CollectLeft, join_type=LeftAnti, on=[(product@0, __inner__product@0)]
     ProjectionExec: expr=[product@0 as product]
-      SortExec: TopK(fetch=1000), expr=[ENC_SORT(offerCount@1) DESC], preserve_partitioning=[false], filter=[ENC_SORT(offerCount@1) IS NULL OR ENC_SORT(offerCount@1) > {type:4,numeric:1.0,bytes:0000000000000001}]
+      SortExec: TopK(fetch=1000), expr=[ENC_SORT(offerCount@1) DESC], preserve_partitioning=[false], filter=[ENC_SORT(offerCount@1) IS NULL OR ENC_SORT(offerCount@1) > {type:4,numeric:1.0,bytes:31}]
         ProjectionExec: expr=[product@0 as product, INT64_AS_TERM(<uuid>@1) as offerCount]
           AggregateExec: mode=Single, gby=[product@0 as product], aggr=[<uuid>]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[product@0, offer@1]

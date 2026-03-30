@@ -20,7 +20,7 @@ pub trait EncodingArray: Clone {
     fn encoding(&self) -> &Arc<Self::Encoding>;
 
     /// Returns a reference to the inner array.
-    fn array(&self) -> &ArrayRef;
+    fn inner(&self) -> &ArrayRef;
 
     /// Consumes `self` and returns the inner array.
     fn into_array_ref(self) -> ArrayRef;
@@ -32,7 +32,7 @@ pub trait EncodingArray: Clone {
         &self,
         index: usize,
     ) -> DFResult<<Self::Encoding as TermEncoding>::Scalar> {
-        let scalar = ScalarValue::try_from_array(self.array(), index)?;
+        let scalar = ScalarValue::try_from_array(self.inner(), index)?;
         self.encoding().try_new_scalar(scalar)
     }
 }
@@ -41,7 +41,7 @@ pub trait EncodingArray: Clone {
 ///
 /// The constructors of types that implement [EncodingScalar] are meant to ensure that the
 /// [ScalarValue] upholds all invariants of the encoding.
-pub trait EncodingScalar {
+pub trait EncodingScalar: Clone {
     /// The encoding used by this scalar.
     type Encoding: TermEncoding;
 
@@ -214,6 +214,7 @@ pub trait TermEncoder<TEncoding: TermEncoding + ?Sized>: Debug + Sync + Send {
 /// ([Self::term_iter]) independently on whether the underlying data is an array or a scalar. This
 /// is useful for scenarios in which distinguishing between array/scalar is not necessary or too
 /// complex.
+#[derive(Clone)]
 pub enum EncodingDatum<TEncoding: TermEncoding + ?Sized> {
     /// An array underlies this datum.
     Array(TEncoding::Array),

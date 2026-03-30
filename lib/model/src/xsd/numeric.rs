@@ -4,6 +4,7 @@ use crate::xsd::float::Float;
 use crate::xsd::integer::Integer;
 use crate::{Int, ThinResult};
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::ops::Neg;
 
@@ -17,6 +18,50 @@ pub enum Numeric {
 }
 
 impl Numeric {
+    pub fn checked_add(&self, rhs: Self) -> ThinResult<Numeric> {
+        match NumericPair::with_casts_from(*self, rhs) {
+            NumericPair::Int(lhs, rhs) => lhs.checked_add(rhs).map(Numeric::Int),
+            NumericPair::Integer(lhs, rhs) => lhs.checked_add(rhs).map(Numeric::Integer),
+            NumericPair::Float(lhs, rhs) => Ok(Numeric::Float(lhs + rhs)),
+            NumericPair::Double(lhs, rhs) => Ok(Numeric::Double(lhs + rhs)),
+            NumericPair::Decimal(lhs, rhs) => lhs.checked_add(rhs).map(Numeric::Decimal),
+        }
+    }
+
+    pub fn checked_sub(&self, rhs: Self) -> ThinResult<Numeric> {
+        match NumericPair::with_casts_from(*self, rhs) {
+            NumericPair::Int(lhs, rhs) => lhs.checked_sub(rhs).map(Numeric::Int),
+            NumericPair::Integer(lhs, rhs) => lhs.checked_sub(rhs).map(Numeric::Integer),
+            NumericPair::Float(lhs, rhs) => Ok(Numeric::Float(lhs - rhs)),
+            NumericPair::Double(lhs, rhs) => Ok(Numeric::Double(lhs - rhs)),
+            NumericPair::Decimal(lhs, rhs) => lhs.checked_sub(rhs).map(Numeric::Decimal),
+        }
+    }
+
+    pub fn checked_mul(&self, rhs: Self) -> ThinResult<Numeric> {
+        match NumericPair::with_casts_from(*self, rhs) {
+            NumericPair::Int(lhs, rhs) => lhs.checked_mul(rhs).map(Numeric::Int),
+            NumericPair::Integer(lhs, rhs) => lhs.checked_mul(rhs).map(Numeric::Integer),
+            NumericPair::Float(lhs, rhs) => Ok(Numeric::Float(lhs * rhs)),
+            NumericPair::Double(lhs, rhs) => Ok(Numeric::Double(lhs * rhs)),
+            NumericPair::Decimal(lhs, rhs) => lhs.checked_mul(rhs).map(Numeric::Decimal),
+        }
+    }
+
+    pub fn div(&self, rhs: Self) -> ThinResult<Numeric> {
+        match NumericPair::with_casts_from(*self, rhs) {
+            NumericPair::Int(lhs, rhs) => Decimal::from(lhs)
+                .checked_div(Decimal::from(rhs))
+                .map(Numeric::Decimal),
+            NumericPair::Integer(lhs, rhs) => Decimal::from(lhs)
+                .checked_div(Decimal::from(rhs))
+                .map(Numeric::Decimal),
+            NumericPair::Float(lhs, rhs) => Ok(Numeric::Float(lhs / rhs)),
+            NumericPair::Double(lhs, rhs) => Ok(Numeric::Double(lhs / rhs)),
+            NumericPair::Decimal(lhs, rhs) => lhs.checked_div(rhs).map(Numeric::Decimal),
+        }
+    }
+
     pub fn abs(&self) -> ThinResult<Numeric> {
         match self {
             Numeric::Int(value) => value.checked_abs().map(Numeric::Int),
@@ -58,6 +103,17 @@ impl Numeric {
             Numeric::Decimal(decimal) => decimal.to_be_bytes().into(),
         }
     }
+
+    #[must_use]
+    pub fn is_zero(&self) -> bool {
+        match self {
+            Self::Int(v) => i32::from(*v) == 0,
+            Self::Integer(v) => i64::from(*v) == 0,
+            Self::Float(v) => f32::from(*v) == 0.0,
+            Self::Double(v) => f64::from(*v) == 0.0,
+            Self::Decimal(v) => v.is_zero(),
+        }
+    }
 }
 
 impl PartialEq for Numeric {
@@ -95,6 +151,18 @@ impl PartialOrd for Numeric {
             NumericPair::Float(lhs, rhs) => lhs.partial_cmp(&rhs),
             NumericPair::Double(lhs, rhs) => lhs.partial_cmp(&rhs),
             NumericPair::Decimal(lhs, rhs) => Some(lhs.cmp(&rhs)),
+        }
+    }
+}
+
+impl Display for Numeric {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Numeric::Int(v) => write!(f, "{v}"),
+            Numeric::Integer(v) => write!(f, "{v}"),
+            Numeric::Float(v) => write!(f, "{v}"),
+            Numeric::Double(v) => write!(f, "{v}"),
+            Numeric::Decimal(v) => write!(f, "{v}"),
         }
     }
 }

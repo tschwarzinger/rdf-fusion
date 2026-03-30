@@ -1,7 +1,7 @@
 use crate::TermEncoding;
 use crate::encoding::EncodingArray;
 use crate::sortable_term::{SORTABLE_TERM_ENCODING, SortableTermEncoding};
-use datafusion::arrow::array::{Array, ArrayRef};
+use datafusion::arrow::array::{Array, ArrayRef, new_null_array};
 use datafusion::common::exec_err;
 use datafusion::error::DataFusionError;
 use std::sync::Arc;
@@ -12,7 +12,14 @@ pub struct SortableTermArray {
     inner: ArrayRef,
 }
 
-impl SortableTermArray {}
+impl SortableTermArray {
+    /// Returns a null [`SortableTermArray`].
+    pub fn new_null(len: usize) -> Self {
+        Self {
+            inner: new_null_array(SORTABLE_TERM_ENCODING.data_type(), len),
+        }
+    }
+}
 
 impl EncodingArray for SortableTermArray {
     type Encoding = SortableTermEncoding;
@@ -21,7 +28,7 @@ impl EncodingArray for SortableTermArray {
         &SORTABLE_TERM_ENCODING
     }
 
-    fn array(&self) -> &ArrayRef {
+    fn inner(&self) -> &ArrayRef {
         &self.inner
     }
 

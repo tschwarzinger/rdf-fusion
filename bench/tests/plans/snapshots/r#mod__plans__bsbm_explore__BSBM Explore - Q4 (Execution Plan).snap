@@ -2,14 +2,14 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]@3) as product, ENC_PT(first_value(label) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]@4) as label, ENC_PT(first_value(propertyTextual) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]@5) as propertyTextual]
+ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]@3) as product, ENC_PT(first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]@4) as label, ENC_PT(first_value(propertyTextual) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]@5) as propertyTextual]
   GlobalLimitExec: skip=5, fetch=10
-    SortExec: TopK(fetch=15), expr=[ENC_SORT(ENC_PT(label))@0 ASC, product@1 ASC, propertyTextual@2 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(ENC_PT(label))@0 ASC]
-      AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(ENC_PT(label)), product@1 as product, propertyTextual@3 as propertyTextual], aggr=[first_value(product) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST], first_value(label) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST], first_value(propertyTextual) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
-        ProjectionExec: expr=[ENC_SORT(ENC_PT(label@1)) as __common_expr_1, product@0 as product, label@1 as label, propertyTextual@2 as propertyTextual]
-          SortPreservingMergeExec: [ENC_SORT(ENC_PT(label@1)) ASC]
+    SortExec: TopK(fetch=15), expr=[ENC_SORT(ENC_TF(ENC_PT(label)))@0 ASC, product@1 ASC, propertyTextual@2 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(ENC_TF(ENC_PT(label)))@0 ASC]
+      AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(ENC_TF(ENC_PT(label))), product@1 as product, propertyTextual@3 as propertyTextual], aggr=[first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST], first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST], first_value(propertyTextual) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
+        ProjectionExec: expr=[ENC_SORT(ENC_TF(ENC_PT(label@1))) as __common_expr_1, product@0 as product, label@1 as label, propertyTextual@2 as propertyTextual]
+          SortPreservingMergeExec: [ENC_SORT(ENC_TF(ENC_PT(label@1))) ASC]
             UnionExec
-              SortExec: expr=[ENC_SORT(ENC_PT(label@1)) ASC], preserve_partitioning=[false]
+              SortExec: expr=[ENC_SORT(ENC_TF(ENC_PT(label@1))) ASC], preserve_partitioning=[false]
                 HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1, propertyTextual@2]
                   HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1, propertyTextual@3]
                     HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]
@@ -20,9 +20,9 @@ ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_PT(labe
                         DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4305>, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
                       DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1427>, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
                     DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual1>, object=?propertyTextual, additional_filters=[DynamicFilter [ Generation 1; Unknown true ]]
-                  FilterExec: EBV(GT(ENC_TV(p1@1), 9:457)), projection=[product@0]
+                  FilterExec: EBV(GT(ENC_TF(p1@1), 4:4:457)), projection=[product@0]
                     DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1>, object=?p1, additional_filters=[DynamicFilter [ Generation 1; Unknown true ]]
-              SortExec: expr=[ENC_SORT(ENC_PT(label@1)) ASC], preserve_partitioning=[false]
+              SortExec: expr=[ENC_SORT(ENC_TF(ENC_PT(label@1))) ASC], preserve_partitioning=[false]
                 HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1, propertyTextual@2]
                   HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1, propertyTextual@3]
                     HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]
@@ -33,5 +33,5 @@ ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_PT(labe
                         DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4305>, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
                       DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1444>, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
                     DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual1>, object=?propertyTextual, additional_filters=[DynamicFilter [ Generation 1; Unknown true ]]
-                  FilterExec: EBV(GT(ENC_TV(p2@1), 9:488)), projection=[product@0]
+                  FilterExec: EBV(GT(ENC_TF(p2@1), 4:4:488)), projection=[product@0]
                     DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2>, object=?p2, additional_filters=[DynamicFilter [ Generation 1; Unknown true ]]

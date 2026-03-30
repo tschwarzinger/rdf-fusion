@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[ENC_PT(otherProduct@0) as otherProduct, ENC_PT(sameFeatures@1) as sameFeatures]
-  SortExec: TopK(fetch=10), expr=[ENC_SORT(sameFeatures@1) DESC, ENC_SORT(ENC_PT(otherProduct@0)) ASC], preserve_partitioning=[false], filter=[ENC_SORT(sameFeatures@1) IS NULL OR ENC_SORT(sameFeatures@1) > {type:4,numeric:4.0,bytes:0000000000000004} OR ENC_SORT(sameFeatures@1) = {type:4,numeric:4.0,bytes:0000000000000004} AND (ENC_SORT(ENC_PT(otherProduct@0)) IS NULL OR ENC_SORT(ENC_PT(otherProduct@0)) < {type:2,numeric:,bytes:687474703a2f2f777777342e7769776973732e66752d6265726c696e2e64652f62697a65722f6273626d2f7630312f696e7374616e6365732f6461746146726f6d50726f647563657231332f50726f64756374353938})]
+  SortExec: TopK(fetch=10), expr=[ENC_SORT(sameFeatures@1) DESC, ENC_SORT(ENC_TF(ENC_PT(otherProduct@0))) ASC], preserve_partitioning=[false], filter=[ENC_SORT(sameFeatures@1) IS NULL OR ENC_SORT(sameFeatures@1) > {type:4,numeric:4.0,bytes:34} OR ENC_SORT(sameFeatures@1) = {type:4,numeric:4.0,bytes:34} AND (ENC_SORT(ENC_TF(ENC_PT(otherProduct@0))) IS NULL OR ENC_SORT(ENC_TF(ENC_PT(otherProduct@0))) < {type:2,numeric:,bytes:687474703a2f2f777777342e7769776973732e66752d6265726c696e2e64652f62697a65722f6273626d2f7630312f696e7374616e6365732f6461746146726f6d50726f647563657231332f50726f64756374353938})]
     HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(otherProduct@0, otherProduct@0)], projection=[otherProduct@0, sameFeatures@2]
       FilterExec: otherProduct@0 != <object id>
         DataSourceExec: [GPOS] subject=?otherProduct, predicate=<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Product>
@@ -11,8 +11,8 @@ ProjectionExec: expr=[ENC_PT(otherProduct@0) as otherProduct, ENC_PT(sameFeature
         AggregateExec: mode=Single, gby=[otherProduct@0 as otherProduct], aggr=[<uuid>]
           ProjectionExec: expr=[otherProduct@1 as otherProduct, otherFeature@2 as otherFeature]
             NestedLoopJoinExec: join_type=Inner, filter=EBV(EQ(join_proj_push_down_1@0, join_proj_push_down_2@1)), projection=[feature@0, otherProduct@2, otherFeature@3]
-              ProjectionExec: expr=[feature@0 as feature, ENC_TV(feature@0) as join_proj_push_down_1]
+              ProjectionExec: expr=[feature@0 as feature, ENC_TF(feature@0) as join_proj_push_down_1]
                 DataSourceExec: [GSPO] subject=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature>, object=?feature
-              ProjectionExec: expr=[otherProduct@0 as otherProduct, otherFeature@1 as otherFeature, ENC_TV(otherFeature@1) as join_proj_push_down_2]
+              ProjectionExec: expr=[otherProduct@0 as otherProduct, otherFeature@1 as otherFeature, ENC_TF(otherFeature@1) as join_proj_push_down_2]
                 FilterExec: otherProduct@0 != <object id>
                   DataSourceExec: [GPOS] subject=?otherProduct, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature>, object=?otherFeature

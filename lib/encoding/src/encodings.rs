@@ -1,7 +1,7 @@
 use crate::object_id::ObjectIdEncodingRef;
 use crate::plain_term::{PlainTermEncoding, PlainTermEncodingRef};
 use crate::sortable_term::SortableTermEncodingRef;
-use crate::typed_value::TypedValueEncodingRef;
+use crate::typed_family::TypedFamilyEncodingRef;
 use crate::{EncodingName, TermEncoding};
 use datafusion::arrow::datatypes::DataType;
 use std::hash::{Hash, Hasher};
@@ -20,8 +20,8 @@ use std::sync::Arc;
 pub struct RdfFusionEncodings {
     /// The [PlainTermEncoding] configuration.
     plain_term: PlainTermEncodingRef,
-    /// The [TypedValueEncoding] configuration.
-    typed_value: TypedValueEncodingRef,
+    /// The [TypedFamilies] configuration.
+    typed_family: TypedFamilyEncodingRef,
     /// The [ObjectIdEncoding] configuration.
     object_id: Option<ObjectIdEncodingRef>,
     /// The [SortableTermEncoding] configuration.
@@ -32,13 +32,13 @@ impl RdfFusionEncodings {
     /// Creates a new [RdfFusionEncodings].
     pub fn new(
         plain_term: PlainTermEncodingRef,
-        typed_value: TypedValueEncodingRef,
+        typed_family: TypedFamilyEncodingRef,
         object_id: Option<ObjectIdEncodingRef>,
         sortable_term: SortableTermEncodingRef,
     ) -> Self {
         Self {
             plain_term,
-            typed_value,
+            typed_family,
             object_id,
             sortable_term,
         }
@@ -49,9 +49,9 @@ impl RdfFusionEncodings {
         &self.plain_term
     }
 
-    /// Provides a reference to the used [`TypedValueEncodingRef`].
-    pub fn typed_value(&self) -> &TypedValueEncodingRef {
-        &self.typed_value
+    /// Provides a reference to the used [`TypedFamilyEncodingRef`].
+    pub fn typed_family(&self) -> &TypedFamilyEncodingRef {
+        &self.typed_family
     }
 
     /// Provides a reference to the used [`ObjectIdEncodingRef`].
@@ -75,8 +75,8 @@ impl RdfFusionEncodings {
             result.push(self.plain_term.data_type().clone());
         }
 
-        if names.contains(&EncodingName::TypedValue) {
-            result.push(self.typed_value.data_type().clone());
+        if names.contains(&EncodingName::TypedFamily) {
+            result.push(self.typed_family.data_type().clone());
         }
 
         if let Some(object_id) = self.object_id.as_ref()
@@ -101,8 +101,8 @@ impl RdfFusionEncodings {
             return Some(EncodingName::PlainTerm);
         }
 
-        if data_type == self.typed_value.data_type() {
-            return Some(EncodingName::TypedValue);
+        if data_type == self.typed_family.data_type() {
+            return Some(EncodingName::TypedFamily);
         }
 
         if let Some(object_id) = self.object_id.as_ref()
@@ -129,7 +129,7 @@ impl PartialEq for RdfFusionEncodings {
 
         object_id_equal
             && Arc::ptr_eq(&self.plain_term, &other.plain_term)
-            && Arc::ptr_eq(&self.typed_value, &other.typed_value)
+            && Arc::ptr_eq(&self.typed_family, &other.typed_family)
             && Arc::ptr_eq(&self.sortable_term, &other.sortable_term)
     }
 }
@@ -139,7 +139,7 @@ impl Eq for RdfFusionEncodings {}
 impl Hash for RdfFusionEncodings {
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_usize(Arc::as_ptr(&self.plain_term) as usize);
-        state.write_usize(Arc::as_ptr(&self.typed_value) as usize);
+        state.write_usize(Arc::as_ptr(&self.typed_family) as usize);
         if let Some(object_id) = &self.object_id {
             state.write_usize(Arc::as_ptr(object_id) as usize);
         }

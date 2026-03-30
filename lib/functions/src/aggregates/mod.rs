@@ -1,11 +1,9 @@
 mod avg;
 mod group_concat;
-mod max;
-mod min;
+mod min_max;
 mod sum;
 
 pub use avg::*;
 pub use group_concat::*;
-pub use max::*;
-pub use min::*;
+pub use min_max::*;
 pub use sum::*;

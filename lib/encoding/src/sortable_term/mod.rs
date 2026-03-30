@@ -1,6 +1,5 @@
 mod array;
 mod builder;
-pub mod encoders;
 mod encoding;
 mod scalar;
 mod term_type;

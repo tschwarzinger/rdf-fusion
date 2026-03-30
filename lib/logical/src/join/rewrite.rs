@@ -389,7 +389,7 @@ mod tests {
     use insta::assert_snapshot;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-    use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+    use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
     use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings, TermEncoding};
     use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
     use std::sync::Arc;
@@ -443,7 +443,7 @@ mod tests {
     fn make_test_context() -> RdfFusionContextView {
         let encodings = RdfFusionEncodings::new(
             Arc::clone(&PLAIN_TERM_ENCODING),
-            Arc::new(TypedValueEncoding::default()),
+            Arc::new(TypedFamilyEncoding::default()),
             None,
             Arc::clone(&SORTABLE_TERM_ENCODING),
         );

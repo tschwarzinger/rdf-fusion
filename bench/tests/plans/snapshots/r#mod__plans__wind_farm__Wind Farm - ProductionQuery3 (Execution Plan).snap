@@ -20,7 +20,7 @@ ProjectionExec: expr=[ENC_PT(site_label@0) as site_label, ENC_PT(wtur_label@1) a
                               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(site@0, site@0)], projection=[site_label@1, wtur_asp@3]
                                 HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(site@0, site@0)], projection=[site@0, site_label@2]
                                   DataSourceExec: [GPOS] subject=?site, predicate=<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>, object=<https://github.com/magbak/chrontext/rds_power#Site>
-                                  FilterExec: EBV(EQ(ENC_TV(site_label@1), 3:{value:Wind Mountain,language:}))
+                                  FilterExec: EBV(EQ(ENC_TF(site_label@1), 2:{value:Wind Mountain,language:}))
                                     DataSourceExec: [GPOS] subject=?site, predicate=<http://www.w3.org/2000/01/rdf-schema#label>, object=?site_label, additional_filters=[DynamicFilter [ Generation 2; site in (<object id range>) ]]
                                 DataSourceExec: [GPOS] subject=?site, predicate=<https://github.com/magbak/chrontext/rds_power#hasFunctionalAspect>, object=?wtur_asp, additional_filters=[DynamicFilter [ Generation 2; site in (<object id range>) ]]
                               DataSourceExec: [GPOS] subject=?wtur_asp, predicate=<http://www.w3.org/2000/01/rdf-schema#label>, object=?wtur_label, additional_filters=[DynamicFilter [ Generation 2; wtur_asp in (<object id range>) ]]

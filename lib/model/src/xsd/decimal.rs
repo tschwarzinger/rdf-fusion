@@ -24,7 +24,7 @@ impl Decimal {
     pub const MAX: Self = Self { value: i128::MAX };
     pub const MIN: Self = Self { value: i128::MIN };
     pub const PRECISION: u8 = 36;
-    pub const SCALE: i8 = 16;
+    pub const SCALE: i8 = 18;
     #[cfg(test)]
     pub const STEP: Self = Self { value: 1 };
 
@@ -276,6 +276,12 @@ impl Decimal {
     #[must_use]
     pub const fn as_i128(self) -> i128 {
         self.value / DECIMAL_PART_POW
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_zero(self) -> bool {
+        self.value == 0
     }
 }
 

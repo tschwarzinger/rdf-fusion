@@ -18,7 +18,7 @@ ProjectionExec: expr=[ENC_PT(productLabel@0) as productLabel, ENC_PT(offer@1) as
               DataSourceExec: [GPOS] subject=?vendor, predicate=<http://www.w3.org/2000/01/rdf-schema#label>, object=?vendorTitle, additional_filters=[DynamicFilter [ Generation 2; vendor in (<object id range>) ]]
             DataSourceExec: [GPOS] subject=?vendor, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country>, object=<http://downlode.org/rdf/iso-3166/countries#DE>, additional_filters=[DynamicFilter [ Generation 2; vendor in (<object id range>) ]]
           DataSourceExec: [GPOS] subject=?offer, predicate=<http://purl.org/dc/elements/1.1/publisher>, object=?vendor, additional_filters=[DynamicFilter [ Generation 1; Unknown true ]]
-        FilterExec: EBV(GT(ENC_TV(date@1), 10:{value:6334951680000.0000000000000000,offset:})), projection=[offer@0]
+        FilterExec: EBV(GT(ENC_TF(date@1), 5:{date_time_type:0,value:63349516800.000000000000000000,offset:})), projection=[offer@0]
           DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo>, object=?date, additional_filters=[DynamicFilter [ Generation 1; Unknown true ]]
     HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, reviewer@1, revName@2, revTitle@3, rating1@4, rating2@6]
       HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, reviewer@1, revName@2, revTitle@3, rating1@5]

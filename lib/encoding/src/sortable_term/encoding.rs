@@ -1,10 +1,9 @@
+use crate::EncodingName;
 use crate::encoding::TermEncoding;
-use crate::sortable_term::encoders::TermRefSortableTermEncoder;
 use crate::sortable_term::{SortableTermArray, SortableTermScalar};
-use crate::{EncodingArray, EncodingName, TermEncoder};
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
-use datafusion::common::ScalarValue;
+use datafusion::common::{ScalarValue, not_impl_err};
 use rdf_fusion_model::DFResult;
 use rdf_fusion_model::{TermRef, ThinResult};
 use std::clone::Clone;
@@ -57,6 +56,12 @@ impl SortableTermEncodingField {
     }
 }
 
+impl From<SortableTermEncodingField> for i8 {
+    fn from(val: SortableTermEncodingField) -> i8 {
+        val.index() as i8
+    }
+}
+
 static FIELDS: LazyLock<Fields> = LazyLock::new(|| {
     Fields::from(vec![
         Field::new(
@@ -104,11 +109,9 @@ impl SortableTermEncoding {
     /// Encodes the `term` as a [SortableTermScalar].
     pub fn encode_term(
         &self,
-        term: ThinResult<TermRef<'_>>,
+        _term: ThinResult<TermRef<'_>>,
     ) -> DFResult<SortableTermScalar> {
-        TermRefSortableTermEncoder::default()
-            .encode_terms([term])?
-            .try_as_scalar(0)
+        not_impl_err!("SortableTermEncoding::encode_term")
     }
 }
 

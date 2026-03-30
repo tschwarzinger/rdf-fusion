@@ -165,7 +165,7 @@ fn apply_pushdown_filters(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::memory::storage::MemQuadPatternDataSource;
     use crate::memory::storage::snapshot::PlanPatternScanResult;
     use crate::memory::{MemObjectIdMapping, MemQuadStorage};

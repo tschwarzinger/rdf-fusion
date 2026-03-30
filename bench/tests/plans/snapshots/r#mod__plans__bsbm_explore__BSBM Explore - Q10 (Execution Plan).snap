@@ -2,11 +2,11 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-ProjectionExec: expr=[ENC_PT(first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@3) as offer, ENC_PT(first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@4) as price]
-  SortExec: TopK(fetch=10), expr=[ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price)))))@0 ASC, offer@1 ASC, price@2 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price)))))@0 ASC]
-    AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price))))), offer@1 as offer, price@2 as price], aggr=[first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
-      ProjectionExec: expr=[ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price@1))))) as __common_expr_1, offer@0 as offer, price@1 as price]
-        SortExec: expr=[ENC_SORT(xsd:double(ENC_TV(STR(ENC_PT(price@1))))) ASC], preserve_partitioning=[false]
+ProjectionExec: expr=[ENC_PT(first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@3) as offer, ENC_PT(first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@4) as price]
+  SortExec: TopK(fetch=10), expr=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price)))))@0 ASC, offer@1 ASC, price@2 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price)))))@0 ASC]
+    AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))), offer@1 as offer, price@2 as price], aggr=[first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
+      ProjectionExec: expr=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price@1))))) as __common_expr_1, offer@0 as offer, price@1 as price]
+        SortExec: expr=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price@1))))) ASC], preserve_partitioning=[false]
           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@1]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@2]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0]
@@ -17,8 +17,8 @@ ProjectionExec: expr=[ENC_PT(first_value(offer) ORDER BY [ENC_SORT(xsd:double(EN
                       DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor>, object=?vendor, additional_filters=[DynamicFilter [ Generation 2; offer in (<object id range>) ]]
                     DataSourceExec: [GPOS] subject=?offer, predicate=<http://purl.org/dc/elements/1.1/publisher>, object=?vendor, additional_filters=[DynamicFilter [ Generation 2; Cannot obtain current predicate expr. ]]
                   DataSourceExec: [GPOS] subject=?vendor, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country>, object=<http://downlode.org/rdf/iso-3166/countries#US>, additional_filters=[DynamicFilter [ Generation 2; vendor in (<object id range>) ]]
-                FilterExec: EBV(LEQ(ENC_TV(deliveryDays@1), 9:3)), projection=[offer@0]
+                FilterExec: EBV(LEQ(ENC_TF(deliveryDays@1), 4:4:3)), projection=[offer@0]
                   DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/deliveryDays>, object=?deliveryDays, additional_filters=[DynamicFilter [ Generation 2; offer in (<object id range>) ]]
               DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price>, object=?price, additional_filters=[DynamicFilter [ Generation 2; offer in (<object id range>) ]]
-            FilterExec: EBV(GT(ENC_TV(date@1), 10:{value:6334951680000.0000000000000000,offset:})), projection=[offer@0]
+            FilterExec: EBV(GT(ENC_TF(date@1), 5:{date_time_type:0,value:63349516800.000000000000000000,offset:})), projection=[offer@0]
               DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo>, object=?date, additional_filters=[DynamicFilter [ Generation 2; offer in (<object id range>) ]]

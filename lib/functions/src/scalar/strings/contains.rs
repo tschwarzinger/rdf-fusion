@@ -1,66 +1,174 @@
-use crate::scalar::dispatch::dispatch_binary_typed_value;
-use crate::scalar::sparql_op_impl::{
-    ScalarSparqlOpImpl, create_typed_value_sparql_op_impl,
+use crate::scalar::args::ScalarSparqlFunctionArgs;
+use crate::scalar::error::SparqlUDFCreationError;
+use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use arrow_string::like::contains;
+use datafusion::arrow::array::Array;
+use datafusion::arrow::datatypes::DataType;
+use datafusion::common::exec_err;
+use datafusion::logical_expr::{
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use crate::scalar::{ScalarSparqlOp, ScalarSparqlOpSignature, SparqlOpArity};
-use rdf_fusion_encoding::RdfFusionEncodings;
-use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+use rdf_fusion_encoding::typed_family::{
+    BooleanFamilyArray, DowncastTypedFamilyArray, TypedFamilyArrayChild,
+};
+use rdf_fusion_encoding::{
+    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
+    TermEncoding, detect_encoding_from_types,
+};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_extensions::functions::FunctionName;
-use rdf_fusion_model::{
-    CompatibleStringArgs, StringLiteralRef, ThinError, TypedValueRef,
-};
+use rdf_fusion_model::DFResult;
+use std::any::Any;
+use std::fmt::{Debug, Formatter};
 
-/// Implementation of the SPARQL `contains` function.
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct ContainsSparqlOp;
+/// Returns true if the first literal contains the second literal.
+///
+/// # Relevant Resources
+/// - [SPARQL 1.1 - CONTAINS](https://www.w3.org/TR/sparql11-query/#func-contains)
+pub fn contains_udf(
+    encodings: RdfFusionEncodings,
+) -> Result<ScalarUDF, SparqlUDFCreationError> {
+    Ok(ScalarUDF::new_from_impl(ContainsSparqlOp::new(encodings)))
+}
 
-impl Default for ContainsSparqlOp {
-    fn default() -> Self {
-        Self::new()
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct ContainsSparqlOp {
+    encodings: RdfFusionEncodings,
+    name: String,
+    signature: Signature,
+}
+
+impl Debug for ContainsSparqlOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContainsSparqlOp")
+            .field("encodings", &self.encodings)
+            .finish()
     }
 }
 
 impl ContainsSparqlOp {
-    const NAME: FunctionName = FunctionName::Builtin(BuiltinName::Contains);
-
-    /// Creates a new [ContainsSparqlOp].
-    pub fn new() -> Self {
-        Self {}
+    /// Create a new [`ContainsSparqlOp`].
+    fn new(encodings: RdfFusionEncodings) -> Self {
+        let type_signature = SparqlOpTypeSignatureBuilder::new()
+            .with_supported_encoding(encodings.typed_family().as_ref())
+            .with_binary_arity()
+            .build();
+        Self {
+            encodings,
+            name: BuiltinName::Contains.to_string(),
+            signature: Signature::new(type_signature, Volatility::Immutable),
+        }
     }
 }
 
-impl ScalarSparqlOp for ContainsSparqlOp {
-    fn name(&self) -> &FunctionName {
-        &Self::NAME
+impl ScalarUDFImpl for ContainsSparqlOp {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 
-    fn signature(&self) -> ScalarSparqlOpSignature {
-        ScalarSparqlOpSignature::default_with_arity(SparqlOpArity::Fixed(2))
+    fn name(&self) -> &str {
+        &self.name
     }
 
-    fn typed_value_encoding_op(
-        &self,
-        encodings: &RdfFusionEncodings,
-    ) -> Option<Box<dyn ScalarSparqlOpImpl<TypedValueEncoding>>> {
-        Some(create_typed_value_sparql_op_impl(
-            encodings.typed_value(),
-            |args| {
-                dispatch_binary_typed_value(
-                    &args.encoding,
-                    &args.args[0],
-                    &args.args[1],
-                    |lhs_value, rhs_value| {
-                        let lhs_value = StringLiteralRef::try_from(lhs_value)?;
-                        let rhs_value = StringLiteralRef::try_from(rhs_value)?;
-                        let args = CompatibleStringArgs::try_from(lhs_value, rhs_value)?;
-                        Ok(TypedValueRef::BooleanLiteral(
-                            args.lhs.contains(args.rhs).into(),
-                        ))
-                    },
-                    |_, _| ThinError::expected(),
-                )
-            },
-        ))
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
+        match detect_encoding_from_types(&self.encodings, arg_types)? {
+            Some(EncodingName::TypedFamily) => {
+                Ok(self.encodings.typed_family().data_type().clone())
+            }
+            _ => exec_err!("Unsupported encoding for CONTAINS return type"),
+        }
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
+        let args_wrapped =
+            ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
+        let tf_encoding = self.encodings.typed_family();
+
+        let tf_args = match args_wrapped.downcast_arrays() {
+            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args.clone(),
+            _ => exec_err!(
+                "CONTAINS is only supported for TypedFamily or PlainTerm encoding"
+            )?,
+        };
+
+        let result = tf_args
+            .map_children_tf_binary(
+                |lhs: TypedFamilyArrayChild, rhs: TypedFamilyArrayChild| match (
+                    lhs.downcast(),
+                    rhs.downcast(),
+                ) {
+                    (
+                        DowncastTypedFamilyArray::String(l),
+                        DowncastTypedFamilyArray::String(r),
+                    ) => {
+                        let res = l.apply_binary_boolean(&r, |a, b| contains(a, b))?;
+                        tf_encoding.create_array_from_family(BooleanFamilyArray::new(res))
+                    }
+                    _ => tf_encoding.create_null_array(lhs.array().len()),
+                },
+            )?
+            .into_array_ref();
+
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{
+        create_default_encodings, evaluate_binary_function_for_test,
+    };
+    use insta::assert_snapshot;
+    use rdf_fusion_encoding::typed_family::{StringFamily, TypedFamily};
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_contains_typed_family() {
+        let encodings = create_default_encodings();
+
+        let left_values = vec!["foobar", "foobar", "foobar", "foobar", "foobar"];
+        let left_langs = vec![None, Some("en"), Some("en"), Some("de"), None];
+        let strings_array = StringFamily::create_strings_array(
+            Arc::new(datafusion::arrow::array::StringArray::from(left_values)),
+            Arc::new(datafusion::arrow::array::StringArray::from(left_langs)),
+        );
+        let left = encodings
+            .typed_family()
+            .create_array_with_single_family(StringFamily::FAMILY_ID, strings_array)
+            .unwrap()
+            .into_array_ref();
+
+        let right_values = vec!["oob", "oob", "oob", "oob", "oob"];
+        let right_langs = vec![None, None, Some("en"), Some("en"), Some("en")];
+        let search_array = StringFamily::create_strings_array(
+            Arc::new(datafusion::arrow::array::StringArray::from(right_values)),
+            Arc::new(datafusion::arrow::array::StringArray::from(right_langs)),
+        );
+        let right = encodings
+            .typed_family()
+            .create_array_with_single_family(StringFamily::FAMILY_ID, search_array)
+            .unwrap()
+            .into_array_ref();
+
+        let udf = Arc::new(contains_udf(encodings).unwrap());
+        let result = evaluate_binary_function_for_test(left, right, udf);
+        assert_snapshot!(
+            result.to_string().await.unwrap(),
+            @"
+        +----------------------------------------------------+-------------------------------------------------+--------------------------------------+
+        | left                                               | right                                           | CONTAINS(?table?.left,?table?.right) |
+        +----------------------------------------------------+-------------------------------------------------+--------------------------------------+
+        | {rdf-fusion.strings={value: foobar, language: }}   | {rdf-fusion.strings={value: oob, language: }}   | {rdf-fusion.boolean=true}            |
+        | {rdf-fusion.strings={value: foobar, language: en}} | {rdf-fusion.strings={value: oob, language: }}   | {rdf-fusion.boolean=true}            |
+        | {rdf-fusion.strings={value: foobar, language: en}} | {rdf-fusion.strings={value: oob, language: en}} | {rdf-fusion.boolean=true}            |
+        | {rdf-fusion.strings={value: foobar, language: de}} | {rdf-fusion.strings={value: oob, language: en}} | {rdf-fusion.null=}                   |
+        | {rdf-fusion.strings={value: foobar, language: }}   | {rdf-fusion.strings={value: oob, language: en}} | {rdf-fusion.boolean=true}            |
+        +----------------------------------------------------+-------------------------------------------------+--------------------------------------+
+        "
+        );
     }
 }

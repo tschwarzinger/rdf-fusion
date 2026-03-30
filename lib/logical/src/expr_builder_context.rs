@@ -451,7 +451,7 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
             .into_iter()
             .map(|e| {
                 self.try_create_builder(e)?
-                    .with_encoding(EncodingName::TypedValue)?
+                    .with_encoding(EncodingName::TypedFamily)?
                     .build()
             })
             .collect::<DFResult<Vec<_>>>()?;

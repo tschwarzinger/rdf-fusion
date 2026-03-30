@@ -3,6 +3,7 @@ mod encoding;
 mod mapping;
 mod scalar;
 
+use crate::EncodingArray;
 pub use array::*;
 use datafusion::arrow::array::{Array, FixedSizeBinaryArray};
 pub use encoding::*;
@@ -112,5 +113,39 @@ impl ObjectId {
     /// Returns `None` if the object id represents the default graph.
     pub fn as_bytes(&self) -> Option<&[u8]> {
         self.0.as_deref()
+    }
+}
+
+/// Represents a non-empty list of [`ObjectIdArray`]s of the same length. The arrays share the same
+/// encoding.
+pub struct ObjectIdArrays {
+    arrays: Vec<ObjectIdArray>,
+}
+
+impl ObjectIdArrays {
+    /// Creates a new [ObjectIdArrays] without validating invariants. See [`ObjectIdArrays`] for
+    /// details.
+    pub fn new_unchecked(arrays: Vec<ObjectIdArray>) -> Self {
+        Self { arrays }
+    }
+
+    /// Returns the encoding.
+    pub fn encoding(&self) -> &ObjectIdEncodingRef {
+        self.arrays[0].encoding()
+    }
+
+    /// Returns the number of arrays.
+    pub fn len(&self) -> usize {
+        self.arrays.len()
+    }
+
+    /// Returns true if the array is empty.
+    pub fn is_empty(&self) -> bool {
+        self.arrays.is_empty()
+    }
+
+    /// Returns the array at the given index.
+    pub fn get(&self, index: usize) -> &ObjectIdArray {
+        &self.arrays[index]
     }
 }

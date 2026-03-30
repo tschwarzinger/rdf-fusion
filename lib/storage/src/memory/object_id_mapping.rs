@@ -1,9 +1,10 @@
 #![allow(clippy::unreadable_literal)]
 
-use crate::memory::encoding::{EncodedTerm, EncodedTypedValue};
+use crate::memory::encoding::EncodedTerm;
 use crate::memory::object_id::EncodedObjectId;
 use dashmap::{DashMap, DashSet};
 use datafusion::arrow::array::{Array, FixedSizeBinaryArray, FixedSizeBinaryBuilder};
+use rdf_fusion_encoding::TermDecoder;
 use rdf_fusion_encoding::object_id::{
     ObjectId, ObjectIdMapping, ObjectIdMappingError, ObjectIdSize,
 };
@@ -11,14 +12,7 @@ use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArray, PlainTermArrayElementBuilder, PlainTermScalar,
 };
-use rdf_fusion_encoding::typed_value::{
-    TypedValueArray, TypedValueArrayElementBuilder, TypedValueEncodingRef,
-    TypedValueScalar,
-};
-use rdf_fusion_encoding::{TermDecoder, TermEncoder};
-use rdf_fusion_model::{
-    BlankNodeRef, LiteralRef, NamedNodeRef, TermRef, ThinError, TypedValueRef,
-};
+use rdf_fusion_model::{BlankNodeRef, LiteralRef, NamedNodeRef, TermRef, ThinError};
 use rustc_hash::FxHasher;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
@@ -33,27 +27,15 @@ use std::sync::atomic::{AtomicU32, Ordering};
 ///
 /// The encoded Object ID is a 32-bit unsigned integer used to uniquely identify RDF terms.
 /// Currently, we simply use a counter to allocate new object IDs.
-///
-/// # Typed Values
-///
-/// In addition to mapping object ids to terms, we also maintain a mapping to the typed value to
-/// speed-up queries working on typed values.
 #[derive(Debug)]
 pub struct MemObjectIdMapping {
     /// Contains the next free object id.
     next_id: AtomicU32,
     /// A set for interning strings.
     str_interning: DashSet<Arc<str>>,
-    /// Maps object ids to the encoded terms & typed values.
-    id2term: DashMap<
-        EncodedObjectId,
-        (EncodedTerm, EncodedTypedValue),
-        BuildHasherDefault<FxHasher>,
-    >,
+    /// Maps object ids to the encoded terms.
+    id2term: DashMap<EncodedObjectId, EncodedTerm, BuildHasherDefault<FxHasher>>,
     /// Maps terms to their object id.
-    ///
-    /// A lookup from typed values to the object id of the "canonical" term is only possible by
-    /// first converting the typed value to term.
     term2id: DashMap<EncodedTerm, EncodedObjectId, BuildHasherDefault<FxHasher>>,
 }
 
@@ -148,20 +130,9 @@ impl MemObjectIdMapping {
         &self,
         object_id: EncodedObjectId,
     ) -> Option<EncodedTerm> {
-        self.id2term.get(&object_id).map(|entry| {
-            let (term, _) = entry.value();
-            term.clone()
-        })
-    }
-
-    fn try_get_encoded_typed_value_from_object_id(
-        &self,
-        object_id: EncodedObjectId,
-    ) -> Option<EncodedTypedValue> {
-        self.id2term.get(&object_id).map(|entry| {
-            let (_, typed_value) = entry.value();
-            typed_value.clone()
-        })
+        self.id2term
+            .get(&object_id)
+            .map(|entry| entry.value().clone())
     }
 
     fn obtain_object_id(&self, encoded_term: &EncodedTerm) -> EncodedObjectId {
@@ -170,9 +141,7 @@ impl MemObjectIdMapping {
             None => {
                 let next_id = self.next_id.fetch_add(1, Ordering::Relaxed);
                 let object_id = EncodedObjectId::from(next_id);
-                let encoded_typed_value = EncodedTypedValue::from(encoded_term);
-                self.id2term
-                    .insert(object_id, (encoded_term.clone(), encoded_typed_value));
+                self.id2term.insert(object_id, encoded_term.clone());
                 self.term2id.insert(encoded_term.clone(), object_id);
                 object_id
             }
@@ -340,67 +309,6 @@ impl ObjectIdMapping for MemObjectIdMapping {
 
         Ok(PlainTermScalar::from(term_ref))
     }
-
-    fn decode_array_to_typed_value(
-        &self,
-        encoding: &TypedValueEncodingRef,
-        array: &FixedSizeBinaryArray,
-    ) -> Result<TypedValueArray, ObjectIdMappingError> {
-        if array.value_length() != 4 {
-            return Err(ObjectIdMappingError::IllegalArgument(
-                "Object id array with invalid size provided".to_owned(),
-            ));
-        }
-
-        let typed_values = array.iter().map(|oid| {
-            let oid = oid.map(EncodedObjectId::from_4_byte_slice);
-            oid.map(|oid| {
-                self.try_get_encoded_typed_value_from_object_id(oid)
-                    .expect("Missing EncodedObjectId")
-                    .clone()
-            })
-        });
-
-        // TODO: can we remove the clone?
-        let mut builder = TypedValueArrayElementBuilder::new(Arc::clone(encoding));
-        for typed_value in typed_values {
-            let typed_value =
-                typed_value.as_ref().and_then(Option::<TypedValueRef>::from);
-            match typed_value {
-                None => builder.append_null()?,
-                Some(typed_value) => builder.append_typed_value(typed_value)?,
-            }
-        }
-
-        Ok(builder.finish())
-    }
-
-    fn decode_scalar_to_typed_value(
-        &self,
-        encoding: &TypedValueEncodingRef,
-        scalar: &ObjectId,
-    ) -> Result<TypedValueScalar, ObjectIdMappingError> {
-        if scalar.is_default_graph() {
-            return Ok(encoding.encode_term(ThinError::expected()).expect("TODO"));
-        }
-
-        let encoded_id = EncodedObjectId::from_4_byte_slice(
-            scalar.as_bytes().expect("Not default graph"),
-        );
-        let typed_value = self
-            .try_get_encoded_typed_value_from_object_id(encoded_id)
-            .ok_or_else(|| {
-                ObjectIdMappingError::IllegalArgument("Unknown object id".to_string())
-            })?;
-
-        let typed_value_ref = Option::<TypedValueRef>::from(&typed_value)
-            .ok_or_else(|| ObjectIdMappingError::IllegalArgument("TODO".to_string()))?;
-
-        Ok(encoding
-            .default_encoder()
-            .encode_term(Ok(typed_value_ref))
-            .expect("Always Ok given"))
-    }
 }
 
 #[cfg(test)]
@@ -430,12 +338,12 @@ mod tests {
         let decoded_plain_term_array = mapping.decode_array(&object_id_array)?;
 
         assert_eq!(
-            plain_term_array.array().len(),
-            decoded_plain_term_array.array().len()
+            plain_term_array.inner().len(),
+            decoded_plain_term_array.inner().len()
         );
         assert_eq!(
-            plain_term_array.array().as_struct(),
-            decoded_plain_term_array.array().as_struct()
+            plain_term_array.inner().as_struct(),
+            decoded_plain_term_array.inner().as_struct()
         );
 
         Ok(())

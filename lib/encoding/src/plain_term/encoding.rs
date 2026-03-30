@@ -2,10 +2,12 @@ use crate::encoding::TermEncoding;
 use crate::plain_term::encoders::DefaultPlainTermEncoder;
 use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use crate::{EncodingName, TermEncoder};
-use datafusion::arrow::array::ArrayRef;
-use datafusion::arrow::datatypes::{DataType, Field, Fields};
+use datafusion::arrow::array::{Array, ArrayRef, StringArray, StructArray, UInt8Array};
+use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{Field, Fields};
 use datafusion::common::ScalarValue;
 use rdf_fusion_model::DFResult;
+use rdf_fusion_model::vocab::xsd;
 use rdf_fusion_model::{TermRef, ThinResult};
 use std::clone::Clone;
 use std::fmt::Display;
@@ -119,7 +121,7 @@ impl TryFrom<u8> for PlainTermType {
 }
 
 impl From<PlainTermType> for u8 {
-    fn from(val: PlainTermType) -> Self {
+    fn from(val: PlainTermType) -> u8 {
         match val {
             PlainTermType::NamedNode => 0,
             PlainTermType::BlankNode => 1,
@@ -152,6 +154,53 @@ impl PlainTermEncoding {
     /// The type of the [PlainTermEncoding] is statically known and cannot be configured.
     pub fn data_type() -> DataType {
         DataType::Struct(Self::fields().clone())
+    }
+
+    /// Creates a [`PlainTermArray`] for the given number of null rows.
+    pub fn create_null_array(&self, num_rows: usize) -> DFResult<ArrayRef> {
+        let array = StructArray::new_null(Self::fields(), num_rows);
+        Ok(Arc::new(array))
+    }
+
+    /// Creates a [`PlainTermArray`] for the given named nodes.
+    ///
+    /// Uses the null buffer of the given array.
+    pub fn create_named_nodes_array(&self, named_nodes: StringArray) -> ArrayRef {
+        let nulls = named_nodes.nulls().cloned();
+        let len = named_nodes.len();
+        let ids = UInt8Array::from_value(PlainTermType::NamedNode.into(), len);
+        let array = StructArray::new(
+            Self::fields(),
+            vec![
+                Arc::new(ids),
+                Arc::new(named_nodes),
+                Arc::new(StringArray::new_null(len)),
+                Arc::new(StringArray::new_null(len)),
+            ],
+            nulls,
+        );
+        Arc::new(array)
+    }
+
+    /// Creates a [`PlainTermArray`] for the given strings.
+    ///
+    /// Uses the null buffer of the given array.
+    pub fn create_string_array(&self, string_values: StringArray) -> ArrayRef {
+        let nulls = string_values.nulls().cloned();
+        let len = string_values.len();
+        let ids = UInt8Array::from_value(PlainTermType::Literal.into(), len);
+        let data_types = StringArray::new_repeated(xsd::STRING.as_str(), len);
+        let array = StructArray::new(
+            Self::fields(),
+            vec![
+                Arc::new(ids),
+                Arc::new(string_values),
+                Arc::new(data_types),
+                Arc::new(StringArray::new_null(len)),
+            ],
+            nulls,
+        );
+        Arc::new(array)
     }
 
     /// Encodes the `term` as a [PlainTermScalar].

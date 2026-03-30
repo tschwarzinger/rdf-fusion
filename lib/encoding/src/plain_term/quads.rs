@@ -29,7 +29,7 @@ impl PlainTermQuads {
 
     /// Returns the number of quads.
     pub fn len(&self) -> usize {
-        self.subjects.array().len()
+        self.subjects.inner().len()
     }
 
     /// Returns true if there are no quads.

@@ -336,22 +336,22 @@ impl GraphPatternRewriter {
                 let expr = expression_rewriter.rewrite(expr)?;
                 let expr = expr_builder.try_create_builder(expr)?;
                 Ok(match name {
-                    AggregateFunction::Avg => {
-                        expr.with_encoding(EncodingName::TypedValue)?.avg(*distinct)
-                    }
+                    AggregateFunction::Avg => expr
+                        .with_encoding(EncodingName::TypedFamily)?
+                        .avg(*distinct),
                     AggregateFunction::Count => expr.count(*distinct),
                     AggregateFunction::Max => {
-                        expr.with_encoding(EncodingName::TypedValue)?.max()
+                        expr.with_encoding(EncodingName::TypedFamily)?.max()
                     }
                     AggregateFunction::Min => {
-                        expr.with_encoding(EncodingName::TypedValue)?.min()
+                        expr.with_encoding(EncodingName::TypedFamily)?.min()
                     }
                     AggregateFunction::Sample => expr.sample(),
-                    AggregateFunction::Sum => {
-                        expr.with_encoding(EncodingName::TypedValue)?.sum(*distinct)
-                    }
+                    AggregateFunction::Sum => expr
+                        .with_encoding(EncodingName::TypedFamily)?
+                        .sum(*distinct),
                     AggregateFunction::GroupConcat { separator } => expr
-                        .with_encoding(EncodingName::TypedValue)?
+                        .with_encoding(EncodingName::TypedFamily)?
                         .group_concat(*distinct, separator.as_deref()),
                     AggregateFunction::Custom(name) => {
                         plan_err!("Unsupported custom aggregate function: {name}")

@@ -1,103 +1,166 @@
-use crate::scalar::dispatch::dispatch_binary_typed_value;
-use crate::scalar::sparql_op_impl::{
-    ScalarSparqlOpImpl, create_typed_value_sparql_op_impl,
+use crate::scalar::args::ScalarSparqlFunctionArgs;
+use crate::scalar::error::SparqlUDFCreationError;
+use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use datafusion::arrow::array::Array;
+use datafusion::arrow::datatypes::DataType;
+use datafusion::common::exec_err;
+use datafusion::logical_expr::{
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use crate::scalar::{ScalarSparqlOp, ScalarSparqlOpSignature, SparqlOpArity};
-use rdf_fusion_encoding::RdfFusionEncodings;
-use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+use rdf_fusion_encoding::typed_family::{BooleanFamilyArray, DowncastTypedFamilyArray};
+use rdf_fusion_encoding::{
+    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
+    TermEncoding, detect_encoding_from_types,
+};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_extensions::functions::FunctionName;
-use rdf_fusion_model::{SimpleLiteralRef, ThinError, TypedValueRef};
+use rdf_fusion_model::DFResult;
+use std::any::Any;
+use std::fmt::{Debug, Formatter};
 
-/// Implementation of the SPARQL `langMatches` function.
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct LangMatchesSparqlOp;
+/// Returns true if the language tag matches the language range.
+///
+/// # Relevant Resources
+/// - [SPARQL 1.1 - LANGMATCHES](https://www.w3.org/TR/sparql11-query/#func-langMatches)
+pub fn lang_matches_udf(
+    encodings: RdfFusionEncodings,
+) -> Result<ScalarUDF, SparqlUDFCreationError> {
+    Ok(ScalarUDF::new_from_impl(LangMatchesSparqlOp::new(
+        encodings,
+    )))
+}
 
-impl Default for LangMatchesSparqlOp {
-    fn default() -> Self {
-        Self::new()
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct LangMatchesSparqlOp {
+    encodings: RdfFusionEncodings,
+    name: String,
+    signature: Signature,
+}
+
+impl Debug for LangMatchesSparqlOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LangMatchesSparqlOp")
+            .field("encodings", &self.encodings)
+            .finish()
     }
 }
 
 impl LangMatchesSparqlOp {
-    const NAME: FunctionName = FunctionName::Builtin(BuiltinName::LangMatches);
-
-    /// Creates a new [LangMatchesSparqlOp].
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl ScalarSparqlOp for LangMatchesSparqlOp {
-    fn name(&self) -> &FunctionName {
-        &Self::NAME
-    }
-
-    fn signature(&self) -> ScalarSparqlOpSignature {
-        ScalarSparqlOpSignature::default_with_arity(SparqlOpArity::Fixed(2))
-    }
-
-    fn typed_value_encoding_op(
-        &self,
-        encodings: &RdfFusionEncodings,
-    ) -> Option<Box<dyn ScalarSparqlOpImpl<TypedValueEncoding>>> {
-        Some(create_typed_value_sparql_op_impl(
-            encodings.typed_value(),
-            |args| {
-                dispatch_binary_typed_value(
-                    &args.encoding,
-                    &args.args[0],
-                    &args.args[1],
-                    |lhs_value, rhs_value| {
-                        let lhs_value = SimpleLiteralRef::try_from(lhs_value)?;
-                        let rhs_value = SimpleLiteralRef::try_from(rhs_value)?;
-
-                        let matches = if rhs_value.value == "*" {
-                            !lhs_value.value.is_empty()
-                        } else {
-                            !ZipLongest::new(
-                                rhs_value.value.split('-'),
-                                lhs_value.value.split('-'),
-                            )
-                            .any(|parts| match parts {
-                                (Some(range_subtag), Some(language_subtag)) => {
-                                    !range_subtag.eq_ignore_ascii_case(language_subtag)
-                                }
-                                (Some(_), None) => true,
-                                (None, _) => false,
-                            })
-                        };
-                        Ok(TypedValueRef::BooleanLiteral(matches.into()))
-                    },
-                    |_, _| ThinError::expected(),
-                )
-            },
-        ))
-    }
-}
-
-struct ZipLongest<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> {
-    a: I1,
-    b: I2,
-}
-
-impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>>
-    ZipLongest<T1, T2, I1, I2>
-{
-    fn new(a: I1, b: I2) -> Self {
-        Self { a, b }
-    }
-}
-
-impl<T1, T2, I1: Iterator<Item = T1>, I2: Iterator<Item = T2>> Iterator
-    for ZipLongest<T1, T2, I1, I2>
-{
-    type Item = (Option<T1>, Option<T2>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match (self.a.next(), self.b.next()) {
-            (None, None) => None,
-            r => Some(r),
+    /// Create a new [`LangMatchesSparqlOp`].
+    fn new(encodings: RdfFusionEncodings) -> Self {
+        let type_signature = SparqlOpTypeSignatureBuilder::new()
+            .with_supported_encoding(encodings.typed_family().as_ref())
+            .with_binary_arity()
+            .build();
+        Self {
+            encodings,
+            name: BuiltinName::LangMatches.to_string(),
+            signature: Signature::new(type_signature, Volatility::Immutable),
         }
+    }
+}
+
+impl ScalarUDFImpl for LangMatchesSparqlOp {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
+        match detect_encoding_from_types(&self.encodings, arg_types)? {
+            Some(EncodingName::TypedFamily) => {
+                Ok(self.encodings.typed_family().data_type().clone())
+            }
+            _ => exec_err!("Unsupported encoding for LANGMATCHES return type"),
+        }
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
+        let args_wrapped =
+            ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
+        let tf_encoding = self.encodings.typed_family();
+
+        let result = match args_wrapped.downcast_arrays() {
+            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+                .map_children_tf_binary(|lhs, rhs| {
+                    match (lhs.downcast(), rhs.downcast()) {
+                        (
+                            DowncastTypedFamilyArray::String(l),
+                            DowncastTypedFamilyArray::String(r),
+                        ) => {
+                            let res =
+                                l.apply_binary_boolean_element_wise(&r, |tag, range| {
+                                    if range == "*" {
+                                        !tag.is_empty()
+                                    } else {
+                                        tag.to_lowercase() == range.to_lowercase()
+                                            || tag.to_lowercase().starts_with(&format!(
+                                                "{}-",
+                                                range.to_lowercase()
+                                            ))
+                                    }
+                                });
+                            tf_encoding
+                                .create_array_from_family(BooleanFamilyArray::new(res))
+                        }
+                        _ => tf_encoding.create_null_array(lhs.array().len()),
+                    }
+                })?
+                .into_array_ref(),
+            _ => exec_err!("LANGMATCHES is only supported for TypedFamily encoding")?,
+        };
+
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{
+        create_default_encodings, create_typed_family_strings_array,
+        evaluate_binary_function_for_test,
+    };
+    use insta::assert_snapshot;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_lang_matches_typed_family() {
+        let encodings = create_default_encodings();
+
+        let left = create_typed_family_strings_array(
+            &encodings,
+            vec!["en", "en-US", "en-GB", "de", ""],
+            vec![None, None, None, None, None],
+        );
+
+        let right = create_typed_family_strings_array(
+            &encodings,
+            vec!["en", "en", "en-GB", "en", "*"],
+            vec![None, None, None, None, None],
+        );
+
+        let udf = Arc::new(lang_matches_udf(encodings).unwrap());
+        let result = evaluate_binary_function_for_test(left, right, udf);
+        assert_snapshot!(
+            result.to_string().await.unwrap(),
+            @r"
+        +-------------------------------------------------+-------------------------------------------------+-----------------------------------------+
+        | left                                            | right                                           | LANGMATCHES(?table?.left,?table?.right) |
+        +-------------------------------------------------+-------------------------------------------------+-----------------------------------------+
+        | {rdf-fusion.strings={value: en, language: }}    | {rdf-fusion.strings={value: en, language: }}    | {rdf-fusion.boolean=true}               |
+        | {rdf-fusion.strings={value: en-US, language: }} | {rdf-fusion.strings={value: en, language: }}    | {rdf-fusion.boolean=true}               |
+        | {rdf-fusion.strings={value: en-GB, language: }} | {rdf-fusion.strings={value: en-GB, language: }} | {rdf-fusion.boolean=true}               |
+        | {rdf-fusion.strings={value: de, language: }}    | {rdf-fusion.strings={value: en, language: }}    | {rdf-fusion.boolean=false}              |
+        | {rdf-fusion.strings={value: , language: }}      | {rdf-fusion.strings={value: *, language: }}     | {rdf-fusion.boolean=false}              |
+        +-------------------------------------------------+-------------------------------------------------+-----------------------------------------+
+        "
+        );
     }
 }

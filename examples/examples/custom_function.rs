@@ -1,17 +1,24 @@
 use anyhow::Context;
-use datafusion::logical_expr::ScalarUDF;
-use rdf_fusion::api::functions::FunctionName;
-use rdf_fusion::encoding::RdfFusionEncodings;
-use rdf_fusion::encoding::typed_value::TypedValueEncoding;
-use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::functions::scalar::dispatch::dispatch_unary_typed_value;
-use rdf_fusion::functions::scalar::{
-    ScalarSparqlOp, ScalarSparqlOpAdapter, ScalarSparqlOpImpl, ScalarSparqlOpSignature,
-    SparqlOpArity, create_typed_value_sparql_op_impl,
+use datafusion::arrow::array::{Array, BooleanArray};
+use datafusion::arrow::datatypes::DataType;
+use datafusion::common::exec_err;
+use datafusion::logical_expr::{
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion::api::functions::FunctionName;
+use rdf_fusion::encoding::typed_family::{BooleanFamilyArray, DowncastTypedFamilyArray};
+use rdf_fusion::encoding::{
+    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
+    TermEncoding, detect_encoding_from_types,
+};
+use rdf_fusion::execution::results::QueryResultsFormat;
+use rdf_fusion::functions::scalar::args::ScalarSparqlFunctionArgs;
+use rdf_fusion::functions::scalar::signature::SparqlOpTypeSignatureBuilder;
 use rdf_fusion::io::{RdfFormat, RdfParser};
-use rdf_fusion::model::{NamedNode, ThinError, TypedValueRef};
+use rdf_fusion::model::{DFResult, NamedNode};
 use rdf_fusion::store::Store;
+use std::any::Any;
+use std::fmt::{Debug, Formatter};
 
 /// This example shows how to register a custom SPARQL function that can be used by RDF Fusion.
 #[tokio::main]
@@ -25,12 +32,11 @@ pub async fn main() -> anyhow::Result<()> {
 
     // Register custom function.
     let context = store.context();
-    context.functions().register_udf(ScalarUDF::new_from_impl(
-        ScalarSparqlOpAdapter::new(
+    context
+        .functions()
+        .register_udf(ScalarUDF::new_from_impl(ContainsSpiderUDF::new(
             context.encodings().clone(),
-            ContainsSpidermanSparqlOp::new(),
-        ),
-    ));
+        )));
 
     // Run SPARQL query.
     let query = "
@@ -40,7 +46,7 @@ pub async fn main() -> anyhow::Result<()> {
     SELECT ?subject ?predicate ?object
     WHERE {
         ?subject ?predicate ?object .
-        FILTER(<http://example.org/containsSpiderman>(?subject))
+        FILTER(<http://example.org/containsSpider>(?object))
     }
     ";
     let result = store.query(query).await?;
@@ -59,69 +65,159 @@ pub async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Checks whether a given element (IRI, blank node, literal) contains the string `spiderman`.
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct ContainsSpidermanSparqlOp {
-    name: FunctionName,
+/// Checks whether a given *literal* contains the string `spider` (case-insensitive).
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ContainsSpiderUDF {
+    encodings: RdfFusionEncodings,
+    name: String,
+    signature: Signature,
 }
 
-impl Default for ContainsSpidermanSparqlOp {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ContainsSpidermanSparqlOp {
-    /// Creates a new [ContainsSpidermanSparqlOp].
-    pub fn new() -> Self {
+impl ContainsSpiderUDF {
+    /// Creates a new [ContainsSpiderUDF].
+    pub fn new(encodings: RdfFusionEncodings) -> Self {
+        let type_signature = SparqlOpTypeSignatureBuilder::new()
+            .with_supported_encoding(encodings.typed_family().as_ref())
+            .with_unary_arity()
+            .build();
         Self {
-            name: FunctionName::Custom(
-                NamedNode::new("http://example.org/containsSpiderman").unwrap(),
-            ),
+            encodings,
+            // How to call the function in SPARQL.
+            name: FunctionName::Custom(NamedNode::new_unchecked(
+                "http://example.org/containsSpider",
+            ))
+            .to_string(),
+            // The signature of the function. For an explanation of Volatility, see the DataFusion
+            // documentation. This basically means that the function always maps the same input to
+            // the same output (as opposed to, for example, rand())
+            signature: Signature::new(type_signature, Volatility::Immutable),
         }
     }
 }
 
-impl ScalarSparqlOp for ContainsSpidermanSparqlOp {
-    fn name(&self) -> &FunctionName {
+impl Debug for ContainsSpiderUDF {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContainsSpiderUDF")
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
+impl ScalarUDFImpl for ContainsSpiderUDF {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn name(&self) -> &str {
         &self.name
     }
 
-    fn signature(&self) -> ScalarSparqlOpSignature {
-        ScalarSparqlOpSignature::default_with_arity(SparqlOpArity::Fixed(1))
+    fn signature(&self) -> &Signature {
+        &self.signature
     }
 
-    fn typed_value_encoding_op(
-        &self,
-        encodings: &RdfFusionEncodings,
-    ) -> Option<Box<dyn ScalarSparqlOpImpl<TypedValueEncoding>>> {
-        Some(create_typed_value_sparql_op_impl(
-            encodings.typed_value(),
-            |args| {
-                // We provide some helper functions that allow you to "iterate" over the content of the
-                // arrays. Note that directly operating on the array data usually can be more
-                // performant. Furthermore, we may remove this API in the future.
-                dispatch_unary_typed_value(
-                    &args.encoding,
-                    &args.args[0],
-                    |value| {
-                        let result = match value {
-                            TypedValueRef::NamedNode(nn) => {
-                                nn.as_str().contains("spiderman")
-                            }
-                            TypedValueRef::SimpleLiteral(lit) => {
-                                lit.value.contains("spiderman")
-                            }
-                            TypedValueRef::LanguageStringLiteral(lit) => {
-                                lit.value.contains("spiderman")
-                            }
-                            _ => false,
-                        };
-                        Ok(TypedValueRef::BooleanLiteral(result.into()))
-                    },
-                    || ThinError::expected(),
-                )
-            },
-        ))
+    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
+        match detect_encoding_from_types(&self.encodings, arg_types)? {
+            Some(EncodingName::TypedFamily) => {
+                Ok(self.encodings.typed_family().data_type().clone())
+            }
+            _ => exec_err!("containsSpiderman only supports the TypedFamily encoding"),
+        }
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
+        let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
+        match args.downcast_arrays() {
+            Some(DowncastEncodingArrays::TypedFamily(array)) => {
+                let result =
+                    array.map_children_tf_unary(|child| match child.downcast() {
+                        // If the input is null or a resource, return null. The output is a
+                        // TypedFamilyEncoding array with nulls.
+                        DowncastTypedFamilyArray::Null(_)
+                        | DowncastTypedFamilyArray::Resource(_) => self
+                            .encodings
+                            .typed_family()
+                            .create_null_array(child.array().len()),
+                        // If the input is a string, check whether it contains the string. The
+                        // output is a TypedFamilyEncoding array with booleans.
+                        DowncastTypedFamilyArray::String(array) => {
+                            let result: BooleanArray = array
+                                .value_array()
+                                .iter()
+                                .map(|val: Option<&str>| {
+                                    val.map(|v| v.to_lowercase().contains("spider"))
+                                })
+                                .collect();
+                            self.encodings
+                                .typed_family()
+                                .create_array_from_family(BooleanFamilyArray::new(result))
+                        }
+                        // For all other families, return false.
+                        _ => {
+                            let result =
+                                BooleanArray::from(vec![false; child.array().len()]);
+                            self.encodings
+                                .typed_family()
+                                .create_array_from_family(BooleanFamilyArray::new(result))
+                        }
+                    })?;
+
+                Ok(ColumnarValue::Array(result.into_array_ref()))
+            }
+            _ => exec_err!("containsSpiderman was called with an unsupported encoding."),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::assert_snapshot;
+    use rdf_fusion::execution::results::QueryResultsFormat;
+    use rdf_fusion::io::{RdfFormat, RdfParser};
+    use rdf_fusion::store::Store;
+    use std::fs::File;
+
+    #[tokio::test]
+    async fn test_contains_spiderman() -> anyhow::Result<()> {
+        let store = Store::default();
+        let context = store.context();
+
+        let udf = ContainsSpiderUDF::new(context.encodings().clone());
+        context
+            .functions()
+            .register_udf(ScalarUDF::new_from_impl(udf));
+
+        let file_path = "./data/spiderman.ttl";
+        let file = File::open(file_path)
+            .with_context(|| format!("Failed to open test data at {}", file_path))?;
+
+        let reader = RdfParser::from_format(RdfFormat::Turtle);
+        store.load_from_reader(reader, &file).await?;
+
+        let query = "
+            BASE <http://example.org/>
+            PREFIX rel: <http://www.perceive.net/schemas/relationship/>
+
+            SELECT ?subject ?predicate ?object
+            WHERE {
+                ?subject ?predicate ?object .
+                FILTER(<http://example.org/containsSpider>(?object))
+            }
+        ";
+
+        let result_set = store.query(query).await?;
+        let mut buffer = Vec::new();
+        result_set
+            .write(&mut buffer, QueryResultsFormat::Tsv)
+            .await?;
+        let output = String::from_utf8(buffer)?;
+
+        assert_snapshot!(output, @r#"
+        ?subject	?predicate	?object
+        <http://example.org/#spiderman>	<http://xmlns.com/foaf/0.1/name>	"Spiderman"
+        "#);
+
+        Ok(())
     }
 }

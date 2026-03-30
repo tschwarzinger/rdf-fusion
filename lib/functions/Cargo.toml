@@ -11,6 +11,7 @@ RDF Fusion Functions
 
 [dependencies]
 datafusion.workspace = true
+arrow-string.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-model.workspace = true
@@ -20,6 +21,7 @@ sha1.workspace = true
 sha2.workspace = true
 rand.workspace = true
 regex.workspace = true
+thiserror.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]

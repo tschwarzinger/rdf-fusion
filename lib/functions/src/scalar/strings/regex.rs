@@ -1,112 +1,155 @@
-use crate::scalar::dispatch::{
-    dispatch_binary_typed_value, dispatch_ternary_typed_value,
+use crate::scalar::args::ScalarSparqlFunctionArgs;
+use crate::scalar::error::SparqlUDFCreationError;
+use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use datafusion::arrow::array::{Array, BooleanBuilder};
+use datafusion::arrow::datatypes::DataType;
+use datafusion::common::exec_err;
+use datafusion::logical_expr::{
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use crate::scalar::sparql_op_impl::{
-    ScalarSparqlOpImpl, create_typed_value_sparql_op_impl,
+use rdf_fusion_encoding::typed_family::{
+    BooleanFamilyArray, DowncastTypedFamilyArray, StringFamilyArray, TypedFamilyArray,
+    TypedFamilyEncodingRef,
 };
-use crate::scalar::{ScalarSparqlOp, ScalarSparqlOpSignature, SparqlOpArity};
-use rdf_fusion_encoding::RdfFusionEncodings;
-use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+use rdf_fusion_encoding::{
+    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
+    TermEncoding, detect_encoding_from_types,
+};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_extensions::functions::FunctionName;
-use rdf_fusion_model::{SimpleLiteralRef, ThinError, ThinResult, TypedValueRef};
+use rdf_fusion_model::{AResult, DFResult, ThinError, ThinResult};
 use regex::{Regex, RegexBuilder};
+use std::any::Any;
 use std::borrow::Cow;
+use std::fmt::{Debug, Formatter};
 
-/// Implementation of the SPARQL `regex` function (binary version).
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct RegexSparqlOp;
+/// Implementation of the SPARQL `regex` function.
+///
+/// # Relevant Resources
+/// - [SPARQL 1.1 - REGEX](https://www.w3.org/TR/sparql11-query/#func-regex)
+pub fn regex_udf(
+    encodings: RdfFusionEncodings,
+) -> Result<ScalarUDF, SparqlUDFCreationError> {
+    Ok(ScalarUDF::new_from_impl(RegexSparqlOp::new(encodings)))
+}
 
-impl Default for RegexSparqlOp {
-    fn default() -> Self {
-        Self::new()
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct RegexSparqlOp {
+    encodings: RdfFusionEncodings,
+    name: String,
+    signature: Signature,
+}
+
+impl Debug for RegexSparqlOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegexSparqlOp")
+            .field("encodings", &self.encodings)
+            .finish()
     }
 }
 
 impl RegexSparqlOp {
-    const NAME: FunctionName = FunctionName::Builtin(BuiltinName::Regex);
-
-    /// Creates a new [RegexSparqlOp].
-    pub fn new() -> Self {
-        Self {}
+    /// Create a new [`RegexSparqlOp`].
+    fn new(encodings: RdfFusionEncodings) -> Self {
+        let type_signature = SparqlOpTypeSignatureBuilder::new()
+            .with_supported_encoding(encodings.typed_family().as_ref())
+            .with_binary_arity()
+            .with_ternary_arity()
+            .build();
+        Self {
+            encodings,
+            name: BuiltinName::Regex.to_string(),
+            signature: Signature::new(type_signature, Volatility::Immutable),
+        }
     }
 }
 
-impl ScalarSparqlOp for RegexSparqlOp {
-    fn name(&self) -> &FunctionName {
-        &Self::NAME
+impl ScalarUDFImpl for RegexSparqlOp {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 
-    fn signature(&self) -> ScalarSparqlOpSignature {
-        ScalarSparqlOpSignature::default_with_arity(SparqlOpArity::OneOf(vec![
-            SparqlOpArity::Fixed(2),
-            SparqlOpArity::Fixed(3),
-        ]))
+    fn name(&self) -> &str {
+        &self.name
     }
 
-    fn typed_value_encoding_op(
-        &self,
-        encodings: &RdfFusionEncodings,
-    ) -> Option<Box<dyn ScalarSparqlOpImpl<TypedValueEncoding>>> {
-        Some(create_typed_value_sparql_op_impl(
-            encodings.typed_value(),
-            |args| match args.args.len() {
-                2 => dispatch_binary_typed_value(
-                    &args.encoding,
-                    &args.args[0],
-                    &args.args[1],
-                    |lhs_value, rhs_value| {
-                        let TypedValueRef::SimpleLiteral(pattern) = rhs_value else {
-                            return ThinError::expected();
-                        };
-
-                        let regex = compile_pattern(pattern.value, None)?;
-                        match lhs_value {
-                            TypedValueRef::SimpleLiteral(value) => {
-                                Ok(TypedValueRef::BooleanLiteral(
-                                    regex.is_match(value.value).into(),
-                                ))
-                            }
-                            TypedValueRef::LanguageStringLiteral(value) => {
-                                Ok(TypedValueRef::BooleanLiteral(
-                                    regex.is_match(value.value).into(),
-                                ))
-                            }
-                            _ => ThinError::expected(),
-                        }
-                    },
-                    |_, _| ThinError::expected(),
-                ),
-                3 => dispatch_ternary_typed_value(
-                    &args.encoding,
-                    &args.args[0],
-                    &args.args[1],
-                    &args.args[2],
-                    |arg0, arg1, arg2| {
-                        let arg1 = SimpleLiteralRef::try_from(arg1)?;
-                        let arg2 = SimpleLiteralRef::try_from(arg2)?;
-
-                        let regex = compile_pattern(arg1.value, Some(arg2.value))?;
-                        match arg0 {
-                            TypedValueRef::SimpleLiteral(value) => {
-                                Ok(TypedValueRef::BooleanLiteral(
-                                    regex.is_match(value.value).into(),
-                                ))
-                            }
-                            TypedValueRef::LanguageStringLiteral(value) => {
-                                Ok(TypedValueRef::BooleanLiteral(
-                                    regex.is_match(value.value).into(),
-                                ))
-                            }
-                            _ => ThinError::expected(),
-                        }
-                    },
-                    |_, _, _| ThinError::expected(),
-                ),
-                _ => unreachable!("Invalid number of arguments"),
-            },
-        ))
+    fn signature(&self) -> &Signature {
+        &self.signature
     }
+
+    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
+        match detect_encoding_from_types(&self.encodings, arg_types)? {
+            Some(EncodingName::TypedFamily) => {
+                Ok(self.encodings.typed_family().data_type().clone())
+            }
+            _ => exec_err!("Unsupported encoding for REGEX return type"),
+        }
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
+        let args_wrapped =
+            ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
+        let tf_encoding = self.encodings.typed_family();
+
+        let result = match args_wrapped.downcast_arrays() {
+            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+                .map_children_tf(|children| {
+                    let family_len = children[0].array().len();
+                    let children =
+                        children.iter().map(|c| c.downcast()).collect::<Vec<_>>();
+
+                    match children.as_slice() {
+                        [
+                            DowncastTypedFamilyArray::String(t_arr),
+                            DowncastTypedFamilyArray::String(p_arr),
+                        ] => regex_impl(tf_encoding, t_arr, p_arr, None),
+                        [
+                            DowncastTypedFamilyArray::String(t_arr),
+                            DowncastTypedFamilyArray::String(p_arr),
+                            DowncastTypedFamilyArray::String(f_arr),
+                        ] => regex_impl(tf_encoding, t_arr, p_arr, Some(f_arr)),
+                        [
+                            DowncastTypedFamilyArray::String(t_arr),
+                            DowncastTypedFamilyArray::String(p_arr),
+                            DowncastTypedFamilyArray::Null(_),
+                        ] => regex_impl(tf_encoding, t_arr, p_arr, None),
+                        _ => tf_encoding.create_null_array(family_len),
+                    }
+                })?
+                .into_array_ref(),
+            _ => exec_err!("REGEX is only supported for TypedFamily encoding")?,
+        };
+
+        Ok(ColumnarValue::Array(result))
+    }
+}
+
+fn regex_impl(
+    encoding: &TypedFamilyEncodingRef,
+    t_arr: &StringFamilyArray,
+    p_arr: &StringFamilyArray,
+    f_arr: Option<&StringFamilyArray>,
+) -> AResult<TypedFamilyArray> {
+    let text = t_arr.value_array();
+    let pattern = p_arr.value_array();
+    let flags = f_arr.map(|f| f.value_array());
+
+    let mut res = BooleanBuilder::with_capacity(text.len());
+    for i in 0..text.len() {
+        let is_flag_null = flags.as_ref().is_some_and(|f| f.is_null(i));
+
+        if text.is_null(i) || pattern.is_null(i) || is_flag_null {
+            res.append_null();
+        } else {
+            let flag_str = flags.as_ref().map(|f| f.value(i));
+            let regex = compile_pattern(pattern.value(i), flag_str);
+            if let Ok(regex) = regex {
+                res.append_value(regex.is_match(text.value(i)));
+            } else {
+                res.append_null();
+            }
+        }
+    }
+    encoding.create_array_from_family(BooleanFamilyArray::new(res.finish()))
 }
 
 pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> ThinResult<Regex> {
@@ -138,4 +181,82 @@ pub(super) fn compile_pattern(pattern: &str, flags: Option<&str>) -> ThinResult<
         }
     }
     regex_builder.build().map_err(|_| ThinError::ExpectedError)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::create_default_encodings;
+    use datafusion::arrow::array::{ArrayRef, StringArray};
+    use datafusion::logical_expr::col;
+    use insta::assert_snapshot;
+    use rdf_fusion_encoding::typed_family::{StringFamily, TypedFamily};
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_regex_typed_family() {
+        let encodings = create_default_encodings();
+        let encoding = encodings.typed_family();
+
+        let text_array = Arc::new(StringArray::from(vec![
+            "foobar", "FOOBAR", "foobar", "foobar",
+        ])) as ArrayRef;
+        let text = encoding
+            .create_array_with_single_family(
+                StringFamily::FAMILY_ID,
+                StringFamily::create_simple_strings_array(text_array),
+            )
+            .unwrap()
+            .into_array_ref();
+
+        let pattern_array =
+            Arc::new(StringArray::from(vec!["foo", "foo", "foo", "foo"])) as ArrayRef;
+        let pattern = encoding
+            .create_array_with_single_family(
+                StringFamily::FAMILY_ID,
+                StringFamily::create_simple_strings_array(pattern_array),
+            )
+            .unwrap()
+            .into_array_ref();
+
+        let flags_array = Arc::new(StringArray::from(vec!["", "", "i", "s"])) as ArrayRef;
+        let flags = encoding
+            .create_array_with_single_family(
+                StringFamily::FAMILY_ID,
+                StringFamily::create_simple_strings_array(flags_array),
+            )
+            .unwrap()
+            .into_array_ref();
+
+        let udf = Arc::new(regex_udf(encodings).unwrap());
+
+        let input = datafusion::prelude::DataFrame::from_columns(vec![
+            ("text", text),
+            ("pattern", pattern),
+            ("flags", flags),
+        ])
+        .unwrap();
+
+        let result = input
+            .select(vec![udf.call(vec![
+                col("text"),
+                col("pattern"),
+                col("flags"),
+            ])])
+            .unwrap();
+
+        assert_snapshot!(
+            result.to_string().await.unwrap(),
+            @r#"
+        +---------------------------------------------------+
+        | REGEX(?table?.text,?table?.pattern,?table?.flags) |
+        +---------------------------------------------------+
+        | {rdf-fusion.boolean=true}                         |
+        | {rdf-fusion.boolean=false}                        |
+        | {rdf-fusion.boolean=true}                         |
+        | {rdf-fusion.boolean=true}                         |
+        +---------------------------------------------------+
+        "#
+        );
+    }
 }

@@ -40,7 +40,7 @@ Projection: ENC_PT(productLabel) AS productLabel, ENC_PT(offer) AS offer, ENC_PT
                       QuadPattern (?offer <http://purl.org/dc/elements/1.1/publisher> ?vendor)
               SubqueryAlias: rhs
                 Projection: offer
-                  Filter: EBV(GT(ENC_TV(date), Union 10:{value:6334951680000.0000000000000000,offset:}))
+                  Filter: EBV(GT(ENC_TF(date), Union 5:{date_time_type:0,value:63349516800.000000000000000000,offset:}))
                     QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo> ?date)
     Projection: lhs.review AS review, lhs.reviewer AS reviewer, lhs.revName AS revName, lhs.revTitle AS revTitle, lhs.rating1 AS rating1, rhs.rating2 AS rating2
       Left Join: lhs.review = rhs.review

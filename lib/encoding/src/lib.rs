@@ -1,12 +1,12 @@
 #![doc(test(attr(deny(warnings))))]
 #![doc(
-    html_favicon_url = "https://raw.githubusercontent.com/tobixdev/rdf-fusion/main/misc/logo/logo.png"
+    html_favicon_url = "https://codeberg.org/tschwarzinger/rdf-fusion/raw/branch/main/misc/logo/logo.png"
 )]
 #![doc(
-    html_logo_url = "https://raw.githubusercontent.com/tobixdev/rdf-fusion/main/misc/logo/logo.png"
+    html_logo_url = "https://codeberg.org/tschwarzinger/rdf-fusion/raw/branch/main/misc/logo/logo.png"
 )]
 
-//! Contains the [RDF Funsion's](https://docs.rs/rdf-fusion/) term encodings.
+//! Contains the [RDF Funion's](https://docs.rs/rdf-fusion/) term encodings.
 //!
 //! # Overview
 //!
@@ -48,10 +48,116 @@ pub mod plain_term;
 mod quad_storage_encoding;
 mod scalar_encoder;
 pub mod sortable_term;
-pub mod typed_value;
+pub mod typed_family;
 
+use crate::object_id::ObjectIdArrays;
+use crate::plain_term::PlainTermArrays;
+use crate::typed_family::TypedFamilyArrays;
+use datafusion::arrow::array::ArrayRef;
+use datafusion::arrow::datatypes::DataType;
+use datafusion::common::{exec_err, plan_datafusion_err, plan_err};
 pub use encoding::*;
 pub use encoding_name::*;
 pub use encodings::*;
 pub use quad_storage_encoding::*;
+use rdf_fusion_model::DFResult;
 pub use scalar_encoder::ScalarEncoder;
+use std::sync::Arc;
+
+/// Represents a list of arrays that share the same encoding.
+pub enum DowncastEncodingArrays {
+    /// Arrays of the Object ID encoding
+    ObjectId(ObjectIdArrays),
+    /// Arrays of the Plain Term encoding
+    PlainTerm(PlainTermArrays),
+    /// Arrays of the Typed Family encoding
+    TypedFamily(TypedFamilyArrays),
+}
+
+impl DowncastEncodingArrays {
+    /// Tries to create a [`DowncastEncodingArrays`] from a list or arrays.
+    pub fn try_from_arrays(
+        encodings: &RdfFusionEncodings,
+        arrays: &[ArrayRef],
+    ) -> DFResult<Option<DowncastEncodingArrays>> {
+        let types = arrays
+            .iter()
+            .map(|a| a.data_type().clone())
+            .collect::<Vec<_>>();
+        let Some(encoding_name) = detect_encoding_from_types(encodings, &types)? else {
+            return Ok(None);
+        };
+
+        let result = match encoding_name {
+            EncodingName::ObjectId => {
+                let encoding = encodings
+                    .object_id()
+                    .expect("Otherwise encoding cannot be detected");
+                let arrays = try_from_arrays_for_encoding(encoding, arrays)?;
+                DowncastEncodingArrays::ObjectId(ObjectIdArrays::new_unchecked(arrays))
+            }
+            EncodingName::PlainTerm => {
+                let arrays =
+                    try_from_arrays_for_encoding(encodings.plain_term(), arrays)?;
+                DowncastEncodingArrays::PlainTerm(PlainTermArrays::new_unchecked(arrays))
+            }
+            EncodingName::TypedFamily => {
+                let arrays =
+                    try_from_arrays_for_encoding(encodings.typed_family(), arrays)?;
+                DowncastEncodingArrays::TypedFamily(TypedFamilyArrays::new_unchecked(
+                    arrays,
+                ))
+            }
+            EncodingName::Sortable => {
+                return exec_err!(
+                    "Sortable encoding is not supported in DowncastEncodingArrays."
+                );
+            }
+        };
+        return Ok(Some(result));
+
+        /// Converts the arrays for a particular encoding.
+        fn try_from_arrays_for_encoding<TEncoding: TermEncoding>(
+            encoding: &Arc<TEncoding>,
+            arrays: &[ArrayRef],
+        ) -> DFResult<Vec<TEncoding::Array>> {
+            arrays
+                .iter()
+                .map(|a| encoding.try_new_array(Arc::clone(a)))
+                .collect()
+        }
+    }
+}
+
+/// Detects the encoding of the given argument types.
+///
+/// This function verifies that all argument types have the same encoding and returns the name
+/// of the encoding.
+pub fn detect_encoding_from_types(
+    encodings: &RdfFusionEncodings,
+    arg_types: &[DataType],
+) -> DFResult<Option<EncodingName>> {
+    if arg_types.is_empty() {
+        return Ok(None);
+    }
+
+    let first_arg_type = &arg_types[0];
+    let encoding_name =
+        encodings
+            .try_get_encoding_name(first_arg_type)
+            .ok_or_else(|| {
+                plan_datafusion_err!("Cannot extract RDF term encoding from argument.")
+            })?;
+
+    // Verify that all arguments have the same encoding
+    for (i, arg_type) in arg_types.iter().enumerate().skip(1) {
+        let other_encoding = encodings.try_get_encoding_name(arg_type);
+        if other_encoding != Some(encoding_name) {
+            return plan_err!(
+                "Arguments have different encodings at index 0 and {i}: {encoding_name:?} and {other_encoding:?}"
+            );
+        }
+    }
+
+    Ok(Some(encoding_name))
+}

@@ -1,137 +1,121 @@
-use crate::scalar::sparql_op_impl::{ClosureSparqlOpImpl, ScalarSparqlOpImpl};
-use crate::scalar::{ScalarSparqlOp, ScalarSparqlOpSignature, SparqlOpArity};
-use datafusion::arrow::array::Array;
+use crate::scalar::error::SparqlUDFCreationError;
+use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
 use datafusion::arrow::compute::is_not_null;
-use datafusion::logical_expr::ColumnarValue;
-use rdf_fusion_encoding::object_id::ObjectIdEncoding;
-use rdf_fusion_encoding::plain_term::PlainTermEncoding;
-use rdf_fusion_encoding::typed_value::{
-    TypedValueArray, TypedValueArrayElementBuilder, TypedValueEncoding,
-    TypedValueEncodingRef,
+use datafusion::arrow::datatypes::DataType;
+use datafusion::logical_expr::{
+    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use rdf_fusion_encoding::{
-    EncodingArray, EncodingDatum, EncodingScalar, RdfFusionEncodings, TermEncoding,
-};
+use rdf_fusion_encoding::typed_family::BooleanFamilyArray;
+use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_extensions::functions::FunctionName;
 use rdf_fusion_model::DFResult;
-use std::sync::Arc;
+use std::any::Any;
 
-#[derive(Debug, Default, Hash, PartialEq, Eq)]
-pub struct BoundSparqlOp;
+/// Implementation of the SPARQL `BOUND` function.
+///
+/// # Relevant Resources
+/// - [SPARQL 1.1 - BOUND](https://www.w3.org/TR/sparql11-query/#func-bound)
+pub fn bound_udf(
+    encodings: RdfFusionEncodings,
+) -> Result<ScalarUDF, SparqlUDFCreationError> {
+    Ok(ScalarUDF::new_from_impl(BoundSparqlOp::new(encodings)))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct BoundSparqlOp {
+    encodings: RdfFusionEncodings,
+    name: String,
+    signature: Signature,
+}
 
 impl BoundSparqlOp {
-    const NAME: FunctionName = FunctionName::Builtin(BuiltinName::Bound);
+    /// Create a new [`BoundSparqlOp`].
+    fn new(encodings: RdfFusionEncodings) -> Self {
+        let mut type_signature_builder = SparqlOpTypeSignatureBuilder::new()
+            .with_supported_encoding(encodings.plain_term().as_ref())
+            .with_supported_encoding(encodings.typed_family().as_ref());
 
-    /// Creates a new [`BoundSparqlOp`].
-    pub fn new() -> Self {
-        Self {}
-    }
-}
+        if let Some(oid_encoding) = encodings.object_id() {
+            type_signature_builder =
+                type_signature_builder.with_supported_encoding(oid_encoding.as_ref());
+        }
 
-impl ScalarSparqlOp for BoundSparqlOp {
-    fn name(&self) -> &FunctionName {
-        &Self::NAME
-    }
+        let type_signature = type_signature_builder.with_unary_arity().build();
 
-    fn signature(&self) -> ScalarSparqlOpSignature {
-        ScalarSparqlOpSignature::default_with_arity(SparqlOpArity::Fixed(1))
-    }
-
-    fn plain_term_encoding_op(
-        &self,
-        encodings: &RdfFusionEncodings,
-    ) -> Option<Box<dyn ScalarSparqlOpImpl<PlainTermEncoding>>> {
-        Some(Box::new(ClosureSparqlOpImpl::new(
-            encodings.typed_value().data_type().clone(),
-            |args| impl_bound_plain_term(args.encodings.typed_value(), &args.args[0]),
-        )))
-    }
-
-    fn typed_value_encoding_op(
-        &self,
-        encodings: &RdfFusionEncodings,
-    ) -> Option<Box<dyn ScalarSparqlOpImpl<TypedValueEncoding>>> {
-        Some(Box::new(ClosureSparqlOpImpl::new(
-            encodings.typed_value().data_type().clone(),
-            |args| impl_bound_typed_value(args.encodings.typed_value(), &args.args[0]),
-        )))
-    }
-
-    fn object_id_encoding_op(
-        &self,
-        encodings: &RdfFusionEncodings,
-    ) -> Option<Box<dyn ScalarSparqlOpImpl<ObjectIdEncoding>>> {
-        Some(Box::new(ClosureSparqlOpImpl::<ObjectIdEncoding>::new(
-            encodings.typed_value().data_type().clone(),
-            |args| impl_bound_object_id(args.encodings.typed_value(), &args.args[0]),
-        )))
-    }
-}
-
-fn impl_bound_plain_term(
-    encoding: &TypedValueEncodingRef,
-    array: &EncodingDatum<PlainTermEncoding>,
-) -> DFResult<ColumnarValue> {
-    match array {
-        EncodingDatum::Array(array) => impl_bound_array(encoding, array.array().as_ref())
-            .map(|array| ColumnarValue::Array(array.into_array_ref())),
-        EncodingDatum::Scalar(scalar, _) => {
-            let array = scalar.to_array(1)?.into_array_ref();
-            impl_bound_array(encoding, array.as_ref())?
-                .try_as_scalar(0)
-                .map(|scalar| ColumnarValue::Scalar(scalar.into_scalar_value()))
+        Self {
+            encodings,
+            name: BuiltinName::Bound.to_string(),
+            signature: Signature::new(type_signature, Volatility::Immutable),
         }
     }
 }
 
-fn impl_bound_typed_value(
-    encoding: &TypedValueEncodingRef,
-    array: &EncodingDatum<TypedValueEncoding>,
-) -> DFResult<ColumnarValue> {
-    match array {
-        EncodingDatum::Array(array) => impl_bound_array(encoding, array.array().as_ref())
-            .map(|array| ColumnarValue::Array(array.into_array_ref())),
-        EncodingDatum::Scalar(scalar, _) => {
-            let array = scalar.to_array(1)?.into_array_ref();
-            impl_bound_array(encoding, array.as_ref())?
-                .try_as_scalar(0)
-                .map(|scalar| ColumnarValue::Scalar(scalar.into_scalar_value()))
-        }
+impl ScalarUDFImpl for BoundSparqlOp {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        Ok(self.encodings.typed_family().data_type().clone())
+    }
+
+    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
+        let input = args.args[0].to_array(args.number_rows)?;
+        let bound = BooleanFamilyArray::from(is_not_null(&input)?);
+        let result = self
+            .encodings
+            .typed_family()
+            .create_array_from_family(bound)?;
+        Ok(ColumnarValue::Array(result.into_array_ref()))
     }
 }
 
-fn impl_bound_object_id(
-    encoding: &TypedValueEncodingRef,
-    array: &EncodingDatum<ObjectIdEncoding>,
-) -> DFResult<ColumnarValue> {
-    match array {
-        EncodingDatum::Array(array) => impl_bound_array(encoding, array.array().as_ref())
-            .map(|array| ColumnarValue::Array(array.into_array_ref())),
-        EncodingDatum::Scalar(scalar, _) => {
-            let array = scalar.to_array(1)?.into_array_ref();
-            impl_bound_array(encoding, array.as_ref())?
-                .try_as_scalar(0)
-                .map(|scalar| ColumnarValue::Scalar(scalar.into_scalar_value()))
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{
+        create_default_encodings, create_standard_test_vector, evaluate_function_for_test,
+    };
+    use insta::assert_snapshot;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_bound_typed_family() {
+        let encodings = create_default_encodings();
+        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let udf = Arc::new(bound_udf(encodings).unwrap());
+        let result = evaluate_function_for_test(test_vector, udf);
+        assert_snapshot!(
+            result.to_string().await.unwrap(),
+            @"
+        +----------------------------------------------------------------------------------------------+----------------------------+
+        | input                                                                                        | BOUND(?table?.input)       |
+        +----------------------------------------------------------------------------------------------+----------------------------+
+        | {rdf-fusion.null=}                                                                           | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.numeric={double=20.0}}                                                           | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.numeric={decimal=30.000000000000000000}}                                         | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.numeric={int=40}}                                                                | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.strings={value: b1, language: }}                                                 | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.strings={value: just a string, language: }}                                      | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.strings={value: hello, language: en}}                                            | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.strings={value: 123, language: }}                                                | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.date-time={date_time_type: 0, value: 63808171200.000000000000000000, offset: 0}} | {rdf-fusion.boolean=true}  |
+        +----------------------------------------------------------------------------------------------+----------------------------+
+        "
+        )
     }
-}
-
-fn impl_bound_array(
-    encoding: &TypedValueEncodingRef,
-    array: &dyn Array,
-) -> DFResult<TypedValueArray> {
-    let result = is_not_null(array)?;
-    assert_eq!(
-        result.null_count(),
-        0,
-        "is_not_null should never return null"
-    );
-
-    let mut builder = TypedValueArrayElementBuilder::new(Arc::clone(encoding));
-    for value in result.values() {
-        builder.append_boolean(value.into())?;
-    }
-
-    Ok(builder.finish())
 }

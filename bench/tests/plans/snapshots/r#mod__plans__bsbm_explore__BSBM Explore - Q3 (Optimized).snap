@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_explore.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(product) AS product, ENC_PT(label) AS label
-  Sort: ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, fetch=10
+  Sort: ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, fetch=10
     Projection: lhs.product AS product, lhs.label AS label
       Filter: NOT EBV(BOUND(rhs.testVar))
         Projection: lhs.product, lhs.label, rhs.testVar
@@ -28,11 +28,11 @@ Projection: ENC_PT(product) AS product, ENC_PT(label) AS label
                                 QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature541>)
                         SubqueryAlias: rhs
                           Projection: product
-                            Filter: EBV(GT(ENC_TV(p1), Union 9:156))
+                            Filter: EBV(GT(ENC_TF(p1), Union 4:4:156))
                               QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?p1)
                   SubqueryAlias: rhs
                     Projection: product
-                      Filter: EBV(LT(ENC_TV(p3), Union 9:152))
+                      Filter: EBV(LT(ENC_TF(p3), Union 4:4:152))
                         QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric3> ?p3)
             SubqueryAlias: rhs
               Projection: lhs.product AS product, rhs.testVar AS testVar

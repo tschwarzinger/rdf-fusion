@@ -14,7 +14,7 @@ use datafusion::logical_expr::AggregateUDF;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::functions::{
@@ -58,7 +58,7 @@ impl RdfFusionContext {
         };
         let encodings = RdfFusionEncodings::new(
             Arc::clone(&PLAIN_TERM_ENCODING),
-            Arc::new(TypedValueEncoding::new()),
+            Arc::new(TypedFamilyEncoding::default()),
             object_id_encoding,
             Arc::clone(&SORTABLE_TERM_ENCODING),
         );

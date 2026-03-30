@@ -52,7 +52,7 @@ Projection: ENC_PT(lhs.site_label) AS site_label, ENC_PT(lhs.wtur_label) AS wtur
                                                                                               SubqueryAlias: lhs
                                                                                                 QuadPattern (?site <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://github.com/magbak/chrontext/rds_power#Site>)
                                                                                               SubqueryAlias: rhs
-                                                                                                Filter: EBV(EQ(ENC_TV(site_label), Union 3:{value:Wind Mountain,language:}))
+                                                                                                Filter: EBV(EQ(ENC_TF(site_label), Union 2:{value:Wind Mountain,language:}))
                                                                                                   QuadPattern (?site <http://www.w3.org/2000/01/rdf-schema#label> ?site_label)
                                                                                         SubqueryAlias: rhs
                                                                                           QuadPattern (?site <https://github.com/magbak/chrontext/rds_power#hasFunctionalAspect> ?wtur_asp)

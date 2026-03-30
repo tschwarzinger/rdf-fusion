@@ -3,11 +3,11 @@ source: bench/tests/plans/wind_farm.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(site_label) AS site_label, ENC_PT(wtur_label) AS wtur_label, year AS year, month AS month, day AS day, hour AS hour, minute_10 AS minute_10, ENC_PT(<uuid>) AS avg_val
-  Aggregate: groupBy=[[site_label AS site_label, wtur_label AS wtur_label, ENC_PT(year) AS year, ENC_PT(month) AS month, ENC_PT(day) AS day, ENC_PT(hour) AS hour, ENC_PT(minute_10) AS minute_10]], aggr=[[AVG(ENC_TV(val)) AS <uuid>]]
+  Aggregate: groupBy=[[site_label AS site_label, wtur_label AS wtur_label, ENC_PT(year) AS year, ENC_PT(month) AS month, ENC_PT(day) AS day, ENC_PT(hour) AS hour, ENC_PT(minute_10) AS minute_10]], aggr=[[AVG(ENC_TF(val)) AS <uuid>]]
     Projection: site_label, wtur_label, val, minute_10, hour, day, MONTH(__common_expr_2) AS month, YEAR(__common_expr_2) AS year
-      Projection: ENC_TV(t) AS __common_expr_2, site_label, wtur_label, val, minute_10, HOURS(__common_expr_3) AS hour, DAY(__common_expr_3) AS day
-        Projection: __common_expr_5 AS __common_expr_3, site_label, wtur_label, val, t, MUL(Union 9:10, FLOOR(DIV(MINUTES(__common_expr_5), Union 7:Some(<uuid>),36,16))) AS minute_10
-          Projection: ENC_TV(t) AS __common_expr_5, site_label, wtur_label, val, t
+      Projection: ENC_TF(t) AS __common_expr_2, site_label, wtur_label, val, minute_10, HOURS(__common_expr_3) AS hour, DAY(__common_expr_3) AS day
+        Projection: __common_expr_5 AS __common_expr_3, site_label, wtur_label, val, t, MUL(Union 4:4:10, FLOOR(DIV(MINUTES(__common_expr_5), Union 4:2:Some(<uuid>),36,18))) AS minute_10
+          Projection: ENC_TF(t) AS __common_expr_5, site_label, wtur_label, val, t
             Projection: lhs.site_label AS site_label, lhs.wtur_label AS wtur_label, lhs.val AS val, rhs.t AS t
               Inner Join: lhs.dp = rhs.dp
                 SubqueryAlias: lhs
@@ -58,12 +58,12 @@ Projection: ENC_PT(site_label) AS site_label, ENC_PT(wtur_label) AS wtur_label, 
                                                                                                           SubqueryAlias: lhs
                                                                                                             QuadPattern (?site <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://github.com/magbak/chrontext/rds_power#Site>)
                                                                                                           SubqueryAlias: rhs
-                                                                                                            Filter: EBV(EQ(ENC_TV(site_label), Union 3:{value:Wind Mountain,language:}))
+                                                                                                            Filter: EBV(EQ(ENC_TF(site_label), Union 2:{value:Wind Mountain,language:}))
                                                                                                               QuadPattern (?site <http://www.w3.org/2000/01/rdf-schema#label> ?site_label)
                                                                                                     SubqueryAlias: rhs
                                                                                                       QuadPattern (?site <https://github.com/magbak/chrontext/rds_power#hasFunctionalAspect> ?wtur_asp)
                                                                                               SubqueryAlias: rhs
-                                                                                                Filter: EBV(EQ(ENC_TV(wtur_label), Union 3:{value:A1,language:}))
+                                                                                                Filter: EBV(EQ(ENC_TF(wtur_label), Union 2:{value:A1,language:}))
                                                                                                   QuadPattern (?wtur_asp <http://www.w3.org/2000/01/rdf-schema#label> ?wtur_label)
                                                                                         SubqueryAlias: rhs
                                                                                           QuadPattern (?wtur <https://github.com/magbak/chrontext/rds_power#hasFunctionalAspectNode> ?wtur_asp)
@@ -91,6 +91,6 @@ Projection: ENC_PT(site_label) AS site_label, ENC_PT(wtur_label) AS wtur_label, 
                         QuadPattern (?dp <https://github.com/magbak/chrontext#hasValue> ?val)
                 SubqueryAlias: rhs
                   Projection: dp, t
-                    Filter: EBV(GEQ(__common_expr_6, Union 10:{value:6379744601300.0000000000000000,offset:})) AND EBV(LEQ(__common_expr_6, Union 10:{value:6379749281300.0000000000000000,offset:}))
-                      Projection: ENC_TV(t) AS __common_expr_6, dp, t
+                    Filter: EBV(GEQ(__common_expr_6, Union 5:{date_time_type:0,value:63797446013.000000000000000000,offset:})) AND EBV(LEQ(__common_expr_6, Union 5:{date_time_type:0,value:63797492813.000000000000000000,offset:}))
+                      Projection: ENC_TF(t) AS __common_expr_6, dp, t
                         QuadPattern (?dp <https://github.com/magbak/chrontext#hasTimestamp> ?t)

@@ -2,7 +2,7 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-ProjectionExec: expr=[ENC_PT(productURI@0) as productURI, ENC_PT(productlabel@1) as productlabel, ENC_PT(vendorURI@2) as vendorURI, ENC_PT(vendorname@3) as vendorname, ENC_PT(vendorhomepage@4) as vendorhomepage, ENC_PT(offerURL@5) as offerURL, ENC_PT(price@6) as price, ENC_PT(deliveryDays@7) as deliveryDays, ENC_PT(validTo@8) as validTo]
+ProjectionExec: expr=[ENC_PT(deliveryDays@7) as deliveryDays, ENC_PT(offerURL@5) as offerURL, ENC_PT(price@6) as price, ENC_PT(productURI@0) as productURI, ENC_PT(productlabel@1) as productlabel, ENC_PT(validTo@8) as validTo, ENC_PT(vendorURI@2) as vendorURI, ENC_PT(vendorhomepage@4) as vendorhomepage, ENC_PT(vendorname@3) as vendorname]
   CrossJoinExec
     CrossJoinExec
       CrossJoinExec

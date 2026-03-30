@@ -2,17 +2,17 @@ use codspeed_criterion_compat::{Criterion, criterion_group, criterion_main};
 use datafusion::arrow::datatypes::Field;
 use datafusion::config::ConfigOptions;
 use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDF};
-use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-use rdf_fusion_encoding::typed_value::{
-    TypedValueArrayElementBuilder, TypedValueEncoding,
+use rdf_fusion_encoding::plain_term::{
+    PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
+use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
+use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
 };
 use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
-use rdf_fusion_model::Integer;
+use rdf_fusion_model::{Integer, Literal, TermRef};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -25,31 +25,44 @@ impl BinaryScenario {
     fn create_args(&self, encodings: &RdfFusionEncodings) -> Vec<ColumnarValue> {
         match self {
             BinaryScenario::AllInt => {
-                let mut left_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
-                let mut right_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
+                let mut left_builder = PlainTermArrayElementBuilder::new(8192);
+                let mut right_builder = PlainTermArrayElementBuilder::new(8192);
                 for i in 0..8192 {
                     match i % 3 {
                         1 => {
-                            left_builder.append_integer(Integer::from(i)).unwrap();
-                            right_builder.append_integer(Integer::from(i)).unwrap();
+                            let left_lit = Literal::from(Integer::from(i).as_i64());
+                            let right_lit = Literal::from(Integer::from(i).as_i64());
+                            left_builder.append_term(TermRef::from(&left_lit));
+                            right_builder.append_term(TermRef::from(&right_lit));
                         }
                         2 => {
-                            left_builder.append_integer(Integer::from(i)).unwrap();
-                            right_builder.append_integer(Integer::from(i + 1)).unwrap();
+                            let left_lit = Literal::from(Integer::from(i).as_i64());
+                            let right_lit = Literal::from(Integer::from(i + 1).as_i64());
+                            left_builder.append_term(TermRef::from(&left_lit));
+                            right_builder.append_term(TermRef::from(&right_lit));
                         }
                         _ => {
-                            left_builder.append_integer(Integer::from(i + 1)).unwrap();
-                            right_builder.append_integer(Integer::from(i)).unwrap();
+                            let left_lit = Literal::from(Integer::from(i + 1).as_i64());
+                            let right_lit = Literal::from(Integer::from(i).as_i64());
+                            left_builder.append_term(TermRef::from(&left_lit));
+                            right_builder.append_term(TermRef::from(&right_lit));
                         }
                     }
                 }
+                let left_plain = left_builder.finish();
+                let right_plain = right_builder.finish();
+
+                let typed_family = encodings.typed_family();
+                let left_tf = typed_family
+                    .cast_from_plain_term_array(&left_plain)
+                    .unwrap();
+                let right_tf = typed_family
+                    .cast_from_plain_term_array(&right_plain)
+                    .unwrap();
+
                 vec![
-                    ColumnarValue::Array(left_builder.finish().into_array_ref()),
-                    ColumnarValue::Array(right_builder.finish().into_array_ref()),
+                    ColumnarValue::Array(left_tf.into_array_ref()),
+                    ColumnarValue::Array(right_tf.into_array_ref()),
                 ]
             }
         }
@@ -60,7 +73,7 @@ impl BinaryScenario {
 fn bench_all_binary(c: &mut Criterion) {
     let encodings = RdfFusionEncodings::new(
         Arc::clone(&PLAIN_TERM_ENCODING),
-        Arc::new(TypedValueEncoding::default()),
+        Arc::new(TypedFamilyEncoding::default()),
         None,
         Arc::clone(&SORTABLE_TERM_ENCODING),
     );
@@ -95,26 +108,19 @@ fn bench_binary_function(
 
     let input_field_left = Arc::new(Field::new(
         "left",
-        encodings.typed_value().data_type().clone(),
+        encodings.typed_family().data_type().clone(),
         true,
     ));
     let input_field_right = Arc::new(Field::new(
         "right",
-        encodings.typed_value().data_type().clone(),
+        encodings.typed_family().data_type().clone(),
         true,
     ));
     let return_field = Arc::new(Field::new(
         "result",
-        encodings.typed_value().data_type().clone(),
+        encodings.typed_family().data_type().clone(),
         true,
     ));
-
-    /* code used only for testing purposes (remove before official launch)
-    // determine correct return type of UDF
-    let return_type = function
-        .return_type(&[TYPED_VALUE_ENCODING.data_type(), TYPED_VALUE_ENCODING.data_type()])
-        .expect("cannot resolve return type");
-    let return_field = Arc::new(Field::new("result", return_type, true));*/
 
     let name = format!("{}_{scenario:?}", function.name());
     c.bench_function(&name, |b| {

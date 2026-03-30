@@ -1,82 +1,67 @@
-use datafusion::arrow::array::{Array, ArrayRef, AsArray};
+use crate::aggregates::SparqlSumAccumulator;
+use datafusion::arrow::array::{ArrayRef, AsArray};
+use datafusion::arrow::compute::sum;
 use datafusion::arrow::datatypes::{DataType, UInt64Type};
-use datafusion::common::exec_datafusion_err;
+use datafusion::arrow::error::ArrowError;
 use datafusion::logical_expr::{AggregateUDF, Volatility, create_udaf};
-use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
-use rdf_fusion_encoding::typed_value::TypedValueEncodingRef;
-use rdf_fusion_encoding::typed_value::decoders::NumericTermValueDecoder;
-use rdf_fusion_encoding::typed_value::encoders::{
-    DecimalTermValueEncoder, DoubleTermValueEncoder, FloatTermValueEncoder,
-    IntegerTermValueEncoder, NumericTypedValueEncoder,
+use datafusion::{error::Result, physical_plan::Accumulator};
+use rdf_fusion_encoding::typed_family::{
+    DowncastTypedFamilyArray, NumericFamily, NumericFamilyScalar, TypedFamilyEncodingRef,
 };
-use rdf_fusion_encoding::{
-    EncodingArray, EncodingScalar, TermDecoder, TermEncoder, TermEncoding,
-};
+use rdf_fusion_encoding::{EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{Decimal, Integer, Numeric, NumericPair, ThinError, ThinResult};
-use std::ops::Div;
 use std::sync::Arc;
 
-pub fn avg_typed_value(encoding: TypedValueEncodingRef) -> AggregateUDF {
+pub fn avg_typed_family(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
     let data_type = encoding.data_type().clone();
     create_udaf(
-        BuiltinName::Avg.to_string().as_str(),
+        &BuiltinName::Avg.to_string(),
         vec![data_type.clone()],
         Arc::new(data_type.clone()),
         Volatility::Immutable,
-        Arc::new(move |_| Ok(Box::new(SparqlAvg::new(Arc::clone(&encoding))))),
+        Arc::new(move |_| Ok(Box::new(SparqlTypedFamilyAvg::new(Arc::clone(&encoding))))),
         Arc::new(vec![data_type, DataType::UInt64]),
     )
 }
 
 #[derive(Debug)]
-struct SparqlAvg {
-    encoding: TypedValueEncodingRef,
-    sum: ThinResult<Numeric>,
+struct SparqlTypedFamilyAvg {
+    encoding: TypedFamilyEncodingRef,
+    sum_acc: SparqlSumAccumulator,
     count: u64,
 }
 
-impl SparqlAvg {
-    pub fn new(encoding: TypedValueEncodingRef) -> Self {
-        SparqlAvg {
+impl SparqlTypedFamilyAvg {
+    /// Creates a new [`SparqlTypedFamilyAvg`].
+    pub fn new(encoding: TypedFamilyEncodingRef) -> Self {
+        let sum_acc = SparqlSumAccumulator::new(Arc::clone(&encoding));
+        SparqlTypedFamilyAvg {
             encoding,
-            sum: Ok(Numeric::Decimal(Decimal::from(0))),
+            sum_acc,
             count: 0,
         }
     }
 }
 
-impl Accumulator for SparqlAvg {
-    fn update_batch(&mut self, values: &[ArrayRef]) -> DFResult<()> {
-        if values.is_empty() || self.sum.is_err() {
+impl Accumulator for SparqlTypedFamilyAvg {
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        if values.is_empty() {
             return Ok(());
         }
-        let arr = self.encoding.try_new_array(Arc::clone(&values[0]))?;
-        let arr_len = u64::try_from(arr.array().len())
-            .map_err(|_| exec_datafusion_err!("Array was too large."))?;
-        self.count += arr_len;
 
-        for value in NumericTermValueDecoder::decode_terms(&arr) {
-            if let Ok(sum) = self.sum {
-                if let Ok(value) = value {
-                    self.sum = match NumericPair::with_casts_from(sum, value) {
-                        NumericPair::Int(lhs, rhs) => {
-                            lhs.checked_add(rhs).map(Numeric::Int)
-                        }
-                        NumericPair::Integer(lhs, rhs) => {
-                            lhs.checked_add(rhs).map(Numeric::Integer)
-                        }
-                        NumericPair::Float(lhs, rhs) => Ok(Numeric::Float(lhs + rhs)),
-                        NumericPair::Double(lhs, rhs) => Ok(Numeric::Double(lhs + rhs)),
-                        NumericPair::Decimal(lhs, rhs) => {
-                            lhs.checked_add(rhs).map(Numeric::Decimal)
-                        }
-                    };
-                } else {
-                    self.sum = ThinError::expected();
-                }
+        self.sum_acc.update_batch(values)?;
+
+        let arr = self.encoding.try_new_array(Arc::clone(&values[0]))?;
+        for child in arr.non_empty_children() {
+            if let DowncastTypedFamilyArray::Numeric(numeric_child) = child.downcast() {
+                let len = numeric_child.len().try_into().map_err(|_| {
+                    ArrowError::ArithmeticOverflow("Child length too big".to_owned())
+                })?;
+                self.count = self.count.checked_add(len).ok_or_else(|| {
+                    ArrowError::ArithmeticOverflow("Average count overflow".to_owned())
+                })?;
             }
         }
 
@@ -85,55 +70,29 @@ impl Accumulator for SparqlAvg {
 
     fn evaluate(&mut self) -> DFResult<ScalarValue> {
         if self.count == 0 {
-            let count = i64::try_from(self.count).map_err(|_| {
-                exec_datafusion_err!("Count too large for current xsd::Integer")
-            })?;
-            return IntegerTermValueEncoder::new(Arc::clone(&self.encoding))
-                .encode_terms([Ok(Integer::from(count))])?
-                .try_as_scalar(0)
-                .map(EncodingScalar::into_scalar_value);
+            return self
+                .encoding
+                .create_scalar_from_family::<NumericFamily>(
+                    NumericFamilyScalar::Integer(0.into()).to_scalar_value(),
+                )
+                .map(|v| v.into_scalar_value());
         }
 
-        let Ok(sum) = self.sum else {
-            return IntegerTermValueEncoder::new(Arc::clone(&self.encoding))
-                .encode_terms([ThinError::expected()])?
-                .try_as_scalar(0)
-                .map(EncodingScalar::into_scalar_value);
-        };
+        let count = i64::try_from(self.count).map_err(|_| {
+            ArrowError::ArithmeticOverflow("Average count overflow".to_string())
+        })?;
+        let avg = self
+            .sum_acc
+            .sum()
+            .and_then(|sum| sum.div(NumericFamilyScalar::Integer(count.into())));
 
-        let count = Numeric::Decimal(Decimal::from(self.count));
-        let result = match NumericPair::with_casts_from(sum, count) {
-            NumericPair::Int(_, _) => unreachable!("Starts with Integer"),
-            NumericPair::Integer(lhs, rhs) => {
-                let value = lhs.checked_div(rhs);
-                IntegerTermValueEncoder::new(Arc::clone(&self.encoding))
-                    .encode_terms([value])?
-                    .try_as_scalar(0)
-                    .map(EncodingScalar::into_scalar_value)
-            }
-            NumericPair::Float(lhs, rhs) => {
-                let value = lhs.div(rhs);
-                FloatTermValueEncoder::new(Arc::clone(&self.encoding))
-                    .encode_terms([Ok(value)])?
-                    .try_as_scalar(0)
-                    .map(EncodingScalar::into_scalar_value)
-            }
-            NumericPair::Double(lhs, rhs) => {
-                let value = lhs.div(rhs);
-                DoubleTermValueEncoder::new(Arc::clone(&self.encoding))
-                    .encode_terms([Ok(value)])?
-                    .try_as_scalar(0)
-                    .map(EncodingScalar::into_scalar_value)
-            }
-            NumericPair::Decimal(lhs, rhs) => {
-                let value = lhs.checked_div(rhs);
-                DecimalTermValueEncoder::new(Arc::clone(&self.encoding))
-                    .encode_terms([value])?
-                    .try_as_scalar(0)
-                    .map(EncodingScalar::into_scalar_value)
-            }
-        }?;
-        Ok(result)
+        match avg {
+            Ok(scalar) => Ok(self
+                .encoding
+                .create_scalar_from_family::<NumericFamily>(scalar.to_scalar_value())?
+                .into_scalar_value()),
+            Err(_) => Ok(self.encoding.create_scalar_null().into_scalar_value()),
+        }
     }
 
     fn size(&self) -> usize {
@@ -141,45 +100,103 @@ impl Accumulator for SparqlAvg {
     }
 
     fn state(&mut self) -> DFResult<Vec<ScalarValue>> {
-        let value = NumericTypedValueEncoder::new(Arc::clone(&self.encoding))
-            .encode_term(self.sum)?;
-        Ok(vec![
-            value.into_scalar_value(),
-            ScalarValue::UInt64(Some(self.count)),
-        ])
+        let mut state = self.sum_acc.state()?;
+        state.push(ScalarValue::UInt64(Some(self.count)));
+        Ok(state)
     }
 
-    #[allow(clippy::missing_asserts_for_indexing)]
-    fn merge_batch(&mut self, states: &[ArrayRef]) -> DFResult<()> {
-        let arr = self.encoding.try_new_array(Arc::clone(&states[0]))?;
-        let counts = states[1].as_primitive::<UInt64Type>();
-        for (count, value) in counts
-            .values()
-            .iter()
-            .zip(NumericTermValueDecoder::decode_terms(&arr))
-        {
-            if let Ok(sum) = self.sum {
-                if let Ok(value) = value {
-                    self.sum = match NumericPair::with_casts_from(sum, value) {
-                        NumericPair::Int(lhs, rhs) => {
-                            lhs.checked_add(rhs).map(Numeric::Int)
-                        }
-                        NumericPair::Integer(lhs, rhs) => {
-                            lhs.checked_add(rhs).map(Numeric::Integer)
-                        }
-                        NumericPair::Float(lhs, rhs) => Ok(Numeric::Float(lhs + rhs)),
-                        NumericPair::Double(lhs, rhs) => Ok(Numeric::Double(lhs + rhs)),
-                        NumericPair::Decimal(lhs, rhs) => {
-                            lhs.checked_add(rhs).map(Numeric::Decimal)
-                        }
-                    };
-                } else {
-                    self.sum = ThinError::expected();
-                }
-            }
-            self.count += *count;
-        }
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        self.sum_acc.merge_batch(&states[0..states.len() - 1])?;
+
+        let counts = states[states.len() - 1].as_primitive::<UInt64Type>();
+        let count = sum(counts).ok_or_else(|| {
+            ArrowError::ArithmeticOverflow("Average count overflow".to_string())
+        })?;
+        self.count += count;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::evaluate_aggregate_with_args_for_test;
+    use datafusion::arrow::array::Int64Array;
+    use datafusion::logical_expr::col;
+    use insta::assert_snapshot;
+    use rdf_fusion_encoding::EncodingArray;
+    use rdf_fusion_encoding::typed_family::{
+        NumericFamilyArray, TypedFamilyArray, TypedFamilyEncoding,
+    };
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_avg_typed_family() -> Result<()> {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let values = NumericFamilyArray::new_integers(Int64Array::from(vec![1, 2, 3]));
+        let typed_array = encoding.create_array_from_family(values)?;
+
+        assert_snapshot!(
+            run_test(typed_array).await,
+            @"
+        +-----------------------------------------------------+
+        | AVG(?table?.a)                                      |
+        +-----------------------------------------------------+
+        | {rdf-fusion.numeric={decimal=2.000000000000000000}} |
+        +-----------------------------------------------------+");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_avg_typed_family_with_null() -> Result<()> {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let values = Int64Array::from(vec![Some(1), None, Some(2)]);
+        let typed_array = encoding
+            .create_array_from_family(NumericFamilyArray::new_integers(values))?;
+
+        assert_snapshot!(
+            run_test(typed_array).await,
+            @"
+        +-----------------------------------------------------+
+        | AVG(?table?.a)                                      |
+        +-----------------------------------------------------+
+        | {rdf-fusion.numeric={decimal=1.500000000000000000}} |
+        +-----------------------------------------------------+
+        ");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_avg_typed_family_promotion() -> Result<()> {
+        let encoding = Arc::new(TypedFamilyEncoding::default());
+        let numeric_array =
+            NumericFamilyArray::new_integers(Int64Array::from(vec![10, 20]));
+        let typed_array = encoding.create_array_from_family(numeric_array)?;
+
+        assert_snapshot!(
+            run_test(typed_array).await,
+            @"
+        +------------------------------------------------------+
+        | AVG(?table?.a)                                       |
+        +------------------------------------------------------+
+        | {rdf-fusion.numeric={decimal=15.000000000000000000}} |
+        +------------------------------------------------------+
+        ");
+
+        Ok(())
+    }
+
+    /// Executes a test and returns the pretty-printed result.
+    async fn run_test(typed_array: TypedFamilyArray) -> String {
+        let encoding = Arc::clone(typed_array.encoding());
+        let df = evaluate_aggregate_with_args_for_test(
+            typed_array.into_array_ref(),
+            Arc::new(avg_typed_family(encoding)),
+            vec![col("a")],
+        );
+        df.to_string().await.unwrap()
     }
 }

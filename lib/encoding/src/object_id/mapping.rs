@@ -1,6 +1,5 @@
 use crate::object_id::{ObjectId, ObjectIdSize};
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray, PlainTermScalar};
-use crate::typed_value::{TypedValueArray, TypedValueEncodingRef, TypedValueScalar};
 use crate::{EncodingArray, EncodingScalar};
 use datafusion::arrow::array::{AsArray, FixedSizeBinaryArray};
 use datafusion::arrow::error::ArrowError;
@@ -61,18 +60,6 @@ pub type ObjectIdMappingRef = Arc<dyn ObjectIdMapping>;
 /// a result, operations that rely on the equality of RDF terms (`SAME_TERM`) can directly work
 /// with the object ids. Joining solution sets is the most important example.
 ///
-/// # Typed Values
-///
-/// To speed up decoding object ids directly into the [TypedValueEncoding](crate::typed_value::TypedValueEncoding),
-/// the trait also contains methods for directly mapping object ids to their typed values. This can
-/// be implemented in two ways:
-/// 1. Decode the object id to a plain term and then translate the term to a typed value
-/// 2. Maintain a second mapping from the object ids to the typed value of their associated RDF term
-///
-/// Contrary to the mapping between RDF terms and object ids, the mapping between typed values and
-/// object ids is not bijective. A single typed value can map to multiple object ids. For example,
-/// this is the case for the two RDF terms `"01"^^xsd:integer` and `"1"^^xsd:integer`.
-///
 /// # Default Graph
 ///
 /// The default graph is represented as the `None` value of the [`ObjectId`] struct.
@@ -122,13 +109,6 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
         array: &FixedSizeBinaryArray,
     ) -> Result<PlainTermArray, ObjectIdMappingError>;
 
-    /// Decodes the entire `array` as a [TypedValueArray].
-    fn decode_array_to_typed_value(
-        &self,
-        encoding: &TypedValueEncodingRef,
-        array: &FixedSizeBinaryArray,
-    ) -> Result<TypedValueArray, ObjectIdMappingError>;
-
     /// Decodes a single `scalar` as a [PlainTermScalar].
     fn decode_scalar(
         &self,
@@ -149,28 +129,6 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
 
         let encoded = self.decode_array(array.as_fixed_size_binary())?;
         Ok(encoded.try_as_scalar(0).expect("Row 0 always exists"))
-    }
-
-    /// Decodes a single `scalar` as a [TypedValueScalar].
-    fn decode_scalar_to_typed_value(
-        &self,
-        encoding: &TypedValueEncodingRef,
-        scalar: &ObjectId,
-    ) -> Result<TypedValueScalar, ObjectIdMappingError> {
-        if scalar.is_default_graph() {
-            return Ok(encoding.encode_term(ThinError::expected()).expect("TODO"));
-        }
-
-        let array = ScalarValue::FixedSizeBinary(
-            self.object_id_size().into(),
-            Some(scalar.as_bytes().expect("Not default graph").to_vec()),
-        )
-        .to_array()
-        .expect("Data type is supported for to_array");
-
-        let decoded =
-            self.decode_array_to_typed_value(encoding, array.as_fixed_size_binary())?;
-        Ok(decoded.try_as_scalar(0).expect("Row 0 always exists"))
     }
 }
 

@@ -5,7 +5,7 @@ use rdf_fusion_encoding::RdfFusionEncodings;
 use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion_extensions::functions::RdfFusionFunctionRegistryRef;
 use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
 use rdf_fusion_storage::memory::{MemObjectIdMapping, MemQuadStorage};
@@ -24,7 +24,7 @@ fn create_function_registry(
 ) -> RdfFusionFunctionRegistryRef {
     let encoding = RdfFusionEncodings::new(
         Arc::clone(&PLAIN_TERM_ENCODING),
-        Arc::new(TypedValueEncoding::default()),
+        Arc::new(TypedFamilyEncoding::default()),
         Some(Arc::new(ObjectIdEncoding::new(object_id_mapping))),
         Arc::clone(&SORTABLE_TERM_ENCODING),
     );

@@ -1,8 +1,8 @@
 ---
 source: bench/tests/plans/bsbm_explore.rs
-expression: canonicalize_uuids(&explanation.optimized_logical_plan.to_string())
+expression: "&explanation.optimized_logical_plan.to_string()"
 ---
-Projection: ENC_PT(productURI) AS productURI, ENC_PT(productlabel) AS productlabel, ENC_PT(vendorURI) AS vendorURI, ENC_PT(vendorname) AS vendorname, ENC_PT(vendorhomepage) AS vendorhomepage, ENC_PT(offerURL) AS offerURL, ENC_PT(price) AS price, ENC_PT(deliveryDays) AS deliveryDays, ENC_PT(validTo) AS validTo
+Projection: ENC_PT(deliveryDays) AS deliveryDays, ENC_PT(offerURL) AS offerURL, ENC_PT(price) AS price, ENC_PT(productURI) AS productURI, ENC_PT(productlabel) AS productlabel, ENC_PT(validTo) AS validTo, ENC_PT(vendorURI) AS vendorURI, ENC_PT(vendorhomepage) AS vendorhomepage, ENC_PT(vendorname) AS vendorname
   Cross Join: 
     Cross Join: 
       Cross Join: 

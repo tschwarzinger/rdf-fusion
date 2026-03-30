@@ -20,21 +20,23 @@ use std::sync::Arc;
 ///
 /// # Example
 ///
-/// ```
+/// The following example creates a query that selects the subject of each triple.
+///
+/// ```rust
 /// # use std::sync::Arc;
 /// # use datafusion::logical_expr::LogicalPlan;
 /// # use rdf_fusion_extensions::RdfFusionContextView;
 /// # use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 /// # use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings};
 /// # use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-/// # use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+/// # use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 /// # use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 /// # use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
 /// # use rdf_fusion_model::{NamedNodePattern, TermPattern, TriplePattern, Variable};
 /// # use rdf_fusion_logical::ActiveGraph;
 /// # let encodings = RdfFusionEncodings::new(
 /// #     Arc::clone(&PLAIN_TERM_ENCODING),
-/// #     Arc::new(TypedValueEncoding::default()),
+/// #     Arc::new(TypedFamilyEncoding::default()),
 /// #     None,
 /// #     Arc::clone(&SORTABLE_TERM_ENCODING)
 /// # );

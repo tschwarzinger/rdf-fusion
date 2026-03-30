@@ -2,17 +2,17 @@ use codspeed_criterion_compat::{Criterion, criterion_group, criterion_main};
 use datafusion::arrow::datatypes::Field;
 use datafusion::config::ConfigOptions;
 use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDF};
-use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-use rdf_fusion_encoding::typed_value::{
-    TypedValueArrayElementBuilder, TypedValueEncoding,
+use rdf_fusion_encoding::plain_term::{
+    PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
+use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
+use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
 };
 use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
-use rdf_fusion_model::{BlankNode, Float, Integer, NamedNodeRef};
+use rdf_fusion_model::{BlankNode, Float, Integer, Literal, NamedNodeRef, TermRef};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -28,108 +28,77 @@ enum UnaryScenario {
 
 impl UnaryScenario {
     fn create_args(&self, encodings: &RdfFusionEncodings) -> Vec<ColumnarValue> {
+        let mut payload_builder = PlainTermArrayElementBuilder::new(8192);
         match self {
             UnaryScenario::AllNamedNodes => {
-                let mut payload_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
                 for i in 0..8192 {
-                    payload_builder
-                        .append_named_node(NamedNodeRef::new_unchecked(
-                            format!("http://example.com/{i}").as_str(),
-                        ))
-                        .unwrap();
+                    payload_builder.append_named_node(NamedNodeRef::new_unchecked(
+                        format!("http://example.com/{i}").as_str(),
+                    ));
                 }
-                vec![ColumnarValue::Array(
-                    payload_builder.finish().into_array_ref(),
-                )]
             }
             UnaryScenario::Mixed => {
-                let mut payload_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
                 for i in 0..8192 {
                     match i % 4 {
                         0 => {
-                            payload_builder
-                                .append_named_node(NamedNodeRef::new_unchecked(
+                            payload_builder.append_named_node(
+                                NamedNodeRef::new_unchecked(
                                     format!("http://example.com/{i}").as_str(),
-                                ))
-                                .unwrap();
+                                ),
+                            );
                         }
                         1 => {
-                            payload_builder.append_integer(Integer::from(i)).unwrap();
+                            let lit = Literal::from(Integer::from(i).as_i64());
+                            payload_builder.append_term(TermRef::from(&lit));
                         }
                         2 => {
-                            payload_builder.append_float(Float::from(i as i16)).unwrap();
+                            let lit = Literal::from(f64::from(Float::from(i as i16)));
+                            payload_builder.append_term(TermRef::from(&lit));
                         }
                         _ => {
                             payload_builder
-                                .append_blank_node(BlankNode::default().as_ref())
-                                .unwrap();
+                                .append_blank_node(BlankNode::default().as_ref());
                         }
                     }
                 }
-                vec![ColumnarValue::Array(
-                    payload_builder.finish().into_array_ref(),
-                )]
             }
             UnaryScenario::AllBlank => {
-                let mut payload_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
                 for _ in 0..8192 {
-                    payload_builder
-                        .append_blank_node(BlankNode::default().as_ref())
-                        .unwrap();
+                    payload_builder.append_blank_node(BlankNode::default().as_ref());
                 }
-                vec![ColumnarValue::Array(
-                    payload_builder.finish().into_array_ref(),
-                )]
             }
             UnaryScenario::AllInt => {
-                let mut payload_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
                 for i in 0..8192 {
-                    payload_builder.append_integer(Integer::from(i)).unwrap();
+                    let lit = Literal::from(Integer::from(i).as_i64());
+                    payload_builder.append_term(TermRef::from(&lit));
                 }
-                vec![ColumnarValue::Array(
-                    payload_builder.finish().into_array_ref(),
-                )]
             }
             UnaryScenario::AllFloat => {
-                let mut payload_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
                 for i in 0..8192 {
-                    payload_builder.append_float(Float::from(i as i16)).unwrap();
+                    let lit = Literal::from(f64::from(Float::from(i as i16)));
+                    payload_builder.append_term(TermRef::from(&lit));
                 }
-                vec![ColumnarValue::Array(
-                    payload_builder.finish().into_array_ref(),
-                )]
             }
             UnaryScenario::AllString => {
-                let mut payload_builder = TypedValueArrayElementBuilder::new(Arc::clone(
-                    encodings.typed_value(),
-                ));
                 for i in 0..8192 {
-                    payload_builder
-                        .append_string(format!("String number {i}").as_str(), None)
-                        .unwrap();
+                    let lit = Literal::new_simple_literal(format!("String number {i}"));
+                    payload_builder.append_term(TermRef::from(&lit));
                 }
-                vec![ColumnarValue::Array(
-                    payload_builder.finish().into_array_ref(),
-                )]
             }
         }
+        let plain_array = payload_builder.finish();
+        let tf_array = encodings
+            .typed_family()
+            .cast_from_plain_term_array(&plain_array)
+            .unwrap();
+        vec![ColumnarValue::Array(tf_array.into_array_ref())]
     }
 }
 
 fn bench_all(c: &mut Criterion) {
     let encodings = RdfFusionEncodings::new(
         Arc::clone(&PLAIN_TERM_ENCODING),
-        Arc::new(TypedValueEncoding::default()),
+        Arc::new(TypedFamilyEncoding::default()),
         None,
         Arc::clone(&SORTABLE_TERM_ENCODING),
     );
@@ -189,12 +158,12 @@ fn bench_unary_function(
 
     let input_field = Arc::new(Field::new(
         "input",
-        encodings.typed_value().data_type().clone(),
+        encodings.typed_family().data_type().clone(),
         true,
     ));
     let return_field = Arc::new(Field::new(
         "result",
-        encodings.typed_value().data_type().clone(),
+        encodings.typed_family().data_type().clone(),
         true,
     ));
 

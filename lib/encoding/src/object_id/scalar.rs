@@ -1,13 +1,16 @@
 use crate::TermEncoding;
 use crate::encoding::EncodingScalar;
-use crate::object_id::{ObjectId, ObjectIdCreationError, ObjectIdEncoding};
+use crate::object_id::{
+    ObjectId, ObjectIdCreationError, ObjectIdEncoding, ObjectIdEncodingRef,
+};
 use datafusion::common::{ScalarValue, exec_err};
 use rdf_fusion_model::DFResult;
 use std::sync::Arc;
 
 /// Represents an Arrow scalar with a [ObjectIdEncoding].
+#[derive(Clone)]
 pub struct ObjectIdScalar {
-    encoding: Arc<ObjectIdEncoding>,
+    encoding: ObjectIdEncodingRef,
     inner: ScalarValue,
 }
 
@@ -17,10 +20,7 @@ impl ObjectIdScalar {
     /// # Errors
     ///
     /// Returns an error if the data type of `value` is unexpected.
-    pub fn try_new(
-        encoding: Arc<ObjectIdEncoding>,
-        value: ScalarValue,
-    ) -> DFResult<Self> {
+    pub fn try_new(encoding: ObjectIdEncodingRef, value: ScalarValue) -> DFResult<Self> {
         if &value.data_type() != encoding.data_type() {
             return exec_err!(
                 "Expected scalar value with ObjectID encoding. Expected: {:?}, got {:?}",
@@ -32,19 +32,19 @@ impl ObjectIdScalar {
     }
 
     /// Creates a new [ObjectIdScalar] without checking invariants.
-    pub fn new_unchecked(encoding: Arc<ObjectIdEncoding>, inner: ScalarValue) -> Self {
+    pub fn new_unchecked(encoding: ObjectIdEncodingRef, inner: ScalarValue) -> Self {
         Self { encoding, inner }
     }
 
     /// Creates a new [ObjectIdScalar] from the given `object_id`.
-    pub fn null(encoding: Arc<ObjectIdEncoding>) -> Self {
+    pub fn null(encoding: ObjectIdEncodingRef) -> Self {
         let scalar = ScalarValue::FixedSizeBinary(encoding.object_id_size().0, None);
         Self::new_unchecked(encoding, scalar)
     }
 
     /// Creates a new [ObjectIdScalar] from the given `object_id`.
     pub fn from_object_id(
-        encoding: Arc<ObjectIdEncoding>,
+        encoding: ObjectIdEncodingRef,
         object_id: ObjectId,
     ) -> Result<Self, ObjectIdCreationError> {
         let bytes = object_id.as_bytes().map(|b| b.to_vec());

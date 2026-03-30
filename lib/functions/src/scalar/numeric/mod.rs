@@ -1,23 +1,7 @@
-mod abs;
-mod add;
-mod ceil;
-mod div;
-mod floor;
-mod mul;
+mod binary;
 mod rand;
-mod round;
-mod sub;
-mod unary_minus;
-mod unary_plus;
+mod unary;
 
-pub use abs::AbsSparqlOp;
-pub use add::AddSparqlOp;
-pub use ceil::CeilSparqlOp;
-pub use div::DivSparqlOp;
-pub use floor::FloorSparqlOp;
-pub use mul::MulSparqlOp;
-pub use rand::RandSparqlOp;
-pub use round::RoundSparqlOp;
-pub use sub::SubSparqlOp;
-pub use unary_minus::UnaryMinusSparqlOp;
-pub use unary_plus::UnaryPlusSparqlOp;
+pub use binary::*;
+pub use rand::*;
+pub use unary::*;

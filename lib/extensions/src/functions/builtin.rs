@@ -79,7 +79,7 @@ pub enum BuiltinName {
     // Conversion Functions
     CastString,
     CastInteger,
-    AsInt,
+    CastInt,
     CastFloat,
     CastDouble,
     CastDecimal,
@@ -88,7 +88,7 @@ pub enum BuiltinName {
 
     // Encoding
     WithSortableEncoding,
-    WithTypedValueEncoding,
+    WithTypedFamilyEncoding,
     WithPlainTermEncoding,
 
     // Other Necessary Functions
@@ -158,11 +158,11 @@ impl fmt::Display for BuiltinName {
             Self::Sub => "SUB",
             Self::CastString => "xsd:string",
             Self::CastInteger => "xsd:integer",
-            Self::AsInt => "xsd:int",
+            Self::CastInt => "xsd:int",
             Self::CastFloat => "xsd:float",
             Self::CastDouble => "xsd:double",
             Self::CastDecimal => "xsd:decimal",
-            Self::CastDateTime => "xsd:dataTime",
+            Self::CastDateTime => "xsd:dateTime",
             Self::CastBoolean => "xsd:boolean",
             Self::EffectiveBooleanValue => "EBV",
             Self::NativeBooleanAsTerm => "BOOLEAN_AS_TERM",
@@ -178,7 +178,7 @@ impl fmt::Display for BuiltinName {
             Self::Avg => "AVG",
             Self::GroupConcat => "GROUP_CONCAT",
             Self::WithSortableEncoding => "ENC_SORT",
-            Self::WithTypedValueEncoding => "ENC_TV",
+            Self::WithTypedFamilyEncoding => "ENC_TF",
             Self::WithPlainTermEncoding => "ENC_PT",
         };
         f.write_str(name)
@@ -251,11 +251,11 @@ impl TryFrom<&str> for BuiltinName {
             "SUB" => Self::Sub,
             "xsd:string" => Self::CastString,
             "xsd:integer" => Self::CastInteger,
-            "xsd:int" => Self::AsInt,
+            "xsd:int" => Self::CastInt,
             "xsd:float" => Self::CastFloat,
             "xsd:double" => Self::CastDouble,
             "xsd:decimal" => Self::CastDecimal,
-            "xsd:dataTime" => Self::CastDateTime,
+            "xsd:dateTime" => Self::CastDateTime,
             "xsd:boolean" => Self::CastBoolean,
             "EBV" => Self::EffectiveBooleanValue,
             "BOOLEAN_AS_TERM" => Self::NativeBooleanAsTerm,
@@ -271,8 +271,8 @@ impl TryFrom<&str> for BuiltinName {
             "AVG" => Self::Avg,
             "GROUP_CONCAT" => Self::GroupConcat,
             "ENC_SORT" => Self::WithSortableEncoding,
-            "ENC_TV" => Self::WithTypedValueEncoding,
-            "ENV_PT" => Self::WithPlainTermEncoding,
+            "ENC_TF" => Self::WithTypedFamilyEncoding,
+            "ENC_PT" => Self::WithPlainTermEncoding,
             _ => return Err(NotABuiltInError {}),
         })
     }

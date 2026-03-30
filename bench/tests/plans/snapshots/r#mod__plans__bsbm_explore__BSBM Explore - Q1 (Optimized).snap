@@ -2,11 +2,11 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
-Projection: ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST]) AS product, ENC_PT(first_value(label) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST]) AS label
-  Sort: ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST, fetch=10
-    Aggregate: groupBy=[[__common_expr_1 AS ENC_SORT(ENC_PT(label)), product]], aggr=[[first_value(product) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(product) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(label) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(label) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NULLS FIRST, product ASC NULLS FIRST]]]
-      Projection: ENC_SORT(ENC_PT(label)) AS __common_expr_1, product, label
-        Sort: ENC_SORT(ENC_PT(label)) ASC NULLS FIRST
+Projection: ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]) AS product, ENC_PT(first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]) AS label
+  Sort: ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, fetch=10
+    Aggregate: groupBy=[[__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(label))), product]], aggr=[[first_value(product) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(label) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]]]
+      Projection: ENC_SORT(ENC_TF(ENC_PT(label))) AS __common_expr_1, product, label
+        Sort: ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST
           Projection: lhs.product AS product, lhs.label AS label
             Inner Join: lhs.product = rhs.product
               SubqueryAlias: lhs
@@ -28,5 +28,5 @@ Projection: ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_PT(label)) ASC NU
                       QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1967>)
               SubqueryAlias: rhs
                 Projection: product
-                  Filter: EBV(GT(ENC_TV(value1), Union 9:136))
+                  Filter: EBV(GT(ENC_TF(value1), Union 4:4:136))
                     QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?value1)

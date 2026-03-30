@@ -3,13 +3,13 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(feature) AS feature, ENC_PT(priceRatio) AS priceRatio
-  Sort: ENC_SORT(DIV(withFeaturePrice, withoutFeaturePrice)) DESC NULLS FIRST, ENC_SORT(ENC_PT(feature)) ASC NULLS FIRST, fetch=10
+  Sort: ENC_SORT(DIV(withFeaturePrice, withoutFeaturePrice)) DESC NULLS FIRST, ENC_SORT(ENC_TF(ENC_PT(feature))) ASC NULLS FIRST, fetch=10
     Projection: feature, withFeaturePrice, withoutFeaturePrice, DIV(withFeaturePrice, withoutFeaturePrice) AS priceRatio
       Projection: lhs.feature AS feature, lhs.withFeaturePrice AS withFeaturePrice, rhs.withoutFeaturePrice AS withoutFeaturePrice
         Inner Join: lhs.feature = rhs.feature
           SubqueryAlias: lhs
             Projection: feature, <uuid> AS withFeaturePrice
-              Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TV(price)))) AS <uuid>]]
+              Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
                 Projection: lhs.feature AS feature, rhs.price AS price
                   Inner Join: lhs.offer = rhs.offer
                     SubqueryAlias: lhs
@@ -28,7 +28,7 @@ Projection: ENC_PT(feature) AS feature, ENC_PT(priceRatio) AS priceRatio
                       QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
           SubqueryAlias: rhs
             Projection: feature, <uuid> AS withoutFeaturePrice
-              Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TV(price)))) AS <uuid>]]
+              Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
                 Projection: feature, price
                   LeftAnti Join: feature = __correlated_sq_1.__inner__feature, product = __correlated_sq_1.__inner__product
                     Cross Join: 

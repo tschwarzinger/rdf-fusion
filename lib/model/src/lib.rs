@@ -1,9 +1,9 @@
 #![doc(test(attr(deny(warnings))))]
 #![doc(
-    html_favicon_url = "https://raw.githubusercontent.com/tobixdev/rdf-fusion/main/misc/logo/logo.png"
+    html_favicon_url = "https://codeberg.org/tschwarzinger/rdf-fusion/raw/branch/main/misc/logo/logo.png"
 )]
 #![doc(
-    html_logo_url = "https://raw.githubusercontent.com/tobixdev/rdf-fusion/main/misc/logo/logo.png"
+    html_logo_url = "https://codeberg.org/tschwarzinger/rdf-fusion/raw/branch/main/misc/logo/logo.png"
 )]
 
 //! This crate contains the RDF Fusion model, including types for RDF terms, quads, and RDF graphs.

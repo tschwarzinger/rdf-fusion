@@ -134,7 +134,7 @@ impl TermEncoding for ObjectIdEncoding {
     type Scalar = ObjectIdScalar;
 
     fn name(&self) -> EncodingName {
-        EncodingName::PlainTerm
+        EncodingName::ObjectId
     }
 
     fn data_type(&self) -> &DataType {

@@ -165,31 +165,31 @@ fn try_replace_equality_with_same_term(
     let lhs_term = try_extract_scalar_term(encodings, &scalar_function.args[0]);
     let rhs_term = try_extract_scalar_term(encodings, &scalar_function.args[1]);
 
-    match (lhs_term, rhs_term) {
+    let (term, other_expression) = match (lhs_term, rhs_term) {
         (Some(lhs_term), None)
             if lhs_term.is_named_node() || lhs_term.is_blank_node() =>
         {
-            replace_equality_with_same_term(
-                encodings,
-                registry,
-                schema,
-                lhs_term,
-                &scalar_function.args[1],
-            )
+            (lhs_term, &scalar_function.args[1])
         }
         (None, Some(rhs_term))
             if rhs_term.is_named_node() || rhs_term.is_blank_node() =>
         {
-            replace_equality_with_same_term(
-                encodings,
-                registry,
-                schema,
-                rhs_term,
-                &scalar_function.args[0],
-            )
+            (rhs_term, &scalar_function.args[0])
         }
-        _ => Ok(Transformed::no(Expr::ScalarFunction(scalar_function))),
+        _ => return Ok(Transformed::no(Expr::ScalarFunction(scalar_function))),
+    };
+
+    let other_expression = unwrap_encoding_changes(other_expression);
+    let field = other_expression.to_field(schema)?.1;
+    let encoding = encodings
+        .try_get_encoding_name(field.data_type())
+        .ok_or_else(|| plan_datafusion_err!("Expected comparison with RDF terms"))?;
+
+    if encoding == EncodingName::TypedFamily {
+        return Ok(Transformed::no(Expr::ScalarFunction(scalar_function)));
     }
+
+    replace_equality_with_same_term(encodings, registry, schema, term, other_expression)
 }
 
 /// Execute the replacement for [try_replace_equality_with_same_term] when all preconditions are
@@ -202,12 +202,10 @@ fn replace_equality_with_same_term(
     term: Term,
     other_expression: &Expr,
 ) -> DFResult<Transformed<Expr>> {
-    let other_expression = unwrap_encoding_changes(other_expression);
-    let field = other_expression.to_field(schema)?.1;
-    let encoding = encodings
-        .try_get_encoding_name(field.data_type())
-        .ok_or_else(|| plan_datafusion_err!("Expected comparison with RDF terms"))?;
-    let scalar = match encoding {
+    let scalar = match encodings
+        .try_get_encoding_name(other_expression.to_field(schema)?.1.data_type())
+        .unwrap()
+    {
         EncodingName::PlainTerm => encodings
             .plain_term()
             .encode_term(Ok(term.as_ref()))?
@@ -222,17 +220,8 @@ fn replace_equality_with_same_term(
                 Err(err) => plan_err!("Failed to encode term: {}", err)?,
             }
         }
-        EncodingName::TypedValue => {
-            // Currently, we cannot use = to compare union arrays. Therefore, we omit this
-            // optimization if the typed value encoding should be used.
-            let equality = registry.udf(&FunctionName::Builtin(BuiltinName::Equal))?;
-            let scalar = encodings
-                .typed_value()
-                .encode_term(Ok(term.as_ref()))?
-                .into_scalar_value();
-            return Ok(Transformed::no(
-                equality.call(vec![lit(scalar), other_expression.clone()]),
-            ));
+        EncodingName::TypedFamily => {
+            unreachable!("Handled in caller")
         }
         EncodingName::Sortable => {
             unreachable!("Sortable encoding should not be encountered.")
@@ -287,7 +276,7 @@ mod tests {
     use insta::assert_snapshot;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-    use rdf_fusion_encoding::typed_value::TypedValueEncoding;
+    use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
     use rdf_fusion_encoding::{
         EncodingName, QuadStorageEncoding, RdfFusionEncodings, TermEncoding,
     };
@@ -322,7 +311,7 @@ mod tests {
             NamedNodeRef::new_unchecked("http://example.com/term"),
         ));
         assert_snapshot!(rewritten.data, @r"
-        Projection: BOOLEAN_AS_TERM(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:}) = column1) AS EQ(ENC_TV(column1),ENC_TV(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:})))
+        Projection: BOOLEAN_AS_TERM(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:}) = column1) AS EQ(ENC_TF(column1),ENC_TF(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:})))
           EmptyRelation: rows=0
         ");
     }
@@ -333,7 +322,7 @@ mod tests {
             BlankNodeRef::new_unchecked("abc"),
         ));
         assert_snapshot!(rewritten.data, @r"
-        Projection: BOOLEAN_AS_TERM(Struct({term_type:1,value:abc,data_type:,language_tag:}) = column1) AS EQ(ENC_TV(column1),ENC_TV(Struct({term_type:1,value:abc,data_type:,language_tag:})))
+        Projection: BOOLEAN_AS_TERM(Struct({term_type:1,value:abc,data_type:,language_tag:}) = column1) AS EQ(ENC_TF(column1),ENC_TF(Struct({term_type:1,value:abc,data_type:,language_tag:})))
           EmptyRelation: rows=0
         ");
     }
@@ -343,14 +332,14 @@ mod tests {
         let rewritten =
             run_literal_equality_test(TermRef::Literal(Literal::from(1).as_ref()));
         assert_snapshot!(rewritten.data, @r"
-        Projection: EQ(ENC_TV(column1), ENC_TV(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+        Projection: EQ(ENC_TF(column1), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
           EmptyRelation: rows=0
         ");
     }
 
     #[test]
     fn test_equality_does_not_rewrite_when_not_applicable() {
-        let schema = make_schema(EncodingName::TypedValue, false, false);
+        let schema = make_schema(EncodingName::TypedFamily, false, false);
         let rewritten = execute_test_for_builtin(&schema, BuiltinName::Equal);
         assert_snapshot!(rewritten.data, @r"
         Projection: EQ(column1, column2)
@@ -370,12 +359,12 @@ mod tests {
         // Ensure the builder is not optimizing
         assert_eq!(
             expr.to_string(),
-            "EBV(BOOLEAN_AS_TERM(NOT EBV(ENC_TV(column1))))"
+            "EBV(BOOLEAN_AS_TERM(NOT EBV(ENC_TF(column1))))"
         );
 
         let rewritten = execute_test_for_expr(&schema, expr);
         assert_snapshot!(rewritten.data, @r"
-        Projection: NOT EBV(ENC_TV(column1)) AS EBV(BOOLEAN_AS_TERM(NOT EBV(ENC_TV(column1))))
+        Projection: NOT EBV(ENC_TF(column1)) AS EBV(BOOLEAN_AS_TERM(NOT EBV(ENC_TF(column1))))
           EmptyRelation: rows=0
         ");
         Ok(())
@@ -448,7 +437,7 @@ mod tests {
     fn create_context() -> RdfFusionContextView {
         let encodings = RdfFusionEncodings::new(
             Arc::clone(&PLAIN_TERM_ENCODING),
-            Arc::new(TypedValueEncoding::new()),
+            Arc::new(TypedFamilyEncoding::default()),
             None,
             Arc::clone(&SORTABLE_TERM_ENCODING),
         );
@@ -464,7 +453,7 @@ mod tests {
         let context = create_context();
         let data_type = match encoding {
             EncodingName::PlainTerm => context.encodings().plain_term().data_type(),
-            EncodingName::TypedValue => context.encodings().typed_value().data_type(),
+            EncodingName::TypedFamily => context.encodings().typed_family().data_type(),
             _ => panic!("Unsupported encoding"),
         };
         DFSchemaRef::new(

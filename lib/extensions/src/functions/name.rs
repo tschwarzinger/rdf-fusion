@@ -2,8 +2,7 @@ use crate::functions::BuiltinName;
 use rdf_fusion_model::NamedNode;
 use std::fmt::{Display, Formatter};
 
-/// Identifier for a function. Either it is an RDF Fusion builtin (e.g., a SPARQL operation) or a
-/// custom function.
+/// Identifier for a function. Either it is an RDF Fusion builtin or a custom function.
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
 pub enum FunctionName {
     /// An RDF Fusion builtin function.
