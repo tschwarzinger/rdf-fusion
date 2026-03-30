@@ -81,10 +81,6 @@ impl DataSource for MemQuadPatternDataSource {
         Ok(Statistics::new_unknown(&self.schema))
     }
 
-    fn statistics(&self) -> DFResult<Statistics> {
-        Ok(Statistics::new_unknown(&self.schema))
-    }
-
     fn with_fetch(&self, _limit: Option<usize>) -> Option<Arc<dyn DataSource>> {
         None
     }

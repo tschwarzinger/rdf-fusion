@@ -3,17 +3,17 @@ source: bench/tests/plans/bsbm_explore.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(deliveryDays) AS deliveryDays, ENC_PT(offerURL) AS offerURL, ENC_PT(price) AS price, ENC_PT(productURI) AS productURI, ENC_PT(productlabel) AS productlabel, ENC_PT(validTo) AS validTo, ENC_PT(vendorURI) AS vendorURI, ENC_PT(vendorhomepage) AS vendorhomepage, ENC_PT(vendorname) AS vendorname
-  Cross Join: 
-    Cross Join: 
-      Cross Join: 
-        Cross Join: 
+  Cross Join:
+    Cross Join:
+      Cross Join:
+        Cross Join:
           Projection: lhs.productURI AS productURI, lhs.productlabel AS productlabel, lhs.vendorURI AS vendorURI, lhs.vendorname AS vendorname, rhs.vendorhomepage AS vendorhomepage
             Inner Join: lhs.vendorURI = rhs.vendorURI
               SubqueryAlias: lhs
                 Projection: lhs.productURI AS productURI, lhs.productlabel AS productlabel, lhs.vendorURI AS vendorURI, rhs.vendorname AS vendorname
                   Inner Join: lhs.vendorURI = rhs.vendorURI
                     SubqueryAlias: lhs
-                      Cross Join: 
+                      Cross Join:
                         Projection: lhs.productURI AS productURI, rhs.productlabel AS productlabel
                           Inner Join: lhs.productURI = rhs.productURI
                             SubqueryAlias: lhs

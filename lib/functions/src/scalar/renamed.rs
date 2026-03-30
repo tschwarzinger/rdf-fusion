@@ -1,7 +1,7 @@
 use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::common::ExprSchema;
 use datafusion::logical_expr::interval_arithmetic::Interval;
-use datafusion::logical_expr::simplify::{ExprSimplifyResult, SimplifyInfo};
+use datafusion::logical_expr::simplify::{ExprSimplifyResult, SimplifyContext};
 use datafusion::logical_expr::sort_properties::{ExprProperties, SortProperties};
 use datafusion::logical_expr::{
     ColumnarValue, Documentation, Expr, ReturnFieldArgs, ScalarFunctionArgs,
@@ -83,7 +83,7 @@ impl<TUDFImpl: ScalarUDFImpl + 'static> ScalarUDFImpl for RenamedScalarUdfImpl<T
     fn simplify(
         &self,
         args: Vec<Expr>,
-        info: &dyn SimplifyInfo,
+        info: &SimplifyContext,
     ) -> DFResult<ExprSimplifyResult> {
         self.inner.simplify(args, info)
     }

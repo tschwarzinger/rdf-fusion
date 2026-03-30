@@ -87,6 +87,7 @@ impl SparqlJoinLoweringRule {
                         JoinType::Left,
                         JoinConstraint::On,
                         NullEquality::NullEqualsNothing,
+                        true,
                     )?;
 
                     Ok(LogicalPlan::Join(join))
@@ -411,7 +412,7 @@ mod tests {
         let result = rewrite_plan(ctx, initial_plan);
 
         assert_snapshot!(&result, @r"
-        Cross Join: 
+        Cross Join:
           EmptyRelation: rows=0
           EmptyRelation: rows=0
         ");
@@ -434,7 +435,7 @@ mod tests {
         let result = rewrite_plan(ctx, initial_plan);
 
         assert_snapshot!(&result, @r"
-        Left Join: 
+        Left Join:
           EmptyRelation: rows=0
           EmptyRelation: rows=0
         ");

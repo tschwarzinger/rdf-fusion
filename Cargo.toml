@@ -28,33 +28,34 @@ repository = "https://github.com/tobixdev/rdf-fusion"
 [workspace.dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
+base16ct = { version = "1.0", features = ["alloc"] }
 bzip2 = "0.6"
 chrono = "0.4"
-clap = "4.5"
-clap_complete = "4.5"
+clap = "4.6"
+clap_complete = "4.6"
 clap_mangen = "0.2"
 csv = "1.4"
-datafusion = "52.3"
-arrow-string = "57.1"
+datafusion = "53.0"
+arrow-string = "58.1"
 dashmap = "6.1"
 futures = "0.3"
 itertools = "0.14"
-md-5 = "0.10"
-rand = "0.9"
-rand_distr = "0.5"
+md-5 = "0.11"
+rand = "0.10"
+rand_distr = "0.6"
 regex = "1.12"
-reqwest = "0.12"
+reqwest = "0.13"
 rustc-hash = "2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha1 = "0.10"
-sha2 = "0.10"
-snmalloc-rs = "0.3"
+sha1 = "0.11"
+sha2 = "0.11"
+snmalloc-rs = "0.7"
 thiserror = "2.0"
 time = "0.3"
 tokio = { version = "1.48", features = ["rt", "rt-multi-thread"] }
-uuid = "1.19"
-zip = "6.0"
+uuid = "1.23"
+zip = "8.4"
 
 # Logging / Tracing
 
@@ -64,17 +65,17 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 # Web Dependencies
 
 axum = "0.8"
-axum-extra = { version = "0.10", features = ["typed-header"] }
-axum-test = "18.2"
+axum-extra = { version = "0.12", features = ["typed-header"] }
+axum-test = "19.1"
 headers = "0.4"
-headers-accept = "0.2"
-mediatype = "0.20"
+headers-accept = "0.3"
+mediatype = "0.21"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # Testing / Benchmarking dependencies
 
-codspeed-criterion-compat = "4.0"
-insta = { version = "1.43", features = ["filters"] }
+criterion = "0.8"
+insta = { version = "1.47", features = ["filters"] }
 prettytable-rs = "0.10"
 text-diff = "0.4"
 tokio-test = "0.4"

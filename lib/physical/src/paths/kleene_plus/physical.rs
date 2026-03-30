@@ -49,7 +49,7 @@ struct Path {
 #[derive(Debug)]
 pub struct KleenePlusClosureExec {
     /// The execution properties of this operator.
-    plan_properties: PlanProperties,
+    plan_properties: Arc<PlanProperties>,
     /// The inner execution plan.
     inner: Arc<dyn ExecutionPlan>,
     /// See [rdf_fusion_logical::paths::KleenePlusClosureNode::disallow_cross_graph_paths] for details.
@@ -84,7 +84,7 @@ impl KleenePlusClosureExec {
             Boundedness::Bounded, // Assumes the closure computation terminates
         );
         Ok(Self {
-            plan_properties,
+            plan_properties: Arc::new(plan_properties),
             inner,
             allow_cross_graph_paths,
         })
@@ -100,7 +100,7 @@ impl ExecutionPlan for KleenePlusClosureExec {
         self
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         &self.plan_properties
     }
 

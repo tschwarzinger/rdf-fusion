@@ -3,9 +3,9 @@ source: bench/tests/plans/bsbm_explore.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(productLabel) AS productLabel, ENC_PT(offer) AS offer, ENC_PT(price) AS price, ENC_PT(vendor) AS vendor, ENC_PT(vendorTitle) AS vendorTitle, ENC_PT(review) AS review, ENC_PT(revTitle) AS revTitle, ENC_PT(reviewer) AS reviewer, ENC_PT(revName) AS revName, ENC_PT(rating1) AS rating1, ENC_PT(rating2) AS rating2
-  Left Join: 
+  Left Join:
     Projection: lhs.productLabel AS productLabel, rhs.offer AS offer, rhs.price AS price, rhs.vendor AS vendor, rhs.vendorTitle AS vendorTitle
-      Left Join: 
+      Left Join:
         SubqueryAlias: lhs
           QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801> <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel)
         SubqueryAlias: rhs

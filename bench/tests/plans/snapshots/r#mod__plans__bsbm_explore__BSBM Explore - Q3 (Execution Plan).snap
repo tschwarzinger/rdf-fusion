@@ -10,7 +10,7 @@ ProjectionExec: expr=[ENC_PT(product@0) as product, ENC_PT(label@1) as label]
           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]
-                DataSourceExec: [GPOS] subject=?product, predicate=<http://www.w3.org/2000/01/rdf-schema#label>, object=?label
+                DataSourceExec: [GPOS] subject=?product, predicate=<http://www.w3.org/2000/01/rdf-schema#label>, object=?label, additional_filters=[DynamicFilter [ Generation 1; Unknown true ]]
                 DataSourceExec: [GPOS] subject=?product, predicate=<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType87>, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
               DataSourceExec: [GPOS] subject=?product, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature541>, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
             FilterExec: EBV(GT(ENC_TF(p1@1), 4:4:156)), projection=[product@0]

@@ -1,5 +1,5 @@
 use axum_test::TestServer;
-use codspeed_criterion_compat::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::execution::runtime_env::RuntimeEnv;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};

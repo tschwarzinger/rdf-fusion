@@ -22,7 +22,7 @@ ProjectionExec: expr=[ENC_PT(vendor@0) as vendor, ENC_PT(cheapExpensiveRatio@3) 
                     HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@1, offer@0)], projection=[product@0, offer@1]
                       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[product@0, offer@1]
                         DataSourceExec: [GPOS] subject=?product, predicate=<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>, object=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
-                        DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product>, object=?product, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ], DynamicFilter [ Generation 2; product in (<object id range>) ]]
+                        DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product>, object=?product, additional_filters=[DynamicFilter [ Generation 2; product in (<object id range>) ]]
                       ProjectionExec: expr=[offer@0 as offer]
                         DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor>, object=?vendor, additional_filters=[DynamicFilter [ Generation 2; offer in (<object id range>) ]]
                     DataSourceExec: [GPOS] subject=?offer, predicate=<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price>, object=?price, additional_filters=[DynamicFilter [ Generation 2; offer in (<object id range>) ]]

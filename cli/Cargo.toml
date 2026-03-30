@@ -35,5 +35,3 @@ clap_mangen.workspace = true
 
 [lints]
 workspace = true
-
-

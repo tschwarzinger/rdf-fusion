@@ -188,27 +188,32 @@ impl ScalarUDFImpl for HashSparqlUdf {
                                     HashAlgorithm::Md5 => {
                                         let mut hasher = Md5::new();
                                         hasher.update(val);
-                                        format!("{:x}", hasher.finalize())
+                                        let result = hasher.finalize();
+                                        base16ct::lower::encode_string(result.as_slice())
                                     }
                                     HashAlgorithm::Sha1 => {
                                         let mut hasher = Sha1::new();
                                         hasher.update(val);
-                                        format!("{:x}", hasher.finalize())
+                                        let result = hasher.finalize();
+                                        base16ct::lower::encode_string(result.as_slice())
                                     }
                                     HashAlgorithm::Sha256 => {
                                         let mut hasher = Sha256::new();
                                         hasher.update(val);
-                                        format!("{:x}", hasher.finalize())
+                                        let result = hasher.finalize();
+                                        base16ct::lower::encode_string(result.as_slice())
                                     }
                                     HashAlgorithm::Sha384 => {
                                         let mut hasher = Sha384::new();
                                         hasher.update(val);
-                                        format!("{:x}", hasher.finalize())
+                                        let result = hasher.finalize();
+                                        base16ct::lower::encode_string(result.as_slice())
                                     }
                                     HashAlgorithm::Sha512 => {
                                         let mut hasher = Sha512::new();
                                         hasher.update(val);
-                                        format!("{:x}", hasher.finalize())
+                                        let result = hasher.finalize();
+                                        base16ct::lower::encode_string(result.as_slice())
                                     }
                                 };
 

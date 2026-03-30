@@ -8,7 +8,7 @@ Projection: ENC_PT(reviewer) AS reviewer, ENC_PT(<uuid>) AS reviewerAvgScore
       Projection: lhs.avgScore AS avgScore, lhs.reviewer AS reviewer, rhs.score AS score
         Inner Join: lhs.review = rhs.review
           SubqueryAlias: lhs
-            Cross Join: 
+            Cross Join:
               Projection: <uuid> AS avgScore
                 Aggregate: groupBy=[[]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>]]
                   Projection: rhs.score AS score

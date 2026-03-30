@@ -10,6 +10,7 @@ RDF Fusion Functions
 """
 
 [dependencies]
+base16ct.workspace = true
 datafusion.workspace = true
 arrow-string.workspace = true
 rdf-fusion-extensions.workspace = true
@@ -25,7 +26,7 @@ thiserror.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
-codspeed-criterion-compat = { workspace = true, features = ["async_tokio"] }
+criterion = { workspace = true, features = ["async_tokio"] }
 insta.workspace = true
 tokio.workspace = true
 
