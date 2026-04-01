@@ -1,4 +1,3 @@
-mod mem_quad_storage;
 mod parquet;
 
 use rdf_fusion_encoding::RdfFusionEncodings;

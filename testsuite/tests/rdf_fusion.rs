@@ -1,13 +1,18 @@
 #![cfg(test)]
 
 use anyhow::Result;
-use rdf_fusion_testsuite::check_testsuite;
+use rdf_fusion_testsuite::w3c::W3CSparqlTestSuiteBuilder;
 
 #[tokio::test]
 async fn rdf_fusion_sparql_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://github.com/tobixdev/rdf-fusion/blob/main/testsuite/rdf-fusion-tests/sparql/manifest.ttl",
-        &[],
-    )
-    .await
+    W3CSparqlTestSuiteBuilder::load_manifest(
+        "https://codeberg.org/tschwarzinger/rdf-fusion/raw/branch/main/testsuite/rdf-fusion-tests/sparql/manifest.ttl",
+    )?
+        .build()
+        .await?
+        .run()
+        .await
+        .assert_success();
+
+    Ok(())
 }

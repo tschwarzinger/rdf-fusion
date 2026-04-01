@@ -1,5 +1,0 @@
-PREFIX ex: <http://example.com/>
-
-SELECT ?o WHERE {
-  ?s a ex:A ; ex:p [ ex:p1/ex:p2 ?o ]
-}

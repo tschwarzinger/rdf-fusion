@@ -1,10 +1,10 @@
 use axum_test::TestServer;
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, Criterion};
 use datafusion::execution::runtime_env::RuntimeEnv;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
 use rdf_fusion::store::Store;
-use rdf_fusion_web::{AppState, create_router};
+use rdf_fusion_web::{create_router, AppState};
 use std::sync::Arc;
 use tokio::runtime::Builder;
 
@@ -27,7 +27,7 @@ fn encode_solution(criterion: &mut Criterion) {
     };
 
     let app = create_router(app_state);
-    let server = TestServer::new(app).unwrap();
+    let server = TestServer::new(app);
 
     criterion.bench_function("Web: Encode SELECT Result", |b| {
         b.to_async(&runtime).iter(async || {

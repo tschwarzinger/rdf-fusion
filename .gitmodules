@@ -1,16 +1,3 @@
-[submodule "testsuite/rdf-tests"]
-	path = testsuite/rdf-tests
+[submodule "testsuite/suites/rdf-tests"]
+	path = testsuite/suites/rdf-tests
 	url = https://github.com/w3c/rdf-tests.git
-[submodule "testsuite/rdf-star"]
-	path = testsuite/rdf-star
-	url = https://github.com/w3c/rdf-star.git
-[submodule "testsuite/N3"]
-	path = testsuite/N3
-	url = https://github.com/w3c/N3.git
-	branch = master
-[submodule "testsuite/rdf-canon"]
-	path = testsuite/rdf-canon
-	url = https://github.com/w3c/rdf-canon.git
-[submodule "cli/templates/yasgui"]
-	path = cli/templates/yasgui
-	url = https://github.com/oxigraph/yasgui-release.git

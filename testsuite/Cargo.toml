@@ -12,6 +12,7 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 clap = { workspace = true, features = ["derive"] }
 datafusion.workspace = true
 futures.workspace = true

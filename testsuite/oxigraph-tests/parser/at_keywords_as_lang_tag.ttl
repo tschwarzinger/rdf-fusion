@@ -1,3 +1,0 @@
-@prefix : <http://example.com/> .
-
-:s :p "foo"@base , "bar"@prefix .

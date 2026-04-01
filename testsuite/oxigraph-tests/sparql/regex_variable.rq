@@ -1,4 +1,0 @@
-SELECT ?l WHERE {
-  VALUES (?l ?r) { ("a" "^a$") ("b" "^a$") }
-  FILTER(REGEX(?l, ?r))
-}

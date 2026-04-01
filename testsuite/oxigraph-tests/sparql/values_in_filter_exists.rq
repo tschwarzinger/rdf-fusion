@@ -1,6 +1,0 @@
-PREFIX ex: <http://example.com/>
-
-SELECT ?s WHERE {
-    VALUES ?s { ex:a ex:b }
-    FILTER EXISTS { VALUES ?s { ex:a ex:c } }
-}

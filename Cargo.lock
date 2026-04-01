@@ -3883,6 +3883,7 @@ name = "rdf-fusion-testsuite"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "datafusion",
  "futures",

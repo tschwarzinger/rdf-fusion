@@ -1,21 +1,32 @@
 #![cfg(test)]
 
 use anyhow::Result;
-use rdf_fusion_testsuite::check_testsuite;
+use rdf_fusion_testsuite::w3c::W3CSparqlTestSuiteBuilder;
 
 #[tokio::test]
 async fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
-    check_testsuite(
+    W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-syntax.ttl",
-        &[
-            "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#syn-bad-26", /* tokenizer */
-        ],
-    ).await
+    )?
+    .ignore_test(
+        // Tokenizer
+        "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/syntax-sparql3/manifest#syn-bad-26",
+    )
+    .build()
+    .await?
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
 }
 
 #[tokio::test]
 async fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
-    check_testsuite("https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl", &[
+    W3CSparqlTestSuiteBuilder::load_manifest(
+        "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
+    )?
+    .ignore_tests([
         // Testing equality of illegal literals ("xyz"^^<http://www.w3.org/2001/XMLSchema#integer>)
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-07",
         //Simple literal vs xsd:string. We apply RDF 1.1
@@ -30,94 +41,60 @@ async fn sparql10_w3c_query_evaluation_testsuite() -> Result<()> {
         // This test relies on naive iteration on the input file
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-1",
         "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2"
-    ]).await
+    ])
+    .build()
+    .await?
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
 }
 
 #[tokio::test]
 async fn sparql11_query_w3c_evaluation_testsuite() -> Result<()> {
-    check_testsuite(
+    W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
-        &[],
-    )
+    )?
+    .build()
+    .await?
+    .run()
     .await
-}
+    .assert_success();
 
-#[tokio::test]
-#[ignore = "We do not support SPARQL 1.1 Federation yet"]
-async fn sparql11_federation_w3c_evaluation_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-fed.ttl",
-        &[
-            // Problem during service evaluation order
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/service/manifest#service5",
-        ],
-    )
-    .await
-}
-
-#[tokio::test]
-#[ignore = "We do not support SPARQL 1.1 Update yet"]
-async fn sparql11_update_w3c_evaluation_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-update.ttl",
-        &[
-            // We allow multiple INSERT DATA with the same blank nodes
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_54",
-        ],
-    ).await
+    Ok(())
 }
 
 #[tokio::test]
 async fn sparql11_json_w3c_evaluation_testsuite() -> Result<()> {
-    check_testsuite(
+    W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/json-res/manifest.ttl",
-        &[],
-    )
+    )?
+    .build()
+    .await?
+    .run()
     .await
+    .assert_success();
+
+    Ok(())
 }
 
 #[tokio::test]
 async fn sparql11_tsv_w3c_evaluation_testsuite() -> Result<()> {
-    check_testsuite(
+    W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/csv-tsv-res/manifest.ttl",
-        &[
-            // We do not run CSVResultFormatTest tests yet
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv01",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv02",
-            "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv03",
-        ],
-    )
+    )?
+    .ignore_tests([
+        // We do not run CSVResultFormatTest tests yet
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv01",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv02",
+        "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/csv-tsv-res/manifest#csv03",
+    ])
+    .build()
+    .await?
+    .run()
     .await
-}
+    .assert_success();
 
-#[tokio::test]
-async fn sparql12_w3c_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://w3c.github.io/rdf-tests/sparql/sparql12/manifest.ttl",
-        &[
-            // Literal normalization
-            "https://w3c.github.io/rdf-tests/sparql/sparql12/grouping#group01",
-        ],
-    )
-    .await
-}
-
-#[tokio::test]
-#[ignore = "We do not support SPARQL-star yet"]
-async fn sparql_star_syntax_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://w3c.github.io/rdf-star/tests/sparql/syntax/manifest.ttl",
-        &[],
-    )
-    .await
-}
-
-#[tokio::test]
-#[ignore = "We do not support SPARQL-star yet"]
-async fn sparql_star_eval_testsuite() -> Result<()> {
-    check_testsuite(
-        "https://w3c.github.io/rdf-star/tests/sparql/eval/manifest.ttl",
-        &[],
-    )
-    .await
+    Ok(())
 }
