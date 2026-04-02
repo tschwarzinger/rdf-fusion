@@ -1,9 +1,8 @@
 use crate::results::QuerySolutionStream;
 use crate::sparql::error::QueryEvaluationError;
 use futures::{Stream, StreamExt};
-use rdf_fusion_model::{BlankNode, Graph, Term, Triple};
+use rdf_fusion_model::{BlankNode, Graph, Term, TermPattern, Triple, TriplePattern};
 use sparesults::QuerySolution;
-use spargebra::term::{TermPattern, TriplePattern};
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::task::{Context, Poll, ready};

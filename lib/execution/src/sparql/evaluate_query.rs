@@ -3,7 +3,7 @@ use crate::results::{QueryResults, QuerySolutionStream, QueryTripleStream};
 use crate::sparql::error::QueryEvaluationError;
 use crate::sparql::optimizer::{create_optimizer_rules, create_pyhsical_optimizer_rules};
 use crate::sparql::rewriting::GraphPatternRewriter;
-use crate::sparql::{Query, QueryDataset, QueryExplanation, QueryOptions};
+use crate::sparql::{QueryDataset, QueryExplanation, QueryOptions, RdfFusionQuery};
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::instant::Instant;
 use datafusion::execution::{SessionState, SessionStateBuilder};
@@ -11,10 +11,10 @@ use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use itertools::izip;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
-use rdf_fusion_model::Iri;
 use rdf_fusion_model::Variable;
-use spargebra::algebra::GraphPattern;
-use spargebra::term::TriplePattern;
+use rdf_fusion_model::sparql::Query;
+use rdf_fusion_model::sparql::algebra::GraphPattern;
+use rdf_fusion_model::{Iri, TriplePattern};
 use std::sync::Arc;
 
 /// Evaluates a SPARQL query and returns the results along with execution information.
@@ -24,7 +24,7 @@ use std::sync::Arc;
 pub async fn evaluate_query(
     ctx: &RdfFusionContext,
     builder_context: RdfFusionLogicalPlanBuilderContext,
-    query: &Query,
+    query: &RdfFusionQuery,
     options: QueryOptions,
 ) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
     let session_state = SessionStateBuilder::from(ctx.session_context().state())
@@ -38,7 +38,7 @@ pub async fn evaluate_query(
         .build();
 
     match &query.inner {
-        spargebra::Query::Select {
+        Query::Select {
             pattern, base_iri, ..
         } => {
             let (stream, explanation) = Box::pin(graph_pattern_to_stream(
@@ -51,7 +51,7 @@ pub async fn evaluate_query(
             .await?;
             Ok((QueryResults::Solutions(stream), explanation))
         }
-        spargebra::Query::Construct {
+        Query::Construct {
             template,
             pattern,
             base_iri,
@@ -70,7 +70,7 @@ pub async fn evaluate_query(
                 explanation,
             ))
         }
-        spargebra::Query::Ask {
+        Query::Ask {
             pattern, base_iri, ..
         } => {
             let (mut stream, explanation) = Box::pin(graph_pattern_to_stream(
@@ -84,7 +84,7 @@ pub async fn evaluate_query(
             let count = stream.next().await;
             Ok((QueryResults::Boolean(count.is_some()), explanation))
         }
-        spargebra::Query::Describe {
+        Query::Describe {
             pattern, base_iri, ..
         } => {
             // TODO: Research what a good DESCRIBE implementation would look like.
@@ -136,7 +136,7 @@ pub async fn evaluate_query(
 async fn graph_pattern_to_stream(
     state: SessionState,
     builder_context: RdfFusionLogicalPlanBuilderContext,
-    query: &Query,
+    query: &RdfFusionQuery,
     pattern: &GraphPattern,
     base_iri: &Option<Iri<String>>,
 ) -> Result<(QuerySolutionStream, QueryExplanation), QueryEvaluationError> {

@@ -10,13 +10,12 @@ use rdf_fusion_logical::join::SparqlJoinType;
 use rdf_fusion_logical::{
     ActiveGraph, RdfFusionLogicalPlanBuilder, RdfFusionLogicalPlanBuilderContext,
 };
-use rdf_fusion_model::DFResult;
 use rdf_fusion_model::Iri;
-use rdf_fusion_model::{GraphName, Variable};
-use spargebra::algebra::{
+use rdf_fusion_model::sparql::algebra::{
     AggregateExpression, AggregateFunction, Expression, GraphPattern, OrderExpression,
 };
-use spargebra::term::NamedNodePattern;
+use rdf_fusion_model::{DFResult, NamedNodePattern};
+use rdf_fusion_model::{GraphName, Variable};
 use std::cell::RefCell;
 use std::sync::Arc;
 

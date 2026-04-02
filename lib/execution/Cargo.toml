@@ -21,7 +21,6 @@ futures.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-physical.workspace = true
 oxrdfio.workspace = true
-spargebra.workspace = true
 sparesults.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

@@ -5,10 +5,10 @@ use rdf_fusion_extensions::functions::FunctionName;
 use rdf_fusion_logical::{RdfFusionExprBuilder, RdfFusionExprBuilderContext};
 use rdf_fusion_model::DFResult;
 use rdf_fusion_model::Iri;
+use rdf_fusion_model::sparql::algebra::{Expression, Function, GraphPattern};
 use rdf_fusion_model::vocab::xsd;
 use rdf_fusion_model::{DateTime, TermRef};
 use rdf_fusion_model::{Literal, NamedNode};
-use spargebra::algebra::{Expression, Function, GraphPattern};
 
 pub(super) struct ExpressionRewriter<'rewriter> {
     graph_rewriter: &'rewriter GraphPatternRewriter,

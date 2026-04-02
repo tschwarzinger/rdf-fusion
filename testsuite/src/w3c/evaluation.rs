@@ -6,7 +6,7 @@ use crate::w3c::utils::{
 use anyhow::{Context, bail, ensure};
 use datafusion::physical_plan::displayable;
 use futures::StreamExt;
-use rdf_fusion::execution::sparql::{Query, QueryOptions};
+use rdf_fusion::execution::sparql::{QueryOptions, RdfFusionQuery};
 use rdf_fusion::model::{GraphName, NamedOrBlankNode};
 use rdf_fusion::store::Store;
 
@@ -53,11 +53,12 @@ impl W3CSparqlEvaluationTest {
 
         let query_file = self.test_data.query.as_deref().context("No action found")?;
         let options = QueryOptions::default();
-        let query = Query::parse(&read_file_to_string(query_file)?, Some(query_file))
-            .context("Failure to parse query")?;
+        let query =
+            RdfFusionQuery::parse(&read_file_to_string(query_file)?, Some(query_file))
+                .context("Failure to parse query")?;
 
         // We check parsing roundtrip
-        Query::parse(&query.to_string(), None)
+        RdfFusionQuery::parse(&query.to_string(), None)
             .with_context(|| format!("Failure to deserialize \"{query}\""))?;
 
         // FROM and FROM NAMED support. We make sure the data is in the store
@@ -90,7 +91,7 @@ impl W3CSparqlEvaluationTest {
             are_query_results_isomorphic(&expected_results, actual_results).await,
             "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{:?}\n\nExecution Plan:\n{}\n",
             results_diff(expected_results, store.query(query.clone()).await?).await,
-            Query::parse(&read_file_to_string(query_file)?, Some(query_file))?,
+            RdfFusionQuery::parse(&read_file_to_string(query_file)?, Some(query_file))?,
             {
                 let mut data = Vec::new();
                 let mut stream = store.stream().await?;

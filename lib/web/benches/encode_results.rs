@@ -1,10 +1,10 @@
 use axum_test::TestServer;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::execution::runtime_env::RuntimeEnv;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
 use rdf_fusion::store::Store;
-use rdf_fusion_web::{create_router, AppState};
+use rdf_fusion_web::{AppState, create_router};
 use std::sync::Arc;
 use tokio::runtime::Builder;
 

@@ -4,7 +4,7 @@ use crate::repositories::query::results::serialize_query_result;
 use crate::repositories::sparql_query_params::SparqlQueryParams;
 use anyhow::anyhow;
 use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::execution::sparql::Query;
+use rdf_fusion::execution::sparql::RdfFusionQuery;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode};
 use rdf_fusion::store::Store;
@@ -17,7 +17,7 @@ pub async fn evaluate_sparql_query(
     rdf_format: Result<RdfFormat, RdfFusionServerError>,
     query_format: Result<QueryResultsFormat, RdfFusionServerError>,
 ) -> Result<HandleQueryResponse, RdfFusionServerError> {
-    let mut query = Query::parse(query, Some(params.base_uri.as_str()))
+    let mut query = RdfFusionQuery::parse(query, Some(params.base_uri.as_str()))
         .map_err(|e| RdfFusionServerError::BadRequest(e.to_string()))?;
 
     if params.default_graph_as_union {

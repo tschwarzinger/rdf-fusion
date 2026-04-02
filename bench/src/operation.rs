@@ -1,7 +1,7 @@
 use crate::runs::BenchmarkRun;
 use futures::StreamExt;
 use rdf_fusion::execution::results::QueryResults;
-use rdf_fusion::execution::sparql::{Query, QueryExplanation, QueryOptions};
+use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions, RdfFusionQuery};
 use rdf_fusion::store::Store;
 
 #[derive(Clone)]
@@ -34,11 +34,11 @@ impl<QueryName: Clone> SparqlRawOperation<QueryName> {
 
 #[derive(Clone)]
 pub enum SparqlOperation<QueryName> {
-    Query(QueryName, Query),
+    Query(QueryName, RdfFusionQuery),
 }
 
 impl<QueryName> SparqlOperation<QueryName> {
-    pub fn query(&self) -> &Query {
+    pub fn query(&self) -> &RdfFusionQuery {
         match self {
             SparqlOperation::Query(_, query) => query,
         }

@@ -1,7 +1,7 @@
 use crate::test::{Test, TestOutcome};
 use crate::w3c::files::read_file_to_string;
 use anyhow::{Context, ensure};
-use rdf_fusion::execution::sparql::{Query, Update};
+use rdf_fusion::execution::sparql::{RdfFusionQuery, RdfFusionUpdate};
 
 pub struct W3CSparqlSyntaxTest {
     pub id: String,
@@ -26,23 +26,23 @@ impl Test for W3CSparqlSyntaxTest {
 
         let result = if self.is_positive {
             if self.is_update {
-                let update = Update::parse(&content, Some(&self.action_file))
+                let update = RdfFusionUpdate::parse(&content, Some(&self.action_file))
                     .context("Not able to parse positive update syntax test")?;
-                Update::parse(&update.to_string(), None)
+                RdfFusionUpdate::parse(&update.to_string(), None)
                     .map(|_| ())
                     .with_context(|| format!("Failure to deserialize \"{update}\""))
             } else {
-                let query = Query::parse(&content, Some(&self.action_file))
+                let query = RdfFusionQuery::parse(&content, Some(&self.action_file))
                     .context("Not able to parse positive syntax test")?;
-                Query::parse(&query.to_string(), None)
+                RdfFusionQuery::parse(&query.to_string(), None)
                     .map(|_| ())
                     .with_context(|| format!("Failure to deserialize \"{query}\""))
             }
         } else {
             let res = if self.is_update {
-                Update::parse(&content, Some(&self.action_file)).map(|_| ())
+                RdfFusionUpdate::parse(&content, Some(&self.action_file)).map(|_| ())
             } else {
-                Query::parse(&content, Some(&self.action_file)).map(|_| ())
+                RdfFusionQuery::parse(&content, Some(&self.action_file)).map(|_| ())
             };
             ensure!(
                 res.is_err(),

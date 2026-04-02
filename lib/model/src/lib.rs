@@ -15,6 +15,7 @@ mod blank_node_mode;
 mod error;
 pub mod quads;
 mod rdf;
+pub mod sparql;
 mod typed_value;
 pub mod vocab;
 mod xsd;

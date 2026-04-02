@@ -22,6 +22,7 @@ use rdf_fusion::logical::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion::logical::patterns::PatternLoweringRule;
 use rdf_fusion::logical::quad_pattern::QuadPatternNode;
 use rdf_fusion::model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion::model::sparql::Update;
 use rdf_fusion::model::{
     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
     QuadRef, StorageError, TermPattern,
@@ -217,6 +218,10 @@ impl QuadStorage for VecQuadStorage {
 
     async fn validate(&self) -> Result<(), StorageError> {
         Ok(())
+    }
+
+    async fn execute_update(&self, update: &Update) -> Result<(), StorageError> {
+        unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 }
 

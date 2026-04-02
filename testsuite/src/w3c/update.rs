@@ -4,7 +4,7 @@ use crate::w3c::report::dataset_diff;
 use crate::w3c::utils::load_to_store;
 use anyhow::{Context, ensure};
 use futures::StreamExt;
-use rdf_fusion::execution::sparql::Update;
+use rdf_fusion::execution::sparql::RdfFusionUpdate;
 use rdf_fusion::model::dataset::CanonicalizationAlgorithm;
 use rdf_fusion::model::{Dataset, GraphName};
 use rdf_fusion::store::Store;
@@ -63,11 +63,12 @@ impl W3CSparqlUpdateEvaluationTest {
             .update
             .as_deref()
             .context("No action found")?;
-        let update = Update::parse(&read_file_to_string(update_file)?, Some(update_file))
-            .context("Failure to parse update")?;
+        let update =
+            RdfFusionUpdate::parse(&read_file_to_string(update_file)?, Some(update_file))
+                .context("Failure to parse update")?;
 
         // We check parsing roundtrip
-        Update::parse(&update.to_string(), None)
+        RdfFusionUpdate::parse(&update.to_string(), None)
             .with_context(|| format!("Failure to deserialize \"{update}\""))?;
 
         store
@@ -92,7 +93,8 @@ impl W3CSparqlUpdateEvaluationTest {
             store_dataset == result_store_dataset,
             "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
             dataset_diff(&result_store_dataset, &store_dataset),
-            Update::parse(&read_file_to_string(update_file)?, Some(update_file)).unwrap(),
+            RdfFusionUpdate::parse(&read_file_to_string(update_file)?, Some(update_file))
+                .unwrap(),
         );
         Ok(())
     }

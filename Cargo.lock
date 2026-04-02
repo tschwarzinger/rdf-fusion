@@ -3779,7 +3779,6 @@ dependencies = [
  "rdf-fusion-model",
  "rdf-fusion-physical",
  "sparesults",
- "spargebra",
  "thiserror 2.0.18",
  "tokio",
 ]

@@ -40,7 +40,7 @@ use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
 use rdf_fusion_execution::sparql::error::QueryEvaluationError;
 use rdf_fusion_execution::sparql::{
-    Query, QueryExplanation, QueryOptions, Update, UpdateOptions,
+    QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate, UpdateOptions,
 };
 use rdf_fusion_model::StorageError;
 use rdf_fusion_model::{
@@ -172,7 +172,10 @@ impl Store {
     /// ```
     pub async fn query(
         &self,
-        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError> + std::fmt::Debug>,
+        query: impl TryInto<
+            RdfFusionQuery,
+            Error = impl Into<QueryEvaluationError> + std::fmt::Debug,
+        >,
     ) -> Result<QueryResults, QueryEvaluationError> {
         self.query_opt(query, QueryOptions::default()).await
     }
@@ -203,7 +206,10 @@ impl Store {
     /// ```
     pub async fn query_opt(
         &self,
-        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError> + std::fmt::Debug>,
+        query: impl TryInto<
+            RdfFusionQuery,
+            Error = impl Into<QueryEvaluationError> + std::fmt::Debug,
+        >,
         options: QueryOptions,
     ) -> Result<QueryResults, QueryEvaluationError> {
         self.explain_query_opt(query, options).await.map(|(r, _)| r)
@@ -238,7 +244,10 @@ impl Store {
     /// ```
     pub async fn explain_query_opt(
         &self,
-        query: impl TryInto<Query, Error = impl Into<QueryEvaluationError> + std::fmt::Debug>,
+        query: impl TryInto<
+            RdfFusionQuery,
+            Error = impl Into<QueryEvaluationError> + std::fmt::Debug,
+        >,
         options: QueryOptions,
     ) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
         let query = query.try_into();
@@ -405,14 +414,11 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    #[allow(clippy::unimplemented, reason = "Not production ready")]
-    #[allow(clippy::unused_self, reason = "Not implemented")]
-    #[allow(clippy::unused_async, reason = "Not implemented")]
     pub async fn update(
         &self,
-        _update: impl TryInto<Update, Error = impl Into<QueryEvaluationError>>,
+        update: impl TryInto<RdfFusionUpdate, Error = impl Into<QueryEvaluationError>>,
     ) -> Result<(), QueryEvaluationError> {
-        unimplemented!()
+        self.update_opt(update, UpdateOptions).await
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/) with some options.
@@ -431,15 +437,16 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    #[allow(clippy::unimplemented, reason = "Not production ready")]
-    #[allow(clippy::unused_self, reason = "Not implemented")]
-    #[allow(clippy::unused_async, reason = "Not implemented")]
     pub async fn update_opt(
         &self,
-        _update: impl TryInto<Update, Error = impl Into<QueryEvaluationError>>,
-        _options: impl Into<UpdateOptions>,
+        update: impl TryInto<RdfFusionUpdate, Error = impl Into<QueryEvaluationError>>,
+        options: impl Into<UpdateOptions>,
     ) -> Result<(), QueryEvaluationError> {
-        unimplemented!()
+        let query = update.try_into();
+        match query {
+            Ok(query) => self.context.execute_update(&query, options.into()).await,
+            Err(err) => Err(err.into()),
+        }
     }
 
     /// Loads a RDF file under into the store.

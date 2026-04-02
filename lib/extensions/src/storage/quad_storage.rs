@@ -4,6 +4,7 @@ use datafusion::physical_planner::ExtensionPlanner;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::object_id::ObjectIdMapping;
 use rdf_fusion_model::StorageError;
+use rdf_fusion_model::sparql::Update;
 use rdf_fusion_model::{
     GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
 };
@@ -75,4 +76,7 @@ pub trait QuadStorage: Send + Sync {
 
     /// Validates invariants in the store
     async fn validate(&self) -> Result<(), StorageError>;
+
+    /// Executes a SPARQL [`Update`] operation against this storage.
+    async fn execute_update(&self, update: &Update) -> Result<(), StorageError>;
 }

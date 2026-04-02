@@ -1,20 +1,20 @@
 //! [SPARQL 1.1 Query Algebra](https://www.w3.org/TR/sparql11-query/#sparqlQuery)
 //!
-//! The root type for SPARQL queries is [`Query`] and the root type for updates is [`Update`].
+//! The root type for SPARQL queries is [`RdfFusionQuery`] and the root type for updates is [`Update`].
 
+use rdf_fusion_model::sparql::{GraphUpdateOperation, Query, SparqlSyntaxError, Update};
 use rdf_fusion_model::{GraphName, NamedOrBlankNode};
-use spargebra::{GraphUpdateOperation, SparqlSyntaxError};
 use std::fmt;
 use std::str::FromStr;
 
 /// A parsed [SPARQL query](https://www.w3.org/TR/sparql11-query/).
 ///
 /// ```
-/// use rdf_fusion_execution::sparql::Query;
+/// use rdf_fusion_execution::sparql::RdfFusionQuery;
 /// use rdf_fusion_model::NamedNode;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
-/// let mut query = Query::parse(query_str, None)?;
+/// let mut query = RdfFusionQuery::parse(query_str, None)?;
 ///
 /// assert_eq!(query.to_string(), query_str);
 ///
@@ -29,16 +29,16 @@ use std::str::FromStr;
 /// ```
 #[allow(clippy::field_scoped_visibility_modifiers)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Query {
-    pub(super) inner: spargebra::Query,
+pub struct RdfFusionQuery {
+    pub(super) inner: Query,
     pub(super) dataset: QueryDataset,
 }
 
-impl Query {
+impl RdfFusionQuery {
     /// Parses a SPARQL query with an optional base IRI to resolve relative IRIs in the query.
     pub fn parse(query: &str, base_iri: Option<&str>) -> Result<Self, SparqlSyntaxError> {
         #[allow(deprecated, reason = "Converting to SparqlSyntaxError")]
-        let query = Self::from(spargebra::Query::parse(query, base_iri)?);
+        let query = Self::from(Query::parse(query, base_iri)?);
         Ok(Self {
             dataset: query.dataset,
             inner: query.inner,
@@ -56,13 +56,13 @@ impl Query {
     }
 }
 
-impl fmt::Display for Query {
+impl fmt::Display for RdfFusionQuery {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f) // TODO: override
     }
 }
 
-impl FromStr for Query {
+impl FromStr for RdfFusionQuery {
     type Err = SparqlSyntaxError;
 
     fn from_str(query: &str) -> Result<Self, Self::Err> {
@@ -70,7 +70,7 @@ impl FromStr for Query {
     }
 }
 
-impl TryFrom<&str> for Query {
+impl TryFrom<&str> for RdfFusionQuery {
     type Error = SparqlSyntaxError;
 
     fn try_from(query: &str) -> Result<Self, Self::Error> {
@@ -78,7 +78,7 @@ impl TryFrom<&str> for Query {
     }
 }
 
-impl TryFrom<&String> for Query {
+impl TryFrom<&String> for RdfFusionQuery {
     type Error = SparqlSyntaxError;
 
     fn try_from(query: &String) -> Result<Self, Self::Error> {
@@ -86,14 +86,14 @@ impl TryFrom<&String> for Query {
     }
 }
 
-impl From<spargebra::Query> for Query {
-    fn from(query: spargebra::Query) -> Self {
+impl From<Query> for RdfFusionQuery {
+    fn from(query: Query) -> Self {
         Self {
             dataset: QueryDataset::from_algebra(match &query {
-                spargebra::Query::Select { dataset, .. }
-                | spargebra::Query::Construct { dataset, .. }
-                | spargebra::Query::Describe { dataset, .. }
-                | spargebra::Query::Ask { dataset, .. } => dataset,
+                Query::Select { dataset, .. }
+                | Query::Construct { dataset, .. }
+                | Query::Describe { dataset, .. }
+                | Query::Ask { dataset, .. } => dataset,
             }),
             inner: query,
         }
@@ -103,7 +103,7 @@ impl From<spargebra::Query> for Query {
 /// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/).
 ///
 /// ```
-/// use spargebra::SparqlSyntaxError;
+/// use SparqlSyntaxError;
 /// use rdf_fusion_execution::sparql::Update;
 ///
 /// let update_str = "CLEAR ALL ;";
@@ -114,19 +114,19 @@ impl From<spargebra::Query> for Query {
 /// ```
 #[allow(clippy::field_scoped_visibility_modifiers)]
 #[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct Update {
-    pub(super) inner: spargebra::Update,
-    pub(super) using_datasets: Vec<Option<QueryDataset>>,
+pub struct RdfFusionUpdate {
+    pub inner: Update,
+    pub using_datasets: Vec<Option<QueryDataset>>,
 }
 
-impl Update {
+impl RdfFusionUpdate {
     /// Parses a SPARQL update with an optional base IRI to resolve relative IRIs in the query.
     pub fn parse(
         update: &str,
         base_iri: Option<&str>,
     ) -> Result<Self, SparqlSyntaxError> {
         #[allow(deprecated, reason = "Converting to SparqlSyntaxError")]
-        Ok(spargebra::Update::parse(update, base_iri)?.into())
+        Ok(Update::parse(update, base_iri)?.into())
     }
 
     /// Returns [the query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset) in [DELETE/INSERT operations](https://www.w3.org/TR/sparql11-update/#deleteInsert).
@@ -140,13 +140,13 @@ impl Update {
     }
 }
 
-impl fmt::Display for Update {
+impl fmt::Display for RdfFusionUpdate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl FromStr for Update {
+impl FromStr for RdfFusionUpdate {
     type Err = SparqlSyntaxError;
 
     fn from_str(update: &str) -> Result<Self, Self::Err> {
@@ -154,7 +154,7 @@ impl FromStr for Update {
     }
 }
 
-impl TryFrom<&str> for Update {
+impl TryFrom<&str> for RdfFusionUpdate {
     type Error = SparqlSyntaxError;
 
     fn try_from(update: &str) -> Result<Self, Self::Error> {
@@ -162,7 +162,7 @@ impl TryFrom<&str> for Update {
     }
 }
 
-impl TryFrom<&String> for Update {
+impl TryFrom<&String> for RdfFusionUpdate {
     type Error = SparqlSyntaxError;
 
     fn try_from(update: &String) -> Result<Self, Self::Error> {
@@ -170,8 +170,8 @@ impl TryFrom<&String> for Update {
     }
 }
 
-impl From<spargebra::Update> for Update {
-    fn from(update: spargebra::Update) -> Self {
+impl From<Update> for RdfFusionUpdate {
+    fn from(update: Update) -> Self {
         Self {
             using_datasets: update
                 .operations
@@ -197,7 +197,9 @@ pub struct QueryDataset {
 }
 
 impl QueryDataset {
-    fn from_algebra(inner: &Option<spargebra::algebra::QueryDataset>) -> Self {
+    fn from_algebra(
+        inner: &Option<rdf_fusion_model::sparql::algebra::QueryDataset>,
+    ) -> Self {
         if let Some(inner) = inner {
             Self {
                 default: Some(inner.default.iter().map(|g| g.clone().into()).collect()),
@@ -218,12 +220,12 @@ impl QueryDataset {
     /// (i.e. the default graph is the store default graph and all the store named graphs are available)
     ///
     /// ```
-    /// use rdf_fusion_execution::sparql::Query;
+    /// use rdf_fusion_execution::sparql::RdfFusionQuery;
     ///
-    /// assert!(Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?
+    /// assert!(RdfFusionQuery::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?
     ///     .dataset()
     ///     .is_default_dataset());
-    /// assert!(!Query::parse(
+    /// assert!(!RdfFusionQuery::parse(
     ///     "SELECT ?s ?p ?o FROM <http://example.com> WHERE { ?s ?p ?o . }",
     ///     None
     /// )?
@@ -254,10 +256,10 @@ impl QueryDataset {
     ///
     /// By default only the store default graph is considered.
     /// ```
-    /// use rdf_fusion_execution::sparql::Query;
+    /// use rdf_fusion_execution::sparql::RdfFusionQuery;
     /// use rdf_fusion_model::NamedNode;
     ///
-    /// let mut query = Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
+    /// let mut query = RdfFusionQuery::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
     /// let default = vec![NamedNode::new("http://example.com")?.into()];
     /// query.dataset_mut().set_default_graph(default.clone());
     /// assert_eq!(
@@ -279,10 +281,10 @@ impl QueryDataset {
     /// Sets the list of allowed named graphs in the query.
     ///
     /// ```
-    /// use rdf_fusion_execution::sparql::Query;
+    /// use rdf_fusion_execution::sparql::RdfFusionQuery;
     /// use rdf_fusion_model::NamedNode;
     ///
-    /// let mut query = Query::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
+    /// let mut query = RdfFusionQuery::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
     /// let named = vec![NamedNode::new("http://example.com")?.into()];
     /// query
     ///     .dataset_mut()
@@ -306,7 +308,7 @@ mod tests {
     #[test]
     fn test_send_sync() {
         fn is_send_sync<T: Send + Sync>() {}
-        is_send_sync::<Query>();
+        is_send_sync::<RdfFusionQuery>();
         is_send_sync::<Update>();
     }
 }

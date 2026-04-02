@@ -19,6 +19,7 @@ use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_model::DFResult;
 use rdf_fusion_model::StorageError;
+use rdf_fusion_model::sparql::Update;
 use rdf_fusion_model::{
     GraphNameRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
 };
@@ -258,5 +259,9 @@ impl QuadStorage for MemQuadStorage {
 
     async fn validate(&self) -> Result<(), StorageError> {
         Ok(())
+    }
+
+    async fn execute_update(&self, _update: &Update) -> Result<(), StorageError> {
+        todo!("Update Not Implemented");
     }
 }

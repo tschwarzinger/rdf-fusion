@@ -2,17 +2,16 @@
 
 mod algebra;
 pub mod error;
-mod eval;
+mod evaluate_query;
 mod explanation;
 mod optimizer;
 mod rewriting;
 
-pub use crate::sparql::algebra::{Query, QueryDataset, Update};
+pub use crate::sparql::algebra::{QueryDataset, RdfFusionQuery, RdfFusionUpdate};
 pub use crate::sparql::explanation::QueryExplanation;
-pub use eval::evaluate_query;
+pub use evaluate_query::evaluate_query;
 pub use optimizer::{create_optimizer_rules, create_pyhsical_optimizer_rules};
 pub use rdf_fusion_model::{Variable, VariableNameParseError};
-pub use spargebra::SparqlSyntaxError;
 
 /// Defines how many optimizations the query optimizer should apply.
 ///
