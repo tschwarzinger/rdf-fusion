@@ -1,6 +1,9 @@
 use anyhow::Context;
 use futures::StreamExt;
 use rdf_fusion::execution::results::QueryResults;
+use rdf_fusion::store::Store;
+use rdf_fusion_bench::benchmarks::Benchmark;
+use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use tokio::runtime::{Builder, Runtime};
 
 pub mod verbose;
@@ -28,6 +31,31 @@ pub async fn consume_results(result: QueryResults) -> anyhow::Result<usize> {
         }
         _ => panic!("Unexpected QueryResults"),
     }
+}
+
+/// Sets up the runtime, context, and prepares the store for a benchmark.
+pub fn setup_benchmark_env<'ctx, B: Benchmark>(
+    benchmarking_context: &'ctx RdfFusionBenchContext,
+    benchmark: &B,
+) -> (Runtime, BenchmarkContext<'ctx>, Store) {
+    let target_partitions = benchmarking_context.options().target_partitions.unwrap();
+    let runtime = create_runtime(target_partitions);
+
+    let benchmark_name = benchmark.name();
+    let benchmark_context = benchmarking_context
+        .create_benchmark_context(benchmark_name)
+        .unwrap();
+
+    let store = runtime
+        .block_on(benchmark.prepare_store(&benchmark_context, false))
+        .context("
+    Failed to prepare store. Have you downloaded the data?
+
+    Execute `just prepare-benches` for downloading the data. Then, run the benchmark from the `bench` directory.
+    ")
+        .unwrap();
+
+    (runtime, benchmark_context, store)
 }
 
 pub fn create_runtime(target_partitions: usize) -> Runtime {

@@ -108,30 +108,6 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
             });
         Ok(result)
     }
-
-    /// Loads the dataset file into the resulting [Store].
-    pub async fn prepare_store(
-        &self,
-        ctx: &BenchmarkContext<'_>,
-    ) -> anyhow::Result<Store> {
-        let start = datafusion::common::instant::Instant::now();
-        println!("Creating in-memory store and loading data ...");
-
-        let dataset_path = ctx.parent().join_data_dir(&self.paths.dataset)?;
-        let data = fs::read(&dataset_path)?;
-
-        let memory_store = ctx.parent().create_store();
-        memory_store
-            .load_from_reader(RdfFormat::NTriples, data.as_slice())
-            .await?;
-        let duration = start.elapsed();
-        println!(
-            "Store created and data loaded. Took {} ms.",
-            duration.as_millis()
-        );
-        print_store_stats(&memory_store).await?;
-        Ok(memory_store)
-    }
 }
 
 #[async_trait]
@@ -160,12 +136,42 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
         ]
     }
 
+    async fn prepare_store(
+        &self,
+        ctx: &BenchmarkContext<'_>,
+        print_info: bool,
+    ) -> anyhow::Result<Store> {
+        let start = datafusion::common::instant::Instant::now();
+        if print_info {
+            println!("Creating in-memory store and loading data ...");
+        }
+
+        let dataset_path = ctx.parent().join_data_dir(&self.paths.dataset)?;
+        let data = fs::read(&dataset_path)?;
+
+        let memory_store = ctx.parent().create_store();
+        memory_store
+            .load_from_reader(RdfFormat::NTriples, data.as_slice())
+            .await?;
+        let duration = start.elapsed();
+
+        if print_info {
+            println!(
+                "Store created and data loaded. Took {} ms.",
+                duration.as_millis()
+            );
+            print_store_stats(&memory_store).await?;
+        }
+
+        Ok(memory_store)
+    }
+
     async fn execute(
         &self,
         bench_context: &BenchmarkContext<'_>,
     ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
         let operations = self.list_operations(bench_context)?;
-        let memory_store = self.prepare_store(bench_context).await?;
+        let memory_store = self.prepare_store(bench_context, true).await?;
         let report =
             execute_benchmark::<TUseCase>(bench_context, operations, &memory_store)
                 .await?;

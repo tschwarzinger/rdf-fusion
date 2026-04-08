@@ -38,7 +38,6 @@ zip.workspace = true
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }
 insta.workspace = true
-regex.workspace = true
 
 [lints]
 workspace = true
@@ -53,4 +52,8 @@ harness = false
 
 [[bench]]
 name = "wind_farm"
+harness = false
+
+[[bench]]
+name = "store_preparation"
 harness = false

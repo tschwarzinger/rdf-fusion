@@ -91,39 +91,6 @@ impl WindFarmBenchmark {
             action: Some(FileAction::Unpack(ArchiveType::Zip)),
         }
     }
-
-    /// Loads the dataset file into the resulting [Store].
-    pub async fn prepare_store(
-        &self,
-        ctx: &BenchmarkContext<'_>,
-    ) -> anyhow::Result<Store> {
-        let start = datafusion::common::instant::Instant::now();
-        println!("Creating in-memory store and loading data ...");
-        let dataset_path = create_files(ctx)?;
-        let memory_store = ctx.parent().create_store();
-
-        println!("Loading static data ...");
-        let data = fs::read(&dataset_path.wind_farm_data)?;
-        memory_store
-            .load_from_reader(RdfFormat::N3, data.as_slice())
-            .await?;
-
-        println!("Loading time series data ...");
-        let data = fs::read(&dataset_path.time_series_data)?;
-        memory_store
-            .load_from_reader(RdfFormat::N3, data.as_slice())
-            .await?;
-
-        let duration = start.elapsed();
-        println!(
-            "Store created and data loaded. Took {} ms.",
-            duration.as_millis()
-        );
-        print_store_stats(&memory_store).await?;
-
-        println!("Store created and data loaded.");
-        Ok(memory_store)
-    }
 }
 
 #[async_trait]
@@ -140,11 +107,51 @@ impl Benchmark for WindFarmBenchmark {
         vec![generate_dataset, download_source]
     }
 
+    async fn prepare_store(
+        &self,
+        ctx: &BenchmarkContext<'_>,
+        print_info: bool,
+    ) -> anyhow::Result<Store> {
+        let start = datafusion::common::instant::Instant::now();
+        if print_info {
+            println!("Creating in-memory store and loading data ...");
+        }
+        let dataset_path = create_files(ctx)?;
+        let memory_store = ctx.parent().create_store();
+
+        if print_info {
+            println!("Loading static data ...");
+        }
+        let data = fs::read(&dataset_path.wind_farm_data)?;
+        memory_store
+            .load_from_reader(RdfFormat::N3, data.as_slice())
+            .await?;
+
+        if print_info {
+            println!("Loading time series data ...");
+        }
+        let data = fs::read(&dataset_path.time_series_data)?;
+        memory_store
+            .load_from_reader(RdfFormat::N3, data.as_slice())
+            .await?;
+
+        if print_info {
+            let duration = start.elapsed();
+            println!(
+                "Store created and data loaded. Took {} ms.",
+                duration.as_millis()
+            );
+            print_store_stats(&memory_store).await?;
+            println!("Store created and data loaded.");
+        }
+        Ok(memory_store)
+    }
+
     async fn execute(
         &self,
         bench_context: &BenchmarkContext<'_>,
     ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
-        let memory_store = self.prepare_store(bench_context).await?;
+        let memory_store = self.prepare_store(bench_context, true).await?;
         let report = execute_benchmark(bench_context, &memory_store).await?;
         Ok(Box::new(report))
     }

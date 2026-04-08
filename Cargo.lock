@@ -3716,7 +3716,6 @@ dependencies = [
  "rand 0.10.0",
  "rand_distr",
  "rdf-fusion",
- "regex",
  "reqwest",
  "serde_json",
  "snmalloc-rs",

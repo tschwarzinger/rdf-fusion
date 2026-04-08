@@ -9,6 +9,7 @@ pub mod windfarm;
 use crate::environment::BenchmarkContext;
 use crate::report::BenchmarkReport;
 pub use name::BenchmarkName;
+use rdf_fusion::store::Store;
 
 /// Represents a benchmark.
 #[async_trait]
@@ -22,9 +23,16 @@ pub trait Benchmark {
     /// Returns a list of preparation requirements.
     fn requirements(&self, bench_files_path: &Path) -> Vec<PrepRequirement>;
 
+    /// Prepares a [`Store`] but does not execute the benchmark.
+    async fn prepare_store(
+        &self,
+        ctx: &BenchmarkContext<'_>,
+        print_info: bool,
+    ) -> anyhow::Result<Store>;
+
     /// Executes the benchmark using the given `bencher`.
     async fn execute(
         &self,
-        bench_context: &BenchmarkContext<'_>,
+        ctx: &BenchmarkContext<'_>,
     ) -> anyhow::Result<Box<dyn BenchmarkReport>>;
 }
