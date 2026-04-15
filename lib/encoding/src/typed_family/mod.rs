@@ -123,7 +123,10 @@ impl TypedFamilyArrays {
 
     /// Applies a binary comparison operation to each matching family child of the first two arrays
     /// and interleaves the results.
-    pub fn map_binary_comparison<F>(&self, f: F) -> AResult<TypedFamilyArray>
+    pub fn map_binary_comparison<F>(
+        &self,
+        ordering_to_boolean: F,
+    ) -> AResult<TypedFamilyArray>
     where
         F: Fn(Ordering) -> bool + Send + Sync + 'static,
     {
@@ -145,7 +148,7 @@ impl TypedFamilyArrays {
             if let Some(comparator) = comparator {
                 let len = lhs.array().len();
                 let result = (0..len)
-                    .map(|i| comparator(i, i).map(&f))
+                    .map(|i| comparator(i, i).map(&ordering_to_boolean))
                     .collect::<BooleanArray>();
                 Ok(TypedFamilyArray::new_unchecked(
                     Arc::clone(&encoding),
@@ -267,6 +270,52 @@ impl TypedFamilyArrays {
             return Ok(new_empty_array(result_type));
         }
 
+        if let Some(result) =
+            self.try_map_children_fast_path(&mapping_function, &result_type, len)?
+        {
+            return Ok(result);
+        }
+
+        self.map_children_default_path(&mapping_function, result_type, len)
+    }
+
+    /// Implements map_children for the case where all elements of the family array are from a
+    /// single family.
+    fn try_map_children_fast_path<F>(
+        &self,
+        mapping_function: &F,
+        result_type: &DataType,
+        expected_length: usize,
+    ) -> Result<Option<ArrayRef>, ArrowError>
+    where
+        F: Fn(&[TypedFamilyArrayChild]) -> AResult<ArrayRef>,
+    {
+        let mut homogenous_children = Vec::new();
+        for array in &self.arrays {
+            if let Some(array) = array.try_get_homogeneous_child() {
+                homogenous_children.push(array);
+            } else {
+                return Ok(None);
+            }
+        }
+
+        let result = mapping_function(homogenous_children.as_ref())?;
+        Self::validate_mapping_result(result.as_ref(), result_type, expected_length)?;
+
+        Ok(Some(result))
+    }
+
+    /// Implements map_children by creating new arrays for the possible combinations. This should
+    /// work for all valid [`TypedFamilyArrays`] but is relatively compute intensive.
+    fn map_children_default_path<F>(
+        &self,
+        mapping_function: &F,
+        result_type: &DataType,
+        len: usize,
+    ) -> Result<ArrayRef, ArrowError>
+    where
+        F: Fn(&[TypedFamilyArrayChild]) -> AResult<ArrayRef>,
+    {
         let unions: Vec<_> = self.arrays.iter().map(|a| a.inner().as_union()).collect();
 
         // Group rows by family combination
@@ -284,7 +333,7 @@ impl TypedFamilyArrays {
         let mut combination_to_result_idx = HashMap::new();
 
         for (combination, indices) in family_combinations {
-            let mut children_arrays = Vec::with_capacity(num_arrays);
+            let mut children_arrays = Vec::with_capacity(self.arrays.len());
 
             for (array_idx, &type_id) in combination.iter().enumerate() {
                 let u = unions[array_idx];
@@ -307,21 +356,7 @@ impl TypedFamilyArrays {
 
             combination_to_result_idx.insert(combination, results.len());
             let mapping_result = mapping_function(&children_arrays)?;
-            if mapping_result.len() != indices.len() {
-                return Err(ArrowError::ComputeError(format!(
-                    "The mapping function returned an array of length {}, but expected {}",
-                    mapping_result.len(),
-                    indices.len()
-                )));
-            }
-
-            if mapping_result.data_type() != result_type {
-                return Err(ArrowError::ComputeError(format!(
-                    "The mapping function returned an array of data type {}, but expected {}",
-                    mapping_result.data_type(),
-                    result_type
-                )));
-            }
+            Self::validate_mapping_result(&mapping_result, result_type, indices.len())?;
 
             results.push(mapping_result);
         }
@@ -342,6 +377,31 @@ impl TypedFamilyArrays {
         let interleaved = interleave(&arrays, &interleave_indices)?;
 
         Ok(interleaved)
+    }
+
+    /// Validate the result of the mapping function.
+    fn validate_mapping_result(
+        result: &dyn Array,
+        result_type: &DataType,
+        expected_length: usize,
+    ) -> Result<(), ArrowError> {
+        if result.data_type() != result_type {
+            return Err(ArrowError::ComputeError(format!(
+                "The mapping function returned an array of data type {}, but expected {}",
+                result.data_type(),
+                result_type
+            )));
+        }
+
+        if result.len() != expected_length {
+            return Err(ArrowError::ComputeError(format!(
+                "The mapping function returned an array of length {}, but expected {}",
+                result.len(),
+                expected_length
+            )));
+        }
+
+        Ok(())
     }
 }
 

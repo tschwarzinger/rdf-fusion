@@ -71,6 +71,45 @@ impl TypedFamilyArray {
         self.len() == 0
     }
 
+    /// Returns true if the array is homogeneous (i.e., all entries have the same type).
+    pub fn is_homogeneous(&self) -> bool {
+        let type_ids = self.type_ids();
+        let first_type_id = type_ids[0];
+        type_ids.iter().all(|&id| id == first_type_id)
+    }
+
+    /// Returns a homogenous inner child if the array is homogenous. Otherwise, returns [`None`].
+    pub fn try_get_homogeneous_child(&self) -> Option<TypedFamilyArrayChild> {
+        if !self.is_homogeneous() {
+            return None;
+        }
+
+        let type_id = self.type_ids()[0];
+        let offsets = self
+            .inner
+            .as_union()
+            .offsets()
+            .expect("Expected Dense Union");
+
+        let candidate_child = self.inner.as_union().child(type_id);
+        if offsets.len() != candidate_child.len() {
+            return None;
+        }
+
+        // The offsets buffer is guaranteed to be increasing for each type. Therefore, given that
+        // the child array has the same length as the offset array, we do not have to use take here.
+        //
+        // From the Arrow documentation:
+        // > Offsets buffer: A buffer of signed Int32 values indicating the relative offset into the
+        // > respective child array for the type in a given slot. The respective offsets for each
+        // > child value array must be in order / increasing.
+        // https://arrow.apache.org/docs/format/Columnar.html#dense-union
+        Some(TypedFamilyArrayChild {
+            family: self.encoding.type_families()[type_id as usize].clone(),
+            child: Arc::clone(candidate_child),
+        })
+    }
+
     /// Returns the child array for the given [`TypedFamilyId`].
     ///
     /// # Panics
