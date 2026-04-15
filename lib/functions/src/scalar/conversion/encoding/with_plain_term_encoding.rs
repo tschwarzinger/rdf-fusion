@@ -99,8 +99,7 @@ impl ScalarUDFImpl for WithPlainTermEncoding {
                     }
                     Some(encoding) => {
                         let array = arrays.get(0);
-                        let decoded =
-                            encoding.mapping().decode_array(array.object_ids())?;
+                        let decoded = encoding.mapping().decode_array(array.inner())?;
                         decoded.into_array_ref()
                     }
                 }
@@ -108,7 +107,7 @@ impl ScalarUDFImpl for WithPlainTermEncoding {
             _ => {
                 if args.args.is_empty() {
                     return Ok(ColumnarValue::Array(
-                        PLAIN_TERM_ENCODING.create_null_array(0)?,
+                        PLAIN_TERM_ENCODING.create_null_array(0).into_array_ref(),
                     ));
                 }
                 return exec_err!(

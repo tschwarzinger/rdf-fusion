@@ -1,0 +1,218 @@
+---
+source: bench/tests/query_results/windfarm.rs
+expression: "run_select_query(&store,\ninclude_str!(\"./queries/wind-farm-production-query4.sparql\")).await"
+---
+{
+  "head": {
+    "vars": [
+      "site_label",
+      "wtur_label",
+      "t",
+      "val"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:00:00"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7733845.344533691"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:00:10"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7733105.323862744"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:00:20"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7733639.776943101"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:00:30"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7732704.09601749"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:00:40"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7733352.477327683"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:00:50"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7731008.607879448"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:01:00"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7730526.333293544"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:01:10"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7728941.081898271"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:01:20"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7727492.742440262"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      },
+      {
+        "site_label": {
+          "type": "literal",
+          "value": "Gale Valley"
+        },
+        "t": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "2022-08-29T00:01:30"
+        },
+        "val": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "type": "literal",
+          "value": "7727387.513989724"
+        },
+        "wtur_label": {
+          "type": "literal",
+          "value": "A1"
+        }
+      }
+    ]
+  }
+}

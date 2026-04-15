@@ -12,26 +12,35 @@ use crate::w3c::evaluation::W3CSparqlEvaluationTest;
 use crate::w3c::syntax::W3CSparqlSyntaxTest;
 use crate::w3c::update::W3CSparqlUpdateEvaluationTest;
 use anyhow::{Context, Result, bail};
+use futures::future::BoxFuture;
 use manifest::TestManifest;
+use rdf_fusion::store::Store;
+use std::sync::Arc;
+
+pub type StoreFactory = Arc<dyn Fn() -> BoxFuture<'static, Store> + Send + Sync>;
 
 pub struct W3CSparqlTestSuiteBuilder {
     builder: TestSuiteBuilder,
     manifest_tests: Vec<manifest::Test>,
     optimize_after_load: bool,
+    store_factory: Option<StoreFactory>,
 }
 
 impl W3CSparqlTestSuiteBuilder {
-    pub fn load_manifest(manifest_url: impl Into<String>) -> Result<Self> {
+    pub async fn load_manifest(manifest_url: impl Into<String>) -> Result<Self> {
         let manifest_url = manifest_url.into();
-        let manifest_tests = TestManifest::new([&manifest_url])
-            .collect::<Result<Vec<_>>>()
-            .with_context(|| format!("Failed to load manifest at {manifest_url}"))?;
+        let mut manifest_tests = Vec::new();
+        let mut manifest = TestManifest::new([&manifest_url]);
+        while let Some(test) = manifest.next().await {
+            manifest_tests.push(test?);
+        }
         let mut builder = TestSuiteBuilder::new();
         builder.with_name(format!("W3C SPARQL Test Suite - {manifest_url}"));
         Ok(Self {
             builder,
             manifest_tests,
             optimize_after_load: false,
+            store_factory: None,
         })
     }
 
@@ -59,6 +68,11 @@ impl W3CSparqlTestSuiteBuilder {
         self
     }
 
+    pub fn with_store_factory(mut self, factory: StoreFactory) -> Self {
+        self.store_factory = Some(factory);
+        self
+    }
+
     pub async fn build(mut self) -> Result<TestSuite> {
         let test_ids: std::collections::HashSet<_> = self
             .manifest_tests
@@ -77,6 +91,10 @@ impl W3CSparqlTestSuiteBuilder {
                 bail!("Only test {id} not found in manifest");
             }
         }
+
+        let store_factory = self.store_factory.unwrap_or_else(|| {
+            Arc::new(|| Box::pin(async { Store::new_in_memory().await }))
+        });
 
         for test in self.manifest_tests {
             let kind = test.kind.as_str();
@@ -113,6 +131,7 @@ impl W3CSparqlTestSuiteBuilder {
                         name: test.name.clone(),
                         test_data: test,
                         optimize_after_load: self.optimize_after_load,
+                        store_factory: Arc::clone(&store_factory),
                     };
                     self.builder.add_test(Box::new(w3c_test));
                 }
@@ -123,6 +142,7 @@ impl W3CSparqlTestSuiteBuilder {
                         name: test.name.clone(),
                         test_data: test,
                         optimize_after_load: self.optimize_after_load,
+                        store_factory: Arc::clone(&store_factory),
                     };
                     self.builder.add_test(Box::new(w3c_test));
                 }

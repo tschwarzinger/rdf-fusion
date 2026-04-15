@@ -35,9 +35,6 @@ clap = "4.6"
 clap_complete = "4.6"
 clap_mangen = "0.2"
 csv = "1.4"
-datafusion = "53.0"
-arrow-string = "58.1"
-dashmap = "6.1"
 futures = "0.3"
 itertools = "0.14"
 md-5 = "0.11"
@@ -45,7 +42,6 @@ rand = "0.10"
 rand_distr = "0.6"
 regex = "1.12"
 reqwest = "0.13"
-rustc-hash = "2.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha1 = "0.11"
@@ -53,9 +49,20 @@ sha2 = "0.11"
 snmalloc-rs = "0.7"
 thiserror = "2.0"
 time = "0.3"
-tokio = { version = "1.48", features = ["rt", "rt-multi-thread"] }
+tokio-util = "0.7"
 uuid = "1.23"
 zip = "8.4"
+
+# DataFusion and Related Dependencies (we try to keep them in-sync with DataFusion)
+ahash = "0.8"
+arrow-string = "58.1"
+datafusion = "53.0"
+deltalake = { git = "https://github.com/delta-io/delta-rs", rev = "616321023dee0f16f4e3bbe75661252d9973b8a8", features = [
+  "datafusion",
+  "datafusion-ext",
+] }
+hashbrown = "0.16.1"
+tokio = { version = "1.51", features = ["rt", "rt-multi-thread", "fs"] }
 
 # Logging / Tracing
 
@@ -84,9 +91,9 @@ tokio-test = "0.4"
 oxttl = "0.2"
 oxiri = "0.2"
 oxrdf = "0.3"
-oxrdfio = "0.2"
+oxrdfio = { version = "0.2", features = ["async-tokio"] }
 oxsdatatypes = "0.2"
-sparesults = "0.3"
+sparesults = { version = "0.3", features = ["async-tokio"] }
 spargebra = "0.4"
 
 # Internal dependencies
@@ -100,6 +107,31 @@ rdf-fusion-physical = { version = "=0.1.0", path = "lib/physical" }
 rdf-fusion-storage = { version = "=0.1.0", path = "lib/storage" }
 rdf-fusion = { version = "=0.1.0", path = "lib/rdf-fusion" }
 rdf-fusion-web = { version = "=0.1.0", path = "lib/web" }
+
+[patch.crates-io]
+datafusion = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-catalog = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-catalog-listing = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-common = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-common-runtime = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-datasource = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-datasource-arrow = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-datasource-csv = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-datasource-json = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-execution = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-expr = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-expr-common = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-functions = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-functions-aggregate = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-functions-table = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-functions-window = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-optimizer = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-physical-expr = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-physical-expr-adapter = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-physical-expr-common = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-physical-optimizer = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-physical-plan = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
+datafusion-session = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
 
 #
 # Most of the remainder of this file (profiles & lints) stem from DataFusion.

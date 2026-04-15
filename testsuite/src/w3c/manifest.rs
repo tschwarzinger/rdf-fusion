@@ -57,22 +57,20 @@ pub struct TestManifest {
     manifests_to_do: VecDeque<String>,
 }
 
-impl Iterator for TestManifest {
-    type Item = Result<Test>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl TestManifest {
+    pub async fn next(&mut self) -> Option<Result<Test>> {
         loop {
             if let Some(next) = self.next_test().transpose() {
                 return Some(next);
             }
-            if let Err(e) = self.load_next_manifest().transpose()? {
-                return Some(Err(e));
+            match self.load_next_manifest().await {
+                Ok(Some(())) => (),
+                Ok(None) => return None,
+                Err(e) => return Some(Err(e)),
             }
         }
     }
-}
 
-impl TestManifest {
     pub fn new<S: ToString>(manifest_urls: impl IntoIterator<Item = S>) -> Self {
         Self {
             graph: Graph::new(),
@@ -306,12 +304,13 @@ impl TestManifest {
         }
     }
 
-    fn load_next_manifest(&mut self) -> Result<Option<()>> {
+    async fn load_next_manifest(&mut self) -> Result<Option<()>> {
         let Some(url) = self.manifests_to_do.pop_front() else {
             return Ok(None);
         };
         self.graph.clear();
-        load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)?;
+        load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)
+            .await?;
 
         let manifests = self
             .graph
@@ -335,7 +334,8 @@ impl TestManifest {
                 guess_rdf_format(&url)?,
                 Some(base_iri.as_str()),
                 false,
-            )?;
+            )
+            .await?;
             manifest = self
                 .graph
                 .subject_for_predicate_object(rdf::TYPE, mf::MANIFEST)

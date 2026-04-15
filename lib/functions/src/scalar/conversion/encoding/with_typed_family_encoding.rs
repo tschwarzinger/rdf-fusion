@@ -93,12 +93,11 @@ impl ScalarUDFImpl for WithTypedFamilyEncoding {
                     }
                     Some(encoding) => {
                         let array = arrays.get(0);
-                        let decoded =
-                            encoding.mapping().decode_array(array.object_ids())?;
-                        self.encodings
-                            .typed_family()
-                            .cast_from_plain_term_array(&decoded)?
-                            .into_array_ref()
+                        let decoded = encoding.mapping().decode_array_to_typed_family(
+                            self.encodings.typed_family(),
+                            array.inner(),
+                        )?;
+                        decoded.into_array_ref()
                     }
                 }
             }

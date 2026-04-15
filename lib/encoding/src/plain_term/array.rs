@@ -5,7 +5,7 @@ use crate::plain_term::{
     PlainTermType,
 };
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, StringArray, StructArray, UInt8Array,
+    Array, ArrayRef, AsArray, Int8Array, StringArray, StructArray,
 };
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::common::{ScalarValue, exec_err};
@@ -20,9 +20,10 @@ pub struct PlainTermArray {
 }
 
 /// Holds the parts of a [`PlainTermArray`].
+#[derive(Debug, Clone, Copy)]
 pub struct PlainTermArrayParts<'array> {
     pub struct_array: &'array StructArray,
-    pub term_type: &'array UInt8Array,
+    pub term_type: &'array Int8Array,
     pub value: &'array StringArray,
     pub data_type: &'array StringArray,
     pub language_tag: &'array StringArray,
@@ -36,7 +37,7 @@ impl PlainTermArray {
 
     /// Creates a new [`PlainTermArray`] from its parts.
     pub fn try_new(
-        term_type: UInt8Array,
+        term_type: Int8Array,
         value: StringArray,
         data_type: StringArray,
         language_tag: StringArray,
@@ -65,7 +66,7 @@ impl PlainTermArray {
         let len = iris.len();
         let nulls = iris.nulls().cloned();
         Self::try_new(
-            UInt8Array::from_value(u8::from(PlainTermType::NamedNode), len),
+            Int8Array::from_value(i8::from(PlainTermType::NamedNode), len),
             iris,
             StringArray::new_null(len),
             StringArray::new_null(len),
@@ -81,7 +82,7 @@ impl PlainTermArray {
         let len = blank_nodes.len();
         let nulls = blank_nodes.nulls().cloned();
         Self::try_new(
-            UInt8Array::from_value(u8::from(PlainTermType::BlankNode), len),
+            Int8Array::from_value(i8::from(PlainTermType::BlankNode), len),
             blank_nodes,
             StringArray::new_null(len),
             StringArray::new_null(len),
@@ -99,7 +100,7 @@ impl PlainTermArray {
     ) -> AResult<Self> {
         let len = values.len();
         Self::try_new(
-            UInt8Array::from_value(u8::from(PlainTermType::Literal), len),
+            Int8Array::from_value(i8::from(PlainTermType::Literal), len),
             values,
             data_types,
             languages,
@@ -110,7 +111,7 @@ impl PlainTermArray {
     /// Creates a new [PlainTermArray] with only null values.
     pub fn new_null(len: usize) -> Self {
         Self::try_new(
-            UInt8Array::from_value(0, len),
+            Int8Array::from_value(0, len),
             StringArray::new_null(len),
             StringArray::new_null(len),
             StringArray::new_null(len),
@@ -157,6 +158,38 @@ impl PlainTermArray {
             let scalar = ScalarValue::try_from_array(&self.inner, index).unwrap();
             Some(PlainTermScalar::new_unchecked(scalar))
         }
+    }
+
+    /// Returns an iterator over the [PlainTermArray].
+    pub fn iter(&self) -> PlainTermArrayIterator<'_> {
+        PlainTermArrayIterator {
+            parts: self.as_parts(),
+            index: 0,
+            len: self.inner.len(),
+        }
+    }
+}
+
+/// An iterator over a [PlainTermArray].
+pub struct PlainTermArrayIterator<'a> {
+    parts: PlainTermArrayParts<'a>,
+    index: usize,
+    len: usize,
+}
+
+impl<'a> Iterator for PlainTermArrayIterator<'a> {
+    type Item = PlainTermScalar;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.len {
+            return None;
+        }
+
+        let scalar =
+            ScalarValue::try_from_array(&self.parts.struct_array, self.index).unwrap();
+        let scalar = PlainTermScalar::new_unchecked(scalar);
+        self.index += 1;
+        Some(scalar)
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::TermEncoding;
 use crate::encoding::EncodingArray;
 use crate::object_id::{ObjectIdEncoding, ObjectIdEncodingRef};
-use datafusion::arrow::array::{Array, ArrayRef, FixedSizeBinaryArray};
+use datafusion::arrow::array::{Array, ArrayRef};
 use datafusion::common::exec_err;
 use rdf_fusion_model::DFResult;
 use std::sync::Arc;
@@ -21,7 +21,11 @@ impl ObjectIdArray {
     /// Returns an error if the data type of `value` is unexpected.
     pub fn try_new(encoding: ObjectIdEncodingRef, array: ArrayRef) -> DFResult<Self> {
         if array.data_type() != encoding.data_type() {
-            return exec_err!("Expected array with ObjectIdEncoding, got {:?}", array);
+            return exec_err!(
+                "Expected array with ObjectIdEncoding ({:?}), got {:?}",
+                encoding.data_type(),
+                array.data_type()
+            );
         }
         Ok(Self::new_unchecked(encoding, array))
     }
@@ -29,14 +33,6 @@ impl ObjectIdArray {
     /// Creates a new [ObjectIdArray] without checking invariants.
     pub fn new_unchecked(encoding: ObjectIdEncodingRef, inner: ArrayRef) -> Self {
         Self { encoding, inner }
-    }
-
-    /// Returns a reference to the inner [FixedSizeBinaryArray].
-    pub fn object_ids(&self) -> &FixedSizeBinaryArray {
-        self.inner
-            .as_any()
-            .downcast_ref::<FixedSizeBinaryArray>()
-            .expect("Checked in constructor")
     }
 }
 

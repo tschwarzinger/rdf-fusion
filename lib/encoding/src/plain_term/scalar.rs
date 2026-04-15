@@ -5,6 +5,8 @@ use crate::plain_term::decoders::{
 use crate::plain_term::encoders::DefaultPlainTermEncoder;
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermEncoding};
 use crate::{TermDecoder, TermEncoder};
+use datafusion::arrow::array::{Array, AsArray};
+use datafusion::arrow::datatypes::Int8Type;
 use datafusion::common::{DataFusionError, ScalarValue, exec_err};
 use rdf_fusion_model::DFResult;
 use rdf_fusion_model::{
@@ -14,7 +16,7 @@ use rdf_fusion_model::{
 use std::sync::Arc;
 
 /// Represents an Arrow scalar with a [PlainTermEncoding].
-#[derive(Clone)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PlainTermScalar {
     inner: ScalarValue,
 }
@@ -55,6 +57,63 @@ impl PlainTermScalar {
     pub fn as_term(&self) -> ThinResult<TermRef<'_>> {
         DefaultPlainTermDecoder::decode_term(self)
     }
+
+    /// Returns the term type of the term, or `None` if the term is null.
+    pub fn term_type(&self) -> Option<i8> {
+        self.as_parts().map(|p| p.term_type)
+    }
+
+    /// Returns the value of the term, or `None` if the term is null.
+    pub fn value(&self) -> Option<&str> {
+        self.as_parts().map(|p| p.value)
+    }
+
+    /// Returns the datatype of the term, or `None` if the term is null or the datatype is null.
+    pub fn data_type(&self) -> Option<&str> {
+        self.as_parts().and_then(|p| p.data_type)
+    }
+
+    /// Returns the language tag of the term, or `None` if the term is null or the language tag is
+    /// null.
+    pub fn language_tag(&self) -> Option<&str> {
+        self.as_parts().and_then(|p| p.language_tag)
+    }
+
+    /// Extracts the individual parts of the scalar. Returns `None` if the scalar is null.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying [`ScalarValue`] is invalid.
+    pub fn as_parts(&self) -> Option<PlainTermScalarParts<'_>> {
+        let ScalarValue::Struct(struct_array) = &self.inner else {
+            panic!("Invalid plain term scalar.");
+        };
+
+        if struct_array.is_null(0) {
+            return None;
+        }
+
+        Some(PlainTermScalarParts {
+            term_type: struct_array.column(0).as_primitive::<Int8Type>().value(0),
+            value: struct_array.column(1).as_string::<i32>().value(0),
+            data_type: struct_array
+                .column(2)
+                .is_valid(0)
+                .then(|| struct_array.column(2).as_string::<i32>().value(0)),
+            language_tag: struct_array
+                .column(3)
+                .is_valid(0)
+                .then(|| struct_array.column(3).as_string::<i32>().value(0)),
+        })
+    }
+}
+
+/// Represents a view of a [`PlainTermScalar`] that has direct references to its parts.
+pub struct PlainTermScalarParts<'scalar> {
+    pub term_type: i8,
+    pub value: &'scalar str,
+    pub data_type: Option<&'scalar str>,
+    pub language_tag: Option<&'scalar str>,
 }
 
 impl EncodingScalar for PlainTermScalar {

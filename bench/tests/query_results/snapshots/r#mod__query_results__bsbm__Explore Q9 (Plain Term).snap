@@ -1,0 +1,5 @@
+---
+source: bench/tests/query_results/bsbm.rs
+expression: "run_graph_result_query(&store,\ninclude_str!(\"./queries/explore-q9.sparql\")).await"
+---
+<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer207> a <http://xmlns.com/foaf/0.1/Person> .

@@ -1,0 +1,22 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(product@0) as product]
+  HashJoinExec: mode=CollectLeft, join_type=LeftAnti, on=[(product@0, __inner__product@0)]
+    ProjectionExec: expr=[product@0 as product]
+      SortExec: TopK(fetch=1000), expr=[ENC_SORT(offerCount@1) DESC], preserve_partitioning=[false], filter=[ENC_SORT(offerCount@1) IS NULL OR ENC_SORT(offerCount@1) > {type:4,numeric:1.0,bytes:31}]
+        ProjectionExec: expr=[product@0 as product, <uuid>@1 as offerCount]
+          AggregateExec: mode=Single, gby=[product@0 as product], aggr=[<uuid>]
+            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[product@0, offer@1]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType1>], blank_node_mode=Variable
+              FilterExec: DynamicFilter [ product@1 >= 14688 AND product@1 <= 23227 AND hash_lookup ]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ product@1 >= 14688 AND product@1 <= 23227 AND hash_lookup ]]
+    ProjectionExec: expr=[product@0 as __inner__product]
+      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(vendor@1, vendor@0)], projection=[product@0]
+        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[product@1, vendor@3]
+          DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product], blank_node_mode=Variable
+          FilterExec: DynamicFilter [ offer@0 >= 23229 AND offer@0 <= 84375 AND hash_lookup ]
+            DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ offer@0 >= 23229 AND offer@0 <= 84375 AND hash_lookup ]]
+        FilterExec: DynamicFilter [ vendor@0 >= 23228 AND vendor@0 <= 82565 AND hash_lookup ]
+          DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country], blank_node_mode=Variable, projection=[vendor], pushed_filters=[country@1 = 15597, DynamicFilter [ vendor@0 >= 23228 AND vendor@0 <= 82565 AND hash_lookup ]]

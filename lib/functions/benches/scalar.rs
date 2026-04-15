@@ -28,7 +28,7 @@ enum UnaryScenario {
 
 impl UnaryScenario {
     fn create_args(&self, encodings: &RdfFusionEncodings) -> Vec<ColumnarValue> {
-        let mut payload_builder = PlainTermArrayElementBuilder::new(8192);
+        let mut payload_builder = PlainTermArrayElementBuilder::with_capacity(8192);
         match self {
             UnaryScenario::AllNamedNodes => {
                 for i in 0..8192 {

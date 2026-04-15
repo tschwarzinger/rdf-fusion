@@ -125,8 +125,8 @@ impl StrDtSparqlOp {
             let lhs_type = lhs_parts.term_type.value(i);
             let rhs_type = rhs_parts.term_type.value(i);
 
-            if lhs_type == u8::from(PlainTermType::Literal)
-                && rhs_type == u8::from(PlainTermType::NamedNode)
+            if lhs_type == i8::from(PlainTermType::Literal)
+                && rhs_type == i8::from(PlainTermType::NamedNode)
             {
                 let lhs_lang = lhs_parts.language_tag.value(i);
                 let lhs_dt = lhs_parts.data_type.value(i);

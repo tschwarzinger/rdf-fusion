@@ -10,8 +10,8 @@ fmt:
 # Run all lints (e.g., formatting, clippy)
 lint:
     cargo fmt -- --check
-    cargo clippy -- -D warnings -D clippy::all
     taplo fmt **.toml --check
+    cargo clippy -- -D warnings -D clippy::all
 
 # Run all tests
 test:
@@ -29,12 +29,12 @@ test-examples:
 rustdoc:
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
 
-[working-directory: 'bench']
+[working-directory('bench')]
 prepare-benches-tests:
     cargo run --profile test prepare bsbm-explore --num-products 1000 # BSBM use cases share the data
     cargo run --profile test prepare wind-farm --num-turbines 4
 
-[working-directory: 'bench']
+[working-directory('bench')]
 prepare-benches:
     cargo run --profile profiling-nonlto prepare bsbm-explore --num-products 10000 # BSBM use cases share the data
     cargo run --profile profiling-nonlto prepare wind-farm --num-turbines 16

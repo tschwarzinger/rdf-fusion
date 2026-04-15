@@ -1,0 +1,45 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&explanation.optimized_logical_plan.to_string()"
+---
+Projection: reviewer, ENC_PT(<uuid>) AS reviewerAvgScore
+  Filter: EBV(GT(<uuid>, MUL(<uuid>, Union 4:2:Some(1500000000000000000),36,18)))
+    Aggregate: groupBy=[[reviewer AS reviewer]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>, MIN(avgScore) AS <uuid>]]
+      Projection: lhs.avgScore AS avgScore, lhs.reviewer AS reviewer, rhs.score AS score
+        Inner Join: lhs.review = rhs.review
+          SubqueryAlias: lhs
+            Cross Join:
+              Projection: <uuid> AS avgScore
+                Aggregate: groupBy=[[]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>]]
+                  Projection: rhs.score AS score
+                    Inner Join: lhs.review = rhs.review
+                      SubqueryAlias: lhs
+                        Projection: rhs.review AS review
+                          Inner Join: lhs.product = rhs.product
+                            SubqueryAlias: lhs
+                              QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>)
+                            SubqueryAlias: rhs
+                              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
+                      SubqueryAlias: rhs
+                        Union
+                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score)
+                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score)
+                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score)
+                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score)
+              Projection: lhs.review AS review, rhs.reviewer AS reviewer
+                Inner Join: lhs.review = rhs.review
+                  SubqueryAlias: lhs
+                    Projection: rhs.review AS review
+                      Inner Join: lhs.product = rhs.product
+                        SubqueryAlias: lhs
+                          QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>)
+                        SubqueryAlias: rhs
+                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
+                  SubqueryAlias: rhs
+                    QuadPattern (?review <http://purl.org/stuff/rev#reviewer> ?reviewer)
+          SubqueryAlias: rhs
+            Union
+              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score)
+              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score)
+              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score)
+              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score)

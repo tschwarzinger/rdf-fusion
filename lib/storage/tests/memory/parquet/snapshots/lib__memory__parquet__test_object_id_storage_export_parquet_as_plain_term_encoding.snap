@@ -1,6 +1,0 @@
----
-source: lib/storage/tests/memory/parquet/mod.rs
-expression: "writer.inner.read().expect(\"poison\").to_vec()"
-extension: parquet
-snapshot_kind: binary
----

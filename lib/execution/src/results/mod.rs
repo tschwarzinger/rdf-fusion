@@ -7,7 +7,7 @@ use futures::StreamExt;
 use oxrdfio::{RdfFormat, RdfSerializer};
 use rdf_fusion_model::{Variable, VariableRef};
 use std::error::Error;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::Arc;
 
 mod graph_name;
@@ -23,11 +23,13 @@ use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
 use rdf_fusion_encoding::{EncodingArray, TermEncoding};
+use sparesults::TokioAsyncReaderQueryResultsParserOutput;
 pub use sparesults::{
     QueryResultsFormat, QueryResultsParseError, QueryResultsParser,
     QueryResultsSerializer, QuerySolution, ReaderQueryResultsParserOutput,
     WriterSolutionsSerializer,
 };
+use tokio::io::AsyncRead;
 pub use triples::QueryTripleStream;
 
 /// Results of a [SPARQL query](https://www.w3.org/TR/sparql11-query/).
@@ -43,12 +45,14 @@ pub enum QueryResults {
 
 impl QueryResults {
     /// Reads a SPARQL query results serialization.
-    pub fn read(
-        reader: impl Read + 'static,
+    pub async fn read(
+        reader: impl AsyncRead + Unpin + 'static,
         format: QueryResultsFormat,
     ) -> Result<Self, QuerySolutionsToStreamError> {
-        let parser = QueryResultsParser::from_format(format).for_reader(reader)?;
-        query_result_for_parser(parser)
+        let parser = QueryResultsParser::from_format(format)
+            .for_tokio_async_reader(reader)
+            .await?;
+        query_result_for_parser(parser).await
     }
 
     /// Writes the query results (solutions or boolean).
@@ -145,21 +149,23 @@ impl From<QueryResultsParseError> for QuerySolutionsToStreamError {
     }
 }
 
-fn query_result_for_parser(
-    parser: ReaderQueryResultsParserOutput<impl Read + Sized>,
+async fn query_result_for_parser(
+    parser: TokioAsyncReaderQueryResultsParserOutput<impl AsyncRead + Sized + Unpin>,
 ) -> Result<QueryResults, QuerySolutionsToStreamError> {
     Ok(match parser {
-        ReaderQueryResultsParserOutput::Solutions(s) => {
+        TokioAsyncReaderQueryResultsParserOutput::Solutions(mut s) => {
             let variables: Arc<[Variable]> = s.variables().into();
-            let parser_iter = s.into_iter().map(|r| {
-                r.map_err(|error| {
-                    let error: Box<dyn Error + Send + Sync> = Box::new(error);
-                    error
-                })
-            });
-            query_result_for_iterator(variables, parser_iter)?
+
+            let mut results = Vec::new();
+            while let Some(next) = s.next().await {
+                results.push(
+                    next.map_err(|err| Box::new(err) as Box<dyn Error + Send + Sync>),
+                )
+            }
+
+            query_result_for_iterator(variables, results.into_iter())?
         }
-        ReaderQueryResultsParserOutput::Boolean(v) => QueryResults::Boolean(v),
+        TokioAsyncReaderQueryResultsParserOutput::Boolean(v) => QueryResults::Boolean(v),
     })
 }
 

@@ -3,8 +3,8 @@ use crate::w3c::files::*;
 use crate::w3c::report::{dataset_diff, format_diff};
 use anyhow::{Result, bail};
 use futures::StreamExt;
+use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::execution::results::QueryResults;
-use rdf_fusion::io::RdfParser;
 use rdf_fusion::model::dataset::CanonicalizationAlgorithm;
 use rdf_fusion::model::vocab::*;
 use rdf_fusion::model::*;
@@ -20,13 +20,15 @@ pub async fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
         .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))
     {
         StaticQueryResults::from_query_results(
-            QueryResults::read(read_file(url)?, format)?,
+            QueryResults::read(read_file(url).await?, format).await?,
             false,
         )
         .await
     } else {
-        StaticQueryResults::from_graph(&load_graph(url, guess_rdf_format(url)?, false)?)
-            .await
+        StaticQueryResults::from_graph(
+            &load_graph(url, guess_rdf_format(url)?, false).await?,
+        )
+        .await
     }
 }
 
@@ -203,7 +205,7 @@ impl StaticQueryResults {
 
     pub async fn from_graph(graph: &Graph) -> Result<Self> {
         // Hack to normalize literals
-        let store = Store::default();
+        let store = Store::new_in_memory().await;
         let quads = graph
             .into_iter()
             .map(|t| t.in_graph(GraphNameRef::DefaultGraph));
@@ -419,12 +421,16 @@ pub async fn load_to_store(
     store: &Store,
     to_graph_name: impl Into<GraphName>,
 ) -> Result<()> {
+    let reader = read_file(url).await?;
     store
         .load_from_reader(
-            RdfParser::from_format(guess_rdf_format(url)?)
-                .with_base_iri(url)?
-                .with_default_graph(to_graph_name),
-            read_file(url)?,
+            reader,
+            RdfParserOptions {
+                format: guess_rdf_format(url)?,
+                base_iri: Some(url.to_string()),
+                rename_blank_nodes: false,
+                default_graph: Some(to_graph_name.into()),
+            },
         )
         .await?;
     Ok(())

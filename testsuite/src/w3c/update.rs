@@ -1,4 +1,5 @@
 use crate::test::{Test, TestOutcome};
+use crate::w3c::StoreFactory;
 use crate::w3c::files::read_file_to_string;
 use crate::w3c::report::dataset_diff;
 use crate::w3c::utils::load_to_store;
@@ -7,13 +8,13 @@ use futures::StreamExt;
 use rdf_fusion::execution::sparql::RdfFusionUpdate;
 use rdf_fusion::model::dataset::CanonicalizationAlgorithm;
 use rdf_fusion::model::{Dataset, GraphName};
-use rdf_fusion::store::Store;
 
 pub struct W3CSparqlUpdateEvaluationTest {
     pub id: String,
     pub name: Option<String>,
     pub test_data: crate::w3c::manifest::Test,
     pub optimize_after_load: bool,
+    pub store_factory: StoreFactory,
 }
 
 #[async_trait::async_trait]
@@ -37,7 +38,7 @@ impl Test for W3CSparqlUpdateEvaluationTest {
 
 impl W3CSparqlUpdateEvaluationTest {
     async fn execute(&self) -> anyhow::Result<()> {
-        let store = Store::default();
+        let store = (self.store_factory)().await;
         if let Some(data) = &self.test_data.data {
             load_to_store(data, &store, GraphName::DefaultGraph).await?;
         }
@@ -45,7 +46,7 @@ impl W3CSparqlUpdateEvaluationTest {
             load_to_store(value, &store, name.clone()).await?;
         }
 
-        let result_store = Store::default();
+        let result_store = (self.store_factory)().await;
         if let Some(data) = &self.test_data.result {
             load_to_store(data, &result_store, GraphName::DefaultGraph).await?;
         }
@@ -63,9 +64,11 @@ impl W3CSparqlUpdateEvaluationTest {
             .update
             .as_deref()
             .context("No action found")?;
-        let update =
-            RdfFusionUpdate::parse(&read_file_to_string(update_file)?, Some(update_file))
-                .context("Failure to parse update")?;
+        let update = RdfFusionUpdate::parse(
+            &read_file_to_string(update_file).await?,
+            Some(update_file),
+        )
+        .context("Failure to parse update")?;
 
         // We check parsing roundtrip
         RdfFusionUpdate::parse(&update.to_string(), None)
@@ -93,8 +96,11 @@ impl W3CSparqlUpdateEvaluationTest {
             store_dataset == result_store_dataset,
             "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
             dataset_diff(&result_store_dataset, &store_dataset),
-            RdfFusionUpdate::parse(&read_file_to_string(update_file)?, Some(update_file))
-                .unwrap(),
+            RdfFusionUpdate::parse(
+                &read_file_to_string(update_file).await?,
+                Some(update_file)
+            )
+            .unwrap(),
         );
         Ok(())
     }

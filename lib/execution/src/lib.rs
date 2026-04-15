@@ -35,9 +35,12 @@
 
 extern crate core;
 
+mod builder;
 mod engine;
+pub mod ingest;
 mod planner;
 pub mod results;
 pub mod sparql;
 
+pub use builder::RdfFusionContextBuilder;
 pub use engine::RdfFusionContext;

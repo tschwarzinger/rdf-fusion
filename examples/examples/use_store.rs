@@ -6,7 +6,7 @@ use rdf_fusion::store::Store;
 /// basic usage, the documentation of [Store] contains additional methods with examples.
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
-    let store = Store::default();
+    let store = Store::new_in_memory().await;
 
     // Insert quad
     let quad = Quad::new(

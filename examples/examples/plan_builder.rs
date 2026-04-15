@@ -1,35 +1,27 @@
 use anyhow::Context;
-use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::prelude::SessionConfig;
-use rdf_fusion::encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
-use rdf_fusion::execution::RdfFusionContext;
-use rdf_fusion::io::{RdfFormat, RdfParser};
+use rdf_fusion::execution::ingest::RdfParserOptions;
+use rdf_fusion::io::RdfFormat;
 use rdf_fusion::logical::{ActiveGraph, RdfFusionLogicalPlanBuilderContext};
 use rdf_fusion::model::{
     NamedNode, NamedNodePattern, TermPattern, TriplePattern, Variable,
 };
-use rdf_fusion::storage::memory::{MemObjectIdMapping, MemQuadStorage};
-use std::sync::Arc;
+use rdf_fusion::store::Store;
 
 /// This example shows how to use RDF Fusion's query builder for programmatically creating SPARQL
 /// queries.
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
     // Create a new in-memory instance
-    let config = SessionConfig::default();
-    let storage = create_storage(&config);
-    let engine =
-        RdfFusionContext::new(config, RuntimeEnvBuilder::default().build_arc()?, storage);
+    let store = Store::new_in_memory().await;
+    let engine = store.context().clone();
 
     // Load data file into storage
-    let file = std::fs::File::open("./examples/data/spiderman.ttl")
+    let file = tokio::fs::File::open("./examples/data/spiderman.ttl")
+        .await
         .context("Could not find spiderman.ttl")?;
-    let reader = RdfParser::from_format(RdfFormat::Turtle);
-    let quads = reader
-        .rename_blank_nodes()
-        .for_reader(file)
-        .collect::<Result<Vec<_>, _>>()?;
-    engine.storage().extend(quads).await?;
+    store
+        .load_from_reader(file, RdfParserOptions::with_format(RdfFormat::Turtle))
+        .await?;
     assert_eq!(engine.len().await?, 7);
 
     // Build pattern
@@ -64,16 +56,4 @@ pub async fn main() -> anyhow::Result<()> {
     result.show().await?;
 
     Ok(())
-}
-
-/// Creates a new in-memory storage.
-fn create_storage(config: &SessionConfig) -> Arc<MemQuadStorage> {
-    let mapping = Arc::new(MemObjectIdMapping::default());
-    let encoding = Arc::new(ObjectIdEncoding::new(
-        Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>
-    ));
-    Arc::new(
-        MemQuadStorage::try_new(encoding, config.batch_size())
-            .expect("MemObjectIdMapping has 4-byte wide object ids"),
-    )
 }

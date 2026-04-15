@@ -17,7 +17,7 @@ impl TermEncoder<PlainTermEncoding> for BooleanPlainTermEncoder {
     ) -> DFResult<<PlainTermEncoding as TermEncoding>::Array> {
         let iter = terms.into_iter();
         let (min, _) = iter.size_hint();
-        let mut builder = PlainTermArrayElementBuilder::new(min);
+        let mut builder = PlainTermArrayElementBuilder::with_capacity(min);
 
         for value in iter {
             if let Ok(value) = value {
@@ -53,7 +53,7 @@ impl TermEncoder<PlainTermEncoding> for SimpleLiteralRefPlainTermEncoder {
     ) -> DFResult<<PlainTermEncoding as TermEncoding>::Array> {
         let iter = terms.into_iter();
         let (min, _) = iter.size_hint();
-        let mut builder = PlainTermArrayElementBuilder::new(min);
+        let mut builder = PlainTermArrayElementBuilder::with_capacity(min);
 
         for value in iter {
             if let Ok(value) = value {

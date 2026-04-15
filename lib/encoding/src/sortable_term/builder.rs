@@ -1,7 +1,7 @@
 use crate::sortable_term::encoding::{SortableTermEncoding, SortableTermEncodingField};
 use crate::sortable_term::term_type::SortableTermType;
 use datafusion::arrow::array::{
-    ArrayRef, BinaryBuilder, Float64Builder, StructBuilder, UInt8Builder,
+    ArrayRef, BinaryBuilder, Float64Builder, Int8Builder, StructBuilder,
 };
 use rdf_fusion_model::{BlankNodeRef, LiteralRef, NamedNodeRef};
 use rdf_fusion_model::{
@@ -117,7 +117,7 @@ impl SortableTermArrayBuilder {
         bytes: &[u8],
     ) {
         self.builder
-            .field_builder::<UInt8Builder>(SortableTermEncodingField::Type.index())
+            .field_builder::<Int8Builder>(SortableTermEncodingField::Type.index())
             .unwrap()
             .append_value(sort_type.into());
 

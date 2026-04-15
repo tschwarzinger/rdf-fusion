@@ -121,8 +121,8 @@ mod tests {
     #[tokio::test]
     async fn test_is_compatible_mixed() {
         let encodings = create_default_encodings();
-        let mut lhs_builder = PlainTermArrayElementBuilder::new(2);
-        let mut rhs_builder = PlainTermArrayElementBuilder::new(2);
+        let mut lhs_builder = PlainTermArrayElementBuilder::new();
+        let mut rhs_builder = PlainTermArrayElementBuilder::new();
 
         let iri_a = NamedNodeRef::new_unchecked("http://example.org/a");
         let iri_b = NamedNodeRef::new_unchecked("http://example.org/b");

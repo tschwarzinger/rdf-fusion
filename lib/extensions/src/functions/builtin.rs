@@ -54,7 +54,8 @@ pub enum BuiltinName {
     Coalesce,
     If,
 
-    // Scalar Built-in Aggregate Functions
+    // Built-in Aggregate Functions
+    Count,
     Sum,
     Min,
     Max,
@@ -172,6 +173,7 @@ impl fmt::Display for BuiltinName {
             Self::Coalesce => "COALESCE",
             Self::UnaryMinus => "MINUS",
             Self::UnaryPlus => "PLUS",
+            Self::Count => "COUNT",
             Self::Sum => "SUM",
             Self::Min => "MIN",
             Self::Max => "MAX",
@@ -265,6 +267,7 @@ impl TryFrom<&str> for BuiltinName {
             "COALESCE" => Self::Coalesce,
             "MINUS" => Self::UnaryMinus,
             "PLUS" => Self::UnaryPlus,
+            "COUNT" => Self::Count,
             "SUM" => Self::Sum,
             "MIN" => Self::Min,
             "MAX" => Self::Max,

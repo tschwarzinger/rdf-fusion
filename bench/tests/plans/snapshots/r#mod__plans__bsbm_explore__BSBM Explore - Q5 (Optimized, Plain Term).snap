@@ -1,0 +1,35 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&explanation.optimized_logical_plan.to_string()"
+---
+Projection: first_value(product) ORDER BY [ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST] AS product, first_value(productLabel) ORDER BY [ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST] AS productLabel
+  Sort: ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST, fetch=5
+    Aggregate: groupBy=[[__common_expr_1 AS ENC_SORT(ENC_TF(productLabel)), product]], aggr=[[first_value(product) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(product) ORDER BY [ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(productLabel) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(productLabel) ORDER BY [ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST]]]
+      Projection: ENC_SORT(ENC_TF(productLabel)) AS __common_expr_1, product, productLabel
+        Sort: ENC_SORT(ENC_TF(productLabel)) ASC NULLS FIRST
+          Projection: lhs.product AS product, lhs.productLabel AS productLabel
+            Inner Join: lhs.product = rhs.product Filter: EBV(LT(ENC_TF(rhs.simProperty2), ADD(ENC_TF(lhs.origProperty2), Union 4:4:170))) AND EBV(GT(ENC_TF(rhs.simProperty2), SUB(ENC_TF(lhs.origProperty2), Union 4:4:170)))
+              SubqueryAlias: lhs
+                Cross Join:
+                  Projection: lhs.product AS product, lhs.productLabel AS productLabel
+                    Inner Join: lhs.product = rhs.product Filter: EBV(LT(ENC_TF(rhs.simProperty1), ADD(ENC_TF(lhs.origProperty1), Union 4:4:120))) AND EBV(GT(ENC_TF(rhs.simProperty1), SUB(ENC_TF(lhs.origProperty1), Union 4:4:120)))
+                      SubqueryAlias: lhs
+                        Cross Join:
+                          Projection: lhs.product AS product, lhs.productLabel AS productLabel
+                            Inner Join: lhs.prodFeature = rhs.prodFeature, lhs.product = rhs.product
+                              SubqueryAlias: lhs
+                                Cross Join:
+                                  Filter: product != Struct({term_type:0,value:http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890,data_type:,language_tag:})
+                                    QuadPattern (?product <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel)
+                                  QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature)
+                              SubqueryAlias: rhs
+                                Filter: product != Struct({term_type:0,value:http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890,data_type:,language_tag:})
+                                  QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature)
+                          QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?origProperty1)
+                      SubqueryAlias: rhs
+                        Filter: product != Struct({term_type:0,value:http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890,data_type:,language_tag:})
+                          QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?simProperty1)
+                  QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?origProperty2)
+              SubqueryAlias: rhs
+                Filter: product != Struct({term_type:0,value:http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890,data_type:,language_tag:})
+                  QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?simProperty2)

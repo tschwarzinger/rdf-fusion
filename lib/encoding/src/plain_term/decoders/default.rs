@@ -5,7 +5,7 @@ use crate::{EncodingScalar, TermEncoding};
 use datafusion::arrow::array::{
     Array, AsArray, GenericStringArray, PrimitiveArray, StructArray,
 };
-use datafusion::arrow::datatypes::UInt8Type;
+use datafusion::arrow::datatypes::Int8Type;
 use datafusion::common::ScalarValue;
 use rdf_fusion_model::{
     BlankNodeRef, LiteralRef, NamedNodeRef, TermRef, ThinError, ThinResult,
@@ -23,7 +23,7 @@ impl TermDecoder<PlainTermEncoding> for DefaultPlainTermDecoder {
     ) -> impl Iterator<Item = ThinResult<Self::Term<'_>>> {
         let array = array.inner().as_struct();
 
-        let term_type = array.column(0).as_primitive::<UInt8Type>();
+        let term_type = array.column(0).as_primitive::<Int8Type>();
 
         let value = array.column(1).as_string::<i32>();
         let datatype = array.column(2).as_string::<i32>();
@@ -40,7 +40,7 @@ impl TermDecoder<PlainTermEncoding> for DefaultPlainTermDecoder {
             panic!("Unexpected encoding. Should be ensured by the wrapping type.");
         };
 
-        let term_type = array.column(0).as_primitive::<UInt8Type>();
+        let term_type = array.column(0).as_primitive::<Int8Type>();
         let value = array.column(1).as_string::<i32>();
         let datatype = array.column(2).as_string::<i32>();
         let language = array.column(3).as_string::<i32>();
@@ -51,7 +51,7 @@ impl TermDecoder<PlainTermEncoding> for DefaultPlainTermDecoder {
 
 fn extract_term<'data>(
     array: &'data StructArray,
-    term_type: &'data PrimitiveArray<UInt8Type>,
+    term_type: &'data PrimitiveArray<Int8Type>,
     value: &'data GenericStringArray<i32>,
     datatype: &'data GenericStringArray<i32>,
     language: &'data GenericStringArray<i32>,

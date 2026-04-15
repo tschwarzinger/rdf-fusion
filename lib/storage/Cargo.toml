@@ -11,21 +11,26 @@ RDF Fusion Storage Layers
 
 [dependencies]
 async-trait.workspace = true
+hashbrown.workspace = true
 futures.workspace = true
-itertools.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-model.workspace = true
 datafusion.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-logical.workspace = true
-dashmap.workspace = true
-rustc-hash.workspace = true
+deltalake.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 insta.workspace = true
-rdf-fusion-functions.workspace = true
+rand.workspace = true
+rdf-fusion-functions = { workspace = true }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "delta_object_id_mapping"
+harness = false

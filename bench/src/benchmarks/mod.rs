@@ -13,7 +13,7 @@ use rdf_fusion::store::Store;
 
 /// Represents a benchmark.
 #[async_trait]
-pub trait Benchmark {
+pub trait Benchmark: Send {
     /// Returns the id of the benchmark.
     ///
     /// This must be a valid folder name and will be used to store files / results on the file

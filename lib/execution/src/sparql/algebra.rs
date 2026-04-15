@@ -103,11 +103,11 @@ impl From<Query> for RdfFusionQuery {
 /// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/).
 ///
 /// ```
-/// use SparqlSyntaxError;
-/// use rdf_fusion_execution::sparql::Update;
+/// use rdf_fusion_model::sparql::SparqlSyntaxError;
+/// use rdf_fusion_execution::sparql::RdfFusionUpdate;
 ///
 /// let update_str = "CLEAR ALL ;";
-/// let update = Update::parse(update_str, None)?;
+/// let update = RdfFusionUpdate::parse(update_str, None)?;
 ///
 /// assert_eq!(update.to_string().trim(), update_str);
 /// # Ok::<_, SparqlSyntaxError>(())

@@ -1,5 +1,6 @@
 use crate::test::{Test, TestOutcome, TestRun};
 use datafusion::common::instant::Instant;
+use datafusion::common::runtime::SpawnedTask;
 use std::collections::{BTreeMap, HashSet};
 use time::OffsetDateTime;
 
@@ -34,16 +35,18 @@ impl TestSuiteResult {
     /// Panics if any test failed.
     pub fn assert_success(&self) {
         let mut passed = 0;
-        let mut failed = 0;
         let mut ignored = 0;
         let mut failures = Vec::new();
+        let mut panics = Vec::new();
 
         for (id, run) in &self.results {
             match &run.outcome {
                 TestOutcome::Success => passed += 1,
                 TestOutcome::Failed(e) => {
-                    failed += 1;
                     failures.push((id, e));
+                }
+                TestOutcome::Panicked(panic) => {
+                    panics.push((id, panic));
                 }
                 TestOutcome::Ignored => ignored += 1,
             }
@@ -57,16 +60,21 @@ impl TestSuiteResult {
         println!("========================================");
         println!("Duration: {}ms", duration.whole_milliseconds());
         println!("Passed:   {passed}");
-        println!("Failed:   {failed}");
+        println!("Failed:   {}", failures.len());
+        println!("Panicked: {}", panics.len());
         println!("Ignored:  {ignored}");
 
-        if failed > 0 {
+        if !failures.is_empty() || !panics.is_empty() {
             let mut error_msg = format!(
                 "{} tests failed in suite \"{}\":\n",
-                failed, self.suite_name
+                failures.len() + panics.len(),
+                self.suite_name
             );
             for (id, err) in failures {
                 error_msg.push_str(&format!("\n--- FAILURE: {id} ---\n{err:?}\n"));
+            }
+            for (id, err) in panics {
+                error_msg.push_str(&format!("\n--- PANIC: {id} ---\n{err:?}\n"));
             }
             panic!("{}", error_msg);
         }
@@ -75,24 +83,27 @@ impl TestSuiteResult {
 
 impl TestSuite {
     /// Runs all tests in the suite and returns the result.
-    pub async fn run(&self) -> TestSuiteResult {
+    pub async fn run(self) -> TestSuiteResult {
         let start_time = OffsetDateTime::now_utc();
         let mut results = BTreeMap::new();
 
-        for test in &self.tests {
-            let id = test.id();
+        for test in self.tests {
+            let id = test.id().to_owned();
 
             let is_ignored = if let Some(only_id) = &self.only_test {
-                id != only_id
+                &id != only_id
             } else {
-                self.ignored_tests.contains(id)
+                self.ignored_tests.contains(&id)
             };
 
             let start = Instant::now();
             let outcome = if is_ignored {
                 TestOutcome::Ignored
             } else {
-                test.run().await.unwrap_or_else(TestOutcome::Failed)
+                match SpawnedTask::spawn(async move { test.run().await }).await {
+                    Ok(inner) => inner.unwrap_or_else(TestOutcome::Failed),
+                    Err(join_err) => TestOutcome::Panicked(join_err.to_string()),
+                }
             };
 
             let run = TestRun {

@@ -1,0 +1,126 @@
+---
+source: bench/tests/query_results/bsbm.rs
+expression: "run_select_query(&store, include_str!(\"./queries/bi-q8.sparql\")).await"
+---
+{
+  "head": {
+    "vars": [
+      "vendor",
+      "cheapExpensiveRatio"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.54545456"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor8/Vendor8"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.53154874"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor2/Vendor2"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.5194805"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor3/Vendor3"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.4985507"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor9/Vendor9"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.49832216"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor7/Vendor7"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.49488753"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor11/Vendor11"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.49137932"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor10/Vendor10"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.4882353"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Vendor5"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.48214287"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Vendor1"
+        }
+      },
+      {
+        "cheapExpensiveRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
+          "type": "literal",
+          "value": "0.4814815"
+        },
+        "vendor": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor6/Vendor6"
+        }
+      }
+    ]
+  }
+}

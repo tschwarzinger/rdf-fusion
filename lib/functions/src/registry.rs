@@ -1,6 +1,6 @@
 use crate::aggregates::{
     avg_typed_family, group_concat_typed_family, max_typed_family, min_typed_family,
-    sum_typed_family,
+    sparql_count, sum_typed_family,
 };
 use crate::scalar::RenamedScalarUdfImpl;
 use crate::scalar::comparison::{
@@ -298,6 +298,7 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
 
     // Aggregate functions
     let aggregate_fns: Vec<AggregateUDF> = vec![
+        sparql_count(Arc::clone(registry.encodings.typed_family())),
         sum_typed_family(Arc::clone(registry.encodings.typed_family())),
         min_typed_family(Arc::clone(registry.encodings.typed_family())),
         max_typed_family(Arc::clone(registry.encodings.typed_family())),

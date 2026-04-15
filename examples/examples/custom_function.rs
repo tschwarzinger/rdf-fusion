@@ -11,10 +11,11 @@ use rdf_fusion::encoding::{
     DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
     TermEncoding, detect_encoding_from_types,
 };
+use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::functions::scalar::args::ScalarSparqlFunctionArgs;
 use rdf_fusion::functions::scalar::signature::SparqlOpTypeSignatureBuilder;
-use rdf_fusion::io::{RdfFormat, RdfParser};
+use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::{DFResult, NamedNode};
 use rdf_fusion::store::Store;
 use std::any::Any;
@@ -24,11 +25,13 @@ use std::fmt::{Debug, Formatter};
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
     // Load data from a file.
-    let store = Store::default();
-    let file = std::fs::File::open("./examples/data/spiderman.ttl")
+    let store = Store::new_in_memory().await;
+    let file = tokio::fs::File::open("./examples/data/spiderman.ttl")
+        .await
         .context("Could not find spiderman.ttl")?;
-    let reader = RdfParser::from_format(RdfFormat::Turtle);
-    store.load_from_reader(reader, &file).await?;
+    store
+        .load_from_reader(file, RdfParserOptions::with_format(RdfFormat::Turtle))
+        .await?;
 
     // Register custom function.
     let context = store.context();

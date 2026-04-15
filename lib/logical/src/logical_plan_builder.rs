@@ -270,6 +270,13 @@ impl RdfFusionLogicalPlanBuilder {
         self.distinct_with_sort(Vec::new())
     }
 
+    /// Removes duplicate solutions from the current plan, but might keep some.
+    ///
+    /// In this implementation, we treat `REDUCED` as `DISTINCT`.
+    pub fn reduced(self) -> DFResult<RdfFusionLogicalPlanBuilder> {
+        self.distinct()
+    }
+
     /// Removes duplicate solutions from the current plan, with additional sorting.
     pub fn distinct_with_sort(
         self,

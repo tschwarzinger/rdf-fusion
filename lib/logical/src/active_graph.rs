@@ -17,6 +17,18 @@ pub enum ActiveGraph {
     AnyNamedGraph,
 }
 
+impl ActiveGraph {
+    /// Returns whether the active graph is bound to a single graph.
+    pub fn is_bound_to_single_graph(&self) -> bool {
+        match self {
+            ActiveGraph::DefaultGraph => true,
+            ActiveGraph::AllGraphs => false,
+            ActiveGraph::Union(graphs) => graphs.len() == 1,
+            ActiveGraph::AnyNamedGraph => false,
+        }
+    }
+}
+
 /// Represents the active graph as an enumerated list of individual graphs.
 ///
 /// This resolves concepts like [ActiveGraph::AnyNamedGraph] to a list of [GraphName].

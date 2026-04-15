@@ -1,0 +1,23 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(product@0) as product, ENC_PT(ratio@3) as ratio]
+  SortExec: TopK(fetch=10), expr=[ENC_SORT(DIV(xsd:float(monthCount@1), monthBeforeCount@2)) DESC, ENC_SORT(ENC_TF(ENC_PT(product@0))) ASC], preserve_partitioning=[false], filter=[ENC_SORT(DIV(xsd:float(monthCount@1), monthBeforeCount@2)) IS NULL OR ENC_SORT(DIV(xsd:float(monthCount@1), monthBeforeCount@2)) > {type:4,numeric:2.0,bytes:32} OR ENC_SORT(DIV(xsd:float(monthCount@1), monthBeforeCount@2)) = {type:4,numeric:2.0,bytes:32} AND (ENC_SORT(ENC_TF(ENC_PT(product@0))) IS NULL OR ENC_SORT(ENC_TF(ENC_PT(product@0))) < {type:2,numeric:,bytes:687474703a2f2f777777342e7769776973732e66752d6265726c696e2e64652f62697a65722f6273626d2f7630312f696e7374616e6365732f6461746146726f6d50726f6475636572372f50726f64756374333030})]
+    ProjectionExec: expr=[product@0 as product, monthCount@1 as monthCount, monthBeforeCount@2 as monthBeforeCount, DIV(xsd:float(monthCount@1), monthBeforeCount@2) as ratio]
+      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, monthCount@1, monthBeforeCount@3]
+        ProjectionExec: expr=[product@0 as product, <uuid>@1 as monthCount]
+          AggregateExec: mode=Single, gby=[product@1 as product], aggr=[<uuid>]
+            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@0, review@0)], projection=[review@0, product@1]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product], blank_node_mode=Variable
+              FilterExec: EBV(GEQ(__common_expr_5@0, 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})) AND EBV(LT(__common_expr_5@0, 5:{date_time_type:1,value:63329990400.000000000000000000,offset:})), projection=[review@1]
+                FilterExec: DynamicFilter [ review@1 >= 84377 AND review@1 <= 115576 AND hash_lookup ]
+                  DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://purl.org/dc/elements/1.1/date> ?date], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ review@1 >= 84377 AND review@1 <= 115576 AND hash_lookup ]]
+        ProjectionExec: expr=[product@0 as product, <uuid>@1 as monthBeforeCount]
+          FilterExec: EBV(GT(<uuid>@1, 4:4:0))
+            AggregateExec: mode=Single, gby=[product@1 as product], aggr=[<uuid>]
+              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@0, review@0)], projection=[review@0, product@1]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product], blank_node_mode=Variable
+                FilterExec: EBV(GEQ(__common_expr_6@0, 5:{date_time_type:1,value:63325152000.000000000000000000,offset:})) AND EBV(LT(__common_expr_6@0, 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})), projection=[review@1]
+                  FilterExec: DynamicFilter [ review@1 >= 84377 AND review@1 <= 115576 AND hash_lookup ]
+                    DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://purl.org/dc/elements/1.1/date> ?date], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ review@1 >= 84377 AND review@1 <= 115576 AND hash_lookup ]]

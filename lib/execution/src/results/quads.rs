@@ -92,9 +92,9 @@ fn to_graph_name(term: Option<&Term>) -> Result<GraphName, QueryEvaluationError>
         None => Ok(GraphName::DefaultGraph),
         Some(Term::NamedNode(n)) => Ok(GraphName::from(n.clone())),
         Some(Term::BlankNode(n)) => Ok(GraphName::from(n.clone())),
-        _ => {
-            QueryEvaluationError::internal("Predicate has invalid value in quads.".into())
-        }
+        _ => QueryEvaluationError::internal(
+            "Graph name has invalid value in quads.".into(),
+        ),
     }
 }
 
@@ -103,7 +103,7 @@ fn to_subject(term: Term) -> Result<NamedOrBlankNode, QueryEvaluationError> {
         Term::NamedNode(n) => Ok(NamedOrBlankNode::from(n)),
         Term::BlankNode(n) => Ok(NamedOrBlankNode::from(n)),
         Term::Literal(_) => {
-            QueryEvaluationError::internal("Predicate has invalid value in quads.".into())
+            QueryEvaluationError::internal("Subject has invalid value in quads.".into())
         }
     }
 }

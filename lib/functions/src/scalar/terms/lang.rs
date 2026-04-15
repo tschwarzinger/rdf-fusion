@@ -213,7 +213,7 @@ mod tests {
     #[tokio::test]
     async fn test_lang_plain_term() {
         let encodings = create_default_encodings();
-        let mut plain_terms = PlainTermArrayElementBuilder::new(5);
+        let mut plain_terms = PlainTermArrayElementBuilder::new();
         plain_terms.append_literal(LiteralRef::new_language_tagged_literal_unchecked(
             "hello", "en",
         ));

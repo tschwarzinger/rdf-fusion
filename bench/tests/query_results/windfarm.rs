@@ -5,25 +5,38 @@
 
 use crate::query_results::run_select_query;
 use insta::assert_snapshot;
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::windfarm::{NumTurbines, WindFarmBenchmark};
 use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
 #[tokio::test]
-pub async fn wind_farm_4_test_results() {
+pub async fn wind_farm_4_test_results_plain_term() {
+    run_wind_farm_4_test_results(QuadStorageEncodingName::PlainTerm, "Plain Term").await;
+}
+
+#[tokio::test]
+pub async fn wind_farm_4_test_results_object_id() {
+    run_wind_farm_4_test_results(QuadStorageEncodingName::ObjectId, "Object ID").await;
+}
+
+async fn run_wind_farm_4_test_results(
+    encoding: QuadStorageEncodingName,
+    encoding_name: &str,
+) {
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
     let benchmark = WindFarmBenchmark::new(NumTurbines::N4);
     let benchmark_name = benchmark.name();
     let ctx = benchmarking_context
         .create_benchmark_context(benchmark_name)
         .unwrap();
 
-    let store = benchmark.prepare_store(&ctx).await.unwrap();
+    let store = benchmark.prepare_store(&ctx, false).await.unwrap();
 
     assert_snapshot!(
-        "Production Q1",
+        format!("Production Q1 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-production-query1.sparql")
@@ -31,7 +44,7 @@ pub async fn wind_farm_4_test_results() {
         .await
     );
     assert_snapshot!(
-        "Production Q2",
+        format!("Production Q2 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-production-query2.sparql")
@@ -39,7 +52,7 @@ pub async fn wind_farm_4_test_results() {
         .await
     );
     assert_snapshot!(
-        "Production Q3",
+        format!("Production Q3 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-production-query3.sparql")
@@ -47,7 +60,7 @@ pub async fn wind_farm_4_test_results() {
         .await
     );
     assert_snapshot!(
-        "Production Q4",
+        format!("Production Q4 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-production-query4.sparql")
@@ -56,7 +69,7 @@ pub async fn wind_farm_4_test_results() {
     );
 
     assert_snapshot!(
-        "Grouped Production Q1",
+        format!("Grouped Production Q1 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-grouped-production-query1.sparql")
@@ -64,7 +77,7 @@ pub async fn wind_farm_4_test_results() {
         .await
     );
     assert_snapshot!(
-        "Grouped Production Q2",
+        format!("Grouped Production Q2 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-grouped-production-query2.sparql")
@@ -72,7 +85,7 @@ pub async fn wind_farm_4_test_results() {
         .await
     );
     assert_snapshot!(
-        "Grouped Production Q3",
+        format!("Grouped Production Q3 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-grouped-production-query3.sparql")
@@ -80,7 +93,7 @@ pub async fn wind_farm_4_test_results() {
         .await
     );
     assert_snapshot!(
-        "Grouped Production Q4",
+        format!("Grouped Production Q4 ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/wind-farm-grouped-production-query4.sparql")

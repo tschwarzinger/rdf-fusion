@@ -1,8 +1,7 @@
 use crate::TermEncoding;
 use crate::encoding::EncodingScalar;
-use crate::object_id::{
-    ObjectId, ObjectIdCreationError, ObjectIdEncoding, ObjectIdEncodingRef,
-};
+use crate::object_id::{ObjectIdEncoding, ObjectIdEncodingRef};
+use datafusion::arrow::datatypes::DataType;
 use datafusion::common::{ScalarValue, exec_err};
 use rdf_fusion_model::DFResult;
 use std::sync::Arc;
@@ -38,18 +37,13 @@ impl ObjectIdScalar {
 
     /// Creates a new [ObjectIdScalar] from the given `object_id`.
     pub fn null(encoding: ObjectIdEncodingRef) -> Self {
-        let scalar = ScalarValue::FixedSizeBinary(encoding.object_id_size().0, None);
+        let scalar = match encoding.data_type() {
+            DataType::Int64 => ScalarValue::Int64(None),
+            DataType::Int32 => ScalarValue::Int32(None),
+            DataType::FixedSizeBinary(size) => ScalarValue::FixedSizeBinary(*size, None),
+            _ => unreachable!("ObjectID encoding is not a supported type."),
+        };
         Self::new_unchecked(encoding, scalar)
-    }
-
-    /// Creates a new [ObjectIdScalar] from the given `object_id`.
-    pub fn from_object_id(
-        encoding: ObjectIdEncodingRef,
-        object_id: ObjectId,
-    ) -> Result<Self, ObjectIdCreationError> {
-        let bytes = object_id.as_bytes().map(|b| b.to_vec());
-        let scalar = ScalarValue::FixedSizeBinary(encoding.object_id_size().0, bytes);
-        Ok(Self::new_unchecked(encoding, scalar))
     }
 }
 
@@ -66,17 +60,5 @@ impl EncodingScalar for ObjectIdScalar {
 
     fn into_scalar_value(self) -> ScalarValue {
         self.inner
-    }
-}
-
-impl From<ObjectIdScalar> for ObjectId {
-    fn from(value: ObjectIdScalar) -> Self {
-        match value.inner {
-            ScalarValue::FixedSizeBinary(_, value) => match value {
-                Some(oid) => ObjectId::try_new(oid).unwrap(),
-                None => ObjectId::new_default_graph(),
-            },
-            _ => unreachable!("ObjectID scalar is FixedSizeBinary."),
-        }
     }
 }

@@ -16,6 +16,7 @@ pub trait Test: Send + Sync {
 pub enum TestOutcome {
     Success,
     Failed(anyhow::Error),
+    Panicked(String),
     Ignored,
 }
 

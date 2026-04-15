@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 /// Specifies how blank nodes should be matched.
 ///
 /// Blank nodes are scoped to a single graph. Users must choose whether a blank node in a pattern
@@ -27,4 +29,13 @@ pub enum BlankNodeMatchingMode {
     Variable,
     /// Treat blank nodes as a specific, constant filter (exact label match).
     Filter,
+}
+
+impl Display for BlankNodeMatchingMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlankNodeMatchingMode::Variable => write!(f, "Variable"),
+            BlankNodeMatchingMode::Filter => write!(f, "Filter"),
+        }
+    }
 }

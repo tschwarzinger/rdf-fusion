@@ -6,25 +6,34 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum_extra::TypedHeader;
+use futures::TryStreamExt;
 use headers::ContentType;
 use rdf_fusion::error::LoaderError;
-use rdf_fusion::io::{RdfFormat, RdfParser};
+use rdf_fusion::execution::ingest::RdfParserOptions;
+use rdf_fusion::io::RdfFormat;
+use tokio_util::io::StreamReader;
 
 pub async fn handle_data_post(
     content_type: TypedHeader<ContentType>,
     State(state): State<AppState>,
-    body: String,
+    body: Body,
 ) -> Result<Response, RdfFusionServerError> {
     let format =
         RdfFormat::from_media_type(&content_type.0.to_string()).ok_or_else(|| {
             RdfFusionServerError::BadRequest("Invalid content type.".to_owned())
         })?;
-    let parser = RdfParser::from_format(format);
+
+    let body_with_io_error = body
+        .into_data_stream()
+        .map_err(|e| std::io::Error::other(e.to_string()));
 
     // TODO logging
     state
         .store
-        .load_from_reader(parser, body.as_bytes())
+        .load_from_reader(
+            StreamReader::new(body_with_io_error),
+            RdfParserOptions::with_format(format),
+        )
         .await
         .map_err(|error| match error {
             LoaderError::Parsing(err) => RdfFusionServerError::BadRequest(format!(

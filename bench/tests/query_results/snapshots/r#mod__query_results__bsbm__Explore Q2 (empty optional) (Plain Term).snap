@@ -1,0 +1,422 @@
+---
+source: bench/tests/query_results/bsbm.rs
+expression: "run_select_query(&store,\ninclude_str!(\"./queries/explore-q2-empty-optional.sparql\")).await"
+---
+{
+  "head": {
+    "vars": [
+      "label",
+      "comment",
+      "producer",
+      "productFeature",
+      "propertyTextual1",
+      "propertyTextual2",
+      "propertyTextual3",
+      "propertyNumeric1",
+      "propertyNumeric2",
+      "propertyTextual4",
+      "propertyTextual5",
+      "propertyNumeric4"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "adjustment"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "exteriorizing pannier tsunamic"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "graciousness flunkeys knave"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "grudges"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "intrusions tantalizers hesitating"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "orthoepist brats"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "paralyzed"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "sistrums"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "cashmeres prearranges"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "stewing existence countermands"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "bladed dobbins conjuring restorers mopiest backslide instituting finer mythos monotheism chewable etatism"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "massagist softballs collies"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "polyvinyl legalized penthouses expires"
+        }
+      }
+    ]
+  }
+}

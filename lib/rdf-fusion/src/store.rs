@@ -10,7 +10,7 @@
 //! use futures::StreamExt;
 //!
 //! # tokio_test::block_on(async {
-//! let store = Store::default();
+//! let store = Store::new_in_memory().await;
 //!
 //! // insertion
 //! let ex = NamedNode::new("http://example.com")?;
@@ -31,25 +31,27 @@
 //! ```
 
 use crate::error::{LoaderError, SerializerError};
-use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
-use datafusion::prelude::SessionConfig;
+use datafusion::logical_expr::col;
 use futures::StreamExt;
-use oxrdfio::{RdfParser, RdfSerializer};
-use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
-use rdf_fusion_execution::RdfFusionContext;
+use oxrdfio::RdfSerializer;
+use rdf_fusion_encoding::quads_to_plain_term_dataframe;
+use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
+use rdf_fusion_execution::ingest::{RdfParserOptions, RdfParserTableProvider};
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
 use rdf_fusion_execution::sparql::error::QueryEvaluationError;
 use rdf_fusion_execution::sparql::{
     QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate, UpdateOptions,
 };
+use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_model::StorageError;
+use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_model::{
     GraphNameRef, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
     TermRef, Variable,
 };
-use rdf_fusion_storage::memory::{MemObjectIdMapping, MemQuadStorage};
-use std::io::{Read, Write};
+use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
 use std::sync::{Arc, LazyLock};
+use tokio::io::AsyncRead;
 
 static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
     Arc::new([
@@ -72,7 +74,7 @@ static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
 /// use futures::StreamExt;
 ///
 /// # tokio_test::block_on(async {
-/// let store = Store::default();
+/// let store = Store::new_in_memory().await;
 ///
 /// // insertion
 /// let ex = NamedNode::new("http://example.com")?;
@@ -96,47 +98,30 @@ pub struct Store {
     context: RdfFusionContext,
 }
 
-impl Default for Store {
-    fn default() -> Self {
-        let config = SessionConfig::new()
-            .with_batch_size(8192)
-            .with_target_partitions(1);
-
-        let object_id_mapping = Arc::new(MemObjectIdMapping::new());
-        let encoding = Arc::new(ObjectIdEncoding::new(
-            Arc::clone(&object_id_mapping) as Arc<dyn ObjectIdMapping>
-        ));
-        let storage = MemQuadStorage::try_new(encoding, 8192)
-            .expect("MemObjectIdMapping has 4-byte wide object ids");
-        let engine = RdfFusionContext::new(
-            config,
-            RuntimeEnvBuilder::default().build_arc().unwrap(),
-            Arc::new(storage),
-        );
-        Self { context: engine }
-    }
-}
-
 impl Store {
     /// Creates a [Store] with the given [RdfFusionContext].
     pub fn new(context: RdfFusionContext) -> Store {
         Self { context }
     }
 
-    /// Creates a [Store] with a [MemQuadStorage] as backing storage using the given `config` and
-    /// `runtime_env`.
-    pub fn new_with_datafusion_config(
-        config: SessionConfig,
-        runtime_env: Arc<RuntimeEnv>,
-    ) -> Store {
-        let mapping = Arc::new(MemObjectIdMapping::new());
-        let encoding = Arc::new(ObjectIdEncoding::new(
-            Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>
-        ));
-        let storage = MemQuadStorage::try_new(encoding, config.batch_size())
-            .expect("MemObjectIdMapping has 4-byte wide object ids");
-        let context = RdfFusionContext::new(config, runtime_env, Arc::new(storage));
-        Self { context }
+    /// Creates a [`Store`] with an in-memory storage.
+    ///
+    /// For more control over the query engine and the storage backend, see [`Self::new`] and
+    /// [`RdfFusionContextBuilder`] and the implementation of the used quad storage (e.g.
+    /// [`DeltaQuadStorageBuilder`]).
+    pub async fn new_in_memory() -> Store {
+        let delta_storage =
+            DeltaQuadStorageBuilder::new(Arc::new(TypedFamilyEncoding::default()))
+                .with_location("memory://")
+                .build()
+                .await
+                .expect("Default in-memory works");
+
+        let context = RdfFusionContextBuilder::new(delta_storage)
+            .with_single_partition_session_config()
+            .build()
+            .expect("Default in-memory works. Session config is set.");
+        Self::new(context)
     }
 
     /// Returns a reference to the underlying [RdfFusionContext].
@@ -154,7 +139,7 @@ impl Store {
     /// use futures::StreamExt;
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     ///
     /// // insertions
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -191,7 +176,7 @@ impl Store {
     /// use futures::StreamExt;
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
     ///     "SELECT (STR(1) AS ?nt) WHERE {}",
     ///     QueryOptions::default(),
@@ -228,7 +213,7 @@ impl Store {
     /// use futures::StreamExt;
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// if let (QueryResults::Solutions(mut solutions), _explanation) = store.explain_query_opt(
     ///     "SELECT ?s WHERE { VALUES ?s { 1 2 3 } }",
     ///     QueryOptions::default(),
@@ -265,7 +250,7 @@ impl Store {
     /// use rdf_fusion::store::Store;
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     ///
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
@@ -304,7 +289,7 @@ impl Store {
     /// use rdf_fusion::store::Store;
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     ///
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
@@ -332,7 +317,7 @@ impl Store {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
     ///
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// assert!(!store.contains(quad).await?);
     ///
     /// store.insert(quad).await?;
@@ -362,7 +347,7 @@ impl Store {
     ///
     /// # tokio_test::block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert(QuadRef::new(ex, ex, ex, ex)).await?;
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph)).await?;
     /// assert_eq!(2, store.len().await?);
@@ -381,7 +366,7 @@ impl Store {
     /// use rdf_fusion::store::Store;
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// assert!(store.is_empty().await?);
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -403,7 +388,7 @@ impl Store {
     ///
     /// # tokio_test::block_on(async {
     /// // TODO #7: Implement Update
-    /// // let store = Store::default();
+    /// // let store = Store::new_in_memory().await;
     /// // insertion
     /// // store
     /// //    .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }").await?;
@@ -429,7 +414,7 @@ impl Store {
     ///
     /// # tokio_test::block_on(async {
     /// // TODO #7: Implement Update
-    /// // let store = Store::default();
+    /// // let store = Store::new_in_memory().await;
     /// // store.update_opt(
     /// //    "INSERT { ?s <http://example.com/n-triples-representation> ?n } WHERE { ?s ?p ?o BIND(<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) }",
     /// //    QueryOptions::default()
@@ -458,13 +443,14 @@ impl Store {
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::io::{RdfParser, RdfFormat};
+    /// use rdf_fusion_execution::ingest::RdfParserOptions;
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.load_from_reader(RdfFormat::NQuads, file.as_ref()).await?;
+    /// store.load_from_reader(file.as_ref(), RdfParserOptions::with_format(RdfFormat::NQuads)).await?;
     ///
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";
@@ -485,17 +471,31 @@ impl Store {
     /// ```
     pub async fn load_from_reader(
         &self,
-        parser: impl Into<RdfParser>,
-        reader: impl Read,
+        reader: impl AsyncRead + Unpin + Send + 'static,
+        options: RdfParserOptions,
     ) -> Result<(), LoaderError> {
-        let quads = parser
-            .into()
-            .rename_blank_nodes()
-            .for_reader(reader)
-            .collect::<Result<Vec<_>, _>>()?;
+        let iri = options.base_iri.clone();
+        let table_provider =
+            RdfParserTableProvider::new(reader, options.with_rename_blank_nodes(true))
+                .map_err(|e| LoaderError::InvalidBaseIri {
+                    iri: iri.expect("Iri Parser Errors requires base iri"),
+                    error: e,
+                })?;
+        let quads = self
+            .context
+            .session_context()
+            .read_table(Arc::new(table_provider))
+            .expect("TODo")
+            .select([
+                col(COL_GRAPH).alias(COL_GRAPH),
+                col(COL_SUBJECT).alias(COL_SUBJECT),
+                col(COL_PREDICATE).alias(COL_PREDICATE),
+                col(COL_OBJECT).alias(COL_OBJECT),
+            ])
+            .expect("TODO");
         self.context
             .storage()
-            .extend(quads)
+            .insert(quads)
             .await
             .map(|_| ())
             .map_err(LoaderError::from)
@@ -503,7 +503,8 @@ impl Store {
 
     /// Adds a quad to this store.
     ///
-    /// Returns `true` if the quad was not already in the store.
+    /// Returns `true` if the quad was not already in the store, if the underlying storage
+    /// layer supports it. If the storage layer does not support it, this method returns [`None`].
     ///
     /// Usage example:
     /// ```
@@ -514,9 +515,9 @@ impl Store {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
-    /// let store = Store::default();
-    /// assert!(store.insert(quad).await?);
-    /// assert!(!store.insert(quad).await?);
+    /// let store = Store::new_in_memory().await;
+    /// store.insert(quad).await?;
+    /// store.insert(quad).await?; // Inserting a quad twice handles deduplication.
     ///
     /// assert!(store.contains(quad).await?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -525,13 +526,15 @@ impl Store {
     pub async fn insert<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
-    ) -> Result<bool, StorageError> {
-        let quad = vec![quad.into().into_owned()];
+    ) -> Result<Option<bool>, StorageError> {
         self.context
             .storage()
-            .extend(quad)
+            .insert(quads_to_plain_term_dataframe(
+                self.context.session_context(),
+                &[quad.into().into_owned()],
+            ))
             .await
-            .map(|inserted| inserted > 0)
+            .map(|inserted| inserted.map(|inserted| inserted > 0))
     }
 
     /// Atomically adds a set of quads to this store.
@@ -540,13 +543,20 @@ impl Store {
         quads: impl IntoIterator<Item = impl Into<Quad>>,
     ) -> Result<(), StorageError> {
         let quads = quads.into_iter().map(Into::into).collect::<Vec<_>>();
-        self.context.storage().extend(quads).await?;
+        self.context
+            .storage()
+            .insert(quads_to_plain_term_dataframe(
+                self.context.session_context(),
+                &quads,
+            ))
+            .await?;
         Ok(())
     }
 
     /// Removes a quad from this store.
     ///
-    /// Returns `true` if the quad was in the store and has been removed.
+    /// Returns `true` if the quad was in the store and has been removed, if the underlying storage
+    /// layer supports it. If the storage layer does not support it, this method returns [`None`].
     ///
     /// Usage example:
     /// ```
@@ -557,10 +567,10 @@ impl Store {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert(quad).await?;
-    /// assert!(store.remove(quad).await?);
-    /// assert!(!store.remove(quad).await?);
+    /// store.remove(quad).await?;
+    /// store.remove(quad).await?; // Removing a quad that does not exist does nothing.
     ///
     /// assert!(!store.contains(quad).await?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -569,8 +579,14 @@ impl Store {
     pub async fn remove<'a>(
         &self,
         quad: impl Into<QuadRef<'a>>,
-    ) -> Result<bool, StorageError> {
-        self.context.storage().remove(quad.into()).await
+    ) -> Result<Option<bool>, StorageError> {
+        self.context
+            .storage()
+            .remove(quads_to_plain_term_dataframe(
+                self.context.session_context(),
+                &[quad.into().into_owned()],
+            ))
+            .await
     }
 
     /// Dumps the store into a file.
@@ -578,21 +594,22 @@ impl Store {
     /// ```
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion::io::RdfFormat;
+    /// use rdf_fusion_execution::ingest::RdfParserOptions;
     ///
     /// let file =
     ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
     ///         .as_bytes();
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
-    /// store.load_from_reader(RdfFormat::NQuads, file).await?;
+    /// let store = Store::new_in_memory().await;
+    /// store.load_from_reader(file, RdfParserOptions::with_format(RdfFormat::NQuads)).await?;
     ///
     /// let buffer = store.dump_to_writer(RdfFormat::NQuads, Vec::new()).await?;
     /// assert_eq!(file, buffer.as_slice());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    pub async fn dump_to_writer<W: Write>(
+    pub async fn dump_to_writer<W: tokio::io::AsyncWrite + Unpin + Send>(
         &self,
         serializer: impl Into<RdfSerializer>,
         writer: W,
@@ -601,28 +618,28 @@ impl Store {
         if !serializer.format().supports_datasets() {
             return Err(SerializerError::DatasetFormatExpected(serializer.format()));
         }
-        let mut serializer = serializer.for_writer(writer);
+        let mut serializer = serializer.for_tokio_async_writer(writer);
         let mut stream = self.stream().await?;
         while let Some(quad) = stream.next().await {
-            serializer.serialize_quad(&quad?)?;
+            serializer.serialize_quad(&quad?).await?;
         }
-        Ok(serializer.finish()?)
+        Ok(serializer.finish().await?)
     }
 
     /// Dumps a store graph into a file.
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::io::{RdfParser, RdfFormat};
+    /// use rdf_fusion::io::{RdfFormat};
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
+    /// use rdf_fusion_execution::ingest::RdfParserOptions;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// # tokio_test::block_on(async {
-    /// let store = Store::default();
-    /// let parser = RdfParser::from_format(RdfFormat::NTriples);
-    /// store.load_from_reader(parser, file.as_ref()).await?;
+    /// let store = Store::new_in_memory().await;
+    /// store.load_from_reader(file.as_ref(), RdfParserOptions::with_format(RdfFormat::NTriples)).await?;
     ///
     /// let mut buffer = Vec::new();
     /// store.dump_graph_to_writer(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer).await?;
@@ -630,20 +647,20 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    pub async fn dump_graph_to_writer<'a, W: Write>(
+    pub async fn dump_graph_to_writer<'a, W: tokio::io::AsyncWrite + Unpin + Send>(
         &self,
         from_graph_name: impl Into<GraphNameRef<'a>>,
         serializer: impl Into<RdfSerializer>,
         writer: W,
     ) -> Result<W, SerializerError> {
-        let mut serializer = serializer.into().for_writer(writer);
+        let mut serializer = serializer.into().for_tokio_async_writer(writer);
         let mut stream = self
             .quads_for_pattern(None, None, None, Some(from_graph_name.into()))
             .await?;
         while let Some(quad) = stream.next().await {
-            serializer.serialize_triple(quad?.as_ref())?;
+            serializer.serialize_triple(quad?.as_ref()).await?;
         }
-        Ok(serializer.finish()?)
+        Ok(serializer.finish().await?)
     }
 
     /// Returns all the store named graphs.
@@ -655,7 +672,7 @@ impl Store {
     ///
     /// # tokio_test::block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex)).await?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, GraphNameRef::DefaultGraph)).await?;
     /// assert_eq!(
@@ -666,7 +683,10 @@ impl Store {
     /// # }).unwrap();
     /// ```
     pub async fn named_graphs(&self) -> Result<Vec<NamedOrBlankNode>, StorageError> {
-        self.context.storage().named_graphs().await
+        self.context
+            .storage()
+            .named_graphs(&self.context.session_context().state())
+            .await
     }
 
     /// Checks if the store contains a given graph
@@ -678,7 +698,7 @@ impl Store {
     ///
     /// # tokio_test::block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex)).await?;
     /// assert!(store.contains_named_graph(&ex).await?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -690,7 +710,10 @@ impl Store {
     ) -> Result<bool, QueryEvaluationError> {
         self.context
             .storage()
-            .contains_named_graph(graph_name.into())
+            .contains_named_graph(
+                &self.context.session_context().state(),
+                graph_name.into(),
+            )
             .await
             .map_err(Into::into)
     }
@@ -706,7 +729,7 @@ impl Store {
     ///
     /// # tokio_test::block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert_named_graph(ex).await?;
     ///
     /// assert_eq!(
@@ -719,10 +742,13 @@ impl Store {
     pub async fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Option<bool>, StorageError> {
         self.context
             .storage()
-            .insert_named_graph(graph_name.into())
+            .insert_named_graph(
+                &self.context.session_context().state(),
+                graph_name.into(),
+            )
             .await
     }
 
@@ -736,7 +762,7 @@ impl Store {
     /// # tokio_test::block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert(quad).await?;
     /// assert_eq!(1, store.len().await?);
     ///
@@ -750,7 +776,10 @@ impl Store {
         &self,
         graph_name: impl Into<GraphNameRef<'a>>,
     ) -> Result<(), StorageError> {
-        self.context.storage().clear_graph(graph_name.into()).await
+        self.context
+            .storage()
+            .clear_graph(&self.context.session_context().state(), graph_name.into())
+            .await
     }
 
     /// Removes a graph from this store.
@@ -765,11 +794,11 @@ impl Store {
     /// # tokio_test::block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert(quad).await?;
     /// assert_eq!(1, store.len().await?);
     ///
-    /// assert!(store.remove_named_graph(ex).await?);
+    /// assert!(store.remove_named_graph(ex).await?.unwrap());
     /// assert!(store.is_empty().await?);
     /// assert_eq!(0, store.named_graphs().await?.len());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -778,10 +807,10 @@ impl Store {
     pub async fn remove_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Option<bool>, StorageError> {
         self.context
             .storage()
-            .drop_named_graph(graph_name.into())
+            .drop_named_graph(&self.context.session_context().state(), graph_name.into())
             .await
     }
 
@@ -794,7 +823,7 @@ impl Store {
     ///
     /// # tokio_test::block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = Store::default();
+    /// let store = Store::new_in_memory().await;
     /// store.insert(QuadRef::new(ex, ex, ex, ex)).await?;
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph)).await?;
     /// assert_eq!(2, store.len().await?);
@@ -805,19 +834,28 @@ impl Store {
     /// # }).unwrap();
     /// ```
     pub async fn clear(&self) -> Result<(), StorageError> {
-        self.context.storage().clear().await
+        self.context
+            .storage()
+            .clear(&self.context.session_context().state())
+            .await
     }
 
     /// Optimizes the database for future workload.
     ///
     /// Useful to call after a batch upload or another similar operation. Usually
     pub async fn optimize(&self) -> Result<(), StorageError> {
-        self.context.storage().optimize().await
+        self.context
+            .storage()
+            .optimize(&self.context.session_context().state())
+            .await
     }
 
     /// Validates that all the store invariants hold in the data storage
     pub async fn validate(&self) -> Result<(), StorageError> {
-        self.context.storage().validate().await
+        self.context
+            .storage()
+            .validate(&self.context.session_context().state())
+            .await
     }
 }
 
@@ -838,7 +876,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_default_graph_quads() -> Result<(), QueryEvaluationError> {
-        let store = Store::default();
+        let store = Store::new_in_memory().await;
         let ex = NamedNodeRef::new("http://example.com")
             .map_err(|e| QueryEvaluationError::InternalError(e.to_string()))?;
         let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
@@ -853,7 +891,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_named_graph_quads() -> Result<(), QueryEvaluationError> {
-        let store = Store::default();
+        let store = Store::new_in_memory().await;
         let ex = NamedNodeRef::new("http://example.com")
             .map_err(|e| QueryEvaluationError::InternalError(e.to_string()))?;
         let graph = GraphName::BlankNode(BlankNode::default());
@@ -918,18 +956,18 @@ mod tests {
             ),
         ];
 
-        let store = Store::default();
+        let store = Store::new_in_memory().await;
         for t in &default_quads {
-            assert!(store.insert(t).await?);
+            assert!(store.insert(t).await?.unwrap_or(true));
         }
-        assert!(!store.insert(&default_quad).await?);
+        assert!(!store.insert(&default_quad).await?.unwrap_or(false));
 
-        assert!(store.remove(&default_quad).await?);
-        assert!(!store.remove(&default_quad).await?);
-        assert!(store.insert(&named_quad).await?);
-        assert!(!store.insert(&named_quad).await?);
-        assert!(store.insert(&default_quad).await?);
-        assert!(!store.insert(&default_quad).await?);
+        assert!(store.remove(&default_quad).await?.unwrap_or(true));
+        assert!(!store.remove(&default_quad).await?.unwrap_or(false));
+        assert!(store.insert(&named_quad).await?.unwrap_or(true));
+        assert!(!store.insert(&named_quad).await?.unwrap_or(false));
+        assert!(store.insert(&default_quad).await?.unwrap_or(true));
+        assert!(!store.insert(&default_quad).await?.unwrap_or(false));
         store.validate().await?;
 
         assert_eq!(store.len().await?, 4);

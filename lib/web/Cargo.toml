@@ -23,6 +23,7 @@ tower-http.workspace = true
 tracing.workspace = true
 rdf-fusion.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]

@@ -1,4 +1,5 @@
 use crate::test::{Test, TestOutcome};
+use crate::w3c::StoreFactory;
 use crate::w3c::files::read_file_to_string;
 use crate::w3c::utils::{
     are_query_results_isomorphic, load_sparql_query_result, load_to_store, results_diff,
@@ -8,13 +9,13 @@ use datafusion::physical_plan::displayable;
 use futures::StreamExt;
 use rdf_fusion::execution::sparql::{QueryOptions, RdfFusionQuery};
 use rdf_fusion::model::{GraphName, NamedOrBlankNode};
-use rdf_fusion::store::Store;
 
 pub struct W3CSparqlEvaluationTest {
     pub id: String,
     pub name: Option<String>,
     pub test_data: crate::w3c::manifest::Test,
     pub optimize_after_load: bool,
+    pub store_factory: StoreFactory,
 }
 
 #[async_trait::async_trait]
@@ -38,7 +39,7 @@ impl Test for W3CSparqlEvaluationTest {
 
 impl W3CSparqlEvaluationTest {
     async fn execute(&self) -> anyhow::Result<()> {
-        let store = Store::default();
+        let store = (self.store_factory)().await;
         if let Some(data) = &self.test_data.data {
             load_to_store(data, &store, GraphName::DefaultGraph).await?;
         }
@@ -53,9 +54,11 @@ impl W3CSparqlEvaluationTest {
 
         let query_file = self.test_data.query.as_deref().context("No action found")?;
         let options = QueryOptions::default();
-        let query =
-            RdfFusionQuery::parse(&read_file_to_string(query_file)?, Some(query_file))
-                .context("Failure to parse query")?;
+        let query = RdfFusionQuery::parse(
+            &read_file_to_string(query_file).await?,
+            Some(query_file),
+        )
+        .context("Failure to parse query")?;
 
         // We check parsing roundtrip
         RdfFusionQuery::parse(&query.to_string(), None)
@@ -91,7 +94,10 @@ impl W3CSparqlEvaluationTest {
             are_query_results_isomorphic(&expected_results, actual_results).await,
             "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{:?}\n\nExecution Plan:\n{}\n",
             results_diff(expected_results, store.query(query.clone()).await?).await,
-            RdfFusionQuery::parse(&read_file_to_string(query_file)?, Some(query_file))?,
+            RdfFusionQuery::parse(
+                &read_file_to_string(query_file).await?,
+                Some(query_file)
+            )?,
             {
                 let mut data = Vec::new();
                 let mut stream = store.stream().await?;

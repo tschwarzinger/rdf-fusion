@@ -12,9 +12,9 @@ use crate::prepare::PrepRequirement;
 use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use async_trait::async_trait;
+use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::store::Store;
-use std::fs;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -143,15 +143,15 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
     ) -> anyhow::Result<Store> {
         let start = datafusion::common::instant::Instant::now();
         if print_info {
-            println!("Creating in-memory store and loading data ...");
+            println!("Creating store and loading data ...");
         }
 
         let dataset_path = ctx.parent().join_data_dir(&self.paths.dataset)?;
-        let data = fs::read(&dataset_path)?;
+        let data = tokio::fs::File::open(&dataset_path).await?;
 
-        let memory_store = ctx.parent().create_store();
+        let memory_store = ctx.parent().create_store().await;
         memory_store
-            .load_from_reader(RdfFormat::NTriples, data.as_slice())
+            .load_from_reader(data, RdfParserOptions::with_format(RdfFormat::NTriples))
             .await?;
         let duration = start.elapsed();
 
@@ -160,6 +160,14 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
                 "Store created and data loaded. Took {} ms.",
                 duration.as_millis()
             );
+        }
+
+        let start = datafusion::common::instant::Instant::now();
+        memory_store.optimize().await?;
+
+        if print_info {
+            let duration = start.elapsed();
+            println!("Store optimized. Took {} ms.", duration.as_millis());
             print_store_stats(&memory_store).await?;
         }
 
@@ -175,6 +183,7 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
         let report =
             execute_benchmark::<TUseCase>(bench_context, operations, &memory_store)
                 .await?;
+
         Ok(Box::new(report))
     }
 }

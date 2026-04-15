@@ -15,7 +15,7 @@ use datafusion::logical_expr::AggregateUDF;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
-use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
+use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
 use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::functions::{
@@ -52,6 +52,7 @@ impl RdfFusionContext {
         config: SessionConfig,
         runtime_env: Arc<RuntimeEnv>,
         storage: Arc<dyn QuadStorage>,
+        typed_family_encoding: TypedFamilyEncodingRef,
     ) -> Self {
         let object_id_encoding = match storage.encoding() {
             QuadStorageEncoding::PlainTerm => None,
@@ -59,7 +60,7 @@ impl RdfFusionContext {
         };
         let encodings = RdfFusionEncodings::new(
             Arc::clone(&PLAIN_TERM_ENCODING),
-            Arc::new(TypedFamilyEncoding::default()),
+            typed_family_encoding,
             object_id_encoding,
             Arc::clone(&SORTABLE_TERM_ENCODING),
         );
@@ -159,7 +160,7 @@ impl RdfFusionContext {
     /// Returns the number of quads in the instance.
     pub async fn len(&self) -> DFResult<usize> {
         self.storage
-            .len()
+            .len(&self.ctx.state())
             .await
             .map_err(|err| DataFusionError::External(Box::new(err)))
     }
@@ -211,7 +212,7 @@ impl RdfFusionContext {
         _options: UpdateOptions,
     ) -> Result<(), QueryEvaluationError> {
         self.storage
-            .execute_update(&query.inner)
+            .execute_update(&self.ctx.state(), &query.inner)
             .await
             .expect("TODO");
         Ok(())

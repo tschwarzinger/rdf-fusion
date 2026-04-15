@@ -13,6 +13,7 @@
 
 mod blank_node_mode;
 mod error;
+mod quad_component;
 pub mod quads;
 mod rdf;
 pub mod sparql;
@@ -22,6 +23,7 @@ mod xsd;
 
 pub use blank_node_mode::BlankNodeMatchingMode;
 pub use error::*;
+pub use quad_component::*;
 pub use rdf::*;
 pub use typed_value::*;
 pub use xsd::*;

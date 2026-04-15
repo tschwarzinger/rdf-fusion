@@ -2,6 +2,7 @@ use crate::plans::{consume_result, run_plan_assertions};
 use anyhow::Context;
 use datafusion::physical_plan::displayable;
 use insta::assert_snapshot;
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::windfarm::{
@@ -12,10 +13,10 @@ use rdf_fusion_bench::operation::SparqlRawOperation;
 use std::path::PathBuf;
 
 #[tokio::test]
-pub async fn optimized_logical_plan_wind_farm() {
-    for_all_explanations(|name, explanation| {
+pub async fn wind_farm_plain_term_optimized_logical_plan() {
+    for_all_explanations(QuadStorageEncodingName::PlainTerm, |name, explanation| {
         assert_snapshot!(
-            format!("{name} (Optimized)"),
+            format!("{name} (Optimized, Plain Term)"),
             &explanation.optimized_logical_plan.to_string()
         )
     })
@@ -23,19 +24,44 @@ pub async fn optimized_logical_plan_wind_farm() {
 }
 
 #[tokio::test]
-pub async fn execution_plan_wind_farm() {
-    for_all_explanations(|name, explanation| {
+pub async fn wind_farm_plain_term_execution_plan() {
+    for_all_explanations(QuadStorageEncodingName::PlainTerm, |name, explanation| {
         let string = displayable(explanation.execution_plan.as_ref())
             .indent(false)
             .to_string();
-        assert_snapshot!(format!("{name} (Execution Plan)"), &string)
+        assert_snapshot!(format!("{name} (Execution Plan, Plain Term)"), &string)
     })
     .await;
 }
 
-async fn for_all_explanations(assertion: impl Fn(String, QueryExplanation) -> ()) {
+#[tokio::test]
+pub async fn wind_farm_object_id_optimized_logical_plan() {
+    for_all_explanations(QuadStorageEncodingName::ObjectId, |name, explanation| {
+        assert_snapshot!(
+            format!("{name} (Optimized, Object ID)"),
+            &explanation.optimized_logical_plan.to_string()
+        )
+    })
+    .await;
+}
+
+#[tokio::test]
+pub async fn wind_farm_object_id_execution_plan() {
+    for_all_explanations(QuadStorageEncodingName::ObjectId, |name, explanation| {
+        let string = displayable(explanation.execution_plan.as_ref())
+            .indent(false)
+            .to_string();
+        assert_snapshot!(format!("{name} (Execution Plan, Object ID)"), &string)
+    })
+    .await;
+}
+
+async fn for_all_explanations(
+    encoding: QuadStorageEncodingName,
+    assertion: impl Fn(String, QueryExplanation) -> (),
+) {
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
 
     // Load the benchmark data and set max query count to one.
     let benchmark = WindFarmBenchmark::new(NumTurbines::N4);
@@ -44,7 +70,10 @@ async fn for_all_explanations(assertion: impl Fn(String, QueryExplanation) -> ()
         .create_benchmark_context(benchmark_name)
         .unwrap();
 
-    let store = benchmark.prepare_store(&benchmark_context).await.unwrap();
+    let store = benchmark
+        .prepare_store(&benchmark_context, true)
+        .await
+        .unwrap();
 
     // Ignore queries that are not fast enough to be executed in reasonable time.
     let ignored = [
@@ -61,11 +90,20 @@ async fn for_all_explanations(assertion: impl Fn(String, QueryExplanation) -> ()
         let benchmark_name = format!("Wind Farm - {query_name}");
         let query = get_query_to_execute(&benchmark_context, query_name);
 
-        let (query, explanation) = store
+        let (results, explanation) = store
             .explain_query_opt(query.text(), QueryOptions::default())
             .await
             .unwrap();
-        consume_result(query).await;
+
+        println!(
+            "{}:\n{}",
+            benchmark_name,
+            displayable(explanation.execution_plan.as_ref())
+                .indent(false)
+                .to_string()
+        );
+
+        consume_result(results).await;
 
         run_plan_assertions(|| assertion(benchmark_name, explanation));
     }

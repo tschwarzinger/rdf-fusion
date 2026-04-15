@@ -1,10 +1,13 @@
 #![cfg(test)]
 #![allow(clippy::panic_in_result_fn)]
 
+use futures::StreamExt;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::vocab::{rdf, xsd};
 use rdf_fusion::model::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::store::Store;
+use rdf_fusion_execution::ingest::RdfParserOptions;
+use rdf_fusion_execution::results::QueryResults;
 use std::error::Error;
 
 #[allow(clippy::non_ascii_literal)]
@@ -98,9 +101,12 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 
 #[tokio::test]
 async fn test_load_graph() -> Result<(), Box<dyn Error>> {
-    let store = Store::default();
+    let store = Store::new_in_memory().await;
     store
-        .load_from_reader(RdfFormat::Turtle, DATA.as_bytes())
+        .load_from_reader(
+            DATA.as_bytes(),
+            RdfParserOptions::with_format(RdfFormat::Turtle),
+        )
         .await?;
     for q in quads(GraphNameRef::DefaultGraph) {
         assert!(store.contains(q).await?);
@@ -111,9 +117,12 @@ async fn test_load_graph() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
-    let store = Store::default();
+    let store = Store::new_in_memory().await;
     store
-        .load_from_reader(RdfFormat::TriG, GRAPH_DATA.as_bytes())
+        .load_from_reader(
+            GRAPH_DATA.as_bytes(),
+            RdfParserOptions::with_format(RdfFormat::TriG),
+        )
         .await?;
     for q in quads(NamedNodeRef::new_unchecked(
         "http://www.wikidata.org/wiki/Special:EntityData/Q90",
@@ -126,12 +135,12 @@ async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
-    let store = Store::default();
+    let store = Store::new_in_memory().await;
     for _ in 0..2 {
         store
             .load_from_reader(
-                RdfFormat::NTriples,
                 "_:a <http://example.com/p> <http://example.com/p> .".as_bytes(),
+                RdfParserOptions::with_format(RdfFormat::NTriples),
             )
             .await?;
     }
@@ -141,7 +150,7 @@ async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error
 
 #[tokio::test]
 async fn test_dump_graph() -> Result<(), Box<dyn Error>> {
-    let store = Store::default();
+    let store = Store::new_in_memory().await;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q).await?;
     }
@@ -163,7 +172,7 @@ async fn test_dump_graph() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
-    let store = Store::default();
+    let store = Store::new_in_memory().await;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q).await?;
     }
@@ -173,5 +182,21 @@ async fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
         buffer.into_iter().filter(|c| *c == b'\n').count(),
         NUMBER_OF_TRIPLES
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_query_empty_store() -> Result<(), Box<dyn Error>> {
+    let store = Store::new_in_memory().await;
+    let QueryResults::Solutions(result) =
+        store.query("SELECT ?s WHERE { ?s ?p ?o }").await?
+    else {
+        panic!("Wrong query result failed");
+    };
+
+    let stream = result.into_record_batch_stream()?;
+    let collected = stream.collect::<Vec<_>>().await;
+    assert_eq!(collected.len(), 0);
+
     Ok(())
 }

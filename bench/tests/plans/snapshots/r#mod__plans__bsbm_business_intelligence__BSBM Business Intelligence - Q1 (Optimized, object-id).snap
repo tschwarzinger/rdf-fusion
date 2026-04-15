@@ -1,0 +1,39 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&explanation.optimized_logical_plan.to_string()"
+---
+Projection: ENC_PT(productType) AS productType, ENC_PT(reviewCount) AS reviewCount
+  Sort: ENC_SORT(reviewCount) DESC NULLS FIRST, ENC_SORT(ENC_TF(ENC_PT(productType))) ASC NULLS FIRST, fetch=10
+    Projection: productType, <uuid> AS reviewCount
+      Aggregate: groupBy=[[productType AS productType]], aggr=[[COUNT(review) AS <uuid>]]
+        Projection: lhs.productType AS productType, lhs.review AS review
+          Inner Join: lhs.reviewer = rhs.reviewer
+            SubqueryAlias: lhs
+              Projection: lhs.productType AS productType, lhs.review AS review, rhs.reviewer AS reviewer
+                Inner Join: lhs.review = rhs.review
+                  SubqueryAlias: lhs
+                    Projection: lhs.productType AS productType, rhs.review AS review
+                      Inner Join: lhs.product = rhs.product
+                        SubqueryAlias: lhs
+                          Projection: lhs.productType AS productType, lhs.product AS product
+                            Inner Join: lhs.producer = rhs.producer
+                              SubqueryAlias: lhs
+                                Projection: lhs.productType AS productType, lhs.product AS product, rhs.producer AS producer
+                                  Inner Join: lhs.product = rhs.product
+                                    SubqueryAlias: lhs
+                                      Projection: lhs.productType AS productType, rhs.product AS product
+                                        Inner Join: lhs.productType = rhs.productType
+                                          SubqueryAlias: lhs
+                                            QuadPattern (?productType <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/ProductType>)
+                                          SubqueryAlias: rhs
+                                            QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?productType)
+                                    SubqueryAlias: rhs
+                                      QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> ?producer)
+                              SubqueryAlias: rhs
+                                QuadPattern (?producer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> <http://downlode.org/rdf/iso-3166/countries#AT>)
+                        SubqueryAlias: rhs
+                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
+                  SubqueryAlias: rhs
+                    QuadPattern (?review <http://purl.org/stuff/rev#reviewer> ?reviewer)
+            SubqueryAlias: rhs
+              QuadPattern (?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> <http://downlode.org/rdf/iso-3166/countries#US>)

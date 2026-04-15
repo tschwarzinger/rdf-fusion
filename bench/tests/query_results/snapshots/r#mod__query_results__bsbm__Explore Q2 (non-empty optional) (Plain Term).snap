@@ -1,0 +1,980 @@
+---
+source: bench/tests/query_results/bsbm.rs
+expression: "run_select_query(&store,\ninclude_str!(\"./queries/explore-q2-non-empty-optional.sparql\")).await"
+---
+{
+  "head": {
+    "vars": [
+      "label",
+      "comment",
+      "producer",
+      "productFeature",
+      "propertyTextual1",
+      "propertyTextual2",
+      "propertyTextual3",
+      "propertyNumeric1",
+      "propertyNumeric2",
+      "propertyTextual4",
+      "propertyTextual5",
+      "propertyNumeric4"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "bankrupting wifed blousily"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "befuddlement rouging intensives"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "classifies animosities"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "dazedly"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "desecration superceding divestment"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "dewdrops prophets"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "doltishly hulkier"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "gutty"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "homerooms mountebanks"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "kajeputs"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "leisureless barroom"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "middlebrow"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "midwived cleavages reconquest"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "penknives reabandoned vitalities"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "preconscious honorands bootery"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "purblindness acidifier"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "pylons devisers"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      },
+      {
+        "comment": {
+          "type": "literal",
+          "value": "lustre bedighted mamies misidentifies weathercock spits arquebus baited haltingly dressings alkalization seidlitz tramcars hotblooded sanguinarily destructible pedicurists fighters restructures transcendentalizm launches apaches faceted obtusest mixups umbers globalize wingspread familiarize railroads hijacking evadable credulously watthour apiaries uninhabitable suitors nobeliums thanking coachers semiprofessional coruscation curvatures massacrers footworn iambuses eroticism incited insulator volatilize chatterers ragworts yearlies decoded dowelling pipped censused ozonizers"
+        },
+        "label": {
+          "type": "literal",
+          "value": "denotive marrowed prosthodontist"
+        },
+        "producer": {
+          "type": "literal",
+          "value": "baptismally"
+        },
+        "productFeature": {
+          "type": "literal",
+          "value": "refractoriness"
+        },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1327"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "607"
+        },
+        "propertyNumeric4": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "227"
+        },
+        "propertyTextual1": {
+          "type": "literal",
+          "value": "oscilloscopically sucres disturbingly operabilities blueblack encephalitic louvres vociferated goldener zillionth"
+        },
+        "propertyTextual2": {
+          "type": "literal",
+          "value": "unschooled bergh bushwhacked unlooses exasperates dwarfism maxwells mocks wrecked proctorship derisions tarmac"
+        },
+        "propertyTextual3": {
+          "type": "literal",
+          "value": "overburden litterbugs tsarinas underwinds unreserved reexhibits"
+        },
+        "propertyTextual4": {
+          "type": "literal",
+          "value": "coauthered hexads participators optimally earmarking sympathized decorations varnished maoris upreared schismatically alerters"
+        },
+        "propertyTextual5": {
+          "type": "literal",
+          "value": "demonologies sponsorship shiniest lymphocytic poser magnetized kidnappers drifted epigrapher desiring overmagnifying"
+        }
+      }
+    ]
+  }
+}

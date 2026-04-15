@@ -10,11 +10,12 @@ use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder, UserDefinedLogic
 use datafusion::optimizer::OptimizerRule;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
-use datafusion::prelude::SessionConfig;
+use datafusion::prelude::{DataFrame, SessionConfig};
 use rdf_fusion::api::RdfFusionContextView;
 use rdf_fusion::api::storage::QuadStorage;
 use rdf_fusion::encoding::object_id::ObjectIdMapping;
 use rdf_fusion::encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
+use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion::encoding::{EncodingArray, QuadStorageEncoding};
 use rdf_fusion::execution::RdfFusionContext;
 use rdf_fusion::execution::results::QueryResultsFormat;
@@ -25,7 +26,7 @@ use rdf_fusion::model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT
 use rdf_fusion::model::sparql::Update;
 use rdf_fusion::model::{
     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
-    QuadRef, StorageError, TermPattern,
+    StorageError, TermPattern,
 };
 use rdf_fusion::store::Store;
 use std::sync::Arc;
@@ -52,6 +53,7 @@ pub async fn main() -> anyhow::Result<()> {
         SessionConfig::default(),
         RuntimeEnvBuilder::new().build_arc()?,
         Arc::new(VecQuadStorage(vec)),
+        Arc::new(TypedFamilyEncoding::default()),
     );
     let store = Store::new(context);
 
@@ -91,10 +93,10 @@ impl VecQuadStorage {
     /// Creates a [MemTable] for the set. This is a struct from DataFusion that simply emits
     /// references to record batches.
     pub fn create_mem_table(&self) -> MemTable {
-        let mut graph_name = PlainTermArrayElementBuilder::new(self.0.len());
-        let mut subject = PlainTermArrayElementBuilder::new(self.0.len());
-        let mut predicate = PlainTermArrayElementBuilder::new(self.0.len());
-        let mut object = PlainTermArrayElementBuilder::new(self.0.len());
+        let mut graph_name = PlainTermArrayElementBuilder::with_capacity(self.0.len());
+        let mut subject = PlainTermArrayElementBuilder::with_capacity(self.0.len());
+        let mut predicate = PlainTermArrayElementBuilder::with_capacity(self.0.len());
+        let mut object = PlainTermArrayElementBuilder::with_capacity(self.0.len());
 
         for quad in &self.0 {
             match &quad.graph_name {
@@ -164,38 +166,44 @@ impl QuadStorage for VecQuadStorage {
         ))]
     }
 
-    async fn extend(&self, _quads: Vec<Quad>) -> Result<usize, StorageError> {
+    async fn insert(&self, _quads: DataFrame) -> Result<Option<usize>, StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 
-    async fn remove(&self, _quad: QuadRef<'_>) -> Result<bool, StorageError> {
+    async fn remove(&self, _quads: DataFrame) -> Result<Option<bool>, StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 
     async fn insert_named_graph<'a>(
         &self,
+        _state: &SessionState,
         _graph_name: NamedOrBlankNodeRef<'a>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Option<bool>, StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 
-    async fn named_graphs(&self) -> Result<Vec<NamedOrBlankNode>, StorageError> {
+    async fn named_graphs(
+        &self,
+        _state: &SessionState,
+    ) -> Result<Vec<NamedOrBlankNode>, StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 
     async fn contains_named_graph<'a>(
         &self,
+        _state: &SessionState,
         _graph_name: NamedOrBlankNodeRef<'a>,
     ) -> Result<bool, StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 
-    async fn clear(&self) -> Result<(), StorageError> {
+    async fn clear(&self, _state: &SessionState) -> Result<(), StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 
     async fn clear_graph<'a>(
         &self,
+        _state: &SessionState,
         _graph_name: GraphNameRef<'a>,
     ) -> Result<(), StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
@@ -203,29 +211,34 @@ impl QuadStorage for VecQuadStorage {
 
     async fn drop_named_graph(
         &self,
+        _state: &SessionState,
         _graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<Option<bool>, StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 
-    async fn len(&self) -> Result<usize, StorageError> {
+    async fn len(&self, _state: &SessionState) -> Result<usize, StorageError> {
         Ok(self.0.len())
     }
 
-    async fn optimize(&self) -> Result<(), StorageError> {
+    async fn optimize(&self, _state: &SessionState) -> Result<(), StorageError> {
         Ok(())
     }
 
-    async fn validate(&self) -> Result<(), StorageError> {
+    async fn validate(&self, _state: &SessionState) -> Result<(), StorageError> {
         Ok(())
     }
 
-    async fn execute_update(&self, update: &Update) -> Result<(), StorageError> {
+    async fn execute_update(
+        &self,
+        _state: &SessionState,
+        _update: &Update,
+    ) -> Result<(), StorageError> {
         unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 }
 
-/// A custom planner that plans the quad pattern nodes based on given [MemTable]. We assume that
+/// A custom planner that plans the quad pattern nodes based on a given [`MemTable`]. We assume that
 /// the table has the following schema: (graph, subject, predicate, object).
 ///
 /// Evaluating a pattern will be done in three steps:
@@ -262,14 +275,17 @@ impl ExtensionPlanner for VecQuadStoragePlanner {
 
         // 2. Apply the pattern
         let builder_context = RdfFusionLogicalPlanBuilderContext::new(self.0.clone());
+        let quad_pattern = node.quad_pattern();
         let pattern = builder_context
             .create(Arc::new(scan.build()?))
             .pattern(vec![
-                node.graph_variable()
+                quad_pattern
+                    .graph_variable
+                    .clone()
                     .map(|v| TermPattern::Variable(v.into())),
-                Some(node.pattern().subject.clone()),
-                Some(node.pattern().predicate.clone().into()),
-                Some(node.pattern().object.clone()),
+                Some(quad_pattern.triple_pattern.subject.clone()),
+                Some(quad_pattern.triple_pattern.predicate.clone().into()),
+                Some(quad_pattern.triple_pattern.object.clone()),
             ])?
             .build()?;
 

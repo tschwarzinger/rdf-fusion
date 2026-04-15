@@ -3,7 +3,7 @@ use crate::prepare::FileAction;
 use reqwest::Url;
 use std::path::PathBuf;
 
-type PrepClosure = Box<dyn Fn(&BenchmarkContext) -> anyhow::Result<()>>;
+type PrepClosure = Box<dyn Fn(&BenchmarkContext) -> anyhow::Result<()> + Send>;
 
 /// Defines a requirement of preparing for a benchmark.
 pub enum PrepRequirement {

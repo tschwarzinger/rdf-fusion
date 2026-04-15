@@ -1,4 +1,5 @@
 use datafusion::arrow::array::ArrayRef;
+use datafusion::common::DataFusionError;
 use datafusion::logical_expr::{AggregateUDF, Volatility, create_udaf};
 use datafusion::scalar::ScalarValue;
 use datafusion::{error::Result, physical_plan::Accumulator};
@@ -52,10 +53,16 @@ impl SparqlSumAccumulator {
             Err(_) => Ok(self.encoding.create_scalar_null()),
         }
     }
-}
 
-impl Accumulator for SparqlSumAccumulator {
-    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+    /// Implements the update batch operation.
+    ///
+    /// The parameter `ignore_nulls` determined whether null values should be ignored or cause an
+    /// error.
+    fn update_batch_impl(
+        &mut self,
+        values: &[ArrayRef],
+        ignore_nulls: bool,
+    ) -> Result<(), DataFusionError> {
         if values.is_empty() {
             return Ok(());
         }
@@ -70,7 +77,7 @@ impl Accumulator for SparqlSumAccumulator {
 
         for child in typed_arrays {
             match child.downcast() {
-                DowncastTypedFamilyArray::Null(_) => continue,
+                DowncastTypedFamilyArray::Null(_) if ignore_nulls => continue,
                 DowncastTypedFamilyArray::Numeric(numeric_child) => {
                     let new_sum = numeric_child.sum();
                     let new_sum = new_sum.and_then(|sum| old_sum.checked_add(sum));
@@ -84,6 +91,12 @@ impl Accumulator for SparqlSumAccumulator {
         }
 
         Ok(())
+    }
+}
+
+impl Accumulator for SparqlSumAccumulator {
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        self.update_batch_impl(values, true)
     }
 
     fn evaluate(&mut self) -> DFResult<ScalarValue> {
@@ -99,7 +112,7 @@ impl Accumulator for SparqlSumAccumulator {
     }
 
     fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
-        self.update_batch(states)
+        self.update_batch_impl(states, false)
     }
 }
 

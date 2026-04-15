@@ -7,6 +7,7 @@ use crate::benchmarks::windfarm::WindFarmBenchmark;
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::RdfFusionBenchContext;
 use clap::ValueEnum;
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use std::fs;
 use std::path::PathBuf;
 
@@ -37,6 +38,18 @@ pub struct BenchmarkingOptions {
     pub target_partitions: Option<usize>,
     /// The number of MiBs that DataFusion is allowed to Suse.
     pub memory_size: Option<usize>,
+    /// The storage backend to use for the benchmark.
+    pub storage_backend: BenchmarkStorageBackend,
+    /// The storage encoding to use for the benchmark.
+    pub storage_encoding: QuadStorageEncodingName,
+}
+
+/// Represents the possible storage backends a benchmark.
+pub enum BenchmarkStorageBackend {
+    /// A Delta Lake storage backend that is stored in-memory.
+    DeltaLakeInMemory,
+    /// A Delta Lake storage backend that is stored on disk.
+    DeltaLakeOnDisk,
 }
 
 /// Executes an `operation` of a given `benchmark`.
@@ -51,12 +64,14 @@ pub async fn execute_benchmark_operation(
 ) -> anyhow::Result<()> {
     let bench_files = PathBuf::from("./bench_files");
     let data = PathBuf::from("./data");
+    let databases = PathBuf::from("./databases");
     let results = PathBuf::from("./results");
 
     fs::create_dir_all(&data)?;
     fs::create_dir_all(&results)?;
 
-    let context = RdfFusionBenchContext::new(options, bench_files, data, results);
+    let context =
+        RdfFusionBenchContext::new(options, bench_files, data, databases, results);
 
     let benchmark = create_benchmark_instance(benchmark)?;
     match operation {

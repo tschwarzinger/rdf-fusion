@@ -1,0 +1,37 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(label@0) as label, ENC_PT(comment@1) as comment, ENC_PT(producer@2) as producer, ENC_PT(productFeature@3) as productFeature, ENC_PT(propertyTextual1@4) as propertyTextual1, ENC_PT(propertyTextual2@5) as propertyTextual2, ENC_PT(propertyTextual3@6) as propertyTextual3, ENC_PT(propertyNumeric1@7) as propertyNumeric1, ENC_PT(propertyNumeric2@8) as propertyNumeric2, ENC_PT(propertyTextual4@9) as propertyTextual4, ENC_PT(propertyTextual5@10) as propertyTextual5, ENC_PT(propertyNumeric4@11) as propertyNumeric4]
+  NestedLoopJoinExec: join_type=Left
+    NestedLoopJoinExec: join_type=Left
+      NestedLoopJoinExec: join_type=Left
+        CrossJoinExec
+          CrossJoinExec
+            CrossJoinExec
+              CrossJoinExec
+                CrossJoinExec
+                  HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(f@3, f@0)], projection=[label@0, comment@1, producer@2, productFeature@5]
+                    CrossJoinExec
+                      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(p@2, p@0)], projection=[label@0, comment@1, producer@3]
+                        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(p@2, p@0)], projection=[label@0, comment@1, p@2, producer@4]
+                          CrossJoinExec
+                            CrossJoinExec
+                              DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www.w3.org/2000/01/rdf-schema#label> ?label], blank_node_mode=Variable
+                              DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www.w3.org/2000/01/rdf-schema#comment> ?comment], blank_node_mode=Variable
+                            DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> ?p], blank_node_mode=Variable
+                          FilterExec: DynamicFilter [ p@0 >= 17156 AND p@0 <= 17156 AND p@0 IN (SET) ([17156]) ]
+                            DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?p <http://www.w3.org/2000/01/rdf-schema#label> ?producer], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ p@0 >= 17156 AND p@0 <= 17156 AND p@0 IN (SET) ([17156]) ]]
+                        FilterExec: DynamicFilter [ p@0 >= 17156 AND p@0 <= 17156 AND p@0 IN (SET) ([17156]) ]
+                          DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://purl.org/dc/elements/1.1/publisher> ?p], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ p@0 >= 17156 AND p@0 <= 17156 AND p@0 IN (SET) ([17156]) ]]
+                      DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?f], blank_node_mode=Variable
+                    FilterExec: DynamicFilter [ f@0 >= 172 AND f@0 <= 6043 AND f@0 IN (SET) ([172, 182, 693, 694, 705, 6030, 6038, 6039, 6043]) ]
+                      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?f <http://www.w3.org/2000/01/rdf-schema#label> ?productFeature], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ f@0 >= 172 AND f@0 <= 6043 AND f@0 IN (SET) ([172, 182, 693, 694, 705, 6030, 6038, 6039, 6043]) ]]
+                  DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual1> ?propertyTextual1], blank_node_mode=Variable
+                DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual2> ?propertyTextual2], blank_node_mode=Variable
+              DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual3> ?propertyTextual3], blank_node_mode=Variable
+            DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?propertyNumeric1], blank_node_mode=Variable
+          DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?propertyNumeric2], blank_node_mode=Variable
+        DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual4> ?propertyTextual4], blank_node_mode=Variable
+      DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual5> ?propertyTextual5], blank_node_mode=Variable
+    DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric4> ?propertyNumeric4], blank_node_mode=Variable

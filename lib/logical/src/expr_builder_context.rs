@@ -446,15 +446,19 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
     ) -> DFResult<RdfFusionExprBuilder<'context>> {
         let udaf = self.registry().udaf(&FunctionName::Builtin(name))?;
 
-        // Currently, UDAFs are only supported for typed values
-        let args = args
-            .into_iter()
-            .map(|e| {
-                self.try_create_builder(e)?
-                    .with_encoding(EncodingName::TypedFamily)?
-                    .build()
-            })
-            .collect::<DFResult<Vec<_>>>()?;
+        // Currently, UDAFs are only supported for typed values (we have an exception for count).
+        // In the future we should solve this similar to the scalar functions
+        let args = match name {
+            BuiltinName::Count => args,
+            _ => args
+                .into_iter()
+                .map(|e| {
+                    self.try_create_builder(e)?
+                        .with_encoding(EncodingName::TypedFamily)?
+                        .build()
+                })
+                .collect::<DFResult<Vec<_>>>()?,
+        };
 
         let expr = Expr::AggregateFunction(AggregateFunction::new_udf(
             udaf,

@@ -1,6 +1,5 @@
 use crate::RdfFusionExprBuilderContext;
 use datafusion::common::{plan_datafusion_err, plan_err};
-use datafusion::functions_aggregate::count::{count, count_distinct};
 use datafusion::functions_aggregate::first_last::first_value;
 use datafusion::logical_expr::{Expr, ExprSchemable, lit};
 use rdf_fusion_encoding::plain_term::{
@@ -168,7 +167,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
             ))),
         };
 
-        let mut pt_builder = PlainTermArrayElementBuilder::new(1);
+        let mut pt_builder = PlainTermArrayElementBuilder::new();
         match term_res {
             Ok(term) => pt_builder.append_term(term),
             Err(_) => pt_builder.append_null(),
@@ -726,18 +725,8 @@ impl<'root> RdfFusionExprBuilder<'root> {
     ///
     /// # Relevant Resources
     /// - [SPARQL 1.1 - Count](https://www.w3.org/TR/sparql11-query/#defn_aggCount)
-    #[allow(
-        clippy::unnecessary_wraps,
-        reason = "Consistent API, Maybe Count becomes registerable"
-    )]
     pub fn count(self, distinct: bool) -> DFResult<Self> {
-        Ok(if distinct {
-            let expr = count_distinct(self.expr);
-            Self { expr, ..self }
-        } else {
-            let expr = count(self.expr);
-            Self { expr, ..self }
-        })
+        self.apply_builtin_udaf(BuiltinName::Count, distinct)
     }
 
     /// Creates a new aggregate expression that computes the maximum of the inner expression.
@@ -790,7 +779,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
     pub fn group_concat(self, distinct: bool, separator: Option<&str>) -> DFResult<Self> {
         let typed_family_encoding = self.context.encodings().typed_family();
 
-        let mut pt_builder = PlainTermArrayElementBuilder::new(1);
+        let mut pt_builder = PlainTermArrayElementBuilder::new();
         let sep = separator.unwrap_or(" ");
         pt_builder.append_literal(LiteralRef::new_simple_literal(sep));
 
@@ -994,7 +983,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 .into_scalar_value(),
             EncodingName::TypedFamily => {
                 let typed_family_encoding = self.context.encodings().typed_family();
-                let mut pt_builder = PlainTermArrayElementBuilder::new(1);
+                let mut pt_builder = PlainTermArrayElementBuilder::new();
                 pt_builder.append_term(scalar);
                 let pt_array = pt_builder.finish();
                 let tf_array =

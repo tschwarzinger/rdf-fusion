@@ -49,7 +49,7 @@ impl SortableTermEncodingField {
     /// Get the [DataType] of this field.
     pub fn data_type(self) -> DataType {
         match self {
-            SortableTermEncodingField::Type => DataType::UInt8,
+            SortableTermEncodingField::Type => DataType::Int8,
             SortableTermEncodingField::Numeric => DataType::Float64,
             SortableTermEncodingField::Bytes => DataType::Binary,
         }

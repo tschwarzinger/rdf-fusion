@@ -5,7 +5,7 @@ use crate::typed_family::families::{
 };
 use crate::typed_family::{TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, StringArray, StringBuilder, UInt8Array,
+    Array, ArrayRef, AsArray, BooleanArray, Int8Array, StringArray, StringBuilder,
     UnionArray,
 };
 use datafusion::arrow::buffer::ScalarBuffer;
@@ -327,13 +327,8 @@ impl FamilyArray for ResourceFamilyArray {
         &self,
     ) -> Result<crate::plain_term::PlainTermArray, ArrowError> {
         let len = self.inner_ref().len();
-        let type_ids: Vec<u8> = self
-            .union_array()
-            .type_ids()
-            .iter()
-            .map(|&tid| tid as u8)
-            .collect();
-        let term_type = UInt8Array::from(type_ids);
+        let term_type =
+            Int8Array::from_iter(self.union_array().type_ids().iter().copied());
 
         // We want the literal representation of IRIs and BNodes
         let mut values = Vec::with_capacity(len);

@@ -61,6 +61,8 @@ implement_from!(OppositeSignInDurationComponentsError);
 implement_from!(FromUtf8Error);
 
 /// An error related to storage operations (reads, writes...).
+///
+/// TODO improve this
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum StorageError {

@@ -1,0 +1,31 @@
+---
+source: bench/tests/query_results/bsbm.rs
+expression: "run_select_query(&store, include_str!(\"./queries/explore-q4.sparql\")).await"
+---
+{
+  "head": {
+    "vars": [
+      "product",
+      "label",
+      "propertyTextual"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "label": {
+          "type": "literal",
+          "value": "repopulates"
+        },
+        "product": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer7/Product318"
+        },
+        "propertyTextual": {
+          "type": "literal",
+          "value": "viewier parallels rectorial desalts foreleg fathomable madcaps rhombs joyfulness birthplaces hajjis undaunted patrimonially pacifisms"
+        }
+      }
+    ]
+  }
+}

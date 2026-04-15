@@ -269,7 +269,7 @@ mod tests {
             for ex in results {
                 let mut buffer = Vec::new();
                 ex.write(&mut buffer, format).await?;
-                let ex2 = QueryResults::read(Cursor::new(buffer.clone()), format)?;
+                let ex2 = QueryResults::read(Cursor::new(buffer.clone()), format).await?;
                 let mut buffer2 = Vec::new();
                 ex2.write(&mut buffer2, format).await?;
                 assert_eq!(

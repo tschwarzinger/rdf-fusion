@@ -25,5 +25,8 @@ sparesults.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
+[dev-dependencies]
+insta.workspace = true
+
 [lints]
 workspace = true

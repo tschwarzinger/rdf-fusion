@@ -27,10 +27,10 @@ impl Display for UnknownSortableTermTypeError {
     }
 }
 
-impl TryFrom<u8> for SortableTermType {
+impl TryFrom<i8> for SortableTermType {
     type Error = UnknownSortableTermTypeError;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: i8) -> Result<Self, Self::Error> {
         let term_type = match value {
             0 => SortableTermType::Null,
             1 => SortableTermType::BlankNodes,
@@ -51,7 +51,7 @@ impl TryFrom<u8> for SortableTermType {
     }
 }
 
-impl From<SortableTermType> for u8 {
+impl From<SortableTermType> for i8 {
     fn from(value: SortableTermType) -> Self {
         match value {
             SortableTermType::Null => 0,
@@ -93,7 +93,7 @@ mod tests {
     }
 
     fn test_roundtrip(term_field: SortableTermType) {
-        let value: u8 = term_field.into();
+        let value: i8 = term_field.into();
         assert_eq!(term_field, value.try_into().unwrap());
     }
 }

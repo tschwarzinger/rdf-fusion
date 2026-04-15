@@ -1,11 +1,9 @@
 use crate::sparql::QueryDataset;
 use crate::sparql::rewriting::expression_rewriter::ExpressionRewriter;
-use datafusion::arrow::datatypes::DataType;
 use datafusion::common::{Column, DFSchema, not_impl_err, plan_err};
-use datafusion::functions_aggregate::count::{count, count_udaf};
-use datafusion::logical_expr::utils::COUNT_STAR_EXPANSION;
 use datafusion::logical_expr::{Expr, LogicalPlan, SortExpr};
 use rdf_fusion_encoding::EncodingName;
+use rdf_fusion_functions::aggregates::sparql_count;
 use rdf_fusion_logical::join::SparqlJoinType;
 use rdf_fusion_logical::{
     ActiveGraph, RdfFusionLogicalPlanBuilder, RdfFusionLogicalPlanBuilderContext,
@@ -165,6 +163,10 @@ impl GraphPatternRewriter {
                     .collect::<Result<Vec<_>, _>>()?;
                 inner.distinct_with_sort(sort_exprs)
             }
+            GraphPattern::Reduced { inner } => {
+                let inner = self.rewrite_graph_pattern(inner)?;
+                inner.reduced()
+            }
             GraphPattern::OrderBy { inner, expression } => {
                 let inner = self.rewrite_graph_pattern(inner)?;
                 let sort_exprs = expression
@@ -227,8 +229,7 @@ impl GraphPatternRewriter {
                     })
                     .collect::<DFResult<Vec<_>>>()?;
 
-                let aggregate_result = inner.group(variables, &aggregate_exprs)?;
-                self.ensure_all_columns_are_rdf_terms(aggregate_result)
+                inner.group(variables, &aggregate_exprs)
             }
             _ => not_impl_err!("rewrite_graph_pattern: {:?}", pattern),
         }
@@ -308,7 +309,12 @@ impl GraphPatternRewriter {
             ExpressionRewriter::new(self, expr_builder, self.base_iri.as_ref());
         match expression {
             AggregateExpression::CountSolutions { distinct } => match distinct {
-                false => Ok(count(Expr::Literal(COUNT_STAR_EXPANSION, None))),
+                false => {
+                    let lit = expr_builder
+                        .literal(&rdf_fusion_model::Literal::from(1))?
+                        .build()?;
+                    expr_builder.try_create_builder(lit)?.count(false)?.build()
+                }
                 true => {
                     let exprs = schema
                         .columns()
@@ -317,7 +323,9 @@ impl GraphPatternRewriter {
                         .collect::<Vec<_>>();
                     Ok(Expr::AggregateFunction(
                         datafusion::logical_expr::expr::AggregateFunction::new_udf(
-                            count_udaf(),
+                            Arc::new(sparql_count(Arc::clone(
+                                self.builder_context.encodings().typed_family(),
+                            ))),
                             exprs,
                             true,
                             None,
@@ -359,47 +367,6 @@ impl GraphPatternRewriter {
                 .build_any())
             }
         }
-    }
-
-    /// Ensures that all columns in the result are RDF terms. If not, a cast operation is inserted if
-    /// possible.
-    fn ensure_all_columns_are_rdf_terms(
-        &self,
-        inner: RdfFusionLogicalPlanBuilder,
-    ) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let projections = inner
-            .schema()
-            .fields()
-            .into_iter()
-            .map(|f| {
-                let column = Expr::from(Column::new_unqualified(f.name().as_str()));
-                let encoding = self
-                    .builder_context
-                    .encodings()
-                    .try_get_encoding_name(f.data_type());
-                if encoding.is_some() {
-                    Ok(column)
-                } else {
-                    match f.data_type() {
-                        DataType::Int64 => Ok(inner
-                            .expr_builder_root()
-                            .native_int64_as_term(column)?
-                            .build()?
-                            .alias(f.name())),
-                        other => {
-                            plan_err!(
-                                "Unsupported data type for aggregation result {:?}",
-                                other
-                            )
-                        }
-                    }
-                }
-            })
-            .collect::<DFResult<Vec<_>>>()?;
-
-        let context = inner.context().clone();
-        let new_plan = inner.into_inner().project(projections)?;
-        Ok(context.create(Arc::new(new_plan.build()?)))
     }
 }
 

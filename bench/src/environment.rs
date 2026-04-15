@@ -1,12 +1,17 @@
-use crate::BenchmarkingOptions;
 use crate::benchmarks::BenchmarkName;
 use crate::prepare::{
     PrepRequirement, prepare_copy_file, prepare_run_closure, prepare_run_command,
 };
 use crate::prepare::{ensure_file_download, prepare_file_download};
+use crate::{BenchmarkStorageBackend, BenchmarkingOptions};
 use anyhow::bail;
-use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
+use datafusion::execution::cache::cache_manager::CacheManagerConfig;
+use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::prelude::SessionConfig;
+use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
+use rdf_fusion::execution::RdfFusionContextBuilder;
+use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion::store::Store;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -20,6 +25,8 @@ pub struct RdfFusionBenchContext {
     bench_files_dir: PathBuf,
     /// The path to the data dir.
     data_dir: Mutex<PathBuf>,
+    /// The path to the database dir.
+    databases_dir: Mutex<PathBuf>,
     /// The path to the results dir.
     results_dir: Mutex<PathBuf>,
 }
@@ -30,27 +37,36 @@ impl RdfFusionBenchContext {
         options: BenchmarkingOptions,
         bench_files_dir: PathBuf,
         data_dir: PathBuf,
+        database_dir: PathBuf,
         results_dir: PathBuf,
     ) -> Self {
         Self {
             options,
             bench_files_dir,
             data_dir: Mutex::new(data_dir),
+            databases_dir: Mutex::new(database_dir),
             results_dir: Mutex::new(results_dir),
         }
     }
 
     /// Creates a new [RdfFusionBenchContext] used in the criterion benchmarks.
-    pub fn new_for_criterion(data_dir: PathBuf, target_partitions: usize) -> Self {
+    pub fn new_for_criterion(
+        data_dir: PathBuf,
+        storage_encoding: QuadStorageEncodingName,
+        target_partitions: usize,
+    ) -> Self {
         Self {
             options: BenchmarkingOptions {
                 verbose_results: false,
                 target_partitions: Some(target_partitions),
                 memory_size: None,
+                storage_backend: BenchmarkStorageBackend::DeltaLakeInMemory,
+                storage_encoding,
             },
             data_dir: Mutex::new(data_dir),
+            databases_dir: Mutex::new(PathBuf::from("/tmp/database")),
             bench_files_dir: PathBuf::from("./bench_files"),
-            results_dir: Mutex::new(PathBuf::from("/temp")),
+            results_dir: Mutex::new(PathBuf::from("/tmp/results")),
         }
     }
 
@@ -68,22 +84,72 @@ impl RdfFusionBenchContext {
         Ok(self.data_dir.lock().expect("Poisoned").join(file))
     }
 
-    pub fn create_store(&self) -> Store {
-        let mut config = SessionConfig::new()
-            .with_batch_size(8192)
-            .with_target_partitions(self.options.target_partitions.unwrap_or(1));
+    pub async fn create_store(&self) -> Store {
+        let cache_config = CacheManagerConfig::default();
+        let mut builder = RuntimeEnvBuilder::new().with_cache_manager(cache_config);
+        if let Some(memory_size) = self.options.memory_size {
+            builder = builder.with_memory_limit(memory_size * 1024 * 1024, 1.0);
+        }
+        let runtime_env = builder.build_arc().expect("Failed to build RuntimeEnv");
 
-        let options = config.options_mut();
-        options.optimizer.enable_dynamic_filter_pushdown = true;
-
-        let runtime_enc = match self.options.memory_size {
-            None => Arc::new(RuntimeEnv::default()),
-            Some(memory_size) => RuntimeEnvBuilder::new()
-                .with_memory_limit(memory_size * 1024 * 1024, 1f64)
-                .build_arc()
-                .expect("Only setting memory limit"),
+        let mut config =
+            SessionConfig::from_env().expect("Failed to create SessionConfig");
+        if let Some(target_partitions) = self.options.target_partitions {
+            config = config.with_target_partitions(target_partitions)
         };
-        Store::new_with_datafusion_config(config, runtime_enc)
+        config.options_mut().execution.parquet.pushdown_filters = true;
+
+        let storage_backend = match self.options.storage_backend {
+            BenchmarkStorageBackend::DeltaLakeInMemory => {
+                DeltaQuadStorageBuilder::new(Arc::new(TypedFamilyEncoding::default()))
+                    .with_location("memory://")
+                    .with_encoding(self.options.storage_encoding)
+                    .build()
+                    .await
+                    .expect("Failed to create DeltaQuadStorage")
+            }
+            BenchmarkStorageBackend::DeltaLakeOnDisk => {
+                let full_iri = prepare_database_directory(self);
+                DeltaQuadStorageBuilder::new(Arc::new(TypedFamilyEncoding::default()))
+                    .with_location(full_iri)
+                    .with_encoding(self.options.storage_encoding)
+                    .build()
+                    .await
+                    .expect("Failed to create DeltaQuadStorage")
+            }
+        };
+
+        let context = RdfFusionContextBuilder::new(storage_backend)
+            .with_session_config(Some(config))
+            .with_runtime_env(Some(runtime_env))
+            .build()
+            .expect("Failed to create RdfFusionContext");
+        return Store::new(context);
+
+        /// Prepares the directory where the database is stored.
+        fn prepare_database_directory(context: &RdfFusionBenchContext) -> String {
+            let database_dir = context.databases_dir.lock().expect("Poisoned");
+
+            let full_path = if database_dir.is_absolute() {
+                database_dir.clone()
+            } else {
+                std::env::current_dir()
+                    .expect("Failed to get current directory")
+                    .join(database_dir.as_path())
+            };
+
+            if full_path.exists() {
+                std::fs::remove_dir_all(&full_path)
+                    .expect("Failed to remove existing directory");
+            }
+            std::fs::create_dir_all(&full_path).expect("Failed to create directory");
+
+            let full_path = full_path
+                .canonicalize()
+                .expect("Failed to resolve absolute path");
+
+            format!("file://{}", full_path.display())
+        }
     }
 
     /// Creates a new folder in the results directory and uses it until [Self::pop_dir] is
@@ -99,9 +165,11 @@ impl RdfFusionBenchContext {
         results_dir_name: &str,
     ) -> anyhow::Result<()> {
         let mut data_dir = self.data_dir.lock().unwrap();
+        let mut databases_dir = self.databases_dir.lock().unwrap();
         let mut results_dir = self.results_dir.lock().unwrap();
 
         data_dir.push(data_dir_name);
+        databases_dir.push(data_dir_name);
         results_dir.push(results_dir_name);
 
         Ok(())
@@ -110,9 +178,11 @@ impl RdfFusionBenchContext {
     /// Pops the last directory from the stack.
     pub fn pop_dir(&self) {
         let mut data_dir = self.data_dir.lock().unwrap();
+        let mut databases_dir = self.databases_dir.lock().unwrap();
         let mut results_dir = self.results_dir.lock().unwrap();
 
         data_dir.pop();
+        databases_dir.pop();
         results_dir.pop();
     }
 

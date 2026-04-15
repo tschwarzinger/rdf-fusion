@@ -1,0 +1,8 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(property@0) as property, ENC_PT(hasValue@1) as hasValue, ENC_PT(isValueOf@2) as isValueOf]
+  UnionExec
+    DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250> ?property ?hasValue], blank_node_mode=Variable, projection=[property, hasValue, isValueOf]
+    DeltaQuadStorageScanExec: index=GOSP, active_graph=Default Graph, triple_pattern=[?isValueOf ?property <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250>], blank_node_mode=Variable, projection=[property, hasValue, isValueOf]

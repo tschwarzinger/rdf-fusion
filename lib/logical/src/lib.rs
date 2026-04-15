@@ -24,6 +24,7 @@ pub mod join;
 mod logical_plan_builder;
 mod logical_plan_builder_context;
 pub mod minus;
+pub mod object_id;
 pub mod paths;
 pub mod patterns;
 pub mod quad_pattern;

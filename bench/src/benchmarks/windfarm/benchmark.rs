@@ -12,6 +12,7 @@ use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use anyhow::Context;
 use async_trait::async_trait;
+use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::store::Store;
 use reqwest::Url;
@@ -114,25 +115,25 @@ impl Benchmark for WindFarmBenchmark {
     ) -> anyhow::Result<Store> {
         let start = datafusion::common::instant::Instant::now();
         if print_info {
-            println!("Creating in-memory store and loading data ...");
+            println!("Creating store and loading data ...");
         }
         let dataset_path = create_files(ctx)?;
-        let memory_store = ctx.parent().create_store();
+        let memory_store = ctx.parent().create_store().await;
 
         if print_info {
             println!("Loading static data ...");
         }
-        let data = fs::read(&dataset_path.wind_farm_data)?;
+        let data = tokio::fs::File::open(&dataset_path.wind_farm_data).await?;
         memory_store
-            .load_from_reader(RdfFormat::N3, data.as_slice())
+            .load_from_reader(data, RdfParserOptions::with_format(RdfFormat::N3))
             .await?;
 
         if print_info {
             println!("Loading time series data ...");
         }
-        let data = fs::read(&dataset_path.time_series_data)?;
+        let data = tokio::fs::File::open(&dataset_path.time_series_data).await?;
         memory_store
-            .load_from_reader(RdfFormat::N3, data.as_slice())
+            .load_from_reader(data, RdfParserOptions::with_format(RdfFormat::N3))
             .await?;
 
         if print_info {
@@ -141,9 +142,17 @@ impl Benchmark for WindFarmBenchmark {
                 "Store created and data loaded. Took {} ms.",
                 duration.as_millis()
             );
-            print_store_stats(&memory_store).await?;
-            println!("Store created and data loaded.");
         }
+
+        let start = datafusion::common::instant::Instant::now();
+        memory_store.optimize().await?;
+
+        if print_info {
+            let duration = start.elapsed();
+            println!("Store optimized. Took {} ms.", duration.as_millis());
+            print_store_stats(&memory_store).await?;
+        }
+
         Ok(memory_store)
     }
 

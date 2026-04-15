@@ -8,5 +8,5 @@
 
 //! Contains storage layer implementations for [RDF Fusion](https://docs.rs/rdf-fusion/).
 
-pub(crate) mod index;
-pub mod memory;
+pub mod delta;
+pub mod index;

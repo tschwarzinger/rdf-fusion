@@ -22,7 +22,7 @@ impl Test for W3CSparqlSyntaxTest {
     }
 
     async fn run(&self) -> anyhow::Result<TestOutcome> {
-        let content = read_file_to_string(&self.action_file)?;
+        let content = read_file_to_string(&self.action_file).await?;
 
         let result = if self.is_positive {
             if self.is_update {

@@ -1,18 +1,18 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
 use crate::cli::{Args, Command};
-use anyhow::{Context, bail};
+use anyhow::Context;
 use clap::Parser;
+use datafusion::common::runtime::SpawnedTask;
+use datafusion::execution::cache::cache_manager::CacheManagerConfig;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::prelude::SessionConfig;
-use rdf_fusion::io::{RdfFormat, RdfParser, RdfSerializer};
-use rdf_fusion::model::{GraphName, NamedNode};
+use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
+use rdf_fusion::execution::RdfFusionContextBuilder;
+use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion::store::Store;
 use rdf_fusion_web::ServerConfig;
-use std::ffi::OsStr;
-use std::fs::File;
-use std::io::{self, BufWriter, Read, Write, stdin, stdout};
-use std::path::Path;
 use std::str;
+use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -31,220 +31,47 @@ pub async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let matches = Args::parse();
-    match matches.command {
+    let args = Args::parse();
+    match args.command {
         Command::Serve {
             bind,
             cors,
             union_default_graph,
         } => {
-            let runtime_env = match matches.runtime.memory_limit {
-                None => RuntimeEnvBuilder::default().build_arc()?,
-                Some(limit) => RuntimeEnvBuilder::default()
-                    .with_memory_limit(limit * 1024 * 1024, 1f64)
-                    .build_arc()?,
-            };
-            let store = Store::new_with_datafusion_config(
-                SessionConfig::from_env()?,
-                runtime_env,
-            );
-            serve(store, &bind, false, cors, union_default_graph).await
-        }
-        Command::Convert {
-            from_file,
-            from_format,
-            from_base,
-            to_file,
-            to_format,
-            to_base,
-            lenient,
-            from_graph,
-            from_default_graph,
-            to_graph,
-        } => {
-            let from_format = if let Some(format) = from_format {
-                rdf_format_from_name(&format)?
-            } else if let Some(file) = &from_file {
-                rdf_format_from_path(file)?
-            } else {
-                bail!("The --from-format option must be set when reading from stdin")
-            };
-            let mut parser = RdfParser::from_format(from_format);
-            if let Some(base) = from_base {
-                parser = parser
-                    .with_base_iri(&base)
-                    .with_context(|| format!("Invalid base IRI {base}"))?;
+            let cache_config = CacheManagerConfig::default();
+            let mut builder = RuntimeEnvBuilder::new().with_cache_manager(cache_config);
+            if let Some(memory_limit) = args.runtime.memory_limit {
+                builder = builder.with_memory_limit(memory_limit * 1024 * 1024, 1.0);
             }
+            let runtime_env = builder.build_arc().expect("Failed to build RuntimeEnv");
 
-            let to_format = if let Some(format) = to_format {
-                rdf_format_from_name(&format)?
-            } else if let Some(file) = &to_file {
-                rdf_format_from_path(file)?
-            } else {
-                bail!("The --to-format option must be set when writing to stdout")
-            };
-            let serializer = RdfSerializer::from_format(to_format);
+            let location = args.runtime.location.as_deref().unwrap_or("memory://");
+            let storage =
+                DeltaQuadStorageBuilder::new(Arc::new(TypedFamilyEncoding::default()))
+                    .with_location(location)
+                    .build()
+                    .await?;
 
-            let from_graph = if let Some(from_graph) = from_graph {
-                Some(
-                    NamedNode::new(&from_graph)
-                        .with_context(|| {
-                            format!("The source graph name {from_graph} is invalid")
-                        })?
-                        .into(),
-                )
-            } else if from_default_graph {
-                Some(GraphName::DefaultGraph)
-            } else {
-                None
-            };
-            let to_graph = if let Some(to_graph) = to_graph {
-                NamedNode::new(&to_graph)
-                    .with_context(|| {
-                        format!("The target graph name {to_graph} is invalid")
-                    })?
-                    .into()
-            } else {
-                GraphName::DefaultGraph
-            };
+            let context = RdfFusionContextBuilder::new(storage)
+                .with_session_config(Some(SessionConfig::from_env()?))
+                .with_runtime_env(Some(runtime_env))
+                .build()
+                .context("Failed to create RDF Fusion Context")?;
+            let store = Store::new(context);
 
-            match (from_file, to_file) {
-                (Some(from_file), Some(to_file)) => close_file_writer(do_convert(
-                    parser,
-                    File::open(from_file)?,
-                    serializer,
-                    BufWriter::new(File::create(to_file)?),
-                    lenient,
-                    &from_graph,
-                    &to_graph,
-                    to_base.as_deref(),
-                )?),
-                (Some(from_file), None) => do_convert(
-                    parser,
-                    File::open(from_file)?,
-                    serializer,
-                    stdout().lock(),
-                    lenient,
-                    &from_graph,
-                    &to_graph,
-                    to_base.as_deref(),
-                )?
-                .flush(),
-                (None, Some(to_file)) => close_file_writer(do_convert(
-                    parser,
-                    stdin().lock(),
-                    serializer,
-                    BufWriter::new(File::create(to_file)?),
-                    lenient,
-                    &from_graph,
-                    &to_graph,
-                    to_base.as_deref(),
-                )?),
-                (None, None) => do_convert(
-                    parser,
-                    stdin().lock(),
-                    serializer,
-                    stdout().lock(),
-                    lenient,
-                    &from_graph,
-                    &to_graph,
-                    to_base.as_deref(),
-                )?
-                .flush(),
-            }?;
+            SpawnedTask::spawn(async move {
+                serve(store, &bind, false, cors, union_default_graph).await
+            })
+            .await
+            .context("Failed to join Web Server")?
+            .context("Error from Web Server")?;
+
             Ok(())
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn do_convert<R: Read, W: Write>(
-    parser: RdfParser,
-    reader: R,
-    mut serializer: RdfSerializer,
-    writer: W,
-    lenient: bool,
-    from_graph: &Option<GraphName>,
-    default_graph: &GraphName,
-    to_base: Option<&str>,
-) -> anyhow::Result<W> {
-    let mut parser = parser.for_reader(reader);
-    let first = parser.next(); // We read the first element to get prefixes and the base IRI
-    if let Some(base_iri) = to_base.or_else(|| parser.base_iri()) {
-        serializer = serializer
-            .with_base_iri(base_iri)
-            .with_context(|| format!("Invalid base IRI: {base_iri}"))?;
-    }
-    for (prefix_name, prefix_iri) in parser.prefixes() {
-        serializer = serializer
-            .with_prefix(prefix_name, prefix_iri)
-            .with_context(|| {
-                format!("Invalid IRI for prefix {prefix_name}: {prefix_iri}")
-            })?;
-    }
-    let mut serializer = serializer.for_writer(writer);
-    for quad_result in first.into_iter().chain(parser) {
-        match quad_result {
-            Ok(mut quad) => {
-                if let Some(from_graph) = from_graph {
-                    if quad.graph_name == *from_graph {
-                        quad.graph_name = GraphName::DefaultGraph;
-                    } else {
-                        continue;
-                    }
-                }
-                if quad.graph_name.is_default_graph() {
-                    quad.graph_name = default_graph.clone();
-                }
-                serializer.serialize_quad(&quad)?;
-            }
-            Err(e) => {
-                if lenient {
-                    eprintln!("Parsing error: {e}");
-                } else {
-                    return Err(e.into());
-                }
-            }
-        }
-    }
-    Ok(serializer.finish()?)
-}
-
-fn format_from_path<T>(
-    path: &Path,
-    from_extension: impl FnOnce(&str) -> anyhow::Result<T>,
-) -> anyhow::Result<T> {
-    if let Some(ext) = path.extension().and_then(OsStr::to_str) {
-        from_extension(ext).map_err(|e| {
-            e.context(format!(
-                "Not able to guess the file format from file name extension '{ext}'"
-            ))
-        })
-    } else {
-        bail!(
-            "The path {} has no extension to guess a file format from",
-            path.display()
-        )
-    }
-}
-
-fn rdf_format_from_path(path: &Path) -> anyhow::Result<RdfFormat> {
-    format_from_path(path, |ext| {
-        RdfFormat::from_extension(ext)
-            .with_context(|| format!("The file extension '{ext}' is unknown"))
-    })
-}
-
-fn rdf_format_from_name(name: &str) -> anyhow::Result<RdfFormat> {
-    if let Some(t) = RdfFormat::from_extension(name) {
-        return Ok(t);
-    }
-    if let Some(t) = RdfFormat::from_media_type(name) {
-        return Ok(t);
-    }
-    bail!("The file format '{name}' is unknown")
-}
-
+/// Starts a Web Server that serves RDF Fusion's Web API.
 async fn serve(
     store: Store,
     bind: &str,
@@ -260,12 +87,4 @@ async fn serve(
         union_default_graph,
     };
     rdf_fusion_web::serve(server_config).await
-}
-
-fn close_file_writer(writer: BufWriter<File>) -> io::Result<()> {
-    let mut file = writer
-        .into_inner()
-        .map_err(io::IntoInnerError::into_error)?;
-    file.flush()?;
-    file.sync_all()
 }

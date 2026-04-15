@@ -1,12 +1,16 @@
 use crate::TermEncoding;
+use crate::encoding::EncodingScalar;
 use crate::object_id::{ObjectIdEncoding, ObjectIdEncodingRef};
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermEncoding};
 use datafusion::arrow::datatypes::{DataType, Field, Fields, Schema, SchemaRef};
-use datafusion::common::{DFSchema, DFSchemaRef};
+use datafusion::common::{DFSchema, DFSchemaRef, ScalarValue};
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_model::{DFResult, TermRef};
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
+use thiserror::Error;
 
 /// Defines which encoding is used for retrieving quads from the storage.
 ///
@@ -21,6 +25,42 @@ pub enum QuadStorageEncoding {
     PlainTerm,
     /// Uses the provided object id encoding.
     ObjectId(ObjectIdEncodingRef),
+}
+
+/// A version of [`QuadStorageEncoding`] that only reflects the name of the encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum QuadStorageEncodingName {
+    /// See [`QuadStorageEncoding::PlainTerm`]
+    PlainTerm,
+    /// See [`QuadStorageEncoding::ObjectId`]
+    ObjectId,
+}
+
+impl Display for QuadStorageEncodingName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            QuadStorageEncodingName::PlainTerm => f.write_str("plain-term"),
+            QuadStorageEncodingName::ObjectId => f.write_str("object-id"),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+#[error(
+    "Invalid quad storage encoding: {0}. Supported encodings: plain-term, object-id."
+)]
+pub struct QuadStorageEncodingNameParserError(String);
+
+impl FromStr for QuadStorageEncodingName {
+    type Err = QuadStorageEncodingNameParserError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "plain-term" => Ok(QuadStorageEncodingName::PlainTerm),
+            "object-id" => Ok(QuadStorageEncodingName::ObjectId),
+            _ => Err(QuadStorageEncodingNameParserError(s.to_string())),
+        }
+    }
 }
 
 static PLAIN_TERM_QUAD_SCHEMA: LazyLock<SchemaRef> = LazyLock::new(|| {
@@ -62,14 +102,27 @@ impl QuadStorageEncoding {
             QuadStorageEncoding::PlainTerm => None,
         }
     }
+
+    /// Encodes the given term into a [ScalarValue] that can be used for filtering.
+    pub fn encode_term_scalar(&self, term: TermRef<'_>) -> DFResult<ScalarValue> {
+        match self {
+            QuadStorageEncoding::PlainTerm => Ok(PLAIN_TERM_ENCODING
+                .encode_term(Ok(term))?
+                .into_scalar_value()),
+            QuadStorageEncoding::ObjectId(enc) => {
+                let pt_scalar = PLAIN_TERM_ENCODING.encode_term(Ok(term))?;
+                Ok(enc.encode_scalar(&pt_scalar)?.into_scalar_value())
+            }
+        }
+    }
 }
 
 impl Display for QuadStorageEncoding {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             QuadStorageEncoding::PlainTerm => write!(f, "PlainTerm"),
             QuadStorageEncoding::ObjectId(encoding) => {
-                write!(f, "ObjectId({})", encoding.object_id_size())
+                write!(f, "ObjectId({})", encoding.object_id_data_type())
             }
         }
     }
@@ -90,4 +143,20 @@ fn object_id_quad_schema(encoding: &ObjectIdEncoding) -> DFSchemaRef {
         )
         .expect("Fields are fixed"),
     )
+}
+
+#[cfg(test)]
+mod test {
+    use crate::QuadStorageEncodingName;
+
+    #[test]
+    fn test_quad_storage_name_parsing_round_trip() {
+        test_parsing_round_trip(QuadStorageEncodingName::PlainTerm);
+        test_parsing_round_trip(QuadStorageEncodingName::ObjectId);
+
+        fn test_parsing_round_trip(name: QuadStorageEncodingName) {
+            let serialized = name.to_string();
+            assert_eq!(serialized.parse::<QuadStorageEncodingName>().unwrap(), name);
+        }
+    }
 }

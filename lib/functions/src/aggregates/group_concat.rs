@@ -1,9 +1,9 @@
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, StringArray};
-use datafusion::arrow::datatypes::DataType;
-use datafusion::common::plan_err;
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::common::{exec_err, plan_err};
 use datafusion::logical_expr::expr::AggregateFunction;
 use datafusion::logical_expr::function::{
-    AccumulatorArgs, AggregateFunctionSimplification,
+    AccumulatorArgs, AggregateFunctionSimplification, StateFieldsArgs,
 };
 use datafusion::logical_expr::{
     AggregateUDF, AggregateUDFImpl, Expr, Signature, Volatility,
@@ -70,7 +70,7 @@ impl AggregateUDFImpl for SparqlGroupConcat {
     }
 
     fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
-        unreachable!("GROUP_CONCAT should have been simplified by the optimizer")
+        exec_err!("GROUP_CONCAT should have been simplified by the optimizer")
     }
 
     fn simplify(&self) -> Option<AggregateFunctionSimplification> {
@@ -163,6 +163,15 @@ impl AggregateUDFImpl for SparqlGroupConcatWithSeparator {
             Arc::clone(&self.encoding),
             self.separator.clone(),
         )))
+    }
+
+    fn state_fields(&self, _args: StateFieldsArgs) -> Result<Vec<FieldRef>> {
+        Ok(vec![
+            Arc::new(Field::new("error", DataType::Boolean, false)),
+            Arc::new(Field::new("value", DataType::Utf8, false)),
+            Arc::new(Field::new("language_error", DataType::Boolean, false)),
+            Arc::new(Field::new("language", DataType::Utf8, true)),
+        ])
     }
 }
 

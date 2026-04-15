@@ -11,10 +11,10 @@ use tokio::runtime::Builder;
 fn encode_solution(criterion: &mut Criterion) {
     let runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
-    let store = Store::new_with_datafusion_config(
+    let store = runtime.block_on(Store::new_in_memory_with_datafusion_config(
         SessionConfig::new().with_target_partitions(1),
         RuntimeEnv::default().into(),
-    );
+    ));
     let quads = generate_quads(8192).collect::<Vec<_>>();
     runtime.block_on(async {
         store.extend(quads.iter().map(Quad::as_ref)).await.unwrap();

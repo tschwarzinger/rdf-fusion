@@ -1,0 +1,36 @@
+---
+source: bench/tests/query_results/bsbm.rs
+expression: "run_select_query(&store, include_str!(\"./queries/explore-q5.sparql\")).await"
+---
+{
+  "head": {
+    "vars": [
+      "product",
+      "productLabel"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "product": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer10/Product461"
+        },
+        "productLabel": {
+          "type": "literal",
+          "value": "initiating"
+        }
+      },
+      {
+        "product": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer21/Product985"
+        },
+        "productLabel": {
+          "type": "literal",
+          "value": "tempered"
+        }
+      }
+    ]
+  }
+}

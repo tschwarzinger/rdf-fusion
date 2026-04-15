@@ -1,16 +1,15 @@
 use crate::active_graph::ActiveGraph;
-use crate::patterns::compute_schema_for_triple_pattern;
+use crate::quad_pattern::QuadPattern;
 use datafusion::common::{DFSchemaRef, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_model::{BlankNodeMatchingMode, DFResult};
-use rdf_fusion_model::{
-    NamedNodePattern, TermPattern, TriplePattern, Variable, VariableRef,
-};
+use rdf_fusion_model::{NamedNodePattern, TermPattern, TriplePattern, Variable};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Formatter;
+use std::sync::Arc;
 
 /// A logical node that represents a scan of quads matching a pattern.
 ///
@@ -27,20 +26,14 @@ use std::fmt::Formatter;
 ///
 /// Planning the [QuadPatternNode] requires users to define a specialized planner for the used
 /// storage layer. This is because the planner should consider storage-specific problems like
-/// sharing a transaction across multiple scans of the quads table in a single query. The built-in
+/// sharing a snapshot across multiple scans of the quads table in a single query. The built-in
 /// storage layers of RDF Fusion provide examples.
 #[derive(PartialEq, Eq, Hash)]
 pub struct QuadPatternNode {
     /// The encoding of the storage layer.
     storage_encoding: QuadStorageEncoding,
-    /// The active graph to query.
-    active_graph: ActiveGraph,
-    /// Whether to project the graph to a variable.
-    graph_variable: Option<Variable>,
-    /// The triple pattern to match.
-    pattern: TriplePattern,
-    /// How to handle blank nodes in the pattern.
-    blank_node_mode: BlankNodeMatchingMode,
+    /// The pattern to match.
+    pattern: QuadPattern,
     /// The schema of the result.
     schema: DFSchemaRef,
 }
@@ -53,17 +46,15 @@ impl QuadPatternNode {
         graph_variable: Option<Variable>,
         pattern: TriplePattern,
     ) -> Self {
-        let schema = compute_schema_for_triple_pattern(
-            &storage_encoding,
-            graph_variable.as_ref().map(|v| v.as_ref()),
-            &pattern,
-            BlankNodeMatchingMode::Variable,
-        );
-        Self {
-            storage_encoding,
+        let pattern = QuadPattern::new(
             active_graph,
             graph_variable,
-            blank_node_mode: BlankNodeMatchingMode::Variable,
+            pattern,
+            BlankNodeMatchingMode::Variable,
+        );
+        let schema = pattern.compute_schema(&storage_encoding);
+        Self {
+            storage_encoding,
             pattern,
             schema,
         }
@@ -79,17 +70,15 @@ impl QuadPatternNode {
         graph_variable: Option<Variable>,
         pattern: TriplePattern,
     ) -> Self {
-        let schema = compute_schema_for_triple_pattern(
-            &storage_encoding,
-            graph_variable.as_ref().map(|v| v.as_ref()),
-            &pattern,
-            BlankNodeMatchingMode::Filter,
-        );
-        Self {
-            storage_encoding,
+        let pattern = QuadPattern::new(
             active_graph,
             graph_variable,
-            blank_node_mode: BlankNodeMatchingMode::Filter,
+            pattern,
+            BlankNodeMatchingMode::Filter,
+        );
+        let schema = pattern.compute_schema(&storage_encoding);
+        Self {
+            storage_encoding,
             pattern,
             schema,
         }
@@ -101,40 +90,34 @@ impl QuadPatternNode {
         storage_encoding: QuadStorageEncoding,
         active_graph: ActiveGraph,
     ) -> Self {
-        Self {
+        let pattern = QuadPattern::new(
             active_graph,
-            graph_variable: Some(Variable::new_unchecked(COL_GRAPH)),
-            pattern: TriplePattern {
+            Some(Variable::new_unchecked(COL_GRAPH)),
+            TriplePattern {
                 subject: TermPattern::Variable(Variable::new_unchecked(COL_SUBJECT)),
                 predicate: NamedNodePattern::Variable(Variable::new_unchecked(
                     COL_PREDICATE,
                 )),
                 object: TermPattern::Variable(Variable::new_unchecked(COL_OBJECT)),
             },
-            blank_node_mode: BlankNodeMatchingMode::Filter, // Doesn't matter here
-            schema: storage_encoding.quad_schema(),
+            BlankNodeMatchingMode::Filter, // Doesn't matter here
+        );
+        let schema = storage_encoding.quad_schema();
+        Self {
             storage_encoding,
+            pattern,
+            schema,
         }
     }
 
-    /// The active graph to query.
-    pub fn active_graph(&self) -> &ActiveGraph {
-        &self.active_graph
+    /// The storage encoding of the [QuadPatternNode].
+    pub fn storage_encoding(&self) -> &QuadStorageEncoding {
+        &self.storage_encoding
     }
 
-    /// The result mode of the [QuadPatternNode].
-    pub fn graph_variable(&self) -> Option<VariableRef<'_>> {
-        self.graph_variable.as_ref().map(|v| v.as_ref())
-    }
-
-    /// The triple pattern to match.
-    pub fn pattern(&self) -> &TriplePattern {
+    /// The quad pattern.
+    pub fn quad_pattern(&self) -> &QuadPattern {
         &self.pattern
-    }
-
-    /// The blank node matching mode.
-    pub fn blank_node_mode(&self) -> BlankNodeMatchingMode {
-        self.blank_node_mode
     }
 }
 
@@ -170,13 +153,13 @@ impl UserDefinedLogicalNodeCore for QuadPatternNode {
     fn fmt_for_explain(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "QuadPattern (")?;
 
-        if let Some(graph_variable) = &self.graph_variable {
+        if let Some(graph_variable) = &self.pattern.graph_variable {
             write!(f, "{graph_variable} ")?;
         }
-        write!(f, "{})", &self.pattern)?;
+        write!(f, "{})", &self.pattern.triple_pattern)?;
 
-        if self.active_graph != ActiveGraph::DefaultGraph {
-            write!(f, ", active_graph: {} ", self.active_graph)?;
+        if self.pattern.active_graph != ActiveGraph::DefaultGraph {
+            write!(f, ", active_graph: {} ", self.pattern.active_graph)?;
         }
 
         Ok(())
@@ -195,20 +178,10 @@ impl UserDefinedLogicalNodeCore for QuadPatternNode {
             return plan_err!("QuadPatternNode has no expressions, got {}.", exprs.len());
         }
 
-        let cloned = match self.blank_node_mode {
-            BlankNodeMatchingMode::Variable => Self::new(
-                self.storage_encoding.clone(),
-                self.active_graph.clone(),
-                self.graph_variable.clone(),
-                self.pattern.clone(),
-            ),
-            BlankNodeMatchingMode::Filter => Self::new_with_blank_nodes_as_filter(
-                self.storage_encoding.clone(),
-                self.active_graph.clone(),
-                self.graph_variable.clone(),
-                self.pattern.clone(),
-            ),
-        };
-        Ok(cloned)
+        Ok(Self {
+            storage_encoding: self.storage_encoding.clone(),
+            pattern: self.pattern.clone(),
+            schema: Arc::clone(&self.schema),
+        })
     }
 }

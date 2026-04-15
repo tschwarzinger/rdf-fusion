@@ -1,0 +1,42 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(productLabel@0) as productLabel, ENC_PT(offer@1) as offer, ENC_PT(price@2) as price, ENC_PT(vendor@3) as vendor, ENC_PT(vendorTitle@4) as vendorTitle, ENC_PT(review@5) as review, ENC_PT(revTitle@8) as revTitle, ENC_PT(reviewer@6) as reviewer, ENC_PT(revName@7) as revName, ENC_PT(rating1@9) as rating1, ENC_PT(rating2@10) as rating2]
+  NestedLoopJoinExec: join_type=Left
+    NestedLoopJoinExec: join_type=Left
+      DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801> <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel], blank_node_mode=Variable
+      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@1, vendor@2, vendorTitle@3]
+        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0), (vendor@2, vendor@1)], projection=[offer@0, price@1, vendor@2, vendorTitle@3]
+          HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(vendor@2, vendor@0)], projection=[offer@0, price@1, vendor@2, vendorTitle@3]
+            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(vendor@2, vendor@0)], projection=[offer@0, price@1, vendor@2, vendorTitle@4]
+              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@1, vendor@3]
+                HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@2]
+                  DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801>], blank_node_mode=Variable
+                  FilterExec: DynamicFilter [ offer@0 >= 25838 AND offer@0 <= 81893 AND offer@0 IN (SET) ([25838, 27924, 35938, 38459, 40538, 40615, 40818, 45041, 45188, 67641, 69568, 74680, 79512, 81893]) ]
+                    DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ offer@0 >= 25838 AND offer@0 <= 81893 AND offer@0 IN (SET) ([25838, 27924, 35938, 38459, 40538, 40615, 40818, 45041, 45188, 67641, 69568, 74680, 79512, 81893]) ]]
+                FilterExec: DynamicFilter [ offer@0 >= 25838 AND offer@0 <= 81893 AND offer@0 IN (SET) ([25838, 27924, 35938, 38459, 40538, 40615, 40818, 45041, 45188, 67641, 69568, 74680, 79512, 81893]) ]
+                  DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ offer@0 >= 25838 AND offer@0 <= 81893 AND offer@0 IN (SET) ([25838, 27924, 35938, 38459, 40538, 40615, 40818, 45041, 45188, 67641, 69568, 74680, 79512, 81893]) ]]
+              FilterExec: DynamicFilter [ vendor@0 >= 23228 AND vendor@0 <= 77111 AND vendor@0 IN (SET) ([23228, 23228, 30891, 38318, 38318, 38318, 38318, 42935, 42935, 67188, 67872, 72759, 77111, 77111]) ]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendor <http://www.w3.org/2000/01/rdf-schema#label> ?vendorTitle], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ vendor@0 >= 23228 AND vendor@0 <= 77111 AND vendor@0 IN (SET) ([23228, 23228, 30891, 38318, 38318, 38318, 38318, 42935, 42935, 67188, 67872, 72759, 77111, 77111]) ]]
+            FilterExec: DynamicFilter [ vendor@0 >= 23228 AND vendor@0 <= 77111 AND vendor@0 IN (SET) ([23228, 23228, 30891, 38318, 38318, 38318, 38318, 42935, 42935, 67188, 67872, 72759, 77111, 77111]) ]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> <http://downlode.org/rdf/iso-3166/countries#DE>], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ vendor@0 >= 23228 AND vendor@0 <= 77111 AND vendor@0 IN (SET) ([23228, 23228, 30891, 38318, 38318, 38318, 38318, 42935, 42935, 67188, 67872, 72759, 77111, 77111]) ]]
+          FilterExec: DynamicFilter [ empty ]
+            DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://purl.org/dc/elements/1.1/publisher> ?vendor], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+        FilterExec: EBV(GT(ENC_TF(date@1), 5:{date_time_type:0,value:63349516800.000000000000000000,offset:})), projection=[offer@0]
+          FilterExec: DynamicFilter [ empty ]
+            DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo> ?date], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+    HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, reviewer@1, revName@2, revTitle@3, rating1@4, rating2@6]
+      HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, reviewer@1, revName@2, revTitle@3, rating1@5]
+        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@0, review@0)], projection=[review@0, reviewer@1, revName@2, revTitle@4]
+          HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(reviewer@1, reviewer@0)], projection=[review@0, reviewer@1, revName@3]
+            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@0, review@0)], projection=[review@0, reviewer@2]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801>], blank_node_mode=Variable
+              FilterExec: DynamicFilter [ review@0 >= 86899 AND review@0 <= 108711 AND review@0 IN (SET) ([86899, 108117, 108551, 108711]) ]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ review@0 >= 86899 AND review@0 <= 108711 AND review@0 IN (SET) ([86899, 108117, 108551, 108711]) ]]
+            FilterExec: DynamicFilter [ reviewer@0 >= 86893 AND reviewer@0 <= 108703 AND reviewer@0 IN (SET) ([86893, 108111, 108539, 108703]) ]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?reviewer <http://xmlns.com/foaf/0.1/name> ?revName], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ reviewer@0 >= 86893 AND reviewer@0 <= 108703 AND reviewer@0 IN (SET) ([86893, 108111, 108539, 108703]) ]]
+          FilterExec: DynamicFilter [ review@0 >= 86899 AND review@0 <= 108711 AND review@0 IN (SET) ([86899, 108117, 108551, 108711]) ]
+            DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://purl.org/dc/elements/1.1/title> ?revTitle], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ review@0 >= 86899 AND review@0 <= 108711 AND review@0 IN (SET) ([86899, 108117, 108551, 108711]) ]]
+        DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?rating1], blank_node_mode=Variable
+      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?rating2], blank_node_mode=Variable

@@ -51,16 +51,19 @@ pub mod sortable_term;
 pub mod typed_family;
 
 use crate::object_id::ObjectIdArrays;
-use crate::plain_term::PlainTermArrays;
+use crate::plain_term::{PlainTermArrays, PlainTermQuadsBuilder};
 use crate::typed_family::TypedFamilyArrays;
-use datafusion::arrow::array::ArrayRef;
+use datafusion::arrow::array::{ArrayRef, RecordBatch};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::{exec_err, plan_datafusion_err, plan_err};
+use datafusion::dataframe::DataFrame;
+use datafusion::prelude::{SessionContext, col};
 pub use encoding::*;
 pub use encoding_name::*;
 pub use encodings::*;
 pub use quad_storage_encoding::*;
-use rdf_fusion_model::DFResult;
+use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_model::{DFResult, Quad};
 pub use scalar_encoder::ScalarEncoder;
 use std::sync::Arc;
 
@@ -160,4 +163,38 @@ pub fn detect_encoding_from_types(
     }
 
     Ok(Some(encoding_name))
+}
+
+/// Creates a [`DataFrame`] from the given quads using the plain term encoding.
+pub fn quads_to_plain_term_dataframe(
+    session: &SessionContext,
+    quads: &[Quad],
+) -> DataFrame {
+    let schema = QuadStorageEncoding::PlainTerm.quad_schema();
+
+    let mut builder = PlainTermQuadsBuilder::with_capacity(quads.len());
+    for quad in quads {
+        builder.append_quad(quad.as_ref());
+    }
+    let pt_quads = builder.finish();
+
+    let arrays = vec![
+        pt_quads.graphs.into_array_ref(),
+        pt_quads.subjects.into_array_ref(),
+        pt_quads.predicates.into_array_ref(),
+        pt_quads.objects.into_array_ref(),
+    ];
+
+    let batch = RecordBatch::try_new(Arc::clone(schema.inner()), arrays)
+        .expect("Failed to create RecordBatch");
+    session
+        .read_batch(batch)
+        .expect("Failed to read batch into DataFrame")
+        .select([
+            col(COL_GRAPH).alias(COL_GRAPH),
+            col(COL_SUBJECT).alias(COL_SUBJECT),
+            col(COL_PREDICATE).alias(COL_PREDICATE),
+            col(COL_OBJECT).alias(COL_OBJECT),
+        ])
+        .expect("Valid projection")
 }

@@ -521,7 +521,7 @@ mod tests {
     #[test]
     fn test_cast_from_plain_term_array_with_invalid_lexical_values() {
         let encoding = Arc::new(TypedFamilyEncoding::new());
-        let mut input = PlainTermArrayElementBuilder::new(2);
+        let mut input = PlainTermArrayElementBuilder::new();
         input.append_literal(LiteralRef::new_typed_literal("123", xsd::INTEGER));
         input.append_literal(LiteralRef::new_typed_literal("abc", xsd::INTEGER));
         let input = input.finish();

@@ -1,8 +1,8 @@
 use crate::EncodingName;
 use crate::encoding::TermEncoding;
 use crate::object_id::{
-    ObjectIdArray, ObjectIdMapping, ObjectIdMappingError, ObjectIdMappingRef,
-    ObjectIdScalar, ObjectIdSize,
+    ObjectIdArray, ObjectIdDataType, ObjectIdMapping, ObjectIdMappingError,
+    ObjectIdMappingRef, ObjectIdScalar,
 };
 use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use datafusion::arrow::array::ArrayRef;
@@ -39,13 +39,13 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 ///
 /// # Default Graph
 ///
-/// The default graph is represented as the `None` value of the [`ObjectId`] struct.
+/// The default graph is represented as a null value in the [`ScalarValue`] enum.
 /// In addition, functions that return Arrow arrays with object ids need to highlight the default
 /// graph by setting the valid bit to `false` (i.e., making them null).
 ///
 /// Note that some storage implementations might still use a special byte sequence (e.g., all
 /// bytes zero) to represent the default graph internally. However, this is abstracted away by
-/// the [`ObjectId`] struct.
+/// the [`ScalarValue`] struct.
 ///
 /// # Strengths and Weaknesses
 ///
@@ -73,10 +73,10 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 /// this limitation.
 #[derive(Debug, Clone)]
 pub struct ObjectIdEncoding {
-    /// The number of bytes in a single object id.
-    object_id_size: ObjectIdSize,
     /// The data type of the object ids.
-    data_type: DataType,
+    data_type: ObjectIdDataType,
+    /// The arrow data type of the object ids.
+    arrow_data_type: DataType,
     /// The mapping that is used to encode and decode object ids.
     mapping: Arc<dyn ObjectIdMapping>,
 }
@@ -84,16 +84,19 @@ pub struct ObjectIdEncoding {
 impl ObjectIdEncoding {
     /// Creates a new [ObjectIdEncoding].
     pub fn new(mapping: Arc<dyn ObjectIdMapping>) -> Self {
+        let data_type = mapping.object_id_data_type();
+        let arrow_data_type = DataType::from(data_type);
+
         Self {
-            object_id_size: mapping.object_id_size(),
-            data_type: DataType::FixedSizeBinary(mapping.object_id_size().into()),
+            data_type,
+            arrow_data_type,
             mapping,
         }
     }
 
-    /// Returns the size of the object id.
-    pub fn object_id_size(&self) -> ObjectIdSize {
-        self.object_id_size
+    /// Returns the data type of the object id.
+    pub fn object_id_data_type(&self) -> ObjectIdDataType {
+        self.data_type
     }
 
     /// Returns the mapping that is used to encode and decode object ids.
@@ -108,12 +111,9 @@ impl ObjectIdEncoding {
         self: &Arc<Self>,
         term: &PlainTermScalar,
     ) -> Result<ObjectIdScalar, ObjectIdMappingError> {
-        let object_id = self.mapping.encode_scalar(term)?;
-        ObjectIdScalar::from_object_id(Arc::clone(self), object_id).map_err(|_| {
-            ObjectIdMappingError::IllegalArgument(
-                "Wrong object id length returned by mapping".to_owned(),
-            )
-        })
+        let scalar = self.mapping.encode_scalar(term)?;
+        ObjectIdScalar::try_new(Arc::clone(self), scalar)
+            .map_err(|e| ObjectIdMappingError::IllegalArgument(e.to_string()))
     }
 
     /// Encodes a [`PlainTermArray`] into an [`ObjectIdArray`].
@@ -123,9 +123,9 @@ impl ObjectIdEncoding {
         self: &Arc<Self>,
         array: &PlainTermArray,
     ) -> Result<ObjectIdArray, ObjectIdMappingError> {
-        self.mapping.encode_array(array).map(|oids| {
-            ObjectIdArray::try_new(Arc::clone(self), Arc::new(oids) as ArrayRef).unwrap()
-        })
+        self.mapping
+            .encode_array(array)
+            .map(|oids| ObjectIdArray::try_new(Arc::clone(self), oids).unwrap())
     }
 }
 
@@ -138,7 +138,7 @@ impl TermEncoding for ObjectIdEncoding {
     }
 
     fn data_type(&self) -> &DataType {
-        &self.data_type
+        &self.arrow_data_type
     }
 
     fn try_new_array(self: &Arc<Self>, array: ArrayRef) -> DFResult<Self::Array> {
@@ -152,8 +152,7 @@ impl TermEncoding for ObjectIdEncoding {
 
 impl PartialEq for ObjectIdEncoding {
     fn eq(&self, other: &Self) -> bool {
-        self.object_id_size == other.object_id_size
-            && Arc::ptr_eq(&self.mapping, &other.mapping)
+        self.data_type == other.data_type && Arc::ptr_eq(&self.mapping, &other.mapping)
     }
 }
 
@@ -161,6 +160,8 @@ impl Eq for ObjectIdEncoding {}
 
 impl Hash for ObjectIdEncoding {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.object_id_size.hash(state);
+        self.data_type.hash(state);
+        // We don't hash the mapping as it is not easily hashable and
+        // the pointer equality check in eq is sufficient for our purposes.
     }
 }

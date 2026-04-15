@@ -2,7 +2,7 @@ use crate::encoding::TermEncoding;
 use crate::plain_term::encoders::DefaultPlainTermEncoder;
 use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use crate::{EncodingName, TermEncoder};
-use datafusion::arrow::array::{Array, ArrayRef, StringArray, StructArray, UInt8Array};
+use datafusion::arrow::array::{Array, ArrayRef, Int8Array, StringArray, StructArray};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::datatypes::{Field, Fields};
 use datafusion::common::ScalarValue;
@@ -55,7 +55,7 @@ impl PlainTermEncodingField {
     #[allow(clippy::match_same_arms)]
     pub fn data_type(self) -> DataType {
         match self {
-            PlainTermEncodingField::TermType => DataType::UInt8,
+            PlainTermEncodingField::TermType => DataType::Int8,
             PlainTermEncodingField::Value => DataType::Utf8,
             PlainTermEncodingField::DataType => DataType::Utf8,
             PlainTermEncodingField::LanguageTag => DataType::Utf8,
@@ -107,10 +107,10 @@ impl Display for UnknownPlainTermTypeError {
     }
 }
 
-impl TryFrom<u8> for PlainTermType {
+impl TryFrom<i8> for PlainTermType {
     type Error = UnknownPlainTermTypeError;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: i8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(PlainTermType::NamedNode),
             1 => Ok(PlainTermType::BlankNode),
@@ -120,8 +120,8 @@ impl TryFrom<u8> for PlainTermType {
     }
 }
 
-impl From<PlainTermType> for u8 {
-    fn from(val: PlainTermType) -> u8 {
+impl From<PlainTermType> for i8 {
+    fn from(val: PlainTermType) -> i8 {
         match val {
             PlainTermType::NamedNode => 0,
             PlainTermType::BlankNode => 1,
@@ -157,9 +157,8 @@ impl PlainTermEncoding {
     }
 
     /// Creates a [`PlainTermArray`] for the given number of null rows.
-    pub fn create_null_array(&self, num_rows: usize) -> DFResult<ArrayRef> {
-        let array = StructArray::new_null(Self::fields(), num_rows);
-        Ok(Arc::new(array))
+    pub fn create_null_array(&self, num_rows: usize) -> PlainTermArray {
+        PlainTermArray::new_null(num_rows)
     }
 
     /// Creates a [`PlainTermArray`] for the given named nodes.
@@ -168,7 +167,7 @@ impl PlainTermEncoding {
     pub fn create_named_nodes_array(&self, named_nodes: StringArray) -> ArrayRef {
         let nulls = named_nodes.nulls().cloned();
         let len = named_nodes.len();
-        let ids = UInt8Array::from_value(PlainTermType::NamedNode.into(), len);
+        let ids = Int8Array::from_value(PlainTermType::NamedNode.into(), len);
         let array = StructArray::new(
             Self::fields(),
             vec![
@@ -188,7 +187,7 @@ impl PlainTermEncoding {
     pub fn create_string_array(&self, string_values: StringArray) -> ArrayRef {
         let nulls = string_values.nulls().cloned();
         let len = string_values.len();
-        let ids = UInt8Array::from_value(PlainTermType::Literal.into(), len);
+        let ids = Int8Array::from_value(PlainTermType::Literal.into(), len);
         let data_types = StringArray::new_repeated(xsd::STRING.as_str(), len);
         let array = StructArray::new(
             Self::fields(),
@@ -247,7 +246,7 @@ mod tests {
     }
 
     fn test_roundtrip(term_field: PlainTermType) {
-        let value: u8 = term_field.into();
+        let value: i8 = term_field.into();
         assert_eq!(term_field, value.try_into().unwrap());
     }
 }

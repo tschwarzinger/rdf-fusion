@@ -336,7 +336,7 @@ mod tests {
     #[tokio::test]
     async fn test_equal_ill_formed_numeric() {
         let encodings = create_default_encodings();
-        let mut plain_terms = PlainTermArrayElementBuilder::new(1);
+        let mut plain_terms = PlainTermArrayElementBuilder::new();
         plain_terms.append_literal(LiteralRef::new_typed_literal("xyz", xsd::INTEGER));
         let plain_terms = plain_terms.finish();
 

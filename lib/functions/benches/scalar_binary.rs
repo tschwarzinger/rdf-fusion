@@ -25,8 +25,8 @@ impl BinaryScenario {
     fn create_args(&self, encodings: &RdfFusionEncodings) -> Vec<ColumnarValue> {
         match self {
             BinaryScenario::AllInt => {
-                let mut left_builder = PlainTermArrayElementBuilder::new(8192);
-                let mut right_builder = PlainTermArrayElementBuilder::new(8192);
+                let mut left_builder = PlainTermArrayElementBuilder::with_capacity(8192);
+                let mut right_builder = PlainTermArrayElementBuilder::with_capacity(8192);
                 for i in 0..8192 {
                     match i % 3 {
                         1 => {

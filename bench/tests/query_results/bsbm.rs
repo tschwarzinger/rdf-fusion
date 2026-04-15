@@ -21,15 +21,28 @@
 
 use crate::query_results::{run_graph_result_query, run_select_query};
 use insta::assert_snapshot;
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
 use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
 #[tokio::test]
-pub async fn bsbm_1000_test_results() {
+pub async fn bsbm_1000_test_results_plain_term() {
+    run_bsbm_1000_test_results(QuadStorageEncodingName::PlainTerm, "Plain Term").await;
+}
+
+#[tokio::test]
+pub async fn bsbm_1000_test_results_object_id() {
+    run_bsbm_1000_test_results(QuadStorageEncodingName::ObjectId, "Object ID").await;
+}
+
+async fn run_bsbm_1000_test_results(
+    encoding: QuadStorageEncodingName,
+    encoding_name: &str,
+) {
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N1_000, None).unwrap();
     let benchmark_name = benchmark.name();
@@ -37,18 +50,18 @@ pub async fn bsbm_1000_test_results() {
         .create_benchmark_context(benchmark_name)
         .unwrap();
 
-    let store = benchmark.prepare_store(&ctx).await.unwrap();
+    let store = benchmark.prepare_store(&ctx, false).await.unwrap();
 
     //
     // Explore
     //
 
     assert_snapshot!(
-        "Explore Q1",
+        format!("Explore Q1 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q1.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q2 (empty optional)",
+        format!("Explore Q2 (empty optional) ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/explore-q2-empty-optional.sparql")
@@ -56,7 +69,7 @@ pub async fn bsbm_1000_test_results() {
         .await
     );
     assert_snapshot!(
-        "Explore Q2 (non-empty optional)",
+        format!("Explore Q2 (non-empty optional) ({encoding_name})"),
         run_select_query(
             &store,
             include_str!("./queries/explore-q2-non-empty-optional.sparql")
@@ -64,39 +77,39 @@ pub async fn bsbm_1000_test_results() {
         .await
     );
     assert_snapshot!(
-        "Explore Q3",
+        format!("Explore Q3 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q3.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q4",
+        format!("Explore Q4 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q4.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q5",
+        format!("Explore Q5 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q5.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q7",
+        format!("Explore Q7 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q7.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q8",
+        format!("Explore Q8 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q8.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q9",
+        format!("Explore Q9 ({encoding_name})"),
         run_graph_result_query(&store, include_str!("./queries/explore-q9.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q10",
+        format!("Explore Q10 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q10.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q11",
+        format!("Explore Q11 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/explore-q11.sparql")).await
     );
     assert_snapshot!(
-        "Explore Q12",
+        format!("Explore Q12 ({encoding_name})"),
         run_graph_result_query(&store, include_str!("./queries/explore-q12.sparql"))
             .await
     );
@@ -106,35 +119,35 @@ pub async fn bsbm_1000_test_results() {
     //
 
     assert_snapshot!(
-        "Business Intelligence Q1",
+        format!("Business Intelligence Q1 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q1.sparql")).await
     );
     assert_snapshot!(
-        "Business Intelligence Q2",
+        format!("Business Intelligence Q2 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q2.sparql")).await
     );
     assert_snapshot!(
-        "Business Intelligence Q3",
+        format!("Business Intelligence Q3 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q3.sparql")).await
     );
     assert_snapshot!(
-        "Business Intelligence Q4",
+        format!("Business Intelligence Q4 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q4.sparql")).await
     );
     assert_snapshot!(
-        "Business Intelligence Q5",
+        format!("Business Intelligence Q5 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q5.sparql")).await
     );
     assert_snapshot!(
-        "Business Intelligence Q6",
+        format!("Business Intelligence Q6 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q6.sparql")).await
     );
     assert_snapshot!(
-        "Business Intelligence Q7",
+        format!("Business Intelligence Q7 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q7.sparql")).await
     );
     assert_snapshot!(
-        "Business Intelligence Q8",
+        format!("Business Intelligence Q8 ({encoding_name})"),
         run_select_query(&store, include_str!("./queries/bi-q8.sparql")).await
     );
 }

@@ -1,6 +1,8 @@
-use crate::plain_term::encoding::{PlainTermEncodingField, PlainTermType};
+use crate::plain_term::encoding::PlainTermType;
 use crate::plain_term::{PlainTermArray, PlainTermEncoding};
-use datafusion::arrow::array::{StringBuilder, StructBuilder, UInt8Builder};
+use datafusion::arrow::array::{
+    Int8Builder, NullBufferBuilder, StringBuilder, StructArray,
+};
 use rdf_fusion_model::{
     BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, TermRef,
 };
@@ -9,43 +11,43 @@ use std::sync::Arc;
 /// Provides a convenient API for building arrays (element-by-element) of RDF terms with the
 /// [PlainTermEncoding]. The documentation of the encoding provides additional information.
 pub struct PlainTermArrayElementBuilder {
-    /// The underlying [StructBuilder].
-    builder: StructBuilder,
+    null_buffer: NullBufferBuilder,
+    term_type: Int8Builder,
+    value: StringBuilder,
+    data_type: StringBuilder,
+    language_tag: StringBuilder,
 }
 
 impl Default for PlainTermArrayElementBuilder {
     fn default() -> Self {
-        Self::new(0)
+        Self::new()
     }
 }
 
 impl PlainTermArrayElementBuilder {
+    /// Create a [PlainTermArrayElementBuilder].
+    pub fn new() -> Self {
+        Self::with_capacity(0)
+    }
+
     /// Create a [PlainTermArrayElementBuilder] with the given `capacity`.
-    pub fn new(capacity: usize) -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            builder: StructBuilder::from_fields(PlainTermEncoding::fields(), capacity),
+            null_buffer: NullBufferBuilder::new(capacity),
+            term_type: Int8Builder::with_capacity(capacity),
+            value: StringBuilder::with_capacity(capacity, capacity * 100),
+            data_type: StringBuilder::with_capacity(capacity, capacity * 100),
+            language_tag: StringBuilder::with_capacity(capacity, capacity * 10),
         }
     }
 
     /// Appends a null value to the array.
     pub fn append_null(&mut self) {
-        self.builder
-            .field_builder::<UInt8Builder>(PlainTermEncodingField::TermType.index())
-            .unwrap()
-            .append_null();
-        self.builder
-            .field_builder::<StringBuilder>(PlainTermEncodingField::Value.index())
-            .unwrap()
-            .append_null();
-        self.builder
-            .field_builder::<StringBuilder>(PlainTermEncodingField::DataType.index())
-            .unwrap()
-            .append_null();
-        self.builder
-            .field_builder::<StringBuilder>(PlainTermEncodingField::LanguageTag.index())
-            .unwrap()
-            .append_null();
-        self.builder.append(false)
+        self.term_type.append_null();
+        self.value.append_null();
+        self.data_type.append_null();
+        self.language_tag.append_null();
+        self.null_buffer.append_null();
     }
 
     /// Appends a name node to the array.
@@ -113,38 +115,34 @@ impl PlainTermArrayElementBuilder {
             "Literal term must have a data type"
         );
 
-        self.builder
-            .field_builder::<UInt8Builder>(PlainTermEncodingField::TermType.index())
-            .unwrap()
-            .append_value(term_type.into());
+        self.append_raw(term_type as i8, value, data_type, language_tag);
+    }
 
-        self.builder
-            .field_builder::<StringBuilder>(PlainTermEncodingField::Value.index())
-            .unwrap()
-            .append_value(value);
-
-        let data_type_builder = self
-            .builder
-            .field_builder::<StringBuilder>(PlainTermEncodingField::DataType.index())
-            .unwrap();
-        match data_type {
-            None => data_type_builder.append_null(),
-            Some(data_type) => data_type_builder.append_value(data_type),
-        }
-
-        let language_tag_builder = self
-            .builder
-            .field_builder::<StringBuilder>(PlainTermEncodingField::LanguageTag.index())
-            .unwrap();
-        match language_tag {
-            None => language_tag_builder.append_null(),
-            Some(language_tag) => language_tag_builder.append_value(language_tag),
-        }
-
-        self.builder.append(true)
+    /// Appends to the builder without any validation.
+    pub fn append_raw(
+        &mut self,
+        term_type: i8,
+        value: &str,
+        data_type: Option<&str>,
+        language_tag: Option<&str>,
+    ) {
+        self.null_buffer.append_non_null();
+        self.term_type.append_value(term_type);
+        self.value.append_value(value);
+        self.data_type.append_option(data_type);
+        self.language_tag.append_option(language_tag);
     }
 
     pub fn finish(mut self) -> PlainTermArray {
-        PlainTermArray::new_unchecked(Arc::new(self.builder.finish()))
+        PlainTermArray::new_unchecked(Arc::new(StructArray::new(
+            PlainTermEncoding::fields(),
+            vec![
+                Arc::new(self.term_type.finish()),
+                Arc::new(self.value.finish()),
+                Arc::new(self.data_type.finish()),
+                Arc::new(self.language_tag.finish()),
+            ],
+            self.null_buffer.finish(),
+        )))
     }
 }
