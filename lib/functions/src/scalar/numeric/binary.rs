@@ -6,9 +6,10 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use rdf_fusion_encoding::typed_family::DowncastTypedFamilyArray;
+use rdf_fusion_compute::numeric::{NumericBinaryOp, apply_numeric_binary};
+use rdf_fusion_encoding::typed_family::DowncastTypedFamilyDatum;
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -21,7 +22,7 @@ pub fn add_udf(
     Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
         encodings,
         BuiltinName::Add.to_string(),
-        NumericBinaryOpType::Add,
+        NumericBinaryOp::Add,
     )))
 }
 
@@ -31,7 +32,7 @@ pub fn sub_udf(
     Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
         encodings,
         BuiltinName::Sub.to_string(),
-        NumericBinaryOpType::Sub,
+        NumericBinaryOp::Sub,
     )))
 }
 
@@ -41,7 +42,7 @@ pub fn mul_udf(
     Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
         encodings,
         BuiltinName::Mul.to_string(),
-        NumericBinaryOpType::Mul,
+        NumericBinaryOp::Mul,
     )))
 }
 
@@ -51,23 +52,15 @@ pub fn div_udf(
     Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
         encodings,
         BuiltinName::Div.to_string(),
-        NumericBinaryOpType::Div,
+        NumericBinaryOp::Div,
     )))
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum NumericBinaryOpType {
-    Add,
-    Sub,
-    Mul,
-    Div,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct NumericBinarySparqlOp {
     encodings: RdfFusionEncodings,
     name: String,
-    op_type: NumericBinaryOpType,
+    op_type: NumericBinaryOp,
     signature: Signature,
 }
 
@@ -85,7 +78,7 @@ impl NumericBinarySparqlOp {
     fn new(
         encodings: RdfFusionEncodings,
         name: String,
-        op_type: NumericBinaryOpType,
+        op_type: NumericBinaryOp,
     ) -> Self {
         let type_signature = SparqlOpTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
@@ -123,22 +116,21 @@ impl ScalarUDFImpl for NumericBinarySparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let result = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
                 .map_children_tf_binary(|lhs, rhs| {
                     match (lhs.downcast(), rhs.downcast()) {
                         (
-                            DowncastTypedFamilyArray::Numeric(l),
-                            DowncastTypedFamilyArray::Numeric(r),
+                            DowncastTypedFamilyDatum::Numeric(l),
+                            DowncastTypedFamilyDatum::Numeric(r),
                         ) => {
-                            let res = match self.op_type {
-                                NumericBinaryOpType::Add => l.add(&r)?,
-                                NumericBinaryOpType::Sub => l.sub(&r)?,
-                                NumericBinaryOpType::Mul => l.mul(&r)?,
-                                NumericBinaryOpType::Div => l.div(&r)?,
-                            };
+                            let res = apply_numeric_binary(
+                                l.as_ref(),
+                                r.as_ref(),
+                                self.op_type,
+                            );
                             Ok(tf_encoding.create_array_from_family(res)?)
                         }
-                        _ => tf_encoding.create_null_array(lhs.array().len()),
+                        _ => tf_encoding.create_null_array(lhs.to_array().len()),
                     }
                 })?
                 .into_array_ref(),

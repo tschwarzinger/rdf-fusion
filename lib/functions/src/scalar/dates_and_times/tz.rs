@@ -10,7 +10,7 @@ use datafusion::logical_expr::{
 use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, StringFamilyArray};
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, RdfFusionEncodings, detect_encoding_from_types,
+    DowncastEncodingArgs, RdfFusionEncodings, detect_encoding_from_types,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingName};
 use rdf_fusion_extensions::functions::BuiltinName;
@@ -85,15 +85,15 @@ impl ScalarUDFImpl for TzSparqlOp {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let tf_encoding = self.encodings.typed_family();
                 tf_args
-                    .map_children_tf_unary(|child| match child.downcast() {
+                    .map_children_tf_unary(|child| match child.as_downcast_array() {
                         DowncastTypedFamilyArray::DateTime(array) => {
                             let tz = StringFamilyArray::new_simple(array.tz());
                             tf_encoding.create_array_from_family(tz)
                         }
-                        _ => tf_encoding.create_null_array(child.array().len()),
+                        _ => tf_encoding.create_null_array(child.to_array().len()),
                     })?
                     .into_array_ref()
             }

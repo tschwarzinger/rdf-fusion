@@ -7,7 +7,7 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -83,14 +83,14 @@ impl ScalarUDFImpl for WithPlainTermEncoding {
             ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result_array = match sparql_args.downcast_arrays() {
-            Some(DowncastEncodingArrays::PlainTerm(arrays)) => {
+            Some(DowncastEncodingArgs::PlainTerm(arrays)) => {
                 Arc::clone(arrays.get(0).inner())
             }
-            Some(DowncastEncodingArrays::TypedFamily(arrays)) => {
+            Some(DowncastEncodingArgs::TypedFamily(arrays)) => {
                 let array = arrays.get(0);
                 array.as_plain_term_array()?.into_array_ref()
             }
-            Some(DowncastEncodingArrays::ObjectId(arrays)) => {
+            Some(DowncastEncodingArgs::ObjectId(arrays)) => {
                 match &self.encodings.object_id() {
                     None => {
                         return exec_err!(

@@ -7,8 +7,8 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -172,7 +172,7 @@ impl ScalarUDFImpl for CompareSparqlUdf {
         let op = self.op;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
                 .map_binary_comparison(move |ord| op.matches_ordering(ord))?
                 .into_array_ref(),
             _ => exec_err!("Comparison is only supported for TypedFamily encoding")?,

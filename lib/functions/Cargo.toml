@@ -13,6 +13,7 @@ RDF Fusion Functions
 base16ct.workspace = true
 datafusion.workspace = true
 arrow-string.workspace = true
+rdf-fusion-compute.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-model.workspace = true

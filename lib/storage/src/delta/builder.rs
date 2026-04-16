@@ -39,10 +39,7 @@ impl DeltaQuadStorageBuilder {
     }
 
     /// Sets the encoding of the delta storage.
-    pub fn with_encoding(
-        mut self,
-        delta_encoding: QuadStorageEncodingName,
-    ) -> Self {
+    pub fn with_encoding(mut self, delta_encoding: QuadStorageEncodingName) -> Self {
         self.encoding = delta_encoding;
         self
     }

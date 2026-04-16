@@ -8,10 +8,11 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_compute::numeric::cast_numeric;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, NumericFamilyArray};
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::{DFResult, Decimal};
@@ -153,12 +154,12 @@ impl ScalarUDFImpl for CastNumericSparqlUdf {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let encoding = self.encodings.typed_family();
                 tf_args
-                    .map_children_tf_unary(|child| match child.downcast() {
+                    .map_children_tf_unary(|child| match child.as_downcast_array() {
                         DowncastTypedFamilyArray::Numeric(array) => {
-                            let cast = array.cast(&self.target_type)?;
+                            let cast = cast_numeric(&array, &self.target_type)?;
                             encoding.create_array_from_family(
                                 NumericFamilyArray::try_from_primitive(cast)?,
                             )
@@ -198,7 +199,7 @@ impl ScalarUDFImpl for CastNumericSparqlUdf {
                                 NumericFamilyArray::try_from_primitive(cast)?,
                             )
                         }
-                        _ => encoding.create_null_array(child.array().len()),
+                        _ => encoding.create_null_array(child.to_array().len()),
                     })?
                     .into_array_ref()
             }

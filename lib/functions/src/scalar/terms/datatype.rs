@@ -8,8 +8,8 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::typed_family::ResourceFamily;
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -88,7 +88,7 @@ impl ScalarUDFImpl for DatatypeSparqlOp {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let array = tf_args.get(0);
                 let iris = ResourceFamily::create_named_nodes_array(
                     array.literal_data_types()?,
@@ -99,7 +99,7 @@ impl ScalarUDFImpl for DatatypeSparqlOp {
                     .create_array_from_family(iris)?
                     .into_array_ref()
             }
-            Some(DowncastEncodingArrays::PlainTerm(pt_args)) => {
+            Some(DowncastEncodingArgs::PlainTerm(pt_args)) => {
                 let array = pt_args.get(0);
                 let parts = array.as_parts();
                 let new_values = parts.data_type.clone();

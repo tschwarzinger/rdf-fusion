@@ -88,7 +88,7 @@ impl ScalarUDFImpl for BNodeSparqlOp {
         let input_raw = args.args[0].to_array(num_rows)?;
         let input = self.encoding.try_new_array(input_raw)?;
 
-        let result = input.map_unary_tf(|child| match child.downcast() {
+        let result = input.map_unary_tf(|child| match child.as_downcast_array() {
             DowncastTypedFamilyArray::String(array) => {
                 let values = array.value_array();
                 let languages = array.language_array();
@@ -111,7 +111,7 @@ impl ScalarUDFImpl for BNodeSparqlOp {
                     ResourceFamily::create_blank_nodes_array(bnodes.finish())?;
                 self.encoding.create_array_from_family(resource_array)
             }
-            _ => self.encoding.create_null_array(child.array().len()),
+            _ => self.encoding.create_null_array(child.to_array().len()),
         })?;
 
         Ok(ColumnarValue::Array(result.into_array_ref()))

@@ -10,6 +10,7 @@ mod utils;
 use crate::utils::verbose::{is_verbose, print_query_details};
 use crate::utils::{consume_results, setup_benchmark_env};
 use criterion::{Criterion, criterion_group, criterion_main};
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion_bench::benchmarks::bsbm::{
     BsbmBenchmark, BsbmExploreQueryName, ExploreUseCase, NumProducts,
@@ -18,8 +19,11 @@ use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use std::path::PathBuf;
 
 fn bench_planning(c: &mut Criterion) {
-    let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), 1);
+    let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
+        PathBuf::from("./data"),
+        QuadStorageEncodingName::ObjectId,
+        1,
+    );
     let target_partitions = benchmarking_context.options().target_partitions.unwrap();
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
@@ -50,8 +54,11 @@ fn bench_planning(c: &mut Criterion) {
 }
 
 fn bench_full_execution(c: &mut Criterion) {
-    let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), 1);
+    let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
+        PathBuf::from("./data"),
+        QuadStorageEncodingName::ObjectId,
+        1,
+    );
     let target_partitions = benchmarking_context.options().target_partitions.unwrap();
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();

@@ -12,8 +12,8 @@ use rdf_fusion_encoding::typed_family::{
     TypedFamilyEncodingRef,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::{AResult, DFResult, ThinError, ThinResult};
@@ -91,11 +91,13 @@ impl ScalarUDFImpl for RegexSparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let result = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
                 .map_children_tf(|children| {
-                    let family_len = children[0].array().len();
-                    let children =
-                        children.iter().map(|c| c.downcast()).collect::<Vec<_>>();
+                    let family_len = children[0].to_array().len();
+                    let children = children
+                        .iter()
+                        .map(|c| c.as_downcast_array())
+                        .collect::<Vec<_>>();
 
                     match children.as_slice() {
                         [

@@ -12,7 +12,7 @@ use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, DurationFamily, TypedFamily,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, RdfFusionEncodings, detect_encoding_from_types,
+    DowncastEncodingArgs, RdfFusionEncodings, detect_encoding_from_types,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingName};
 use rdf_fusion_extensions::functions::BuiltinName;
@@ -87,10 +87,10 @@ impl ScalarUDFImpl for TimezoneSparqlOp {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let tf_encoding = self.encodings.typed_family();
                 tf_args
-                    .map_children_tf_unary(|child| match child.downcast() {
+                    .map_children_tf_unary(|child| match child.as_downcast_array() {
                         DowncastTypedFamilyArray::DateTime(array) => {
                             let child_array = array.timezone()?;
                             tf_encoding.create_array_with_single_family(
@@ -98,7 +98,7 @@ impl ScalarUDFImpl for TimezoneSparqlOp {
                                 child_array,
                             )
                         }
-                        _ => tf_encoding.create_null_array(child.array().len()),
+                        _ => tf_encoding.create_null_array(child.to_array().len()),
                     })?
                     .into_array_ref()
             }

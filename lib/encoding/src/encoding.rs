@@ -128,7 +128,7 @@ pub trait TermEncoding: Debug + Send + Sync {
                 EncodingDatum::Array(self.try_new_array(array)?)
             }
             ColumnarValue::Scalar(scalar) => {
-                EncodingDatum::Scalar(self.try_new_scalar(scalar)?, number_rows)
+                EncodingDatum::Scalar(self.try_new_scalar(scalar)?)
             }
         };
         Ok(datum)
@@ -218,43 +218,24 @@ pub trait TermEncoder<TEncoding: TermEncoding + ?Sized>: Debug + Sync + Send {
 pub enum EncodingDatum<TEncoding: TermEncoding + ?Sized> {
     /// An array underlies this datum.
     Array(TEncoding::Array),
-    /// A scalar underlies this datum. The additional length value is crucial for creating an
-    /// iterator of a given length.
-    Scalar(TEncoding::Scalar, usize),
+    /// A scalar underlies this datum.
+    Scalar(TEncoding::Scalar),
 }
 
 impl<TEncoding: TermEncoding + ?Sized> EncodingDatum<TEncoding> {
-    /// Creates an iterator over the contents of this datum.
-    ///
-    /// For an array, the iterator will simply return the result from the decoder.
-    ///
-    /// For a scalar, the value of the scalar will be cloned for each iteration, as dictated by the
-    /// additional length.
-    pub fn term_iter<'data, TDecoder>(
-        &'data self,
-    ) -> Box<dyn Iterator<Item = ThinResult<TDecoder::Term<'data>>> + 'data>
-    where
-        TDecoder: TermDecoder<TEncoding> + 'data,
-    {
+    /// Returns the encoding of this datum.
+    pub fn encoding(&self) -> &Arc<TEncoding> {
         match self {
-            EncodingDatum::Array(array) => Box::new(
-                TDecoder::decode_terms(array)
-                    .collect::<Vec<_>>()
-                    .into_iter(),
-            ),
-            EncodingDatum::Scalar(scalar, n) => {
-                Box::new((0..*n).map(|_| TDecoder::decode_term(scalar)))
-            }
+            EncodingDatum::Array(array) => array.encoding(),
+            EncodingDatum::Scalar(scalar) => scalar.encoding(),
         }
     }
 
     /// Creates an array for this datum.
-    pub fn to_array(&self) -> TEncoding::Array {
+    pub fn to_array(&self, number_rows: usize) -> TEncoding::Array {
         match self {
             EncodingDatum::Array(array) => array.clone(),
-            EncodingDatum::Scalar(scalar, number_rows) => {
-                scalar.to_array(*number_rows).unwrap()
-            }
+            EncodingDatum::Scalar(scalar) => scalar.to_array(number_rows).unwrap(),
         }
     }
 }

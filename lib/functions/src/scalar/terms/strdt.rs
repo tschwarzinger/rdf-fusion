@@ -10,8 +10,8 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermType};
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -88,7 +88,7 @@ impl ScalarUDFImpl for StrDtSparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let lhs = tf_args.get(0);
                 let rhs = tf_args.get(1);
 

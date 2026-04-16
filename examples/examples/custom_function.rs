@@ -8,8 +8,8 @@ use datafusion::logical_expr::{
 use rdf_fusion::api::functions::FunctionName;
 use rdf_fusion::encoding::typed_family::{BooleanFamilyArray, DowncastTypedFamilyArray};
 use rdf_fusion::encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::execution::results::QueryResultsFormat;
@@ -131,16 +131,16 @@ impl ScalarUDFImpl for ContainsSpiderUDF {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
         match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(array)) => {
-                let result =
-                    array.map_children_tf_unary(|child| match child.downcast() {
+            Some(DowncastEncodingArgs::TypedFamily(array)) => {
+                let result = array.map_children_tf_unary(|child| {
+                    match child.as_downcast_array() {
                         // If the input is null or a resource, return null. The output is a
                         // TypedFamilyEncoding array with nulls.
                         DowncastTypedFamilyArray::Null(_)
                         | DowncastTypedFamilyArray::Resource(_) => self
                             .encodings
                             .typed_family()
-                            .create_null_array(child.array().len()),
+                            .create_null_array(child.to_array().len()),
                         // If the input is a string, check whether it contains the string. The
                         // output is a TypedFamilyEncoding array with booleans.
                         DowncastTypedFamilyArray::String(array) => {
@@ -158,12 +158,13 @@ impl ScalarUDFImpl for ContainsSpiderUDF {
                         // For all other families, return false.
                         _ => {
                             let result =
-                                BooleanArray::from(vec![false; child.array().len()]);
+                                BooleanArray::from(vec![false; child.to_array().len()]);
                             self.encodings
                                 .typed_family()
                                 .create_array_from_family(BooleanFamilyArray::new(result))
                         }
-                    })?;
+                    }
+                })?;
 
                 Ok(ColumnarValue::Array(result.into_array_ref()))
             }

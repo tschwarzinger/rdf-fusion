@@ -9,8 +9,8 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, NumericFamilyArray};
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -84,8 +84,8 @@ impl ScalarUDFImpl for StrLenSparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
-                .map_children_tf_unary(|child| match child.downcast() {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
+                .map_children_tf_unary(|child| match child.as_downcast_array() {
                     DowncastTypedFamilyArray::String(array) => {
                         let values = array.value_array();
                         let lengths = Int64Array::from_iter(values.iter().map(|val| {
@@ -94,7 +94,7 @@ impl ScalarUDFImpl for StrLenSparqlOp {
                         let numeric_array = NumericFamilyArray::new_integers(lengths);
                         tf_encoding.create_array_from_family(numeric_array)
                     }
-                    _ => tf_encoding.create_null_array(child.array().len()),
+                    _ => tf_encoding.create_null_array(child.to_array().len()),
                 })?
                 .into_array_ref(),
             _ => exec_err!(

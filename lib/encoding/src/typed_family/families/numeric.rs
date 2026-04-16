@@ -3,7 +3,7 @@ use crate::sortable_term::{SortableTermArray, SortableTermArrayBuilder};
 use crate::typed_family::families::{
     FamilyArray, FamilyComparator, TypeClaim, TypedFamily,
 };
-use crate::typed_family::{TypedFamilyId, make_null_aware_comparator};
+use crate::typed_family::{FamilyScalar, TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
     Array, ArrayBuilder, ArrayRef, AsArray, BooleanArray, BooleanBuilder,
     Decimal128Array, Decimal128Builder, Float32Array, Float32Builder, Float64Array,
@@ -11,12 +11,9 @@ use datafusion::arrow::array::{
     UnionArray,
 };
 use datafusion::arrow::buffer::ScalarBuffer;
-use datafusion::arrow::compute::cast;
-use datafusion::arrow::compute::interleave;
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
-use datafusion::error::Result as DFResult;
 use rdf_fusion_model::vocab::xsd;
 use rdf_fusion_model::{
     AResult, Decimal, LiteralRef, NamedNodeRef, Numeric, ThinError, ThinResult,
@@ -249,6 +246,12 @@ impl NumericFamilyArray {
         .expect("Valid numeric array")
     }
 
+    /// Creates a new [`NumericFamilyArray`] with a single scalar.
+    pub fn new_int_scalar(value: i32) -> FamilyScalar<NumericFamilyArray> {
+        let array = Self::new_ints(Int32Array::new_scalar(value).into_inner());
+        FamilyScalar::new(array)
+    }
+
     /// Creates a new [`NumericFamilyArray`] with all integers.
     pub fn new_integers(array: Int64Array) -> NumericFamilyArray {
         NumericFamilyArrayBuilder::new_for_single_type(
@@ -324,6 +327,18 @@ impl NumericFamilyArray {
         self.union_array().child(4).as_primitive()
     }
 
+    /// Tries to extract a homogenous type id from the array.
+    pub fn try_get_homogenous_type_id_for_fast_path(&self) -> Option<i8> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let type_ids = self.union_array().type_ids();
+        let first_id = type_ids[0];
+        let all_ids_equal = type_ids.iter().all(|id| *id == first_id);
+        if all_ids_equal { Some(first_id) } else { None }
+    }
+
     /// Returns the length of this array.
     pub fn len(&self) -> usize {
         self.union_array().len()
@@ -379,44 +394,6 @@ impl NumericFamilyArray {
             sum = sum.checked_add(self.get_numeric(i))?;
         }
         Ok(NumericFamilyScalar::from(sum))
-    }
-
-    fn apply_binary<F>(&self, rhs: &Self, f: F) -> AResult<Self>
-    where
-        F: Fn(Numeric, Numeric) -> ThinResult<Numeric>,
-    {
-        let len = self.union_array().len();
-        let is_null = self.null_buffer();
-        let rhs_is_null = rhs.null_buffer();
-        let mut builder = NumericFamilyArrayElementBuilder::with_capacity(len);
-        for i in 0..len {
-            if is_null.is_null(i) || rhs_is_null.is_null(i) {
-                builder.append_null();
-            } else {
-                let res = f(self.get_numeric(i), rhs.get_numeric(i));
-                match res {
-                    Ok(v) => builder.append_numeric(v),
-                    Err(_) => builder.append_null(),
-                }
-            }
-        }
-        Ok(builder.finish())
-    }
-
-    pub fn add(&self, rhs: &Self) -> AResult<Self> {
-        self.apply_binary(rhs, |l, r| l.checked_add(r))
-    }
-
-    pub fn sub(&self, rhs: &Self) -> AResult<Self> {
-        self.apply_binary(rhs, |l, r| l.checked_sub(r))
-    }
-
-    pub fn mul(&self, rhs: &Self) -> AResult<Self> {
-        self.apply_binary(rhs, |l, r| l.checked_mul(r))
-    }
-
-    pub fn div(&self, rhs: &Self) -> AResult<Self> {
-        self.apply_binary(rhs, |l, r| l.div(r))
     }
 
     fn apply_unary<F>(&self, f: F) -> AResult<Self>
@@ -487,28 +464,6 @@ impl NumericFamilyArray {
             }
         }
         Ok(builder.finish())
-    }
-
-    pub fn cast(&self, target_data_type: &DataType) -> DFResult<ArrayRef> {
-        let arrays = [
-            cast(self.floats(), target_data_type)?,
-            cast(self.doubles(), target_data_type)?,
-            cast(self.decimals(), target_data_type)?,
-            cast(self.ints(), target_data_type)?,
-            cast(self.integers(), target_data_type)?,
-        ];
-
-        let mut indices = Vec::with_capacity(self.union_array().len());
-        for i in 0..self.union_array().len() {
-            indices.push((
-                self.union_array().type_id(i) as usize,
-                self.union_array().value_offset(i),
-            ));
-        }
-
-        let arrays_ref: Vec<&dyn Array> = arrays.iter().map(|a| a.as_ref()).collect();
-        let result = interleave(&arrays_ref, &indices)?;
-        Ok(result)
     }
 }
 

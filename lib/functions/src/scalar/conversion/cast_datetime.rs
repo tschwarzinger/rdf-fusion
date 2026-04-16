@@ -15,8 +15,8 @@ use rdf_fusion_encoding::typed_family::{
     TypedFamily, TypedFamilyArray,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::{AResult, DFResult, DateTime, Decimal};
@@ -66,7 +66,7 @@ impl CastDateTimeSparqlOp {
 
     fn invoke_tf(&self, tf_array: &TypedFamilyArray) -> AResult<TypedFamilyArray> {
         let encoding = self.encodings.typed_family();
-        tf_array.map_unary_tf(|child| match child.downcast() {
+        tf_array.map_unary_tf(|child| match child.as_downcast_array() {
             DowncastTypedFamilyArray::DateTime(array) => {
                 encoding.create_array_from_family(array)
             }
@@ -75,7 +75,7 @@ impl CastDateTimeSparqlOp {
                 encoding
                     .create_array_with_single_family(DateTimeFamily::FAMILY_ID, values)
             }
-            _ => encoding.create_null_array(child.array().len()),
+            _ => encoding.create_null_array(child.to_array().len()),
         })
     }
 }
@@ -108,8 +108,8 @@ impl ScalarUDFImpl for CastDateTimeSparqlOp {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
-                self.invoke_tf(tf_args.get(0))?.into_array_ref()
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
+                self.invoke_tf(&tf_args.get(0))?.into_array_ref()
             }
             _ => exec_err!("xsd:dateTime is only supported for TypedFamily encoding")?,
         };

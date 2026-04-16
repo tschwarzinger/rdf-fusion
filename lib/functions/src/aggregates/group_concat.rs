@@ -90,7 +90,7 @@ impl AggregateUDFImpl for SparqlGroupConcat {
                     if children.len() != 1 {
                         return plan_err!("Separator should be a simple literal");
                     }
-                    match children[0].downcast() {
+                    match children[0].as_downcast_array() {
                         DowncastTypedFamilyArray::String(s_arr) => {
                             if s_arr.language_array().is_null(0) {
                                 s_arr.value_array().value(0).to_owned()
@@ -265,7 +265,7 @@ impl Accumulator for SparqlGroupConcatAccumulator {
 
         let arr = self.encoding.try_new_array(Arc::clone(&values[0]))?;
         for child in arr.non_empty_children() {
-            match child.downcast() {
+            match child.as_downcast_array() {
                 DowncastTypedFamilyArray::Null(_) => continue,
                 DowncastTypedFamilyArray::String(array) => {
                     self.update_accumulator_for_string(&array)?;

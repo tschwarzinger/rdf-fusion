@@ -9,11 +9,11 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_encoding::typed_family::{
-    BooleanFamilyArray, DowncastTypedFamilyArray, TypedFamilyArrayChild,
+    BooleanFamilyArray, DowncastTypedFamilyArray, TypedFamilyChild,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -88,7 +88,7 @@ impl ScalarUDFImpl for ContainsSparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let tf_args = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args.clone(),
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args.clone(),
             _ => exec_err!(
                 "CONTAINS is only supported for TypedFamily or PlainTerm encoding"
             )?,
@@ -96,9 +96,9 @@ impl ScalarUDFImpl for ContainsSparqlOp {
 
         let result = tf_args
             .map_children_tf_binary(
-                |lhs: TypedFamilyArrayChild, rhs: TypedFamilyArrayChild| match (
-                    lhs.downcast(),
-                    rhs.downcast(),
+                |lhs: TypedFamilyChild, rhs: TypedFamilyChild| match (
+                    lhs.as_downcast_array(),
+                    rhs.as_downcast_array(),
                 ) {
                     (
                         DowncastTypedFamilyArray::String(l),
@@ -107,7 +107,7 @@ impl ScalarUDFImpl for ContainsSparqlOp {
                         let res = l.apply_binary_boolean(&r, |a, b| contains(a, b))?;
                         tf_encoding.create_array_from_family(BooleanFamilyArray::new(res))
                     }
-                    _ => tf_encoding.create_null_array(lhs.array().len()),
+                    _ => tf_encoding.create_null_array(lhs.to_array().len()),
                 },
             )?
             .into_array_ref();

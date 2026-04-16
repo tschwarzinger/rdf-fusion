@@ -68,12 +68,12 @@ pub struct ObjectIdCreationError;
 
 /// Represents a non-empty list of [`PlainTermArray`]s of the same length. The arrays share the same
 /// encoding.
-pub struct ObjectIdArrays {
+pub struct ObjectIdArgs {
     arrays: Vec<ObjectIdArray>,
 }
 
-impl ObjectIdArrays {
-    /// Creates a new [`ObjectIdArrays`] without validating invariants.
+impl ObjectIdArgs {
+    /// Creates a new [`ObjectIdArgs`] without validating invariants.
     pub fn new_unchecked(arrays: Vec<ObjectIdArray>) -> Self {
         Self { arrays }
     }

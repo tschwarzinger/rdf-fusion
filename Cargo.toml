@@ -3,6 +3,7 @@ members = [
   "bench",
   "cli",
   "examples",
+  "lib/compute",
   "lib/extensions",
   "lib/model",
   "lib/encoding",
@@ -97,6 +98,7 @@ sparesults = { version = "0.3", features = ["async-tokio"] }
 spargebra = "0.4"
 
 # Internal dependencies
+rdf-fusion-compute = { version = "=0.1.0", path = "lib/compute" }
 rdf-fusion-extensions = { version = "=0.1.0", path = "lib/extensions" }
 rdf-fusion-model = { version = "=0.1.0", path = "lib/model" }
 rdf-fusion-encoding = { version = "=0.1.0", path = "lib/encoding" }

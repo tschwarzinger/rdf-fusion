@@ -1,15 +1,16 @@
 [package]
-name = "rdf-fusion-encoding"
+name = "rdf-fusion-compute"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = """
-RDF Fusion Term Encodings
+RDF Fusion Compute
 """
 
 [dependencies]
+rdf-fusion-encoding.workspace = true
 rdf-fusion-model.workspace = true
 datafusion.workspace = true
 thiserror.workspace = true
@@ -20,3 +21,11 @@ insta.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "numeric_unary"
+harness = false
+
+[[bench]]
+name = "numeric_binary"
+harness = false

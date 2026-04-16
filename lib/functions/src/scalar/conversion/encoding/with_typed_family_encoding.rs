@@ -6,7 +6,7 @@ use datafusion::logical_expr::{
     TypeSignature, Volatility,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -74,17 +74,17 @@ impl ScalarUDFImpl for WithTypedFamilyEncoding {
             ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result_array = match sparql_args.downcast_arrays() {
-            Some(DowncastEncodingArrays::PlainTerm(arrays)) => {
+            Some(DowncastEncodingArgs::PlainTerm(arrays)) => {
                 let array = arrays.get(0);
                 self.encodings
                     .typed_family()
                     .cast_from_plain_term_array(array)?
                     .into_array_ref()
             }
-            Some(DowncastEncodingArrays::TypedFamily(arrays)) => {
+            Some(DowncastEncodingArgs::TypedFamily(arrays)) => {
                 Arc::clone(arrays.get(0).inner())
             }
-            Some(DowncastEncodingArrays::ObjectId(arrays)) => {
+            Some(DowncastEncodingArgs::ObjectId(arrays)) => {
                 match &self.encodings.object_id() {
                     None => {
                         return exec_err!(

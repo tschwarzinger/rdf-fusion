@@ -13,11 +13,11 @@ use datafusion::logical_expr::{
 use itertools::repeat_n;
 use rdf_fusion_encoding::typed_family::{
     FamilyArray, StringFamily, StringFamilyArray, TypedFamily, TypedFamilyArray,
-    TypedFamilyArrayChild, TypedFamilyId,
+    TypedFamilyChild, TypedFamilyId,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::{AResult, DFResult};
@@ -94,7 +94,7 @@ impl ScalarUDFImpl for ConcatSparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let result = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 tf_args.map_children_tf(|cs| self.map_children_typed_family(cs))
             }
             None => {
@@ -120,9 +120,9 @@ impl ConcatSparqlOp {
     /// Implements the actual logic of handling typed family arrays.
     fn map_children_typed_family(
         &self,
-        children: &[TypedFamilyArrayChild],
+        children: &[TypedFamilyChild],
     ) -> AResult<TypedFamilyArray> {
-        let len = children[0].array().len();
+        let len = children[0].to_array().len();
         let any_non_string = children
             .iter()
             .any(|c| c.family().family_id() != TypedFamilyId::String);
@@ -132,7 +132,7 @@ impl ConcatSparqlOp {
 
         let string_arrays = children
             .iter()
-            .map(|c| StringFamilyArray::from_array_unchecked(Arc::clone(c.array())))
+            .map(|c| StringFamilyArray::from_array_unchecked(c.to_array()))
             .collect::<Vec<_>>();
 
         let lexical_forms = string_arrays

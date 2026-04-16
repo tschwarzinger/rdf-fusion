@@ -7,7 +7,7 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingName, RdfFusionEncodings, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingName, RdfFusionEncodings, detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -85,7 +85,7 @@ impl ScalarUDFImpl for EffectiveBooleanValueSparqlOp {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let tf_array = tf_args.get(0);
                 tf_array.effective_boolean_value()?
             }

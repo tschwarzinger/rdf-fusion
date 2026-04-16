@@ -13,7 +13,7 @@ use rdf_fusion_encoding::typed_family::{
     BooleanFamilyArray, DowncastTypedFamilyArray, TypedFamilyArray,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
     detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
@@ -206,10 +206,10 @@ impl ScalarUDFImpl for IsSparqlOp {
         let _tf_encoding = self.encodings.typed_family();
 
         match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(array)) => {
+            Some(DowncastEncodingArgs::TypedFamily(array)) => {
                 let result = array.map_children_tf_unary(|child| {
-                    let child_len = child.array().len();
-                    self.evaluate_child(&child.downcast(), child_len)
+                    let child_len = child.to_array().len();
+                    self.evaluate_child(&child.as_downcast_array(), child_len)
                 })?;
 
                 Ok(ColumnarValue::Array(result.into_array_ref()))

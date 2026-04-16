@@ -12,8 +12,8 @@ use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, StringFamily, TypedFamily,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -93,8 +93,8 @@ impl ScalarUDFImpl for LangSparqlOp {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
-                .map_children_tf_unary(|child| match child.downcast() {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
+                .map_children_tf_unary(|child| match child.as_downcast_array() {
                     DowncastTypedFamilyArray::String(array) => {
                         let langs =
                             array.language_array().iter().map(|i| i.unwrap_or(""));
@@ -112,9 +112,9 @@ impl ScalarUDFImpl for LangSparqlOp {
                     | DowncastTypedFamilyArray::Resource(_) => self
                         .encodings
                         .typed_family()
-                        .create_null_array(child.array().len()),
+                        .create_null_array(child.to_array().len()),
                     _ => {
-                        let len = child.array().len();
+                        let len = child.to_array().len();
                         let res = Arc::new(StringArray::from(vec![""; len]));
                         let sf_array = StringFamily::create_simple_strings_array(res);
                         self.encodings
@@ -126,7 +126,7 @@ impl ScalarUDFImpl for LangSparqlOp {
                     }
                 })?
                 .into_array_ref(),
-            Some(DowncastEncodingArrays::PlainTerm(pt_args)) => {
+            Some(DowncastEncodingArgs::PlainTerm(pt_args)) => {
                 let array = pt_args.get(0);
                 let parts = array.as_parts();
                 let len = array.len();

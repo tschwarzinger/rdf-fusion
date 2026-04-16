@@ -172,17 +172,18 @@ impl Accumulator for SparqlMinMaxAccumulator {
                 continue;
             }
 
+            let child_array = child.to_array();
             let Some(comparator) = child
                 .family()
-                .comparator(Arc::clone(child.array()), Arc::clone(child.array()))
+                .comparator(Arc::clone(&child_array), Arc::clone(&child_array))
             else {
-                let scalar = ScalarValue::try_from_array(child.array(), 0)?;
+                let scalar = ScalarValue::try_from_array(&child_array, 0)?;
                 self.set_extreme(new_type_id, new_family_id, scalar)?;
                 return Ok(());
             };
 
             let Some(batch_extreme_inner) =
-                self.find_child_extreme(child.array(), &comparator)
+                self.find_child_extreme(&child_array, &comparator)
             else {
                 self.error = true;
                 return Ok(());

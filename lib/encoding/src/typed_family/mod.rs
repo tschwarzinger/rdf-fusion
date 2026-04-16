@@ -1,12 +1,13 @@
 use crate::encoding::TermEncoding;
 mod array;
 mod builder;
+mod datum;
 mod encoding;
 mod families;
 mod id;
 mod scalar;
 
-use crate::EncodingArray;
+use crate::{EncodingArray, EncodingDatum};
 pub use array::*;
 pub use builder::*;
 use datafusion::arrow::array::{
@@ -15,6 +16,7 @@ use datafusion::arrow::array::{
 use datafusion::arrow::compute::{interleave, take};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
+use datafusion::logical_expr::ColumnarValue;
 pub use encoding::*;
 pub use families::*;
 pub use id::*;
@@ -27,34 +29,40 @@ use std::sync::Arc;
 /// Represents a non-empty list of [`TypedFamilyArray`]s of the same length. The arrays share the
 /// same encoding.
 #[derive(Clone)]
-pub struct TypedFamilyArrays {
-    arrays: Vec<TypedFamilyArray>,
+pub struct TypedFamilyArgs {
+    /// The number of rows.
+    number_rows: usize,
+    /// The arrays.
+    args: Vec<EncodingDatum<TypedFamilyEncoding>>,
 }
 
-impl TypedFamilyArrays {
-    /// Creates a new [`TypedFamilyArrays`].
-    pub fn new_unchecked(arrays: Vec<TypedFamilyArray>) -> Self {
-        Self { arrays }
+impl TypedFamilyArgs {
+    /// Creates a new [`TypedFamilyArgs`].
+    pub fn new_unchecked(
+        number_rows: usize,
+        args: Vec<EncodingDatum<TypedFamilyEncoding>>,
+    ) -> Self {
+        Self { number_rows, args }
     }
 
     /// Returns the encoding of the arrays.
     pub fn encoding(&self) -> &TypedFamilyEncodingRef {
-        self.arrays[0].encoding()
+        self.args[0].encoding()
     }
 
     /// Returns the number of arrays.
     pub fn number_of_arrays(&self) -> usize {
-        self.arrays.len()
+        self.args.len()
     }
 
     /// Returns an iterator over the arrays.
-    pub fn iter(&self) -> impl Iterator<Item = &TypedFamilyArray> {
-        self.arrays.iter()
+    pub fn iter(&self) -> impl Iterator<Item = &EncodingDatum<TypedFamilyEncoding>> {
+        self.args.iter()
     }
 
     /// Returns the array at the given index.
-    pub fn get(&self, index: usize) -> &TypedFamilyArray {
-        &self.arrays[index]
+    pub fn get(&self, index: usize) -> TypedFamilyArray {
+        self.args[index].to_array(self.number_rows)
     }
 
     /// Calls [`Self::map_children`] while providing mapping between [`ArrayRef`] and
@@ -62,7 +70,7 @@ impl TypedFamilyArrays {
     /// array to another typed family array.
     pub fn map_children_tf<F>(&self, mapping_function: F) -> AResult<TypedFamilyArray>
     where
-        F: Fn(&[TypedFamilyArrayChild]) -> AResult<TypedFamilyArray>,
+        F: Fn(&[TypedFamilyChild]) -> AResult<TypedFamilyArray>,
     {
         let raw_result = self.map_children(
             |children| mapping_function(children).map(|res| res.into_array_ref()),
@@ -82,15 +90,10 @@ impl TypedFamilyArrays {
         mapping_function: F,
     ) -> AResult<TypedFamilyArray>
     where
-        F: Fn(TypedFamilyArrayChild) -> AResult<TypedFamilyArray>,
+        F: Fn(TypedFamilyChild) -> AResult<TypedFamilyArray>,
     {
-        assert_eq!(self.arrays.len(), 1, "map_unary requires exactly one array");
-        self.map_children_tf(|children| {
-            mapping_function(TypedFamilyArrayChild {
-                family: children[0].family.clone(),
-                child: Arc::clone(&children[0].child),
-            })
-        })
+        assert_eq!(self.args.len(), 1, "map_unary requires exactly one array");
+        self.map_children_tf(|children| mapping_function(children[0].clone()))
     }
 
     /// Helper functions for calling [`Self::map_children_tf`] for mappings that accept two family
@@ -100,24 +103,11 @@ impl TypedFamilyArrays {
         mapping_function: F,
     ) -> AResult<TypedFamilyArray>
     where
-        F: Fn(TypedFamilyArrayChild, TypedFamilyArrayChild) -> AResult<TypedFamilyArray>,
+        F: Fn(TypedFamilyChild, TypedFamilyChild) -> AResult<TypedFamilyArray>,
     {
-        assert_eq!(
-            self.arrays.len(),
-            2,
-            "map_binary requires exactly two arrays"
-        );
+        assert_eq!(self.args.len(), 2, "map_binary requires exactly two arrays");
         self.map_children_tf(|children| {
-            mapping_function(
-                TypedFamilyArrayChild {
-                    family: children[0].family.clone(),
-                    child: Arc::clone(&children[0].child),
-                },
-                TypedFamilyArrayChild {
-                    family: children[1].family.clone(),
-                    child: Arc::clone(&children[1].child),
-                },
-            )
+            mapping_function(children[0].clone(), children[1].clone())
         })
     }
 
@@ -136,19 +126,31 @@ impl TypedFamilyArrays {
                 return Ok(TypedFamilyArray::new_unchecked(
                     Arc::clone(&encoding),
                     encoding
-                        .create_null_array(lhs.array().len())?
+                        .create_null_array(lhs.number_rows)?
                         .into_array_ref(),
                 ));
             }
 
-            let comparator = lhs
-                .family()
-                .comparator(Arc::clone(lhs.array()), Arc::clone(rhs.array()));
+            let family = lhs.family();
+            let comparator = family.comparator(
+                lhs.to_array_with_single_row_scalar(),
+                rhs.to_array_with_single_row_scalar(),
+            );
 
             if let Some(comparator) = comparator {
-                let len = lhs.array().len();
-                let result = (0..len)
-                    .map(|i| comparator(i, i).map(&ordering_to_boolean))
+                let lhs_idx = match lhs.value_is_scalar() {
+                    true => vec![0; lhs.number_rows],
+                    false => (0..lhs.number_rows).collect(),
+                };
+                let rhs_idx = match rhs.value_is_scalar() {
+                    true => vec![0; rhs.number_rows],
+                    false => (0..rhs.number_rows).collect(),
+                };
+
+                let result = lhs_idx
+                    .into_iter()
+                    .zip(rhs_idx)
+                    .map(|(lhs, rhs)| comparator(lhs, rhs).map(&ordering_to_boolean))
                     .collect::<BooleanArray>();
                 Ok(TypedFamilyArray::new_unchecked(
                     Arc::clone(&encoding),
@@ -160,7 +162,7 @@ impl TypedFamilyArrays {
                 Ok(TypedFamilyArray::new_unchecked(
                     Arc::clone(&encoding),
                     encoding
-                        .create_null_array(lhs.array().len())?
+                        .create_null_array(lhs.to_array().len())?
                         .into_array_ref(),
                 ))
             }
@@ -175,30 +177,21 @@ impl TypedFamilyArrays {
     ) -> AResult<TypedFamilyArray>
     where
         F: Fn(
-            TypedFamilyArrayChild,
-            TypedFamilyArrayChild,
-            TypedFamilyArrayChild,
+            TypedFamilyChild,
+            TypedFamilyChild,
+            TypedFamilyChild,
         ) -> AResult<TypedFamilyArray>,
     {
         assert_eq!(
-            self.arrays.len(),
+            self.args.len(),
             3,
             "map_ternary requires exactly three arrays"
         );
         self.map_children_tf(|children| {
             mapping_function(
-                TypedFamilyArrayChild {
-                    family: children[0].family.clone(),
-                    child: Arc::clone(&children[0].child),
-                },
-                TypedFamilyArrayChild {
-                    family: children[1].family.clone(),
-                    child: Arc::clone(&children[1].child),
-                },
-                TypedFamilyArrayChild {
-                    family: children[2].family.clone(),
-                    child: Arc::clone(&children[2].child),
-                },
+                children[0].clone(),
+                children[1].clone(),
+                children[2].clone(),
             )
         })
     }
@@ -211,35 +204,23 @@ impl TypedFamilyArrays {
     ) -> AResult<TypedFamilyArray>
     where
         F: Fn(
-            TypedFamilyArrayChild,
-            TypedFamilyArrayChild,
-            TypedFamilyArrayChild,
-            TypedFamilyArrayChild,
+            TypedFamilyChild,
+            TypedFamilyChild,
+            TypedFamilyChild,
+            TypedFamilyChild,
         ) -> AResult<TypedFamilyArray>,
     {
         assert_eq!(
-            self.arrays.len(),
+            self.args.len(),
             4,
             "map_quaternary requires exactly four arrays"
         );
         self.map_children_tf(|children| {
             mapping_function(
-                TypedFamilyArrayChild {
-                    family: children[0].family.clone(),
-                    child: Arc::clone(&children[0].child),
-                },
-                TypedFamilyArrayChild {
-                    family: children[1].family.clone(),
-                    child: Arc::clone(&children[1].child),
-                },
-                TypedFamilyArrayChild {
-                    family: children[2].family.clone(),
-                    child: Arc::clone(&children[2].child),
-                },
-                TypedFamilyArrayChild {
-                    family: children[3].family.clone(),
-                    child: Arc::clone(&children[3].child),
-                },
+                children[0].clone(),
+                children[1].clone(),
+                children[2].clone(),
+                children[3].clone(),
             )
         })
     }
@@ -256,27 +237,32 @@ impl TypedFamilyArrays {
         result_type: &DataType,
     ) -> AResult<ArrayRef>
     where
-        F: Fn(&[TypedFamilyArrayChild]) -> AResult<ArrayRef>,
+        F: Fn(&[TypedFamilyChild]) -> AResult<ArrayRef>,
     {
-        let num_arrays = self.arrays.len();
-        assert!(num_arrays > 0, "map_children requires at least one array");
-
-        let len = self.arrays[0].inner().len();
-        for a in &self.arrays[1..] {
-            assert_eq!(a.inner().len(), len, "Arrays must have the same length");
-        }
-
-        if len == 0 {
+        if self.number_rows == 0 {
             return Ok(new_empty_array(result_type));
         }
 
+        let num_arrays = self.args.len();
+        assert!(num_arrays > 0, "map_children requires at least one array");
+
+        for a in &self.args {
+            if let EncodingDatum::Array(array) = a {
+                assert_eq!(
+                    array.len(),
+                    self.number_rows,
+                    "Arrays must have the same length"
+                );
+            }
+        }
+
         if let Some(result) =
-            self.try_map_children_fast_path(&mapping_function, &result_type, len)?
+            self.try_map_children_fast_path(&mapping_function, result_type)?
         {
             return Ok(result);
         }
 
-        self.map_children_default_path(&mapping_function, result_type, len)
+        self.map_children_default_path(&mapping_function, result_type)
     }
 
     /// Implements map_children for the case where all elements of the family array are from a
@@ -285,14 +271,13 @@ impl TypedFamilyArrays {
         &self,
         mapping_function: &F,
         result_type: &DataType,
-        expected_length: usize,
     ) -> Result<Option<ArrayRef>, ArrowError>
     where
-        F: Fn(&[TypedFamilyArrayChild]) -> AResult<ArrayRef>,
+        F: Fn(&[TypedFamilyChild]) -> AResult<ArrayRef>,
     {
         let mut homogenous_children = Vec::new();
-        for array in &self.arrays {
-            if let Some(array) = array.try_get_homogeneous_child() {
+        for array in &self.args {
+            if let Some(array) = array.try_get_homogeneous_child(self.number_rows) {
                 homogenous_children.push(array);
             } else {
                 return Ok(None);
@@ -300,29 +285,32 @@ impl TypedFamilyArrays {
         }
 
         let result = mapping_function(homogenous_children.as_ref())?;
-        Self::validate_mapping_result(result.as_ref(), result_type, expected_length)?;
+        Self::validate_mapping_result(result.as_ref(), result_type, self.number_rows)?;
 
         Ok(Some(result))
     }
 
     /// Implements map_children by creating new arrays for the possible combinations. This should
-    /// work for all valid [`TypedFamilyArrays`] but is relatively compute intensive.
+    /// work for all valid [`TypedFamilyArgs`] but is relatively compute intensive.
     fn map_children_default_path<F>(
         &self,
         mapping_function: &F,
         result_type: &DataType,
-        len: usize,
     ) -> Result<ArrayRef, ArrowError>
     where
-        F: Fn(&[TypedFamilyArrayChild]) -> AResult<ArrayRef>,
+        F: Fn(&[TypedFamilyChild]) -> AResult<ArrayRef>,
     {
-        let unions: Vec<_> = self.arrays.iter().map(|a| a.inner().as_union()).collect();
+        let type_ids = self
+            .args
+            .iter()
+            .map(|a| compute_type_ids(a, self.number_rows))
+            .collect::<Vec<_>>();
 
         // Group rows by family combination
         let mut family_combinations: HashMap<Vec<i8>, Vec<u32>> = HashMap::new();
 
-        for i in 0..len {
-            let combination: Vec<i8> = unions.iter().map(|u| u.type_id(i)).collect();
+        for i in 0..self.number_rows {
+            let combination: Vec<i8> = type_ids.iter().map(|u| u[i]).collect();
             family_combinations
                 .entry(combination)
                 .or_default()
@@ -333,40 +321,51 @@ impl TypedFamilyArrays {
         let mut combination_to_result_idx = HashMap::new();
 
         for (combination, indices) in family_combinations {
-            let mut children_arrays = Vec::with_capacity(self.arrays.len());
+            let mut children = Vec::with_capacity(self.args.len());
 
             for (array_idx, &type_id) in combination.iter().enumerate() {
-                let u = unions[array_idx];
-
-                // Extract offsets for this family child
-                let offsets: UInt32Array = indices
-                    .iter()
-                    .map(|&i| u.value_offset(i as usize) as u32)
-                    .collect();
-
-                let child_raw = u.child(type_id);
-                let child_inner = take(child_raw.as_ref(), &offsets, None)?;
-
                 let family = self.encoding().type_families()[type_id as usize].clone();
-                children_arrays.push(TypedFamilyArrayChild {
-                    family,
-                    child: child_inner,
-                });
+                match &self.args[array_idx] {
+                    EncodingDatum::Array(array) => {
+                        let union = array.inner().as_union();
+
+                        // Extract offsets for this family child
+                        let offsets: UInt32Array = indices
+                            .iter()
+                            .map(|&i| union.value_offset(i as usize) as u32)
+                            .collect();
+
+                        let child_raw = union.child(type_id);
+                        let child_inner = take(child_raw.as_ref(), &offsets, None)?;
+
+                        children.push(TypedFamilyChild {
+                            family,
+                            number_rows: indices.len(),
+                            value: ColumnarValue::Array(child_inner),
+                        });
+                    }
+                    EncodingDatum::Scalar(scalar) => children.push(TypedFamilyChild {
+                        family,
+                        number_rows: indices.len(),
+                        value: ColumnarValue::Scalar(scalar.inner_value().clone()),
+                    }),
+                }
             }
 
             combination_to_result_idx.insert(combination, results.len());
-            let mapping_result = mapping_function(&children_arrays)?;
+            let mapping_result = mapping_function(&children)?;
             Self::validate_mapping_result(&mapping_result, result_type, indices.len())?;
 
             results.push(mapping_result);
         }
 
         // Interleave
-        let mut interleave_indices = Vec::with_capacity(len);
+        let mut interleave_indices = Vec::with_capacity(self.number_rows);
         let mut combination_counters = HashMap::new();
 
-        for i in 0..len {
-            let combination: Vec<i8> = unions.iter().map(|u| u.type_id(i)).collect();
+        for i in 0..self.number_rows {
+            let combination: Vec<i8> =
+                type_ids.iter().map(|type_ids| type_ids[i]).collect();
             let res_idx = *combination_to_result_idx.get(&combination).unwrap();
             let counter = combination_counters.entry(combination).or_insert(0);
             interleave_indices.push((res_idx, *counter));
@@ -376,7 +375,27 @@ impl TypedFamilyArrays {
         let arrays: Vec<&dyn Array> = results.iter().map(|r| r.as_ref()).collect();
         let interleaved = interleave(&arrays, &interleave_indices)?;
 
-        Ok(interleaved)
+        return Ok(interleaved);
+
+        /// Computes the type ids for each argument. For scalars, the type id is repeated.
+        fn compute_type_ids(
+            arg: &EncodingDatum<TypedFamilyEncoding>,
+            number_rows: usize,
+        ) -> Vec<i8> {
+            match arg {
+                EncodingDatum::Array(array) => array
+                    .inner()
+                    .as_union()
+                    .type_ids()
+                    .iter()
+                    .copied()
+                    .collect(),
+                EncodingDatum::Scalar(scalar) => {
+                    let type_id = scalar.type_id();
+                    vec![type_id; number_rows]
+                }
+            }
+        }
     }
 
     /// Validate the result of the mapping function.
@@ -411,55 +430,130 @@ impl TypedFamilyArrays {
 /// [`TypedFamilyArray::non_empty_children`] and [`TypedFamilyArray::non_empty_consecutive_children`]
 /// for more information.
 #[derive(Clone)]
-pub struct TypedFamilyArrayChild {
+pub struct TypedFamilyChild {
     /// The typed family of this child.
     family: TypedFamilyRef,
-    /// The child array.
-    child: ArrayRef,
+    /// The number of rows in this child array.
+    number_rows: usize,
+    /// The value of this child.
+    value: ColumnarValue,
 }
 
-impl TypedFamilyArrayChild {
+impl TypedFamilyChild {
     /// Returns the typed family of this child.
     pub fn family(&self) -> &TypedFamilyRef {
         &self.family
     }
 
-    /// Returns the child array.
-    pub fn array(&self) -> &ArrayRef {
-        &self.child
+    /// Returns the value of this child.
+    pub fn value(&self) -> &ColumnarValue {
+        &self.value
     }
 
-    /// Downcasts the array for easier handling of the respective families.
-    pub fn downcast(&self) -> DowncastTypedFamilyArray {
+    /// Returns the number of rows in this child array.
+    pub fn number_rows(&self) -> usize {
+        self.number_rows
+    }
+
+    /// Returns whether the value of this child is a scalar.
+    pub fn value_is_scalar(&self) -> bool {
+        matches!(self.value, ColumnarValue::Scalar(_))
+    }
+
+    /// Returns the child array.
+    pub fn to_array(&self) -> ArrayRef {
+        self.value
+            .to_array(self.number_rows)
+            .expect("Scalar is convertible")
+    }
+
+    /// Returns the child array.
+    pub fn to_array_with_single_row_scalar(&self) -> ArrayRef {
+        match &self.value {
+            ColumnarValue::Array(array) => Arc::clone(array),
+            ColumnarValue::Scalar(scalar) => {
+                scalar.to_array_of_size(1).expect("Scalar is convertible")
+            }
+        }
+    }
+
+    /// Converts all children to arrays and downcasts the result. This will expand literals to
+    /// arrays.
+    pub fn as_downcast_array(&self) -> DowncastTypedFamilyArray {
+        let array = self.to_array();
         match self.family.family_id() {
             TypedFamilyId::Null => DowncastTypedFamilyArray::Null(
-                NullFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                NullFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::Resource => DowncastTypedFamilyArray::Resource(
-                ResourceFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                ResourceFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::String => DowncastTypedFamilyArray::String(
-                StringFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                StringFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::Boolean => DowncastTypedFamilyArray::Boolean(
-                BooleanFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                BooleanFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::Numeric => DowncastTypedFamilyArray::Numeric(
-                NumericFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                NumericFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::DateTime => DowncastTypedFamilyArray::DateTime(
-                DateTimeFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                DateTimeFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::Duration => DowncastTypedFamilyArray::Duration(
-                DurationFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                DurationFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::Unknown => DowncastTypedFamilyArray::Unknown(
-                UnknownFamilyArray::from_array_unchecked(Arc::clone(&self.child)),
+                UnknownFamilyArray::from_array_unchecked(array),
             ),
-            TypedFamilyId::Extension(_) => DowncastTypedFamilyArray::Extension(
+            TypedFamilyId::Extension(_) => {
+                DowncastTypedFamilyArray::Extension(self.family.family_id(), array)
+            }
+        }
+    }
+
+    /// Downcasts the values of the child.
+    pub fn downcast(&self) -> DowncastTypedFamilyDatum {
+        let array = self.to_array_with_single_row_scalar();
+        match self.family.family_id() {
+            TypedFamilyId::Null => DowncastTypedFamilyDatum::Null(
+                self.wrap_in_datum(NullFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::Resource => DowncastTypedFamilyDatum::Resource(
+                self.wrap_in_datum(ResourceFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::String => DowncastTypedFamilyDatum::String(
+                self.wrap_in_datum(StringFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::Boolean => DowncastTypedFamilyDatum::Boolean(
+                self.wrap_in_datum(BooleanFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::Numeric => DowncastTypedFamilyDatum::Numeric(
+                self.wrap_in_datum(NumericFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::DateTime => DowncastTypedFamilyDatum::DateTime(
+                self.wrap_in_datum(DateTimeFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::Duration => DowncastTypedFamilyDatum::Duration(
+                self.wrap_in_datum(DurationFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::Unknown => DowncastTypedFamilyDatum::Unknown(
+                self.wrap_in_datum(UnknownFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::Extension(_) => DowncastTypedFamilyDatum::Extension(
                 self.family.family_id(),
-                Arc::clone(&self.child),
+                self.value.clone(),
             ),
+        }
+    }
+
+    fn wrap_in_datum<TArray: FamilyArray + 'static>(
+        &self,
+        array: TArray,
+    ) -> Box<dyn FamilyDatum<TArray>> {
+        match self.value_is_scalar() {
+            true => Box::new(FamilyScalar::new(array)),
+            false => Box::new(array),
         }
     }
 }
@@ -477,7 +571,8 @@ mod tests {
     fn test_map_children_empty_array() {
         let encoding = create_dummy_encoding();
         let array1 = TypedFamilyArray::new_empty(Arc::clone(&encoding));
-        let arrays = TypedFamilyArrays::new_unchecked(vec![array1]);
+        let arrays =
+            TypedFamilyArgs::new_unchecked(0, vec![EncodingDatum::Array(array1)]);
 
         let result = arrays
             .map_children(
@@ -496,7 +591,8 @@ mod tests {
     fn test_map_children_length_mismatch_error() {
         let encoding = create_dummy_encoding();
         let array1 = create_null_array_of_size(&encoding, 2);
-        let arrays = TypedFamilyArrays::new_unchecked(vec![array1]);
+        let arrays =
+            TypedFamilyArgs::new_unchecked(2, vec![EncodingDatum::Array(array1)]);
 
         let result = arrays.map_children(
             |_children| Ok(Arc::new(Int32Array::from(vec![1])) as ArrayRef),
@@ -513,7 +609,8 @@ mod tests {
     fn test_map_children_type_mismatch_error() {
         let encoding = create_dummy_encoding();
         let array1 = create_null_array_of_size(&encoding, 2);
-        let arrays = TypedFamilyArrays::new_unchecked(vec![array1]);
+        let arrays =
+            TypedFamilyArgs::new_unchecked(2, vec![EncodingDatum::Array(array1)]);
 
         let result = arrays.map_children(
             |_children| Ok(Arc::new(BooleanArray::from(vec![true, false])) as ArrayRef),
@@ -547,20 +644,21 @@ mod tests {
         .finish()
         .unwrap();
 
-        let result = TypedFamilyArrays::new_unchecked(vec![array1])
-            .map_children(
-                |children| {
-                    let child = &children[0];
-                    let len = child.array().len();
+        let result =
+            TypedFamilyArgs::new_unchecked(4, vec![EncodingDatum::Array(array1)])
+                .map_children(
+                    |children| {
+                        let child = &children[0];
+                        let len = child.to_array().len();
 
-                    let type_id = child.family().family_id();
-                    let values = vec![type_id.as_str(); len];
+                        let type_id = child.family().family_id();
+                        let values = vec![type_id.as_str(); len];
 
-                    Ok(Arc::new(StringArray::from(values)) as ArrayRef)
-                },
-                &DataType::Utf8,
-            )
-            .unwrap();
+                        Ok(Arc::new(StringArray::from(values)) as ArrayRef)
+                    },
+                    &DataType::Utf8,
+                )
+                .unwrap();
 
         let result = pretty_format_columns("result", &[result]).unwrap();
         assert_snapshot!(

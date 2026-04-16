@@ -8,8 +8,8 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::typed_family::DowncastTypedFamilyArray;
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -121,9 +121,9 @@ impl ScalarUDFImpl for StringSplitSparqlOp {
         let op = self.op;
 
         let result = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
                 .map_children_tf_binary(|lhs, rhs| {
-                    match (lhs.downcast(), rhs.downcast()) {
+                    match (lhs.as_downcast_array(), rhs.as_downcast_array()) {
                         (
                             DowncastTypedFamilyArray::String(l),
                             DowncastTypedFamilyArray::String(r),
@@ -172,7 +172,7 @@ impl ScalarUDFImpl for StringSplitSparqlOp {
                             };
                             tf_encoding.create_array_from_family(res)
                         }
-                        _ => tf_encoding.create_null_array(lhs.array().len()),
+                        _ => tf_encoding.create_null_array(lhs.to_array().len()),
                     }
                 })?
                 .into_array_ref(),

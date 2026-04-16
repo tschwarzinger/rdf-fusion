@@ -10,14 +10,13 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, StringFamilyArray};
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 
 /// Casts an RDF term to a string literal.
 ///
@@ -85,14 +84,14 @@ impl ScalarUDFImpl for CastStringSparqlOp {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let encoding = self.encodings.typed_family();
                 tf_args
-                    .map_children_tf_unary(|child| match child.downcast() {
+                    .map_children_tf_unary(|child| match child.as_downcast_array() {
                         DowncastTypedFamilyArray::Resource(array) => {
                             let is_blank = array.is_blank_node();
                             let printed =
-                                child.family().pretty_print(Arc::clone(child.array()))?;
+                                child.family().pretty_print(child.to_array())?;
                             let result_values = nullif(&printed, &is_blank)?;
                             let result = StringFamilyArray::new_simple(
                                 result_values.as_string::<i32>().clone(),
@@ -101,7 +100,7 @@ impl ScalarUDFImpl for CastStringSparqlOp {
                         }
                         _ => {
                             let printed =
-                                child.family().pretty_print(Arc::clone(child.array()))?;
+                                child.family().pretty_print(child.to_array())?;
                             let result = StringFamilyArray::new_simple(printed);
                             encoding.create_array_from_family(result)
                         }

@@ -4180,9 +4180,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdf-fusion-compute"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "datafusion",
+ "insta",
+ "rdf-fusion-encoding",
+ "rdf-fusion-model",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "rdf-fusion-encoding"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "datafusion",
  "insta",
  "rdf-fusion-model",
@@ -4246,6 +4259,7 @@ dependencies = [
  "itertools 0.14.0",
  "md-5 0.11.0",
  "rand 0.10.0",
+ "rdf-fusion-compute",
  "rdf-fusion-encoding",
  "rdf-fusion-extensions",
  "rdf-fusion-model",

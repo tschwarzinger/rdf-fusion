@@ -5,6 +5,7 @@ mod utils;
 
 use crate::utils::create_runtime;
 use criterion::{Criterion, criterion_group, criterion_main};
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
 use rdf_fusion_bench::benchmarks::windfarm::{NumTurbines, WindFarmBenchmark};
@@ -12,8 +13,11 @@ use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
 fn bench_bsbm_store_prepare(c: &mut Criterion) {
-    let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), 1);
+    let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
+        PathBuf::from("./data"),
+        QuadStorageEncodingName::ObjectId,
+        1,
+    );
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
 
@@ -36,8 +40,11 @@ fn bench_bsbm_store_prepare(c: &mut Criterion) {
 }
 
 fn bench_windfarm_store_prepare(c: &mut Criterion) {
-    let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), 1);
+    let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
+        PathBuf::from("./data"),
+        QuadStorageEncodingName::ObjectId,
+        1,
+    );
     let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
     let target_partitions = benchmarking_context.options().target_partitions.unwrap();

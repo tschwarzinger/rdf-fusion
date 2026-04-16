@@ -8,13 +8,12 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 pub fn with_sortable_term_encoding(encodings: RdfFusionEncodings) -> ScalarUDF {
     let udf_impl = WithSortableEncoding::new(encodings);
@@ -72,7 +71,7 @@ impl ScalarUDFImpl for WithSortableEncoding {
             ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let result_array = match sparql_args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(arrays)) => arrays.map_children(
+            Some(DowncastEncodingArgs::TypedFamily(arrays)) => arrays.map_children(
                 |children| {
                     if children.len() != 1 {
                         return Err(ArrowError::InvalidArgumentError(
@@ -83,7 +82,7 @@ impl ScalarUDFImpl for WithSortableEncoding {
 
                     child
                         .family()
-                        .cast_to_sortable_array(Arc::clone(child.array()))
+                        .cast_to_sortable_array(child.to_array())
                         .map(|arr| arr.into_array_ref())
                 },
                 self.encodings.sortable_term().data_type(),

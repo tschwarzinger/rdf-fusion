@@ -10,8 +10,8 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::typed_family::{BooleanFamilyArray, DowncastTypedFamilyArray};
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -124,9 +124,9 @@ impl ScalarUDFImpl for StringAffixSparqlOp {
         let op = self.op;
 
         let result = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
                 .map_children_tf_binary(|lhs, rhs| {
-                    match (lhs.downcast(), rhs.downcast()) {
+                    match (lhs.as_downcast_array(), rhs.as_downcast_array()) {
                         (
                             DowncastTypedFamilyArray::String(l),
                             DowncastTypedFamilyArray::String(r),
@@ -142,7 +142,7 @@ impl ScalarUDFImpl for StringAffixSparqlOp {
                         _ => self
                             .encodings
                             .typed_family()
-                            .create_null_array(lhs.array().len()),
+                            .create_null_array(lhs.to_array().len()),
                     }
                 })?
                 .into_array_ref(),

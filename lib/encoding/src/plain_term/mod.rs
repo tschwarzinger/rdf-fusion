@@ -17,12 +17,12 @@ pub use scalar::*;
 
 /// Represents a non-empty list of [`PlainTermArray`]s of the same length. The arrays share the same
 /// encoding.
-pub struct PlainTermArrays {
+pub struct PlainTermArgs {
     arrays: Vec<PlainTermArray>,
 }
 
-impl PlainTermArrays {
-    /// Creates a new [PlainTermArrays] without validating invariants.
+impl PlainTermArgs {
+    /// Creates a new [PlainTermArgs] without validating invariants.
     pub fn new_unchecked(arrays: Vec<PlainTermArray>) -> Self {
         Self { arrays }
     }

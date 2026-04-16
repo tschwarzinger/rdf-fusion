@@ -1,7 +1,7 @@
 use datafusion::logical_expr::ScalarFunctionArgs;
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingDatum, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingDatum, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_model::DFResult;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ pub struct ScalarSparqlFunctionArgs<'a> {
     /// The inner arguments.
     args: &'a ScalarFunctionArgs,
     /// The actual encoding used in the arguments
-    downcast_args: Option<DowncastEncodingArrays>,
+    downcast_args: Option<DowncastEncodingArgs>,
 }
 
 impl<'a> ScalarSparqlFunctionArgs<'a> {
@@ -45,13 +45,7 @@ impl<'a> ScalarSparqlFunctionArgs<'a> {
             });
         }
 
-        let arrays = args
-            .args
-            .iter()
-            .map(|arg| arg.to_array(args.number_rows))
-            .collect::<DFResult<Vec<_>>>()?;
-        let downcast_args = DowncastEncodingArrays::try_from_arrays(encodings, &arrays)?;
-
+        let downcast_args = DowncastEncodingArgs::try_from_arrays(encodings, args)?;
         Ok(Self {
             args,
             downcast_args,
@@ -64,7 +58,7 @@ impl<'a> ScalarSparqlFunctionArgs<'a> {
     }
 
     /// TODO
-    pub fn downcast_arrays(&self) -> Option<&DowncastEncodingArrays> {
+    pub fn downcast_arrays(&self) -> Option<&DowncastEncodingArgs> {
         self.downcast_args.as_ref()
     }
 }

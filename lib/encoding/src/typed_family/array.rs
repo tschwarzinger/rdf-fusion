@@ -1,19 +1,21 @@
-use crate::TermEncoding;
 use crate::encoding::EncodingArray;
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray};
 use crate::typed_family::{
     BooleanFamilyArray, DateTimeFamilyArray, DurationFamilyArray, FamilyArray,
     NullFamilyArray, NumericFamilyArray, ResourceFamilyArray, StringFamilyArray,
-    TypedFamilyArrayChild, TypedFamilyArrays, TypedFamilyEncoding,
-    TypedFamilyEncodingRef, TypedFamilyId, UnknownFamilyArray,
+    TypedFamilyArgs, TypedFamilyChild, TypedFamilyEncoding, TypedFamilyEncodingRef,
+    TypedFamilyId, UnknownFamilyArray,
 };
+use crate::{EncodingDatum, TermEncoding};
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, StringArray, UInt32Array, new_empty_array,
+    Array, ArrayRef, AsArray, BooleanArray, Int32Array, StringArray, UInt32Array,
+    new_empty_array,
 };
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::compute::take;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
+use datafusion::logical_expr::ColumnarValue;
 use rdf_fusion_model::AResult;
 use std::iter::repeat_n;
 use std::sync::Arc;
@@ -79,7 +81,7 @@ impl TypedFamilyArray {
     }
 
     /// Returns a homogenous inner child if the array is homogenous. Otherwise, returns [`None`].
-    pub fn try_get_homogeneous_child(&self) -> Option<TypedFamilyArrayChild> {
+    pub fn try_get_homogeneous_child(&self) -> Option<TypedFamilyChild> {
         if !self.is_homogeneous() {
             return None;
         }
@@ -104,9 +106,10 @@ impl TypedFamilyArray {
         // > respective child array for the type in a given slot. The respective offsets for each
         // > child value array must be in order / increasing.
         // https://arrow.apache.org/docs/format/Columnar.html#dense-union
-        Some(TypedFamilyArrayChild {
+        Some(TypedFamilyChild {
             family: self.encoding.type_families()[type_id as usize].clone(),
-            child: Arc::clone(candidate_child),
+            number_rows: self.len(),
+            value: ColumnarValue::Array(Arc::clone(candidate_child)),
         })
     }
 
@@ -129,7 +132,7 @@ impl TypedFamilyArray {
             |child| {
                 child
                     .family()
-                    .effective_boolean_value(Arc::clone(child.array()))
+                    .effective_boolean_value(child.to_array())
                     .map(|array| Arc::new(array) as ArrayRef)
             },
             &DataType::Boolean,
@@ -143,7 +146,7 @@ impl TypedFamilyArray {
             |child| {
                 child
                     .family()
-                    .pretty_print(Arc::clone(child.array()))
+                    .pretty_print(child.to_array())
                     .map(|array| Arc::new(array) as ArrayRef)
             },
             &DataType::Utf8,
@@ -157,7 +160,7 @@ impl TypedFamilyArray {
             |child| {
                 child
                     .family()
-                    .literal_data_types(Arc::clone(child.array()))
+                    .literal_data_types(child.to_array())
                     .map(|array| Arc::new(array) as ArrayRef)
             },
             &DataType::Utf8,
@@ -170,11 +173,11 @@ impl TypedFamilyArray {
     /// Only the string family provides language tags. For all other families, the result is null.
     pub fn language_tags(&self) -> Result<StringArray, ArrowError> {
         let array = self.map_unary(
-            |child| match child.downcast() {
+            |child| match child.as_downcast_array() {
                 DowncastTypedFamilyArray::String(string_family) => {
                     Ok(Arc::clone(string_family.language_array_ref()))
                 }
-                _ => Ok(Arc::new(StringArray::new_null(child.child.len()))),
+                _ => Ok(Arc::new(StringArray::new_null(child.number_rows))),
             },
             &DataType::Utf8,
         );
@@ -184,16 +187,16 @@ impl TypedFamilyArray {
     /// Returns a boolean array indicating whether each entry is a literal.
     pub fn is_literal(&self) -> Result<BooleanArray, ArrowError> {
         let array = self.map_unary(
-            |child| match child.downcast() {
+            |child| match child.as_downcast_array() {
                 DowncastTypedFamilyArray::Null(null_array) => {
                     Ok(Arc::clone(null_array.inner_ref()))
                 }
                 DowncastTypedFamilyArray::Resource(_) => Ok(Arc::new(
-                    BooleanArray::from_iter(repeat_n(false, child.child.len())),
+                    BooleanArray::from_iter(repeat_n(false, child.number_rows)),
                 )),
                 _ => Ok(Arc::new(BooleanArray::from_iter(repeat_n(
                     true,
-                    child.child.len(),
+                    child.number_rows,
                 )))),
             },
             &DataType::Boolean,
@@ -207,7 +210,7 @@ impl TypedFamilyArray {
             |child| {
                 child
                     .family
-                    .cast_to_plain_term_array(Arc::clone(child.array()))
+                    .cast_to_plain_term_array(child.to_array())
                     .map(|array| array.into_array_ref())
             },
             PLAIN_TERM_ENCODING.data_type(),
@@ -219,7 +222,7 @@ impl TypedFamilyArray {
     ///
     /// It is not guaranteed that the child arrays are consecutive in the array. For this purpose
     /// see [`Self::non_empty_consecutive_children`].
-    pub fn non_empty_children(&self) -> Vec<TypedFamilyArrayChild> {
+    pub fn non_empty_children(&self) -> Vec<TypedFamilyChild> {
         let union_array = self.inner.as_union();
         let len = union_array.len();
         if len == 0 {
@@ -251,25 +254,21 @@ impl TypedFamilyArray {
                 let child_inner = take(child_raw.as_ref(), &child_offsets_array, None)
                     .expect("Failed to narrow child array in non_empty_children");
 
-                Some(TypedFamilyArrayChild {
+                Some(TypedFamilyChild {
                     family: family.clone(),
-                    child: child_inner,
+                    number_rows: child_inner.len(),
+                    value: ColumnarValue::Array(child_inner),
                 })
             })
             .collect()
     }
 
-    /// Convenience function for calling [`TypedFamilyArrays::map_children`] with a single argument.
+    /// Convenience function for calling [`TypedFamilyArgs::map_children`] with a single argument.
     pub fn map_unary<F>(&self, f: F, target_type: &DataType) -> AResult<ArrayRef>
     where
-        F: Fn(TypedFamilyArrayChild) -> AResult<ArrayRef>,
+        F: Fn(TypedFamilyChild) -> AResult<ArrayRef>,
     {
-        let cloned = TypedFamilyArray::new_unchecked(
-            Arc::clone(&self.encoding),
-            Arc::clone(&self.inner),
-        );
-        let arrays = TypedFamilyArrays::new_unchecked(vec![cloned]);
-        arrays.map_children(
+        self.as_unary_args().map_children(
             |children| {
                 if children.len() != 1 {
                     return Err(ArrowError::InvalidArgumentError(format!(
@@ -285,22 +284,29 @@ impl TypedFamilyArray {
         )
     }
 
-    /// Convenience function for calling [`TypedFamilyArrays::map_children_tf_unary`].
+    /// Convenience function for calling [`TypedFamilyArgs::map_children_tf_unary`].
     pub fn map_unary_tf<F>(&self, f: F) -> AResult<TypedFamilyArray>
     where
-        F: Fn(TypedFamilyArrayChild) -> AResult<TypedFamilyArray>,
+        F: Fn(TypedFamilyChild) -> AResult<TypedFamilyArray>,
     {
-        let cloned = TypedFamilyArray::new_unchecked(
-            Arc::clone(&self.encoding),
-            Arc::clone(&self.inner),
-        );
-        let arrays = TypedFamilyArrays::new_unchecked(vec![cloned]);
-        arrays.map_children_tf_unary(f)
+        self.as_unary_args().map_children_tf_unary(f)
     }
 
     /// Internal access to the inner array.
     pub fn inner(&self) -> &ArrayRef {
         &self.inner
+    }
+
+    /// Creates unary arguments from this array.
+    fn as_unary_args(&self) -> TypedFamilyArgs {
+        let cloned = TypedFamilyArray::new_unchecked(
+            Arc::clone(&self.encoding),
+            Arc::clone(&self.inner),
+        );
+        TypedFamilyArgs::new_unchecked(
+            self.inner.len(),
+            vec![EncodingDatum::Array(cloned)],
+        )
     }
 }
 
@@ -324,6 +330,116 @@ pub enum DowncastTypedFamilyArray {
     Unknown(UnknownFamilyArray),
     /// An extension family which can be downcast by the respective extension.
     Extension(TypedFamilyId, ArrayRef),
+}
+
+/// A downcast family array.
+pub enum DowncastTypedFamilyDatum {
+    /// The null family.
+    Null(Box<dyn FamilyDatum<NullFamilyArray>>),
+    /// The resource family.
+    Resource(Box<dyn FamilyDatum<ResourceFamilyArray>>),
+    /// The string family.
+    String(Box<dyn FamilyDatum<StringFamilyArray>>),
+    /// The boolean family.
+    Boolean(Box<dyn FamilyDatum<BooleanFamilyArray>>),
+    /// The numeric family.
+    Numeric(Box<dyn FamilyDatum<NumericFamilyArray>>),
+    /// The date-time family.
+    DateTime(Box<dyn FamilyDatum<DateTimeFamilyArray>>),
+    /// The duration family.
+    Duration(Box<dyn FamilyDatum<DurationFamilyArray>>),
+    /// The unknown family.
+    Unknown(Box<dyn FamilyDatum<UnknownFamilyArray>>),
+    /// An extension family which can be downcast by the respective extension.
+    Extension(TypedFamilyId, ColumnarValue),
+}
+
+/// A scalar whose value is represented as an array of length one.
+///
+/// This mirrors the [`Scalar`](arrow::array::Scalar) type but is used for typed family arrays.
+pub struct FamilyScalar<TArray: FamilyArray> {
+    /// A family array of length one.
+    inner: TArray,
+}
+
+impl<TArray: FamilyArray> FamilyScalar<TArray> {
+    /// Creates a new [`FamilyScalar`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given array does not have a length of one.
+    pub fn new(inner: TArray) -> Self {
+        assert_eq!(
+            inner.inner_ref().len(),
+            1,
+            "Scalar must have a length of one"
+        );
+        Self { inner }
+    }
+}
+
+/// A family array that is either a regular array or a scalar.
+///
+/// This is inspired by the [`Scalar`](arrow::array::Scalar) trait,but is used for typed family
+/// arrays.
+pub trait FamilyDatum<TArray: FamilyArray> {
+    /// Returns the inner array and an indicator whether the array is a scalar or not.
+    fn get(&self) -> (bool, &TArray);
+}
+
+impl<TArray: FamilyArray> FamilyDatum<TArray> for TArray {
+    fn get(&self) -> (bool, &TArray) {
+        (false, self)
+    }
+}
+
+impl<TArray: FamilyArray> FamilyDatum<TArray> for FamilyScalar<TArray> {
+    fn get(&self) -> (bool, &TArray) {
+        (true, &self.inner)
+    }
+}
+
+/// A list of helper functions for working with typed family data. See [`FamilyDatum`] for more
+/// information.
+pub trait FamilyDatumExt<TArray: FamilyArray> {
+    /// Creates an array from this datum.
+    fn to_array(&self, number_rows: usize) -> AResult<TArray>;
+
+    /// Returns a list of indices that can be used for indexing `number_rows` elements of this
+    /// datum. Errors if the number of rows does not match the array length for
+    /// [`FamilyDatum::Array`].
+    fn indices_of_length(&self, number_rows: usize) -> AResult<Vec<usize>>;
+}
+
+impl<TArray: FamilyArray> FamilyDatumExt<TArray> for dyn FamilyDatum<TArray> + '_ {
+    fn to_array(&self, number_rows: usize) -> AResult<TArray> {
+        let (is_scalar, array) = self.get();
+        match is_scalar {
+            false => Ok(array.clone()),
+            true => {
+                let indices = Int32Array::from(vec![0; number_rows]);
+                let result = take(&array.inner_ref(), &indices, None)?;
+                Ok(TArray::from_array_unchecked(result))
+            }
+        }
+    }
+
+    fn indices_of_length(&self, number_rows: usize) -> AResult<Vec<usize>> {
+        let (is_scalar, array) = self.get();
+        match is_scalar {
+            false => {
+                if array.inner_ref().len() != number_rows {
+                    return Err(ArrowError::InvalidArgumentError(format!(
+                        "The number of rows ({}) does not match the array length ({})",
+                        number_rows,
+                        array.inner_ref().len()
+                    )));
+                }
+                Ok((0..number_rows).collect())
+            }
+            true => Ok(vec![0; number_rows]),
+        }
+    }
 }
 
 impl EncodingArray for TypedFamilyArray {
@@ -357,7 +473,7 @@ mod tests {
 
         let children = tf_array.non_empty_children();
         assert_eq!(children.len(), 1);
-        assert_eq!(children[0].array().len(), 2);
+        assert_eq!(children[0].to_array().len(), 2);
     }
 
     #[test]
@@ -444,6 +560,6 @@ mod tests {
 
         let child = &children[0];
         assert_eq!(child.family().family_id(), TypedFamilyId::Numeric);
-        assert_eq!(child.array().len(), 1);
+        assert_eq!(child.to_array().len(), 1);
     }
 }

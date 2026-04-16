@@ -7,13 +7,14 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_compute::numeric::cast_numeric;
 use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, NumericFamilyArray, StringFamily, StringFamilyArray,
     TypedFamily, TypedFamilyArray, TypedFamilyEncodingRef,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::{AResult, DFResult};
@@ -90,11 +91,13 @@ impl ScalarUDFImpl for SubStrSparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let result = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
                 .map_children_tf(|children| {
-                    let family_len = children[0].array().len();
-                    let children =
-                        children.iter().map(|c| c.downcast()).collect::<Vec<_>>();
+                    let family_len = children[0].to_array().len();
+                    let children = children
+                        .iter()
+                        .map(|c| c.as_downcast_array())
+                        .collect::<Vec<_>>();
 
                     match children.as_slice() {
                         [
@@ -131,12 +134,12 @@ fn substr_impl(
     let source = s_arr.value_array();
 
     // Cast to Int64 to match our indexing expectations
-    let start_raw = st_arr.cast(&DataType::Int64)?;
+    let start_raw = cast_numeric(st_arr, &DataType::Int64)?;
     let start = start_raw.as_primitive::<Int64Type>();
 
     let length = match l_arr {
         Some(l) => {
-            let length_raw = l.cast(&DataType::Int64)?;
+            let length_raw = cast_numeric(l, &DataType::Int64)?;
             Some(length_raw.as_primitive::<Int64Type>().clone())
         }
         None => None,

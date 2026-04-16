@@ -11,7 +11,7 @@ use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, StringFamily, TypedFamily,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -122,35 +122,35 @@ impl ScalarUDFImpl for StringCaseSparqlUDF {
         let args = ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
 
         let tf_args = match args.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args.clone(),
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args.clone(),
             _ => exec_err!("String casing is only supported for TypedFamily encoding")?,
         };
 
         let result = tf_args
             .map_children_tf_unary(
-                |child: rdf_fusion_encoding::typed_family::TypedFamilyArrayChild| {
-                    match child.downcast() {
-                        DowncastTypedFamilyArray::String(array) => {
-                            let string_array = match self.op {
-                                StringCaseOp::Lower => {
-                                    array.apply_unary(|v| v.to_lowercase())
-                                }
-                                StringCaseOp::Upper => {
-                                    array.apply_unary(|v| v.to_uppercase())
-                                }
-                            };
-                            self.encodings
-                                .typed_family()
-                                .create_array_with_single_family(
-                                    StringFamily::FAMILY_ID,
-                                    string_array,
-                                )
-                        }
-                        _ => self
-                            .encodings
+                |child: rdf_fusion_encoding::typed_family::TypedFamilyChild| match child
+                    .as_downcast_array()
+                {
+                    DowncastTypedFamilyArray::String(array) => {
+                        let string_array = match self.op {
+                            StringCaseOp::Lower => {
+                                array.apply_unary(|v| v.to_lowercase())
+                            }
+                            StringCaseOp::Upper => {
+                                array.apply_unary(|v| v.to_uppercase())
+                            }
+                        };
+                        self.encodings
                             .typed_family()
-                            .create_null_array(child.array().len()),
+                            .create_array_with_single_family(
+                                StringFamily::FAMILY_ID,
+                                string_array,
+                            )
                     }
+                    _ => self
+                        .encodings
+                        .typed_family()
+                        .create_null_array(child.to_array().len()),
                 },
             )?
             .into_array_ref();

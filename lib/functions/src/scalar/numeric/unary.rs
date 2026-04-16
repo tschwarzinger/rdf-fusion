@@ -8,7 +8,7 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_encoding::typed_family::DowncastTypedFamilyArray;
 use rdf_fusion_encoding::{
-    DowncastEncodingArrays, EncodingArray, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
@@ -145,8 +145,8 @@ impl ScalarUDFImpl for NumericUnarySparqlOp {
         let tf_encoding = self.encodings.typed_family();
 
         let result = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArrays::TypedFamily(tf_args)) => tf_args
-                .map_children_tf_unary(|child| match child.downcast() {
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
+                .map_children_tf_unary(|child| match child.as_downcast_array() {
                     DowncastTypedFamilyArray::Numeric(array) => {
                         let res = match self.op {
                             NumericUnaryOperation::Abs => array.abs()?,
@@ -158,7 +158,7 @@ impl ScalarUDFImpl for NumericUnarySparqlOp {
                         };
                         Ok(tf_encoding.create_array_from_family(res)?)
                     }
-                    _ => tf_encoding.create_null_array(child.array().len()),
+                    _ => tf_encoding.create_null_array(child.to_array().len()),
                 })?
                 .into_array_ref(),
             _ => exec_err!("{} is only supported for TypedFamily encoding", self.name)?,

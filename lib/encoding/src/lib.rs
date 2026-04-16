@@ -50,13 +50,14 @@ mod scalar_encoder;
 pub mod sortable_term;
 pub mod typed_family;
 
-use crate::object_id::ObjectIdArrays;
-use crate::plain_term::{PlainTermArrays, PlainTermQuadsBuilder};
-use crate::typed_family::TypedFamilyArrays;
-use datafusion::arrow::array::{ArrayRef, RecordBatch};
+use crate::object_id::ObjectIdArgs;
+use crate::plain_term::{PlainTermArgs, PlainTermQuadsBuilder};
+use crate::typed_family::TypedFamilyArgs;
+use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::{exec_err, plan_datafusion_err, plan_err};
 use datafusion::dataframe::DataFrame;
+use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs};
 use datafusion::prelude::{SessionContext, col};
 pub use encoding::*;
 pub use encoding_name::*;
@@ -68,22 +69,23 @@ pub use scalar_encoder::ScalarEncoder;
 use std::sync::Arc;
 
 /// Represents a list of arrays that share the same encoding.
-pub enum DowncastEncodingArrays {
+pub enum DowncastEncodingArgs {
     /// Arrays of the Object ID encoding
-    ObjectId(ObjectIdArrays),
+    ObjectId(ObjectIdArgs),
     /// Arrays of the Plain Term encoding
-    PlainTerm(PlainTermArrays),
+    PlainTerm(PlainTermArgs),
     /// Arrays of the Typed Family encoding
-    TypedFamily(TypedFamilyArrays),
+    TypedFamily(TypedFamilyArgs),
 }
 
-impl DowncastEncodingArrays {
-    /// Tries to create a [`DowncastEncodingArrays`] from a list or arrays.
+impl DowncastEncodingArgs {
+    /// Tries to create a [`DowncastEncodingArgs`] from a list or arrays.
     pub fn try_from_arrays(
         encodings: &RdfFusionEncodings,
-        arrays: &[ArrayRef],
-    ) -> DFResult<Option<DowncastEncodingArrays>> {
-        let types = arrays
+        args: &ScalarFunctionArgs,
+    ) -> DFResult<Option<DowncastEncodingArgs>> {
+        let types = args
+            .arg_fields
             .iter()
             .map(|a| a.data_type().clone())
             .collect::<Vec<_>>();
@@ -96,18 +98,24 @@ impl DowncastEncodingArrays {
                 let encoding = encodings
                     .object_id()
                     .expect("Otherwise encoding cannot be detected");
-                let arrays = try_from_arrays_for_encoding(encoding, arrays)?;
-                DowncastEncodingArrays::ObjectId(ObjectIdArrays::new_unchecked(arrays))
+                let arrays = try_from_arrays_for_encoding(encoding, args)?
+                    .into_iter()
+                    .map(|d| d.to_array(args.number_rows))
+                    .collect::<Vec<_>>();
+                DowncastEncodingArgs::ObjectId(ObjectIdArgs::new_unchecked(arrays))
             }
             EncodingName::PlainTerm => {
-                let arrays =
-                    try_from_arrays_for_encoding(encodings.plain_term(), arrays)?;
-                DowncastEncodingArrays::PlainTerm(PlainTermArrays::new_unchecked(arrays))
+                let arrays = try_from_arrays_for_encoding(encodings.plain_term(), args)?
+                    .into_iter()
+                    .map(|d| d.to_array(args.number_rows))
+                    .collect::<Vec<_>>();
+                DowncastEncodingArgs::PlainTerm(PlainTermArgs::new_unchecked(arrays))
             }
             EncodingName::TypedFamily => {
                 let arrays =
-                    try_from_arrays_for_encoding(encodings.typed_family(), arrays)?;
-                DowncastEncodingArrays::TypedFamily(TypedFamilyArrays::new_unchecked(
+                    try_from_arrays_for_encoding(encodings.typed_family(), args)?;
+                DowncastEncodingArgs::TypedFamily(TypedFamilyArgs::new_unchecked(
+                    args.number_rows,
                     arrays,
                 ))
             }
@@ -122,11 +130,18 @@ impl DowncastEncodingArrays {
         /// Converts the arrays for a particular encoding.
         fn try_from_arrays_for_encoding<TEncoding: TermEncoding>(
             encoding: &Arc<TEncoding>,
-            arrays: &[ArrayRef],
-        ) -> DFResult<Vec<TEncoding::Array>> {
-            arrays
+            args: &ScalarFunctionArgs,
+        ) -> DFResult<Vec<EncodingDatum<TEncoding>>> {
+            args.args
                 .iter()
-                .map(|a| encoding.try_new_array(Arc::clone(a)))
+                .map(|a| match a {
+                    ColumnarValue::Array(array) => Ok(EncodingDatum::Array(
+                        encoding.try_new_array(Arc::clone(array))?,
+                    )),
+                    ColumnarValue::Scalar(scalar) => Ok(EncodingDatum::Scalar(
+                        encoding.try_new_scalar(scalar.clone())?,
+                    )),
+                })
                 .collect()
         }
     }

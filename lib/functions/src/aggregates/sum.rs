@@ -76,7 +76,7 @@ impl SparqlSumAccumulator {
         let typed_arrays = arr.non_empty_children();
 
         for child in typed_arrays {
-            match child.downcast() {
+            match child.as_downcast_array() {
                 DowncastTypedFamilyArray::Null(_) if ignore_nulls => continue,
                 DowncastTypedFamilyArray::Numeric(numeric_child) => {
                     let new_sum = numeric_child.sum();

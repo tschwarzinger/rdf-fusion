@@ -55,7 +55,9 @@ impl Accumulator for SparqlTypedFamilyAvg {
 
         let arr = self.encoding.try_new_array(Arc::clone(&values[0]))?;
         for child in arr.non_empty_children() {
-            if let DowncastTypedFamilyArray::Numeric(numeric_child) = child.downcast() {
+            if let DowncastTypedFamilyArray::Numeric(numeric_child) =
+                child.as_downcast_array()
+            {
                 let len = numeric_child.len().try_into().map_err(|_| {
                     ArrowError::ArithmeticOverflow("Child length too big".to_owned())
                 })?;

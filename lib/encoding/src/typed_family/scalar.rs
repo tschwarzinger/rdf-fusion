@@ -46,6 +46,14 @@ impl TypedFamilyScalar {
         }
     }
 
+    /// Returns the type id of this scalar.
+    pub fn inner_value(&self) -> &ScalarValue {
+        match &self.inner {
+            ScalarValue::Union(Some((_, value)), _, _) => value.as_ref(),
+            _ => panic!("Illegal ScalarValue in TypedFamilyScalar."),
+        }
+    }
+
     /// Returns the plain term representation of this scalar.
     pub fn as_plain_term_scalar(&self) -> DFResult<ScalarValue> {
         let array = self.to_array(1)?;
