@@ -15,6 +15,7 @@ use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::compute::take;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
+use datafusion::common::ScalarValue;
 use datafusion::logical_expr::ColumnarValue;
 use rdf_fusion_model::AResult;
 use std::iter::repeat_n;
@@ -375,6 +376,12 @@ impl<TArray: FamilyArray> FamilyScalar<TArray> {
             "Scalar must have a length of one"
         );
         Self { inner }
+    }
+
+    /// Creates a scalar value from this family scalar.
+    pub fn to_scalar_value(&self) -> ScalarValue {
+        ScalarValue::try_from_array(self.inner.inner_ref(), 0)
+            .expect("Scalar must have a length of one")
     }
 }
 

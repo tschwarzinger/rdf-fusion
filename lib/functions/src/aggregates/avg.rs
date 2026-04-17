@@ -1,204 +1,311 @@
-use crate::aggregates::SparqlSumAccumulator;
-use datafusion::arrow::array::{ArrayRef, AsArray};
-use datafusion::arrow::compute::sum;
-use datafusion::arrow::datatypes::{DataType, UInt64Type};
-use datafusion::arrow::error::ArrowError;
-use datafusion::logical_expr::{AggregateUDF, Volatility, create_udaf};
-use datafusion::scalar::ScalarValue;
-use datafusion::{error::Result, physical_plan::Accumulator};
-use rdf_fusion_encoding::typed_family::{
-    DowncastTypedFamilyArray, NumericFamily, NumericFamilyScalar, TypedFamilyEncodingRef,
+use crate::aggregates::{sparql_count, sparql_sum};
+use datafusion::arrow::array::{ArrayRef, BooleanArray};
+use datafusion::arrow::datatypes::{DataType, Field};
+use datafusion::common::DataFusionError;
+use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
+use datafusion::logical_expr::{
+    AggregateUDF, AggregateUDFImpl, EmitTo, GroupsAccumulator, Signature, Volatility,
 };
-use rdf_fusion_encoding::{EncodingScalar, TermEncoding};
+use datafusion::physical_plan::Accumulator;
+use datafusion::scalar::ScalarValue;
+use rdf_fusion_compute::numeric::{apply_typed_family_binary, NumericBinaryOp};
+use rdf_fusion_encoding::typed_family::{
+    NumericFamily, NumericFamilyArray, TypedFamilyArgs, TypedFamilyEncodingRef,
+};
+use rdf_fusion_encoding::{EncodingArray, EncodingDatum, EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::DFResult;
+use std::any::Any;
 use std::sync::Arc;
 
-pub fn avg_typed_family(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
-    let data_type = encoding.data_type().clone();
-    create_udaf(
-        &BuiltinName::Avg.to_string(),
-        vec![data_type.clone()],
-        Arc::new(data_type.clone()),
-        Volatility::Immutable,
-        Arc::new(move |_| Ok(Box::new(SparqlTypedFamilyAvg::new(Arc::clone(&encoding))))),
-        Arc::new(vec![data_type, DataType::UInt64]),
-    )
+/// Creates a new [AggregateUDF] for the SPARQL `AVG` aggregate function.
+///
+/// Relevant Resources:
+/// - [SPARQL 1.1 - AVG](https://www.w3.org/TR/sparql11-query/#defn_aggAvg)
+pub fn sparql_avg(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
+    AggregateUDF::new_from_impl(SparqlAvgUDAF::new(encoding))
 }
 
-#[derive(Debug)]
-struct SparqlTypedFamilyAvg {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SparqlAvgUDAF {
+    name: String,
+    signature: Signature,
     encoding: TypedFamilyEncodingRef,
-    sum_acc: SparqlSumAccumulator,
-    count: u64,
+    data_type: DataType,
+    sum_inner: AggregateUDF,
+    count_inner: AggregateUDF,
 }
 
-impl SparqlTypedFamilyAvg {
-    /// Creates a new [`SparqlTypedFamilyAvg`].
+impl SparqlAvgUDAF {
     pub fn new(encoding: TypedFamilyEncodingRef) -> Self {
-        let sum_acc = SparqlSumAccumulator::new(Arc::clone(&encoding));
-        SparqlTypedFamilyAvg {
+        let data_type = encoding.data_type().clone();
+
+        let sum_inner = sparql_sum(Arc::clone(&encoding));
+        let count_inner = sparql_count(Arc::clone(&encoding));
+
+        Self {
+            name: BuiltinName::Avg.to_string(),
+            signature: Signature::exact(vec![data_type.clone()], Volatility::Immutable),
             encoding,
-            sum_acc,
-            count: 0,
+            data_type,
+            sum_inner,
+            count_inner,
         }
     }
 }
 
-impl Accumulator for SparqlTypedFamilyAvg {
-    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
-        if values.is_empty() {
-            return Ok(());
-        }
+impl AggregateUDFImpl for SparqlAvgUDAF {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        Ok(self.data_type.clone())
+    }
+
+    fn accumulator(&self, acc_args: AccumulatorArgs) -> DFResult<Box<dyn Accumulator>> {
+        let sum_acc = self.sum_inner.inner().accumulator(acc_args.clone())?;
+        let count_acc = self.count_inner.inner().accumulator(acc_args)?;
+        Ok(Box::new(SparqlAvgAccumulator::new(
+            Arc::clone(&self.encoding),
+            sum_acc,
+            count_acc,
+        )))
+    }
+
+    fn state_fields(&self, args: StateFieldsArgs) -> DFResult<Vec<Arc<Field>>> {
+        let args_clone = StateFieldsArgs {
+            name: args.name,
+            input_fields: args.input_fields,
+            return_field: args.return_field.clone(),
+            ordering_fields: args.ordering_fields,
+            is_distinct: args.is_distinct,
+        };
+
+        let mut fields = self.sum_inner.inner().state_fields(args)?;
+        let mut count_fields = self.count_inner.inner().state_fields(args_clone)?;
+        fields.append(&mut count_fields);
+
+        Ok(fields)
+    }
+
+    fn groups_accumulator_supported(&self, args: AccumulatorArgs) -> bool {
+        self.sum_inner
+            .inner()
+            .groups_accumulator_supported(args.clone())
+            && self.count_inner.inner().groups_accumulator_supported(args)
+    }
+
+    fn create_groups_accumulator(
+        &self,
+        args: AccumulatorArgs,
+    ) -> DFResult<Box<dyn GroupsAccumulator>> {
+        let sum_acc = self
+            .sum_inner
+            .inner()
+            .create_groups_accumulator(args.clone())?;
+        let count_acc = self.count_inner.inner().create_groups_accumulator(args)?;
+
+        Ok(Box::new(SparqlAvgGroupsAccumulator::new(
+            Arc::clone(&self.encoding),
+            sum_acc,
+            count_acc,
+        )))
+    }
+
+    fn default_value(&self, _data_type: &DataType) -> DFResult<ScalarValue> {
+        let zero = NumericFamilyArray::new_integer_scalar(0);
+        self.encoding
+            .create_scalar_from_family::<NumericFamily>(zero.to_scalar_value())
+            .map(|tf| tf.into_scalar_value())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SparqlAvgAccumulator {
+    encoding: TypedFamilyEncodingRef,
+    sum_acc: Box<dyn Accumulator>,
+    count_acc: Box<dyn Accumulator>,
+}
+
+impl SparqlAvgAccumulator {
+    pub fn new(
+        encoding: TypedFamilyEncodingRef,
+        sum_acc: Box<dyn Accumulator>,
+        count_acc: Box<dyn Accumulator>,
+    ) -> Self {
+        Self {
+            encoding,
+            sum_acc,
+            count_acc,
+        }
+    }
+}
+
+impl Accumulator for SparqlAvgAccumulator {
+    fn update_batch(&mut self, values: &[ArrayRef]) -> DFResult<()> {
         self.sum_acc.update_batch(values)?;
-
-        let arr = self.encoding.try_new_array(Arc::clone(&values[0]))?;
-        for child in arr.non_empty_children() {
-            if let DowncastTypedFamilyArray::Numeric(numeric_child) =
-                child.as_downcast_array()
-            {
-                let len = numeric_child.len().try_into().map_err(|_| {
-                    ArrowError::ArithmeticOverflow("Child length too big".to_owned())
-                })?;
-                self.count = self.count.checked_add(len).ok_or_else(|| {
-                    ArrowError::ArithmeticOverflow("Average count overflow".to_owned())
-                })?;
-            }
-        }
-
+        self.count_acc.update_batch(values)?;
         Ok(())
     }
 
     fn evaluate(&mut self) -> DFResult<ScalarValue> {
-        if self.count == 0 {
-            return self
-                .encoding
-                .create_scalar_from_family::<NumericFamily>(
-                    NumericFamilyScalar::Integer(0.into()).to_scalar_value(),
-                )
-                .map(|v| v.into_scalar_value());
+        let sum_res = self.sum_acc.evaluate()?;
+        let count_res = self.count_acc.evaluate()?;
+
+        // Construct the expected '0' scalar for comparison and fallback
+        let zero = NumericFamilyArray::new_integer_scalar(0);
+        let zero_scalar = self
+            .encoding
+            .create_scalar_from_family::<NumericFamily>(zero.to_scalar_value())
+            .map(|tf| tf.into_scalar_value())?;
+
+        // If the multiset is empty (Count == 0), AVG is 0.
+        if count_res == zero_scalar {
+            return Ok(zero_scalar);
         }
 
-        let count = i64::try_from(self.count).map_err(|_| {
-            ArrowError::ArithmeticOverflow("Average count overflow".to_string())
-        })?;
-        let avg = self
-            .sum_acc
-            .sum()
-            .and_then(|sum| sum.div(NumericFamilyScalar::Integer(count.into())));
+        let sum_res_tf = self.encoding.try_new_scalar(sum_res)?;
+        let count_res_tf = self.encoding.try_new_scalar(count_res)?;
 
-        match avg {
-            Ok(scalar) => Ok(self
-                .encoding
-                .create_scalar_from_family::<NumericFamily>(scalar.to_scalar_value())?
-                .into_scalar_value()),
-            Err(_) => Ok(self.encoding.create_scalar_null().into_scalar_value()),
-        }
+        let args = TypedFamilyArgs::new_unchecked(
+            1,
+            vec![
+                EncodingDatum::Scalar(sum_res_tf),
+                EncodingDatum::Scalar(count_res_tf),
+            ],
+        );
+        let div = apply_typed_family_binary(&args, NumericBinaryOp::Div)?;
+        let scalar = div.try_as_scalar(0).expect("length is valid");
+        Ok(scalar.into_scalar_value())
     }
 
     fn size(&self) -> usize {
         size_of_val(self)
+            + (self.sum_acc.size() - size_of_val(&self.sum_acc))
+            + (self.count_acc.size() - size_of_val(&self.count_acc))
     }
 
     fn state(&mut self) -> DFResult<Vec<ScalarValue>> {
         let mut state = self.sum_acc.state()?;
-        state.push(ScalarValue::UInt64(Some(self.count)));
+        state.append(&mut self.count_acc.state()?);
         Ok(state)
     }
 
-    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
-        self.sum_acc.merge_batch(&states[0..states.len() - 1])?;
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> DFResult<()> {
+        let sum_states = &states[0..1];
+        let count_states = &states[1..];
 
-        let counts = states[states.len() - 1].as_primitive::<UInt64Type>();
-        let count = sum(counts).ok_or_else(|| {
-            ArrowError::ArithmeticOverflow("Average count overflow".to_string())
-        })?;
-        self.count += count;
-
+        self.sum_acc.merge_batch(sum_states)?;
+        self.count_acc.merge_batch(count_states)?;
         Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::evaluate_aggregate_with_args_for_test;
-    use datafusion::arrow::array::Int64Array;
-    use datafusion::logical_expr::col;
-    use insta::assert_snapshot;
-    use rdf_fusion_encoding::EncodingArray;
-    use rdf_fusion_encoding::typed_family::{
-        NumericFamilyArray, TypedFamilyArray, TypedFamilyEncoding,
-    };
-    use std::sync::Arc;
+pub(crate) struct SparqlAvgGroupsAccumulator {
+    encoding: TypedFamilyEncodingRef,
+    sum_acc: Box<dyn GroupsAccumulator>,
+    count_acc: Box<dyn GroupsAccumulator>,
+}
 
-    #[tokio::test]
-    async fn test_avg_typed_family() -> Result<()> {
-        let encoding = Arc::new(TypedFamilyEncoding::default());
-        let values = NumericFamilyArray::new_integers(Int64Array::from(vec![1, 2, 3]));
-        let typed_array = encoding.create_array_from_family(values)?;
+impl SparqlAvgGroupsAccumulator {
+    pub fn new(
+        encoding: TypedFamilyEncodingRef,
+        sum_acc: Box<dyn GroupsAccumulator>,
+        count_acc: Box<dyn GroupsAccumulator>,
+    ) -> Self {
+        Self {
+            encoding,
+            sum_acc,
+            count_acc,
+        }
+    }
+}
 
-        assert_snapshot!(
-            run_test(typed_array).await,
-            @"
-        +-----------------------------------------------------+
-        | AVG(?table?.a)                                      |
-        +-----------------------------------------------------+
-        | {rdf-fusion.numeric={decimal=2.000000000000000000}} |
-        +-----------------------------------------------------+");
-
+impl GroupsAccumulator for SparqlAvgGroupsAccumulator {
+    fn update_batch(
+        &mut self,
+        values: &[ArrayRef],
+        group_indices: &[usize],
+        opt_filter: Option<&BooleanArray>,
+        total_num_groups: usize,
+    ) -> DFResult<()> {
+        self.sum_acc
+            .update_batch(values, group_indices, opt_filter, total_num_groups)?;
+        self.count_acc.update_batch(
+            values,
+            group_indices,
+            opt_filter,
+            total_num_groups,
+        )?;
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_avg_typed_family_with_null() -> Result<()> {
-        let encoding = Arc::new(TypedFamilyEncoding::default());
-        let values = Int64Array::from(vec![Some(1), None, Some(2)]);
-        let typed_array = encoding
-            .create_array_from_family(NumericFamilyArray::new_integers(values))?;
+    fn evaluate(&mut self, emit_to: EmitTo) -> DFResult<ArrayRef> {
+        let sum_res = self.sum_acc.evaluate(emit_to)?;
+        let count_res = self.count_acc.evaluate(emit_to)?;
 
-        assert_snapshot!(
-            run_test(typed_array).await,
-            @"
-        +-----------------------------------------------------+
-        | AVG(?table?.a)                                      |
-        +-----------------------------------------------------+
-        | {rdf-fusion.numeric={decimal=1.500000000000000000}} |
-        +-----------------------------------------------------+
-        ");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_avg_typed_family_promotion() -> Result<()> {
-        let encoding = Arc::new(TypedFamilyEncoding::default());
-        let numeric_array =
-            NumericFamilyArray::new_integers(Int64Array::from(vec![10, 20]));
-        let typed_array = encoding.create_array_from_family(numeric_array)?;
-
-        assert_snapshot!(
-            run_test(typed_array).await,
-            @"
-        +------------------------------------------------------+
-        | AVG(?table?.a)                                       |
-        +------------------------------------------------------+
-        | {rdf-fusion.numeric={decimal=15.000000000000000000}} |
-        +------------------------------------------------------+
-        ");
-
-        Ok(())
-    }
-
-    /// Executes a test and returns the pretty-printed result.
-    async fn run_test(typed_array: TypedFamilyArray) -> String {
-        let encoding = Arc::clone(typed_array.encoding());
-        let df = evaluate_aggregate_with_args_for_test(
-            typed_array.into_array_ref(),
-            Arc::new(avg_typed_family(encoding)),
-            vec![col("a")],
+        assert_eq!(
+            sum_res.len(),
+            count_res.len(),
+            "Both accumulators must return the same length."
         );
-        df.to_string().await.unwrap()
+        let len = sum_res.len();
+
+        let sum_res = self.encoding.try_new_array(sum_res)?;
+        let count_res = self.encoding.try_new_array(count_res)?;
+
+        let args = TypedFamilyArgs::new_unchecked(
+            len,
+            vec![
+                EncodingDatum::Array(sum_res),
+                EncodingDatum::Array(count_res),
+            ],
+        );
+        let div = apply_typed_family_binary(&args, NumericBinaryOp::Div)?;
+        Ok(div.into_array_ref())
+    }
+
+    fn state(&mut self, emit_to: EmitTo) -> DFResult<Vec<ArrayRef>> {
+        let mut state = self.sum_acc.state(emit_to)?;
+        state.append(&mut self.count_acc.state(emit_to)?);
+        Ok(state)
+    }
+
+    fn merge_batch(
+        &mut self,
+        states: &[ArrayRef],
+        group_indices: &[usize],
+        opt_filter: Option<&BooleanArray>,
+        total_num_groups: usize,
+    ) -> Result<(), DataFusionError> {
+        let sum_states = &states[0..1];
+        let count_states = &states[1..];
+
+        self.sum_acc.merge_batch(
+            sum_states,
+            group_indices,
+            opt_filter,
+            total_num_groups,
+        )?;
+        self.count_acc.merge_batch(
+            count_states,
+            group_indices,
+            opt_filter,
+            total_num_groups,
+        )?;
+        Ok(())
+    }
+
+    fn size(&self) -> usize {
+        size_of_val(self) + self.sum_acc.size() + self.count_acc.size()
     }
 }

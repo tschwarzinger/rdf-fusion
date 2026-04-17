@@ -1,6 +1,6 @@
-use crate::scalar::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
 use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::ScalarSparqlFunctionArgs;
 use datafusion::arrow::array::{Array, ArrayRef};
 use datafusion::arrow::compute::cast;
 use datafusion::arrow::datatypes::DataType;
@@ -11,8 +11,8 @@ use datafusion::logical_expr::{
 use rdf_fusion_compute::numeric::cast_numeric;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, NumericFamilyArray};
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_types,
+    detect_encoding_from_types, DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
+    TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::{DFResult, Decimal};
@@ -170,10 +170,11 @@ impl ScalarUDFImpl for CastNumericSparqlUdf {
                                 let mut builder = datafusion::arrow::array::Decimal128Builder::with_capacity(
                                     array.inner().len(),
                                 )
-                                .with_precision_and_scale(
-                                    Decimal::PRECISION,
-                                    Decimal::SCALE,
-                                )?;
+                                    .with_precision_and_scale(
+                                        Decimal::PRECISION,
+                                        Decimal::SCALE,
+                                    )?;
+
                                 for i in 0..array.inner().len() {
                                     if array.inner().is_null(i) {
                                         builder.append_null();
@@ -185,6 +186,7 @@ impl ScalarUDFImpl for CastNumericSparqlUdf {
                                         builder.append_value(0);
                                     }
                                 }
+
                                 Arc::new(builder.finish()) as ArrayRef
                             } else {
                                 cast(array.inner(), &self.target_type)?

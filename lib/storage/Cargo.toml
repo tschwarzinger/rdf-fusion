@@ -26,7 +26,7 @@ tokio.workspace = true
 criterion.workspace = true
 insta.workspace = true
 rand.workspace = true
-rdf-fusion-functions = { workspace = true }
+rdf-fusion-execution.workspace = true
 
 [lints]
 workspace = true

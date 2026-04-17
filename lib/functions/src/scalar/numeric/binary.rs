@@ -6,8 +6,7 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use rdf_fusion_compute::numeric::{NumericBinaryOp, apply_numeric_binary};
-use rdf_fusion_encoding::typed_family::DowncastTypedFamilyDatum;
+use rdf_fusion_compute::numeric::{apply_typed_family_binary, NumericBinaryOp};
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, RdfFusionEncodings, TermEncoding,
 };
@@ -113,27 +112,11 @@ impl ScalarUDFImpl for NumericBinarySparqlOp {
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
         let args_wrapped =
             ScalarSparqlFunctionArgs::try_from_args(&args, &self.encodings)?;
-        let tf_encoding = self.encodings.typed_family();
 
         let result = match args_wrapped.downcast_arrays() {
-            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => tf_args
-                .map_children_tf_binary(|lhs, rhs| {
-                    match (lhs.downcast(), rhs.downcast()) {
-                        (
-                            DowncastTypedFamilyDatum::Numeric(l),
-                            DowncastTypedFamilyDatum::Numeric(r),
-                        ) => {
-                            let res = apply_numeric_binary(
-                                l.as_ref(),
-                                r.as_ref(),
-                                self.op_type,
-                            );
-                            Ok(tf_encoding.create_array_from_family(res)?)
-                        }
-                        _ => tf_encoding.create_null_array(lhs.to_array().len()),
-                    }
-                })?
-                .into_array_ref(),
+            Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
+                apply_typed_family_binary(tf_args, self.op_type)?.into_array_ref()
+            }
             _ => exec_err!("{} is only supported for TypedFamily encoding", self.name)?,
         };
 

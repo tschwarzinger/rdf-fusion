@@ -51,7 +51,7 @@ impl TypedFamilyArgs {
     }
 
     /// Returns the number of arrays.
-    pub fn number_of_arrays(&self) -> usize {
+    pub fn number_of_args(&self) -> usize {
         self.args.len()
     }
 

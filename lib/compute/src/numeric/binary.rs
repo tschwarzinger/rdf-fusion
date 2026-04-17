@@ -1,21 +1,15 @@
 use crate::numeric::cast_numeric;
-use datafusion::arrow::array::{Datum, Scalar};
+use datafusion::arrow::array::{Array, Datum, Scalar};
 use datafusion::arrow::compute::kernels::numeric::{add, div, mul, sub};
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::error::ArrowError;
 use rdf_fusion_encoding::typed_family::{
-    FamilyArray, FamilyDatum, FamilyDatumExt, NumericFamily, NumericFamilyArray,
-    NumericFamilyArrayElementBuilder,
+    DowncastTypedFamilyDatum, FamilyArray, FamilyDatum, FamilyDatumExt, NumericFamily,
+    NumericFamilyArray, NumericFamilyArrayElementBuilder, TypedFamilyArgs,
+    TypedFamilyArray,
 };
-use rdf_fusion_model::{Decimal, Numeric, ThinResult};
+use rdf_fusion_model::{AResult, Decimal, Numeric, ThinResult};
 use std::cmp::max;
-
-/// Adds together two [`NumericFamilyArray`]s.
-pub fn add_numeric_family(
-    lhs: &dyn FamilyDatum<NumericFamilyArray>,
-    rhs: &dyn FamilyDatum<NumericFamilyArray>,
-) -> NumericFamilyArray {
-    apply_numeric_binary(lhs, rhs, NumericBinaryOp::Add)
-}
 
 /// An operation that can be executed by [`apply_numeric_binary`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,6 +21,32 @@ pub enum NumericBinaryOp {
 }
 
 /// Applies the given operation to the two input arrays.
+///
+/// # Errors
+///
+/// - The given arguments have an unexpected length.
+pub fn apply_typed_family_binary(
+    args: &TypedFamilyArgs,
+    op: NumericBinaryOp,
+) -> AResult<TypedFamilyArray> {
+    if args.number_of_args() != 2 {
+        return Err(ArrowError::InvalidArgumentError(format!(
+            "Expected 2 arguments, got {}",
+            args.number_of_args()
+        )));
+    }
+
+    let encoding = args.encoding();
+    args.map_children_tf_binary(|lhs, rhs| match (lhs.downcast(), rhs.downcast()) {
+        (DowncastTypedFamilyDatum::Numeric(l), DowncastTypedFamilyDatum::Numeric(r)) => {
+            let res = apply_numeric_binary(l.as_ref(), r.as_ref(), op);
+            Ok(encoding.create_array_from_family(res)?)
+        }
+        _ => encoding.create_null_array(lhs.to_array().len()),
+    })
+}
+
+/// Applies the given operation to the two input arrays.
 pub fn apply_numeric_binary(
     lhs: &dyn FamilyDatum<NumericFamilyArray>,
     rhs: &dyn FamilyDatum<NumericFamilyArray>,
@@ -35,7 +55,7 @@ pub fn apply_numeric_binary(
     let (lhs_is_scalar, lhs_array) = lhs.get();
     let (rhs_is_scalar, rhs_array) = rhs.get();
 
-    if let Some(cast_target) = try_detect_fast_path(lhs_array, rhs_array) {
+    if let Some(cast_target) = try_detect_fast_path(lhs_array, rhs_array, op) {
         let target_data_type = match cast_target {
             NumericFamily::FLOAT_TYPE_ID => DataType::Float32,
             NumericFamily::DOUBLE_TYPE_ID => DataType::Float64,
@@ -85,7 +105,14 @@ pub fn apply_numeric_binary(
     fn try_detect_fast_path(
         lhs_type: &NumericFamilyArray,
         rhs_type: &NumericFamilyArray,
+        op: NumericBinaryOp,
     ) -> Option<i8> {
+        // Decimals are not supported for fast path, as the arrow operations change the precision
+        // and scale of the result.
+        if lhs_type.decimals().len() > 0 || rhs_type.decimals().len() > 0 {
+            return None;
+        }
+
         let lhs_type = lhs_type.try_get_homogenous_type_id_for_fast_path()?;
         let rhs_type = rhs_type.try_get_homogenous_type_id_for_fast_path()?;
 
@@ -99,9 +126,15 @@ pub fn apply_numeric_binary(
                 (NumericFamily::DECIMAL_TYPE_ID, _)
                 | (_, NumericFamily::DECIMAL_TYPE_ID) => NumericFamily::DECIMAL_TYPE_ID,
                 (NumericFamily::INTEGER_TYPE_ID, _)
-                | (_, NumericFamily::INTEGER_TYPE_ID) => NumericFamily::INTEGER_TYPE_ID,
+                | (_, NumericFamily::INTEGER_TYPE_ID) => match op {
+                    NumericBinaryOp::Div => NumericFamily::DECIMAL_TYPE_ID,
+                    _ => NumericFamily::INTEGER_TYPE_ID,
+                },
                 (NumericFamily::INT_TYPE_ID, _) | (_, NumericFamily::INT_TYPE_ID) => {
-                    NumericFamily::INT_TYPE_ID
+                    match op {
+                        NumericBinaryOp::Div => NumericFamily::DECIMAL_TYPE_ID,
+                        _ => NumericFamily::INT_TYPE_ID,
+                    }
                 }
                 _ => panic!("Invalid numeric array combination: {lhs_type} {rhs_type}",),
             };
@@ -194,7 +227,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use datafusion::arrow::array::{Float32Array, Int32Array};
+    use datafusion::arrow::array::{Float32Array, Int32Array, Int64Array};
+    use datafusion::arrow::util::pretty::pretty_format_columns;
+    use insta::assert_snapshot;
     use rdf_fusion_model::Numeric;
 
     #[test]
@@ -208,7 +243,7 @@ mod tests {
             Some(30),
         ]));
 
-        let result = add_numeric_family(&lhs, &rhs);
+        let result = apply_numeric_binary(&lhs, &rhs, NumericBinaryOp::Add);
 
         assert_eq!(result.len(), 3);
         assert_eq!(result.get_numeric_opt(0), Some(Numeric::Int(11.into())));
@@ -241,6 +276,27 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result.get_numeric_opt(0), Some(Numeric::Float(7.0.into())));
         assert_eq!(result.get_numeric_opt(1), Some(Numeric::Float(14.5.into())));
+    }
+
+    /// Div promotes integers to decimals.
+    #[test]
+    fn test_div_fast_path_homogenous() {
+        let lhs = NumericFamilyArray::new_integers(Int64Array::from(vec![10, 20]));
+        let rhs = NumericFamilyArray::new_integers(Int64Array::from(vec![3, 5]));
+
+        let result = apply_numeric_binary(&lhs, &rhs, NumericBinaryOp::Div);
+
+        assert_snapshot!(
+            pretty_format_columns("result", &[result.into_array_ref()]).unwrap(),
+            @r"
+        +--------------------------------+
+        | result                         |
+        +--------------------------------+
+        | {decimal=3.333333333333333333} |
+        | {decimal=4.000000000000000000} |
+        +--------------------------------+
+        "
+        )
     }
 
     #[test]

@@ -9,7 +9,7 @@ use datafusion::logical_expr::{
 use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
 use rdf_fusion_encoding::typed_family::{
-    NumericFamily, NumericFamilyArray, NumericFamilyScalar, TypedFamilyEncodingRef,
+    NumericFamily, NumericFamilyArray, TypedFamilyEncodingRef,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
@@ -98,7 +98,7 @@ impl AggregateUDFImpl for SparqlCount {
     }
 
     fn default_value(&self, _data_type: &DataType) -> DFResult<ScalarValue> {
-        let count = NumericFamilyScalar::Integer(0.into());
+        let count = NumericFamilyArray::new_integer_scalar(0);
         self.encoding
             .create_scalar_from_family::<NumericFamily>(count.to_scalar_value())
             .map(|tf| tf.into_scalar_value())
@@ -111,7 +111,7 @@ impl AggregateUDFImpl for SparqlCount {
 
 /// A wrapper around an SQL [`Accumulator`] that implements COUNT.
 #[derive(Debug)]
-struct SparqlCountAccumulator {
+pub(crate) struct SparqlCountAccumulator {
     inner: Box<dyn Accumulator>,
     encoding: TypedFamilyEncodingRef,
 }
@@ -135,7 +135,7 @@ impl Accumulator for SparqlCountAccumulator {
             _ => return exec_err!("Unexpected value from count"),
         };
 
-        let count = NumericFamilyScalar::Integer(count_val.into());
+        let count = NumericFamilyArray::new_integer_scalar(count_val.into());
         self.encoding
             .create_scalar_from_family::<NumericFamily>(count.to_scalar_value())
             .map(|tf| tf.into_scalar_value())
@@ -159,7 +159,7 @@ impl Accumulator for SparqlCountAccumulator {
 }
 
 /// A wrapper around an SQL [`GroupsAccumulator`] that implements COUNT.
-struct SparqlCountGroupsAccumulator {
+pub(crate) struct SparqlCountGroupsAccumulator {
     inner: Box<dyn GroupsAccumulator>,
     encoding: TypedFamilyEncodingRef,
 }
@@ -206,7 +206,7 @@ impl GroupsAccumulator for SparqlCountGroupsAccumulator {
         group_indices: &[usize],
         opt_filter: Option<&BooleanArray>,
         total_num_groups: usize,
-    ) -> datafusion::common::Result<()> {
+    ) -> DFResult<()> {
         self.inner
             .merge_batch(values, group_indices, opt_filter, total_num_groups)
     }

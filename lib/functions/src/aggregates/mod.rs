@@ -3,6 +3,7 @@ mod count;
 mod group_concat;
 mod min_max;
 mod sum;
+mod numeric_state;
 
 pub use avg::*;
 pub use count::*;

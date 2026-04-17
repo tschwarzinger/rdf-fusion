@@ -3,7 +3,7 @@ use crate::sortable_term::{SortableTermArray, SortableTermArrayBuilder};
 use crate::typed_family::families::{
     FamilyArray, FamilyComparator, TypeClaim, TypedFamily,
 };
-use crate::typed_family::{FamilyScalar, TypedFamilyId, make_null_aware_comparator};
+use crate::typed_family::{make_null_aware_comparator, FamilyScalar, TypedFamilyId};
 use datafusion::arrow::array::{
     Array, ArrayBuilder, ArrayRef, AsArray, BooleanArray, BooleanBuilder,
     Decimal128Array, Decimal128Builder, Float32Array, Float32Builder, Float64Array,
@@ -13,11 +13,9 @@ use datafusion::arrow::array::{
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
 use datafusion::arrow::error::ArrowError;
-use datafusion::common::ScalarValue;
 use rdf_fusion_model::vocab::xsd;
 use rdf_fusion_model::{
-    AResult, Decimal, LiteralRef, NamedNodeRef, Numeric, ThinError, ThinResult,
-    TypedValueRef,
+    AResult, Decimal, LiteralRef, NamedNodeRef, Numeric, ThinResult, TypedValueRef,
 };
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
@@ -252,6 +250,52 @@ impl NumericFamilyArray {
         FamilyScalar::new(array)
     }
 
+    /// Creates a new [`NumericFamilyArray`] with a single integer (i64) scalar.
+    pub fn new_integer_scalar(value: i64) -> FamilyScalar<NumericFamilyArray> {
+        let array = Self::new_integers(Int64Array::new_scalar(value).into_inner());
+        FamilyScalar::new(array)
+    }
+
+    /// Creates a new [`NumericFamilyArray`] with a single float (f32) scalar.
+    pub fn new_float_scalar(value: f32) -> FamilyScalar<NumericFamilyArray> {
+        let array = Self::new_floats(Float32Array::new_scalar(value).into_inner());
+        FamilyScalar::new(array)
+    }
+
+    /// Creates a new [`NumericFamilyArray`] with a single double (f64) scalar.
+    pub fn new_double_scalar(value: f64) -> FamilyScalar<NumericFamilyArray> {
+        let array = Self::new_doubles(Float64Array::new_scalar(value).into_inner());
+        FamilyScalar::new(array)
+    }
+
+    /// Creates a new [`NumericFamilyArray`] with a single decimal scalar.
+    pub fn new_decimal_scalar(value: Decimal) -> FamilyScalar<NumericFamilyArray> {
+        let array = Self::try_new_decimals(
+            Decimal128Array::from(vec![i128::from_be_bytes(value.to_be_bytes())])
+                .with_precision_and_scale(Decimal::PRECISION, Decimal::SCALE)
+                .expect("Valid decimal array"),
+        )
+        .expect("Valid precision and scale");
+        FamilyScalar::new(array)
+    }
+
+    /// Creates a new [`NumericFamilyArray`] with a single numeric scalar.
+    pub fn new_scalar_from_numeric(value: Numeric) -> FamilyScalar<NumericFamilyArray> {
+        match value {
+            Numeric::Int(value) => Self::new_int_scalar(value.into()),
+            Numeric::Integer(value) => Self::new_integer_scalar(value.into()),
+            Numeric::Float(value) => Self::new_float_scalar(value.into()),
+            Numeric::Double(value) => Self::new_double_scalar(value.into()),
+            Numeric::Decimal(value) => Self::new_decimal_scalar(value.into()),
+        }
+    }
+
+    /// Creates a new [`NumericFamilyArray`] with a single null scalar.
+    pub fn new_null_scalar() -> FamilyScalar<NumericFamilyArray> {
+        let array = Self::new_ints(Int32Array::new_null(1));
+        FamilyScalar::new(array)
+    }
+
     /// Creates a new [`NumericFamilyArray`] with all integers.
     pub fn new_integers(array: Int64Array) -> NumericFamilyArray {
         NumericFamilyArrayBuilder::new_for_single_type(
@@ -382,18 +426,21 @@ impl NumericFamilyArray {
         self.get_numeric_opt(index).expect("Value is not null")
     }
 
-    pub fn sum(&self) -> ThinResult<NumericFamilyScalar> {
+    pub fn sum(&self) -> FamilyScalar<NumericFamilyArray> {
         let mut sum = Numeric::Integer(0.into());
         let is_null = self.null_buffer();
 
         if is_null.null_count() > 0 {
-            return ThinError::expected();
+            return NumericFamilyArray::new_null_scalar();
         }
 
         for i in 0..self.union_array().len() {
-            sum = sum.checked_add(self.get_numeric(i))?;
+            sum = match sum.checked_add(self.get_numeric(i)) {
+                Ok(v) => v,
+                Err(_) => return NumericFamilyArray::new_null_scalar(),
+            }
         }
-        Ok(NumericFamilyScalar::from(sum))
+        NumericFamilyArray::new_scalar_from_numeric(sum)
     }
 
     fn apply_unary<F>(&self, f: F) -> AResult<Self>
@@ -464,6 +511,19 @@ impl NumericFamilyArray {
             }
         }
         Ok(builder.finish())
+    }
+
+    /// Returns the [`NumericFamilyArrayParts`] for this array.
+    pub fn as_parts(&self) -> NumericFamilyArrayParts<'_> {
+        NumericFamilyArrayParts {
+            type_ids: self.union_array().type_ids(),
+            offsets: self.union_array().offsets().expect("Dense union"),
+            floats: self.floats(),
+            doubles: self.doubles(),
+            decimals: self.decimals(),
+            ints: self.ints(),
+            integers: self.integers(),
+        }
     }
 }
 
@@ -567,107 +627,14 @@ impl FamilyArray for NumericFamilyArray {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NumericFamilyScalar {
-    Float(f32),
-    Double(f64),
-    Decimal(Decimal),
-    Int(i32),
-    Integer(rdf_fusion_model::Integer),
-}
-
-impl Hash for NumericFamilyScalar {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Self::Float(v) => v.to_bits().hash(state),
-            Self::Double(v) => v.to_bits().hash(state),
-            Self::Decimal(v) => v.hash(state),
-            Self::Int(v) => v.hash(state),
-            Self::Integer(v) => v.hash(state),
-        }
-    }
-}
-
-impl NumericFamilyScalar {
-    pub fn checked_add(&self, rhs: Self) -> ThinResult<Self> {
-        self.as_numeric()
-            .checked_add(rhs.as_numeric())
-            .map(Self::from)
-    }
-
-    pub fn checked_sub(&self, rhs: Self) -> ThinResult<Self> {
-        self.as_numeric()
-            .checked_sub(rhs.as_numeric())
-            .map(Self::from)
-    }
-
-    pub fn checked_mul(&self, rhs: Self) -> ThinResult<Self> {
-        self.as_numeric()
-            .checked_mul(rhs.as_numeric())
-            .map(Self::from)
-    }
-
-    pub fn div(&self, rhs: Self) -> ThinResult<Self> {
-        self.as_numeric().div(rhs.as_numeric()).map(Self::from)
-    }
-    fn as_numeric(&self) -> Numeric {
-        match self {
-            Self::Float(v) => Numeric::Float((*v).into()),
-            Self::Double(v) => Numeric::Double((*v).into()),
-            Self::Decimal(v) => Numeric::Decimal(*v),
-            Self::Int(v) => Numeric::Int((*v).into()),
-            Self::Integer(v) => Numeric::Integer(*v),
-        }
-    }
-
-    pub fn to_scalar_value(&self) -> ScalarValue {
-        let (type_id, scalar) = match self {
-            Self::Float(v) => {
-                (NumericFamily::FLOAT_TYPE_ID, ScalarValue::Float32(Some(*v)))
-            }
-            Self::Double(v) => (
-                NumericFamily::DOUBLE_TYPE_ID,
-                ScalarValue::Float64(Some(*v)),
-            ),
-            Self::Decimal(v) => (
-                NumericFamily::DECIMAL_TYPE_ID,
-                ScalarValue::Decimal128(
-                    Some(i128::from_be_bytes(v.to_be_bytes())),
-                    Decimal::PRECISION,
-                    Decimal::SCALE,
-                ),
-            ),
-            Self::Int(v) => (NumericFamily::INT_TYPE_ID, ScalarValue::Int32(Some(*v))),
-            Self::Integer(v) => (
-                NumericFamily::INTEGER_TYPE_ID,
-                ScalarValue::Int64(Some((*v).into())),
-            ),
-        };
-
-        ScalarValue::Union(
-            Some((type_id, Box::new(scalar))),
-            FIELDS_TYPE.clone(),
-            UnionMode::Dense,
-        )
-    }
-}
-
-impl From<Numeric> for NumericFamilyScalar {
-    fn from(value: Numeric) -> Self {
-        match value {
-            Numeric::Float(v) => Self::Float(v.into()),
-            Numeric::Double(v) => Self::Double(v.into()),
-            Numeric::Decimal(v) => Self::Decimal(v),
-            Numeric::Int(v) => Self::Int(v.into()),
-            Numeric::Integer(v) => Self::Integer(v),
-        }
-    }
-}
-
-impl From<NumericFamilyScalar> for Numeric {
-    fn from(value: NumericFamilyScalar) -> Self {
-        value.as_numeric()
-    }
+pub struct NumericFamilyArrayParts<'arr> {
+    pub type_ids: &'arr ScalarBuffer<i8>,
+    pub offsets: &'arr ScalarBuffer<i32>,
+    pub floats: &'arr Float32Array,
+    pub doubles: &'arr Float64Array,
+    pub decimals: &'arr Decimal128Array,
+    pub ints: &'arr Int32Array,
+    pub integers: &'arr Int64Array,
 }
 
 /// A builder for creating an array of the [`NumericFamily`].

@@ -3,7 +3,7 @@ use crate::sparql::rewriting::expression_rewriter::ExpressionRewriter;
 use datafusion::common::{Column, DFSchema, not_impl_err, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, SortExpr};
 use rdf_fusion_encoding::EncodingName;
-use rdf_fusion_functions::aggregates::sparql_count;
+use rdf_fusion_functions::aggregates::sparql_sum;
 use rdf_fusion_logical::join::SparqlJoinType;
 use rdf_fusion_logical::{
     ActiveGraph, RdfFusionLogicalPlanBuilder, RdfFusionLogicalPlanBuilderContext,
@@ -323,7 +323,7 @@ impl GraphPatternRewriter {
                         .collect::<Vec<_>>();
                     Ok(Expr::AggregateFunction(
                         datafusion::logical_expr::expr::AggregateFunction::new_udf(
-                            Arc::new(sparql_count(Arc::clone(
+                            Arc::new(sparql_sum(Arc::clone(
                                 self.builder_context.encodings().typed_family(),
                             ))),
                             exprs,

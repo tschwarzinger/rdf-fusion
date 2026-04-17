@@ -57,9 +57,7 @@ impl ObjectIdInMemoryMapping {
         let array_parts = array.as_parts();
         let mut result_ids = Int64Builder::with_capacity(array.len());
 
-        // Assume 75% of the terms are already in the dictionary.
-        let start_capacity = array.len() / 4;
-        let mut new_terms = PlainTermArrayElementBuilder::with_capacity(start_capacity);
+        let mut new_terms = PlainTermArrayElementBuilder::new();
 
         for idx in 0..array.len() {
             if array.inner().is_null(idx) {

@@ -455,11 +455,11 @@ impl Store {
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";
     /// store.load_from_reader(
-    ///     RdfParser::from_format(RdfFormat::Turtle)
+    ///     file.as_ref(),
+    ///     RdfParserOptions::with_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com")?
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
-    ///     file.as_ref()
     /// ).await?;
     ///
     /// // we inspect the store contents
