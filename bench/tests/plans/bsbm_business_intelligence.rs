@@ -1,14 +1,14 @@
-use crate::plans::{consume_result, run_plan_assertions};
+use crate::plans::run_plan_assertions;
 use anyhow::Context;
 use datafusion::physical_plan::displayable;
 use insta::assert_snapshot;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
-use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{
     BsbmBenchmark, BsbmBusinessIntelligenceQueryName, BusinessIntelligenceUseCase,
     NumProducts,
 };
+use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use rdf_fusion_bench::operation::SparqlRawOperation;
 use std::path::PathBuf;
@@ -82,7 +82,7 @@ async fn for_all_explanations(
         let query =
             get_query_to_execute(benchmark.clone(), &benchmark_context, query_name);
 
-        let (results, explanation) = store
+        let (_, explanation) = store
             .explain_query_opt(query.text(), QueryOptions::default())
             .await
             .unwrap();
@@ -94,8 +94,6 @@ async fn for_all_explanations(
                 .indent(false)
                 .to_string()
         );
-
-        consume_result(results).await;
 
         run_plan_assertions(|| assertion(benchmark_name, explanation));
     }

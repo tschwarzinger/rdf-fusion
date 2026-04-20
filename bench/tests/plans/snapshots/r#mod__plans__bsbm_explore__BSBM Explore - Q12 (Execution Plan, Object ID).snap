@@ -12,13 +12,13 @@ ProjectionExec: expr=[ENC_PT(deliveryDays@7) as deliveryDays, ENC_PT(offerURL@5)
               CrossJoinExec
                 HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(productURI@0, productURI@0)], projection=[productURI@0, productlabel@2]
                   DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?productURI], blank_node_mode=Variable
-                  FilterExec: DynamicFilter [ productURI@0 >= 19283 AND productURI@0 <= 19283 AND productURI@0 IN (SET) ([19283]) ]
-                    DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?productURI <http://www.w3.org/2000/01/rdf-schema#label> ?productlabel], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ productURI@0 >= 19283 AND productURI@0 <= 19283 AND productURI@0 IN (SET) ([19283]) ]]
+                  FilterExec: DynamicFilter [ empty ]
+                    DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?productURI <http://www.w3.org/2000/01/rdf-schema#label> ?productlabel], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
                 DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendorURI], blank_node_mode=Variable
-              FilterExec: DynamicFilter [ vendorURI@0 >= 48009 AND vendorURI@0 <= 48009 AND vendorURI@0 IN (SET) ([48009]) ]
-                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendorURI <http://www.w3.org/2000/01/rdf-schema#label> ?vendorname], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ vendorURI@0 >= 48009 AND vendorURI@0 <= 48009 AND vendorURI@0 IN (SET) ([48009]) ]]
-            FilterExec: DynamicFilter [ vendorURI@0 >= 48009 AND vendorURI@0 <= 48009 AND vendorURI@0 IN (SET) ([48009]) ]
-              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendorURI <http://xmlns.com/foaf/0.1/homepage> ?vendorhomepage], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ vendorURI@0 >= 48009 AND vendorURI@0 <= 48009 AND vendorURI@0 IN (SET) ([48009]) ]]
+              FilterExec: DynamicFilter [ empty ]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendorURI <http://www.w3.org/2000/01/rdf-schema#label> ?vendorname], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+            FilterExec: DynamicFilter [ empty ]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendorURI <http://xmlns.com/foaf/0.1/homepage> ?vendorhomepage], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
           DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/offerWebpage> ?offerURL], blank_node_mode=Variable
         DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price], blank_node_mode=Variable
       DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/deliveryDays> ?deliveryDays], blank_node_mode=Variable

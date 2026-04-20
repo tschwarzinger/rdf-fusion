@@ -4,9 +4,7 @@
 //! - To ensure that the query plans do not change unexpectedly.
 //! - Given a new optimization, verify that the "end to end" query plans are indeed changed.
 
-use futures::StreamExt;
 use insta::Settings;
-use rdf_fusion::execution::results::QueryResults;
 
 mod bsbm_business_intelligence;
 mod bsbm_explore;
@@ -21,22 +19,4 @@ fn run_plan_assertions(assertions: impl FnOnce()) {
     settings.add_filter(r"\b[0-9a-fA-F]{20,32}\b", "<uuid>");
 
     settings.bind(|| assertions());
-}
-
-/// Consume the entire result.
-async fn consume_result(query: QueryResults) -> () {
-    match query {
-        QueryResults::Solutions(solutions) => {
-            let mut solutions = solutions.into_record_batch_stream().unwrap();
-            while let Some(result) = solutions.next().await {
-                result.unwrap();
-            }
-        }
-        QueryResults::Boolean(_) => {}
-        QueryResults::Graph(mut triples) => {
-            while let Some(result) = triples.next().await {
-                result.unwrap();
-            }
-        }
-    }
 }

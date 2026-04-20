@@ -5,5 +5,5 @@ expression: "&string"
 ProjectionExec: expr=[ENC_PT(x@0) as x, ENC_PT(x__type@1) as x__type]
   HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(x@0, x@0)], projection=[x@0, x__type@2]
     DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review4194> <http://purl.org/stuff/rev#reviewer> ?x], blank_node_mode=Variable
-    FilterExec: DynamicFilter [ x@0 >= 97043 AND x@0 <= 97043 AND x@0 IN (SET) ([97043]) ]
-      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?x <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?x__type], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ x@0 >= 97043 AND x@0 <= 97043 AND x@0 IN (SET) ([97043]) ]]
+    FilterExec: DynamicFilter [ empty ]
+      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?x <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?x__type], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
