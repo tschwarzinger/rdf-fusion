@@ -442,7 +442,7 @@ impl Store {
     /// ```
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion::model::*;
-    /// use rdf_fusion::io::{RdfParser, RdfFormat};
+    /// use rdf_fusion::io::RdfFormat;
     /// use rdf_fusion_execution::ingest::RdfParserOptions;
     ///
     /// # tokio_test::block_on(async {
@@ -457,7 +457,7 @@ impl Store {
     /// store.load_from_reader(
     ///     file.as_ref(),
     ///     RdfParserOptions::with_format(RdfFormat::Turtle)
-    ///         .with_base_iri("http://example.com")?
+    ///         .with_base_iri("http://example.com".to_owned())?
     ///         .without_named_graphs() // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     /// ).await?;
@@ -478,7 +478,9 @@ impl Store {
         let table_provider =
             RdfParserTableProvider::new(reader, options.with_rename_blank_nodes(true))
                 .map_err(|e| LoaderError::InvalidBaseIri {
-                    iri: iri.expect("Iri Parser Errors requires base iri"),
+                    iri: iri
+                        .map(|i| i.to_string())
+                        .expect("Iri Parser Errors requires base iri"),
                     error: e,
                 })?;
         let quads = self

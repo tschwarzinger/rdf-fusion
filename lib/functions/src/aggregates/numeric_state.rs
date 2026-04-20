@@ -94,9 +94,9 @@ impl NumericState {
     }
 
     /// Recreates the [`Numeric`] while considering the error flag.
-    pub fn to_numeric(&self) -> ThinResult<Numeric> {
+    pub fn to_numeric(self) -> ThinResult<Numeric> {
         match self.is_error {
-            false => Ok(self.value.clone()),
+            false => Ok(self.value),
             true => ThinError::expected(),
         }
     }

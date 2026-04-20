@@ -2,6 +2,7 @@ use crate::aggregates::{
     group_concat_typed_family, max_typed_family, min_typed_family, sparql_avg,
     sparql_count, sparql_sum,
 };
+use crate::scalar::RenamedScalarUdfImpl;
 use crate::scalar::comparison::{
     equal_udf, greater_or_equal_udf, greater_than_udf, is_compatible_udf,
     less_or_equal_udf, less_than_udf,
@@ -34,10 +35,9 @@ use crate::scalar::terms::{
     bnode_udf, datatype_udf, iri_udf, is_blank_udf, is_iri_udf, is_literal_udf,
     is_numeric_udf, lang_udf, str_udf, strdt_udf, strlang_udf, struuid_udf, uuid_udf,
 };
-use crate::scalar::RenamedScalarUdfImpl;
 use datafusion::common::plan_datafusion_err;
-use datafusion::execution::registry::MemoryFunctionRegistry;
 use datafusion::execution::FunctionRegistry;
+use datafusion::execution::registry::MemoryFunctionRegistry;
 use datafusion::functions::core::coalesce::CoalesceFunc;
 use datafusion::logical_expr::{
     AggregateUDF, ScalarUDF, ScalarUDFImpl, Signature, TypeSignature, Volatility,

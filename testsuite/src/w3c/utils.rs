@@ -279,7 +279,7 @@ impl StaticQueryResults {
                         Ok((bindings, index))
                     })
                     .collect::<Result<Vec<_>>>()?;
-                solutions.sort_by(|(_, index_a), (_, index_b)| index_a.cmp(index_b));
+                solutions.sort_by_key(|(_, index)| *index);
 
                 let ordered = solutions.iter().all(|(_, index)| index.is_some());
 
@@ -427,7 +427,7 @@ pub async fn load_to_store(
             reader,
             RdfParserOptions {
                 format: guess_rdf_format(url)?,
-                base_iri: Some(url.to_string()),
+                base_iri: Some(url.parse()?),
                 rename_blank_nodes: false,
                 default_graph: Some(to_graph_name.into()),
             },

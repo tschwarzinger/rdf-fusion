@@ -16,7 +16,7 @@ use futures::stream::try_unfold;
 use oxrdfio::{RdfFormat, RdfParser, TokioAsyncReaderQuadParser};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
-use rdf_fusion_model::{DFResult, GraphName, IriParseError};
+use rdf_fusion_model::{DFResult, GraphName, Iri, IriParseError};
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
@@ -28,7 +28,7 @@ pub struct RdfParserOptions {
     /// The rdf format.
     pub format: RdfFormat,
     /// The base IRI for the parser.
-    pub base_iri: Option<String>,
+    pub base_iri: Option<Iri<String>>,
     /// Whether to rename blank nodes.
     pub rename_blank_nodes: bool,
     /// The default graph for the parser.
@@ -53,9 +53,13 @@ impl RdfParserOptions {
     }
 
     /// Sets the base IRI for the parser.
-    pub fn with_base_iri(mut self, base_iri: String) -> Self {
+    pub fn with_base_iri(
+        mut self,
+        base_iri: impl Into<String>,
+    ) -> Result<Self, IriParseError> {
+        let base_iri = Iri::parse(base_iri.into())?;
         self.base_iri = Some(base_iri);
-        self
+        Ok(self)
     }
 
     /// Sets the default graph for the parser.
@@ -79,7 +83,7 @@ impl<R: AsyncRead + Unpin + Send + 'static> RdfParserTableProvider<R> {
     pub fn new(read: R, options: RdfParserOptions) -> Result<Self, IriParseError> {
         let mut reader = RdfParser::from_format(options.format);
         if let Some(base_iri) = options.base_iri {
-            reader = reader.with_base_iri(base_iri)?;
+            reader = reader.with_base_iri(base_iri.to_string())?;
         }
         if options.rename_blank_nodes {
             reader = reader.rename_blank_nodes();

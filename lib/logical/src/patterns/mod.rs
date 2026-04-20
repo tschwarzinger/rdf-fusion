@@ -75,20 +75,19 @@ pub fn compute_schema_for_pattern(
 
     for (pattern, field) in patterns.iter().zip(inner_schema.fields()) {
         match pattern {
-            Some(TermPattern::Variable(variable)) => {
-                if !seen.contains(variable.as_str()) {
-                    seen.insert(variable.as_str());
-                    fields.push((variable.as_str(), field));
-                }
+            Some(TermPattern::Variable(variable))
+                if !seen.contains(variable.as_str()) =>
+            {
+                seen.insert(variable.as_str());
+                fields.push((variable.as_str(), field));
             }
             // A blank node only leads to an output variable if it is matched like a variable
             Some(TermPattern::BlankNode(bnode))
-                if blank_node_mode == BlankNodeMatchingMode::Variable =>
+                if blank_node_mode == BlankNodeMatchingMode::Variable
+                    && !seen.contains(bnode.as_str()) =>
             {
-                if !seen.contains(bnode.as_str()) {
-                    seen.insert(bnode.as_str());
-                    fields.push((bnode.as_str(), field));
-                }
+                seen.insert(bnode.as_str());
+                fields.push((bnode.as_str(), field));
             }
             _ => {}
         }

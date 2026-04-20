@@ -6,7 +6,7 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use rdf_fusion_compute::numeric::{apply_typed_family_binary, NumericBinaryOp};
+use rdf_fusion_compute::numeric::{NumericBinaryOp, apply_typed_family_binary};
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, RdfFusionEncodings, TermEncoding,
 };

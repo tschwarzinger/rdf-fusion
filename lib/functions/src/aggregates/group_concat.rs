@@ -91,12 +91,10 @@ impl AggregateUDFImpl for SparqlGroupConcat {
                         return plan_err!("Separator should be a simple literal");
                     }
                     match children[0].as_downcast_array() {
-                        DowncastTypedFamilyArray::String(s_arr) => {
-                            if s_arr.language_array().is_null(0) {
-                                s_arr.value_array().value(0).to_owned()
-                            } else {
-                                return plan_err!("Separator should be a simple literal");
-                            }
+                        DowncastTypedFamilyArray::String(s_arr)
+                            if s_arr.language_array().is_null(0) =>
+                        {
+                            s_arr.value_array().value(0).to_owned()
                         }
                         _ => return plan_err!("Separator should be a simple literal"),
                     }

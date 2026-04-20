@@ -46,7 +46,7 @@ impl TypedFamilyArrayBuilder {
 
         let type_families = self.encoding.type_families().to_vec();
         let mut result = self;
-        for (family, array) in type_families.iter().zip(family_arrays.into_iter()) {
+        for (family, array) in type_families.iter().zip(family_arrays) {
             result = result.with_array(family.family_id(), Some(array))?;
         }
         Ok(result)

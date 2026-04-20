@@ -146,7 +146,7 @@ mod tests {
     use datafusion::physical_planner::DefaultPhysicalPlanner;
     use datafusion::prelude::{SessionConfig, SessionContext};
     use insta::assert_snapshot;
-    use rdf_fusion_encoding::{quads_to_plain_term_dataframe, QuadStorageEncodingName};
+    use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
     use rdf_fusion_execution::RdfFusionContextBuilder;
     use rdf_fusion_extensions::storage::QuadStorage;
     use rdf_fusion_logical::ActiveGraph;

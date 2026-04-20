@@ -337,11 +337,9 @@ impl TypedFamilyEncoding {
             .find_typed_family(family)
             .ok_or_else(|| exec_datafusion_err!("Family not found"))?;
 
-
         // Compute is_null to support UnionArray's
         let is_null = is_null(array.as_ref())?;
-        if is_null.true_count() == 0
-        {
+        if is_null.true_count() == 0 {
             let num_rows = array.len();
             let num_rows_i32 = i32::try_from(num_rows).map_err(|_| {
                 ArrowError::ArithmeticOverflow("Array too long".to_owned())

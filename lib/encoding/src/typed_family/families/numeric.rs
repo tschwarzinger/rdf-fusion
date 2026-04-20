@@ -3,7 +3,7 @@ use crate::sortable_term::{SortableTermArray, SortableTermArrayBuilder};
 use crate::typed_family::families::{
     FamilyArray, FamilyComparator, TypeClaim, TypedFamily,
 };
-use crate::typed_family::{make_null_aware_comparator, FamilyScalar, TypedFamilyId};
+use crate::typed_family::{FamilyScalar, TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
     Array, ArrayBuilder, ArrayRef, AsArray, BooleanArray, BooleanBuilder,
     Decimal128Array, Decimal128Builder, Float32Array, Float32Builder, Float64Array,
@@ -286,7 +286,7 @@ impl NumericFamilyArray {
             Numeric::Integer(value) => Self::new_integer_scalar(value.into()),
             Numeric::Float(value) => Self::new_float_scalar(value.into()),
             Numeric::Double(value) => Self::new_double_scalar(value.into()),
-            Numeric::Decimal(value) => Self::new_decimal_scalar(value.into()),
+            Numeric::Decimal(value) => Self::new_decimal_scalar(value),
         }
     }
 

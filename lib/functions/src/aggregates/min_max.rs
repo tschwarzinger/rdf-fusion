@@ -130,12 +130,10 @@ impl SparqlMinMaxAccumulator {
         let mut extreme_idx = 0;
         for i in 1..array.len() {
             match comparator(i, extreme_idx) {
-                Some(cmp) => {
-                    if self.operator.is_better(cmp) {
-                        extreme_idx = i;
-                    }
+                Some(cmp) if self.operator.is_better(cmp) => {
+                    extreme_idx = i;
                 }
-                None => {
+                _ => {
                     // For now, we simply ignore elements that cannot be compared to the current
                     // extreme.
                 }

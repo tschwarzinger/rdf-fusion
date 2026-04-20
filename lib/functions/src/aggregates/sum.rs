@@ -1,7 +1,7 @@
 use crate::aggregates::numeric_state::NumericState;
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, BooleanArray};
 use datafusion::arrow::datatypes::{DataType, Field};
-use datafusion::common::{exec_err, DataFusionError};
+use datafusion::common::{DataFusionError, exec_err};
 use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
 use datafusion::logical_expr::utils::format_state_name;
 use datafusion::logical_expr::{
@@ -189,9 +189,9 @@ impl SparqlSumGroupsAccumulator {
         let type_ids = arr.type_ids();
         let offsets = arr.inner().as_union().offsets().expect("Dense union");
 
-        let numeric_family_array = NumericFamilyArray::from_array_unchecked(
-            arr.inner().as_union().child(numeric_type_id).clone(),
-        );
+        let numeric_family_array = NumericFamilyArray::from_array_unchecked(Arc::clone(
+            arr.inner().as_union().child(numeric_type_id),
+        ));
         let numeric_family_parts = numeric_family_array.as_parts();
 
         match opt_filter {
@@ -232,6 +232,7 @@ impl SparqlSumGroupsAccumulator {
 
         /// Implements the processing logic for a single row.
         #[inline(always)]
+        #[allow(clippy::too_many_arguments)]
         fn process_numeric_row<const IGNORE_NULLS: bool>(
             sums: &mut [NumericState],
             row_idx: usize,
@@ -265,7 +266,7 @@ impl SparqlSumGroupsAccumulator {
                     NumericFamily::DECIMAL_TYPE_ID => {
                         let value = numeric_family_parts.decimals.value(num_offset);
                         let value = Decimal::from_be_bytes(value.to_be_bytes());
-                        sums[group_idx].acc_sum_single(Numeric::Decimal(value.into()));
+                        sums[group_idx].acc_sum_single(Numeric::Decimal(value));
                     }
                     NumericFamily::INT_TYPE_ID => {
                         let value = numeric_family_parts.ints.value(num_offset);
@@ -355,11 +356,11 @@ mod tests {
     use datafusion::arrow::util::pretty::pretty_format_columns;
     use datafusion::logical_expr::col;
     use insta::assert_snapshot;
+    use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_encoding::typed_family::{
         NumericFamilyArray, NumericFamilyArrayElementBuilder, TypedFamilyArray,
         TypedFamilyEncoding,
     };
-    use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_model::Numeric;
     use std::sync::Arc;
 

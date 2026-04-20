@@ -1,6 +1,6 @@
+use crate::scalar::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
 use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
-use crate::scalar::ScalarSparqlFunctionArgs;
 use datafusion::arrow::array::{Array, ArrayRef};
 use datafusion::arrow::compute::cast;
 use datafusion::arrow::datatypes::DataType;
@@ -11,8 +11,8 @@ use datafusion::logical_expr::{
 use rdf_fusion_compute::numeric::cast_numeric;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, NumericFamilyArray};
 use rdf_fusion_encoding::{
-    detect_encoding_from_types, DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
-    TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use rdf_fusion_model::{DFResult, Decimal};

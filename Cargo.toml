@@ -57,8 +57,8 @@ zip = "8.4"
 # DataFusion and Related Dependencies (we try to keep them in-sync with DataFusion)
 ahash = "0.8"
 arrow-string = "58.1"
-datafusion = "53.0"
-deltalake = { git = "https://github.com/delta-io/delta-rs", rev = "616321023dee0f16f4e3bbe75661252d9973b8a8", features = [
+datafusion = "53.1"
+deltalake = { git = "https://github.com/delta-io/delta-rs", rev = "8b5e16210863817a94739543b7ac29732642b7ec", features = [
   "datafusion",
   "datafusion-ext",
 ] }
@@ -109,31 +109,6 @@ rdf-fusion-physical = { version = "=0.1.0", path = "lib/physical" }
 rdf-fusion-storage = { version = "=0.1.0", path = "lib/storage" }
 rdf-fusion = { version = "=0.1.0", path = "lib/rdf-fusion" }
 rdf-fusion-web = { version = "=0.1.0", path = "lib/web" }
-
-[patch.crates-io]
-datafusion = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-catalog = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-catalog-listing = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-common = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-common-runtime = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-datasource = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-datasource-arrow = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-datasource-csv = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-datasource-json = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-execution = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-expr = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-expr-common = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-functions = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-functions-aggregate = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-functions-table = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-functions-window = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-optimizer = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-physical-expr = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-physical-expr-adapter = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-physical-expr-common = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-physical-optimizer = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-physical-plan = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
-datafusion-session = { git = "https://github.com/apache/datafusion", branch = "branch-53" }
 
 #
 # Most of the remainder of this file (profiles & lints) stem from DataFusion.

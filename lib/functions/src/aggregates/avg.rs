@@ -8,7 +8,7 @@ use datafusion::logical_expr::{
 };
 use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
-use rdf_fusion_compute::numeric::{apply_typed_family_binary, NumericBinaryOp};
+use rdf_fusion_compute::numeric::{NumericBinaryOp, apply_typed_family_binary};
 use rdf_fusion_encoding::typed_family::{
     NumericFamily, NumericFamilyArray, TypedFamilyArgs, TypedFamilyEncodingRef,
 };
@@ -85,7 +85,7 @@ impl AggregateUDFImpl for SparqlAvgUDAF {
         let args_clone = StateFieldsArgs {
             name: args.name,
             input_fields: args.input_fields,
-            return_field: args.return_field.clone(),
+            return_field: Arc::clone(&args.return_field),
             ordering_fields: args.ordering_fields,
             is_distinct: args.is_distinct,
         };

@@ -135,7 +135,7 @@ impl Accumulator for SparqlCountAccumulator {
             _ => return exec_err!("Unexpected value from count"),
         };
 
-        let count = NumericFamilyArray::new_integer_scalar(count_val.into());
+        let count = NumericFamilyArray::new_integer_scalar(count_val);
         self.encoding
             .create_scalar_from_family::<NumericFamily>(count.to_scalar_value())
             .map(|tf| tf.into_scalar_value())

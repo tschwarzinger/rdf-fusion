@@ -109,7 +109,7 @@ pub fn apply_numeric_binary(
     ) -> Option<i8> {
         // Decimals are not supported for fast path, as the arrow operations change the precision
         // and scale of the result.
-        if lhs_type.decimals().len() > 0 || rhs_type.decimals().len() > 0 {
+        if !lhs_type.decimals().is_empty() || !rhs_type.decimals().is_empty() {
             return None;
         }
 
@@ -207,7 +207,7 @@ where
         .indices_of_length(result_len)
         .expect("Valid number of rows if both regular arrays have the same length");
 
-    for (lhs_index, rhs_index) in lhs_indices.into_iter().zip(rhs_indices.into_iter()) {
+    for (lhs_index, rhs_index) in lhs_indices.into_iter().zip(rhs_indices) {
         if lhs_is_null.is_null(lhs_index) || rhs_is_null.is_null(rhs_index) {
             builder.append_null();
         } else {
