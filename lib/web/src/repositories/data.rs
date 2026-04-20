@@ -13,6 +13,7 @@ use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::io::RdfFormat;
 use tokio_util::io::StreamReader;
 
+/// Inserts the RDF data into the store and optimizes it.
 pub async fn handle_data_post(
     content_type: TypedHeader<ContentType>,
     State(state): State<AppState>,
@@ -46,6 +47,12 @@ pub async fn handle_data_post(
                 RdfFusionServerError::BadRequest("Invalid base IRI.".to_owned())
             }
         })?;
+
+    state.store.optimize().await.map_err(|error| {
+        RdfFusionServerError::Internal(
+            anyhow!(error).context("Could not optimize the store."),
+        )
+    })?;
 
     Ok(Response::builder()
         .status(StatusCode::NO_CONTENT)
