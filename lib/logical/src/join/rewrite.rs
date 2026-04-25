@@ -390,6 +390,7 @@ mod tests {
     use insta::assert_snapshot;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
+    use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
     use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings, TermEncoding};
     use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
@@ -447,6 +448,7 @@ mod tests {
             Arc::new(TypedFamilyEncoding::default()),
             None,
             Arc::clone(&SORTABLE_TERM_ENCODING),
+            Arc::clone(&STRING_ENCODING),
         );
         let registry = Arc::new(DefaultRdfFusionFunctionRegistry::new(encodings.clone()));
         RdfFusionContextView::new(registry, encodings, QuadStorageEncoding::PlainTerm)

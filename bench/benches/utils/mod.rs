@@ -1,5 +1,6 @@
 use anyhow::Context;
 use futures::StreamExt;
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::store::Store;
 use rdf_fusion_bench::benchmarks::Benchmark;
@@ -7,6 +8,9 @@ use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use tokio::runtime::{Builder, Runtime};
 
 pub mod verbose;
+
+pub const ENCODINGS_TO_BENCHMARK: [QuadStorageEncodingName; 1] =
+    [QuadStorageEncodingName::String];
 
 pub async fn consume_results(result: QueryResults) -> anyhow::Result<usize> {
     match result {

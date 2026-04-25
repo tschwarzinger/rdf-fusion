@@ -1,0 +1,44 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&explanation.optimized_logical_plan.to_string()"
+---
+Projection: ENC_PT(first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]) AS offer, ENC_PT(first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]) AS price
+  Sort: ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST, fetch=10
+    Aggregate: groupBy=[[__common_expr_1 AS ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))), offer, price]], aggr=[[first_value(offer) ORDER BY [__common_expr_1 AS ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST] AS first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [__common_expr_1 AS ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST] AS first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]]]
+      Projection: ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) AS __common_expr_1, offer, price
+        Sort: ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST
+          Projection: lhs.offer AS offer, lhs.price AS price
+            Inner Join: lhs.offer = rhs.offer
+              SubqueryAlias: lhs
+                Projection: lhs.offer AS offer, rhs.price AS price
+                  Inner Join: lhs.offer = rhs.offer
+                    SubqueryAlias: lhs
+                      Projection: lhs.offer AS offer
+                        Inner Join: lhs.offer = rhs.offer
+                          SubqueryAlias: lhs
+                            Projection: lhs.offer AS offer
+                              Inner Join: lhs.vendor = rhs.vendor
+                                SubqueryAlias: lhs
+                                  Projection: lhs.offer AS offer, lhs.vendor AS vendor
+                                    Inner Join: lhs.offer = rhs.offer, lhs.vendor = rhs.vendor
+                                      SubqueryAlias: lhs
+                                        Projection: lhs.offer AS offer, rhs.vendor AS vendor
+                                          Inner Join: lhs.offer = rhs.offer
+                                            SubqueryAlias: lhs
+                                              QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer7/Product296>)
+                                            SubqueryAlias: rhs
+                                              QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
+                                      SubqueryAlias: rhs
+                                        QuadPattern (?offer <http://purl.org/dc/elements/1.1/publisher> ?vendor)
+                                SubqueryAlias: rhs
+                                  QuadPattern (?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> <http://downlode.org/rdf/iso-3166/countries#US>)
+                          SubqueryAlias: rhs
+                            Projection: offer
+                              Filter: EBV(LEQ(ENC_TF(ENC_PT(deliveryDays)), Union 4:4:3))
+                                QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/deliveryDays> ?deliveryDays)
+                    SubqueryAlias: rhs
+                      QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
+              SubqueryAlias: rhs
+                Projection: offer
+                  Filter: EBV(GT(ENC_TF(ENC_PT(date)), Union 5:{date_time_type:0,value:63349516800.000000000000000000,offset:}))
+                    QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo> ?date)

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 pub async fn wind_farm_plain_term_optimized_logical_plan() {
     for_all_explanations(QuadStorageEncodingName::PlainTerm, |name, explanation| {
         assert_snapshot!(
-            format!("{name} (Optimized, Plain Term)"),
+            format!("{name} (Optimized, {})", QuadStorageEncodingName::PlainTerm),
             &explanation.optimized_logical_plan.to_string()
         )
     })
@@ -29,7 +29,13 @@ pub async fn wind_farm_plain_term_execution_plan() {
         let string = displayable(explanation.execution_plan.as_ref())
             .indent(false)
             .to_string();
-        assert_snapshot!(format!("{name} (Execution Plan, Plain Term)"), &string)
+        assert_snapshot!(
+            format!(
+                "{name} (Execution Plan, {})",
+                QuadStorageEncodingName::PlainTerm
+            ),
+            &string
+        )
     })
     .await;
 }
@@ -38,7 +44,7 @@ pub async fn wind_farm_plain_term_execution_plan() {
 pub async fn wind_farm_object_id_optimized_logical_plan() {
     for_all_explanations(QuadStorageEncodingName::ObjectId, |name, explanation| {
         assert_snapshot!(
-            format!("{name} (Optimized, Object ID)"),
+            format!("{name} (Optimized, {})", QuadStorageEncodingName::ObjectId),
             &explanation.optimized_logical_plan.to_string()
         )
     })
@@ -51,7 +57,41 @@ pub async fn wind_farm_object_id_execution_plan() {
         let string = displayable(explanation.execution_plan.as_ref())
             .indent(false)
             .to_string();
-        assert_snapshot!(format!("{name} (Execution Plan, Object ID)"), &string)
+        assert_snapshot!(
+            format!(
+                "{name} (Execution Plan, {})",
+                QuadStorageEncodingName::ObjectId
+            ),
+            &string
+        )
+    })
+    .await;
+}
+
+#[tokio::test]
+pub async fn wind_farm_string_optimized_logical_plan() {
+    for_all_explanations(QuadStorageEncodingName::String, |name, explanation| {
+        assert_snapshot!(
+            format!("{name} (Optimized, {})", QuadStorageEncodingName::String),
+            &explanation.optimized_logical_plan.to_string()
+        )
+    })
+    .await;
+}
+
+#[tokio::test]
+pub async fn wind_farm_string_execution_plan() {
+    for_all_explanations(QuadStorageEncodingName::String, |name, explanation| {
+        let string = displayable(explanation.execution_plan.as_ref())
+            .indent(false)
+            .to_string();
+        assert_snapshot!(
+            format!(
+                "{name} (Execution Plan, {})",
+                QuadStorageEncodingName::String
+            ),
+            &string
+        )
     })
     .await;
 }

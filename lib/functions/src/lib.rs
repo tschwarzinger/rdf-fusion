@@ -45,6 +45,7 @@ mod test_utils {
     use datafusion::prelude::DataFrame;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
+    use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::{
         DateTimeFamily, DateTimeFamilyArray, FamilyArray, NullFamilyArray, NumericFamily,
         NumericFamilyArrayBuilder, ResourceArrayBuilder, StringFamilyArray,
@@ -62,6 +63,7 @@ mod test_utils {
             Arc::new(TypedFamilyEncoding::default()),
             None,
             Arc::clone(&SORTABLE_TERM_ENCODING),
+            Arc::clone(&STRING_ENCODING),
         )
     }
 

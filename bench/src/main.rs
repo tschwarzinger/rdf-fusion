@@ -78,8 +78,10 @@ pub enum StorageLocationArg {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
 pub enum QuadStorageEncodingNameArg {
-    /// The storage location is in-memory.
+    /// The plain term encoding
     PlainTerm,
+    /// The string encoding
+    String,
     /// Use the object id
     ObjectId,
 }
@@ -88,6 +90,7 @@ impl From<QuadStorageEncodingNameArg> for QuadStorageEncodingName {
     fn from(value: QuadStorageEncodingNameArg) -> Self {
         match value {
             QuadStorageEncodingNameArg::PlainTerm => QuadStorageEncodingName::PlainTerm,
+            QuadStorageEncodingNameArg::String => QuadStorageEncodingName::String,
             QuadStorageEncodingNameArg::ObjectId => QuadStorageEncodingName::ObjectId,
         }
     }

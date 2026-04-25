@@ -1,5 +1,6 @@
 use crate::RdfFusionExprBuilderContext;
-use datafusion::common::{plan_datafusion_err, plan_err};
+use crate::expr_builder_context::decide_input_encoding;
+use datafusion::common::{ScalarValue, plan_datafusion_err, plan_err};
 use datafusion::functions_aggregate::first_last::first_value;
 use datafusion::logical_expr::{Expr, ExprSchemable, lit};
 use rdf_fusion_encoding::plain_term::{
@@ -851,7 +852,9 @@ impl<'root> RdfFusionExprBuilder<'root> {
         for target_encoding in target_encodings {
             let functions_to_apply = match (source_encoding, target_encoding) {
                 (
-                    EncodingName::ObjectId | EncodingName::TypedFamily,
+                    EncodingName::ObjectId
+                    | EncodingName::TypedFamily
+                    | EncodingName::String,
                     EncodingName::PlainTerm,
                 ) => {
                     vec![BuiltinName::WithPlainTermEncoding]
@@ -862,6 +865,20 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 ) => {
                     vec![BuiltinName::WithTypedFamilyEncoding]
                 }
+                (EncodingName::String, EncodingName::TypedFamily) => vec![
+                    BuiltinName::WithPlainTermEncoding,
+                    BuiltinName::WithTypedFamilyEncoding,
+                ],
+                (EncodingName::PlainTerm, EncodingName::String) => {
+                    vec![BuiltinName::WithStringEncoding]
+                }
+                (
+                    EncodingName::ObjectId | EncodingName::TypedFamily,
+                    EncodingName::String,
+                ) => vec![
+                    BuiltinName::WithPlainTermEncoding,
+                    BuiltinName::WithStringEncoding,
+                ],
                 (EncodingName::PlainTerm, EncodingName::Sortable) => {
                     vec![
                         BuiltinName::WithTypedFamilyEncoding,
@@ -872,6 +889,11 @@ impl<'root> RdfFusionExprBuilder<'root> {
                     vec![BuiltinName::WithSortableEncoding]
                 }
                 (EncodingName::ObjectId, EncodingName::Sortable) => vec![
+                    BuiltinName::WithPlainTermEncoding,
+                    BuiltinName::WithTypedFamilyEncoding,
+                    BuiltinName::WithSortableEncoding,
+                ],
+                (EncodingName::String, EncodingName::Sortable) => vec![
                     BuiltinName::WithPlainTermEncoding,
                     BuiltinName::WithTypedFamilyEncoding,
                     BuiltinName::WithSortableEncoding,
@@ -929,15 +951,36 @@ impl<'root> RdfFusionExprBuilder<'root> {
     ///
     /// This is a terminating builder function as it no longer produces an RDF term as output.
     pub fn build_same_term(self, rhs: Expr) -> DFResult<Expr> {
+        let inputs = [self.expr, rhs];
+        let encodings = self.context.get_encodings(&inputs)?;
+
+        // If they share an encoding, just return it.
+        if encodings.len() == 1 {
+            let [lhs, rhs] = inputs;
+            return Ok(lhs.eq(rhs));
+        }
+
+        let supported_encodings = &[
+            EncodingName::PlainTerm,
+            EncodingName::String,
+            EncodingName::TypedFamily,
+            EncodingName::ObjectId,
+        ];
+        let input_encoding =
+            decide_input_encoding(supported_encodings.as_slice(), &encodings)?;
+
+        let [lhs, rhs] = inputs;
         let lhs = self
-            .clone()
-            .with_encoding(EncodingName::PlainTerm)?
+            .context
+            .try_create_builder(lhs)?
+            .with_encoding(input_encoding)?
             .build()?;
         let rhs = self
             .context
             .try_create_builder(rhs)?
-            .with_encoding(EncodingName::PlainTerm)?
+            .with_encoding(input_encoding)?
             .build()?;
+
         Ok(lhs.eq(rhs))
     }
 
@@ -1002,6 +1045,10 @@ impl<'root> RdfFusionExprBuilder<'root> {
                     .encode_scalar(&PlainTermScalar::from(scalar))?
                     .into_scalar_value(),
             },
+            EncodingName::String => {
+                let turtle = scalar.to_string(); // This should ideally be proper Turtle
+                ScalarValue::Utf8(Some(turtle))
+            }
         };
         self.build_same_term(lit(literal))
     }

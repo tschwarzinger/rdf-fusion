@@ -1,36 +1,26 @@
 use datafusion::common::{DFSchema, DFSchemaRef, Result as DFResult, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
-use rdf_fusion_encoding::TermEncoding;
-use rdf_fusion_encoding::object_id::ObjectIdDataType;
-use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::QuadStorageEncoding;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
 
+/// Changes the encoding of all terms to the given target encoding.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EncodeAsObjectIdNode {
+pub struct ChangeEncodingNode {
     input: LogicalPlan,
-    object_id_data_type: ObjectIdDataType,
+    target_encoding: QuadStorageEncoding,
     output_schema: DFSchemaRef,
 }
 
-impl EncodeAsObjectIdNode {
-    /// Creates a new [`EncodeAsObjectIdNode`].
+impl ChangeEncodingNode {
+    /// Creates a new [`ChangeEncodingNode`].
     pub fn try_new(
         input: LogicalPlan,
-        object_id_data_type: ObjectIdDataType,
+        target_encoding: QuadStorageEncoding,
     ) -> DFResult<Self> {
-        let any_unexpected_data_type = input
-            .schema()
-            .fields()
-            .iter()
-            .any(|f| f.data_type() != PLAIN_TERM_ENCODING.data_type());
-        if any_unexpected_data_type {
-            return plan_err!("EncodeAsObjectId only supports plain term columns");
-        }
-
-        let encoded_type = object_id_data_type.as_arrow_type();
+        let encoded_type = target_encoding.term_type().clone();
         let df_schema = input
             .schema()
             .iter()
@@ -45,15 +35,20 @@ impl EncodeAsObjectIdNode {
             DFSchema::new_with_metadata(df_schema, input.schema().metadata().clone())?;
         Ok(Self {
             input,
-            object_id_data_type,
+            target_encoding,
             output_schema: Arc::new(df_schema),
         })
     }
+
+    /// Returns the target encoding of the [`ChangeEncodingNode`].
+    pub fn target_encoding(&self) -> &QuadStorageEncoding {
+        &self.target_encoding
+    }
 }
 
-impl UserDefinedLogicalNodeCore for EncodeAsObjectIdNode {
+impl UserDefinedLogicalNodeCore for ChangeEncodingNode {
     fn name(&self) -> &str {
-        "EncodeAsObjectId"
+        "ChangeEncodingForStorage"
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
@@ -69,7 +64,7 @@ impl UserDefinedLogicalNodeCore for EncodeAsObjectIdNode {
     }
 
     fn fmt_for_explain(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "EncodeAsObjectId:")
+        write!(f, "ChangeEncodingForStorage:")
     }
 
     fn with_exprs_and_inputs(
@@ -78,14 +73,14 @@ impl UserDefinedLogicalNodeCore for EncodeAsObjectIdNode {
         inputs: Vec<LogicalPlan>,
     ) -> DFResult<Self> {
         if !exprs.is_empty() || inputs.len() != 1 {
-            return plan_err!("EncodeAsObjectId takes a single input plan");
+            return plan_err!("ChangeEncodingForStorage takes a single input plan");
         }
 
-        Self::try_new(inputs[0].clone(), self.object_id_data_type)
+        Self::try_new(inputs[0].clone(), self.target_encoding.clone())
     }
 }
 
-impl PartialOrd for EncodeAsObjectIdNode {
+impl PartialOrd for ChangeEncodingNode {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.input.partial_cmp(&other.input)
     }

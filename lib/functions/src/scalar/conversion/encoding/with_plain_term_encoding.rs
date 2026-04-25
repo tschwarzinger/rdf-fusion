@@ -42,6 +42,7 @@ impl WithPlainTermEncoding {
                         EncodingName::PlainTerm,
                         EncodingName::TypedFamily,
                         EncodingName::ObjectId,
+                        EncodingName::String,
                     ]),
                 ),
                 Volatility::Immutable,
@@ -87,6 +88,10 @@ impl ScalarUDFImpl for WithPlainTermEncoding {
                 Arc::clone(arrays.get(0).inner())
             }
             Some(DowncastEncodingArgs::TypedFamily(arrays)) => {
+                let array = arrays.get(0);
+                array.as_plain_term_array()?.into_array_ref()
+            }
+            Some(DowncastEncodingArgs::String(arrays)) => {
                 let array = arrays.get(0);
                 array.as_plain_term_array()?.into_array_ref()
             }

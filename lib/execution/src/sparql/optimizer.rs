@@ -7,6 +7,7 @@ use datafusion::optimizer::{Optimizer, OptimizerRule};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::optimizer::PhysicalOptimizer;
 use rdf_fusion_extensions::RdfFusionContextView;
+use rdf_fusion_logical::encoding::change::LowerChangeEncodingRule;
 use rdf_fusion_logical::expr::SimplifySparqlExpressionsRule;
 use rdf_fusion_logical::extend::ExtendLoweringRule;
 use rdf_fusion_logical::join::SparqlJoinLoweringRule;
@@ -26,6 +27,9 @@ pub fn create_optimizer_rules(
         Arc::new(PropertyPathLoweringRule::new(context.clone())),
         Arc::new(SparqlJoinLoweringRule::new(context.clone())),
         Arc::new(PatternLoweringRule::new(context.clone())),
+        Arc::new(LowerChangeEncodingRule::new(Arc::clone(
+            context.functions(),
+        ))),
     ];
 
     match optimization_level {

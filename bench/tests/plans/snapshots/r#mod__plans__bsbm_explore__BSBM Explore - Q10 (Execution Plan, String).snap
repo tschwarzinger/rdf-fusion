@@ -1,0 +1,30 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@3) as offer, ENC_PT(first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@4) as price]
+  SortExec: TopK(fetch=10), expr=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price)))))@0 ASC, offer@1 ASC, price@2 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price)))))@0 ASC]
+    AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))), offer@1 as offer, price@2 as price], aggr=[first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
+      ProjectionExec: expr=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price@1))))) as __common_expr_1, offer@0 as offer, price@1 as price]
+        SortExec: expr=[ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price@1))))) ASC], preserve_partitioning=[false]
+          HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@1]
+            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@2]
+              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0]
+                HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(vendor@1, vendor@0)], projection=[offer@0]
+                  HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0), (vendor@1, vendor@1)], projection=[offer@0, vendor@1]
+                    HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, vendor@2]
+                      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer7/Product296>], blank_node_mode=Variable
+                      FilterExec: DynamicFilter [ empty ]
+                        DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+                    FilterExec: DynamicFilter [ empty ]
+                      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://purl.org/dc/elements/1.1/publisher> ?vendor], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+                  FilterExec: DynamicFilter [ empty ]
+                    DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> <http://downlode.org/rdf/iso-3166/countries#US>], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+                FilterExec: EBV(LEQ(ENC_TF(ENC_PT(deliveryDays@1)), 4:4:3)), projection=[offer@0]
+                  FilterExec: DynamicFilter [ empty ]
+                    DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/deliveryDays> ?deliveryDays], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+              FilterExec: DynamicFilter [ empty ]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
+            FilterExec: EBV(GT(ENC_TF(ENC_PT(date@1)), 5:{date_time_type:0,value:63349516800.000000000000000000,offset:})), projection=[offer@0]
+              FilterExec: DynamicFilter [ empty ]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo> ?date], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]

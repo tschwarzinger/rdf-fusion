@@ -45,7 +45,7 @@ impl ObjectIdEncodingStream {
         mapping: Arc<DeltaObjectIdMapping>,
         num_running_streams: Arc<AtomicI64>,
     ) -> Self {
-        let encoded_type = mapping.object_id_data_type().as_arrow_type();
+        let encoded_type = mapping.object_id_data_type().term_type();
         let fields = input
             .schema()
             .fields()

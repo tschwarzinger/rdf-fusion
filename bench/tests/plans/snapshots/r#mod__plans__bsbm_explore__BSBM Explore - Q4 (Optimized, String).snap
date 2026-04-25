@@ -1,0 +1,67 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&explanation.optimized_logical_plan.to_string()"
+---
+Projection: ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]) AS product, ENC_PT(first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]) AS label, ENC_PT(first_value(propertyTextual) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]) AS propertyTextual
+  Limit: skip=5, fetch=10
+    Sort: ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST, fetch=15
+      Aggregate: groupBy=[[__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(label))), product, propertyTextual]], aggr=[[first_value(product) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST] AS first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST], first_value(label) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST] AS first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST], first_value(propertyTextual) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST] AS first_value(propertyTextual) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST, propertyTextual ASC NULLS FIRST]]]
+        Projection: ENC_SORT(ENC_TF(ENC_PT(label))) AS __common_expr_1, product, label, propertyTextual
+          Sort: ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST
+            Union
+              Projection: lhs.product AS product, lhs.label AS label, lhs.propertyTextual AS propertyTextual
+                Inner Join: lhs.product = rhs.product
+                  SubqueryAlias: lhs
+                    Projection: lhs.product AS product, lhs.label AS label, rhs.propertyTextual AS propertyTextual
+                      Inner Join: lhs.product = rhs.product
+                        SubqueryAlias: lhs
+                          Projection: lhs.product AS product, lhs.label AS label
+                            Inner Join: lhs.product = rhs.product
+                              SubqueryAlias: lhs
+                                Projection: lhs.product AS product, lhs.label AS label
+                                  Inner Join: lhs.product = rhs.product
+                                    SubqueryAlias: lhs
+                                      Projection: lhs.product AS product, lhs.label AS label
+                                        Inner Join: lhs.product = rhs.product
+                                          SubqueryAlias: lhs
+                                            QuadPattern (?product <http://www.w3.org/2000/01/rdf-schema#label> ?label)
+                                          SubqueryAlias: rhs
+                                            QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType138>)
+                                    SubqueryAlias: rhs
+                                      QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4305>)
+                              SubqueryAlias: rhs
+                                QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1427>)
+                        SubqueryAlias: rhs
+                          QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual1> ?propertyTextual)
+                  SubqueryAlias: rhs
+                    Projection: product
+                      Filter: EBV(GT(ENC_TF(ENC_PT(p1)), Union 4:4:457))
+                        QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?p1)
+              Projection: lhs.product AS product, lhs.label AS label, lhs.propertyTextual AS propertyTextual
+                Inner Join: lhs.product = rhs.product
+                  SubqueryAlias: lhs
+                    Projection: lhs.product AS product, lhs.label AS label, rhs.propertyTextual AS propertyTextual
+                      Inner Join: lhs.product = rhs.product
+                        SubqueryAlias: lhs
+                          Projection: lhs.product AS product, lhs.label AS label
+                            Inner Join: lhs.product = rhs.product
+                              SubqueryAlias: lhs
+                                Projection: lhs.product AS product, lhs.label AS label
+                                  Inner Join: lhs.product = rhs.product
+                                    SubqueryAlias: lhs
+                                      Projection: lhs.product AS product, lhs.label AS label
+                                        Inner Join: lhs.product = rhs.product
+                                          SubqueryAlias: lhs
+                                            QuadPattern (?product <http://www.w3.org/2000/01/rdf-schema#label> ?label)
+                                          SubqueryAlias: rhs
+                                            QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType138>)
+                                    SubqueryAlias: rhs
+                                      QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4305>)
+                              SubqueryAlias: rhs
+                                QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1444>)
+                        SubqueryAlias: rhs
+                          QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual1> ?propertyTextual)
+                  SubqueryAlias: rhs
+                    Projection: product
+                      Filter: EBV(GT(ENC_TF(ENC_PT(p2)), Union 4:4:488))
+                        QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?p2)

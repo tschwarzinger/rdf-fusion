@@ -9,7 +9,7 @@ use rdf_fusion_testsuite::storage::StorageTestSuiteBuilder;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn mem_storage_testsuite_without_index() -> Result<()> {
+async fn delta_storage_testsuite_without_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_plain_term_encoding(vec![]).await
     })
@@ -22,7 +22,7 @@ async fn mem_storage_testsuite_without_index() -> Result<()> {
 }
 
 #[tokio::test]
-async fn mem_storage_testsuite_with_index() -> Result<()> {
+async fn delta_storage_testsuite_with_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_plain_term_encoding(vec![
             IndexComponents::GSPO,
@@ -40,7 +40,7 @@ async fn mem_storage_testsuite_with_index() -> Result<()> {
 }
 
 #[tokio::test]
-async fn mem_storage_object_id_testsuite_without_index() -> Result<()> {
+async fn delta_storage_object_id_testsuite_without_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_object_id(vec![]).await
     })
@@ -53,9 +53,40 @@ async fn mem_storage_object_id_testsuite_without_index() -> Result<()> {
 }
 
 #[tokio::test]
-async fn mem_storage_object_id_testsuite_with_index() -> Result<()> {
+async fn delta_storage_object_id_testsuite_with_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_object_id(vec![
+            IndexComponents::GSPO,
+            IndexComponents::GPOS,
+            IndexComponents::GOSP,
+        ])
+        .await
+    })
+    .build()
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn delta_storage_string_testsuite_without_index() -> Result<()> {
+    StorageTestSuiteBuilder::new(|| async {
+        create_delta_storage_with_string(vec![]).await
+    })
+    .build()
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn delta_storage_string_testsuite_with_index() -> Result<()> {
+    StorageTestSuiteBuilder::new(|| async {
+        create_delta_storage_with_string(vec![
             IndexComponents::GSPO,
             IndexComponents::GPOS,
             IndexComponents::GOSP,
@@ -89,6 +120,18 @@ async fn create_delta_storage_with_object_id(
 ) -> Result<Arc<dyn QuadStorage>, Error> {
     let storage = DeltaQuadStorage::new_in_memory(
         QuadStorageEncodingName::ObjectId,
+        indexes,
+        Arc::new(TypedFamilyEncoding::default()),
+    )
+    .await;
+    Ok(Arc::new(storage) as Arc<dyn QuadStorage>)
+}
+
+async fn create_delta_storage_with_string(
+    indexes: Vec<IndexComponents>,
+) -> Result<Arc<dyn QuadStorage>, Error> {
+    let storage = DeltaQuadStorage::new_in_memory(
+        QuadStorageEncodingName::String,
         indexes,
         Arc::new(TypedFamilyEncoding::default()),
     )

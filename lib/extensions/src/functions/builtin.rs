@@ -91,6 +91,7 @@ pub enum BuiltinName {
     WithSortableEncoding,
     WithTypedFamilyEncoding,
     WithPlainTermEncoding,
+    WithStringEncoding,
 
     // Other Necessary Functions
     EffectiveBooleanValue,
@@ -182,6 +183,7 @@ impl fmt::Display for BuiltinName {
             Self::WithSortableEncoding => "ENC_SORT",
             Self::WithTypedFamilyEncoding => "ENC_TF",
             Self::WithPlainTermEncoding => "ENC_PT",
+            Self::WithStringEncoding => "ENC_STR",
         };
         f.write_str(name)
     }
@@ -276,6 +278,7 @@ impl TryFrom<&str> for BuiltinName {
             "ENC_SORT" => Self::WithSortableEncoding,
             "ENC_TF" => Self::WithTypedFamilyEncoding,
             "ENC_PT" => Self::WithPlainTermEncoding,
+            "ENC_STR" => Self::WithStringEncoding,
             _ => return Err(NotABuiltInError {}),
         })
     }

@@ -3,7 +3,7 @@
 mod utils;
 
 use crate::utils::verbose::{is_verbose, print_query_details};
-use crate::utils::{consume_results, setup_benchmark_env};
+use crate::utils::{ENCODINGS_TO_BENCHMARK, consume_results, setup_benchmark_env};
 use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::QueryOptions;
@@ -14,20 +14,21 @@ use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use std::path::PathBuf;
 
 fn bench_planning(c: &mut Criterion) {
-    let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
-        PathBuf::from("./data"),
-        QuadStorageEncodingName::ObjectId,
-        1,
-    );
+    let encoding = QuadStorageEncodingName::String;
+    let benchmarking_context =
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
     let target_partitions = benchmarking_context.options().target_partitions.unwrap();
     let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
     let (runtime, benchmark_context, store) =
         setup_benchmark_env(&benchmarking_context, &benchmark);
-    let queries = get_queries(&benchmark_context, target_partitions);
+    let queries = get_queries(&benchmark_context);
     let verbose = is_verbose();
 
-    for (benchmark_name, query_text) in queries {
+    for (query_name, query_text) in queries {
+        let benchmark_name = format!(
+            "Planning (partitions={target_partitions}): Wind Farm 16 - {query_name}"
+        );
         if verbose {
             runtime
                 .block_on(print_query_details(
@@ -38,7 +39,7 @@ fn bench_planning(c: &mut Criterion) {
                 ))
                 .unwrap();
         }
-        c.bench_function(&format!("Planning: {benchmark_name}"), |b| {
+        c.bench_function(&benchmark_name, |b| {
             b.to_async(&runtime).iter(|| async {
                 let result = store.query_opt(&query_text, QueryOptions::default()).await;
                 assert!(result.is_ok());
@@ -48,28 +49,33 @@ fn bench_planning(c: &mut Criterion) {
 }
 
 fn bench_full_execution(c: &mut Criterion) {
-    let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
-        PathBuf::from("./data"),
-        QuadStorageEncodingName::ObjectId,
-        1,
-    );
-    let target_partitions = benchmarking_context.options().target_partitions.unwrap();
-    let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
+    for encoding in ENCODINGS_TO_BENCHMARK {
+        let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
+            PathBuf::from("./data"),
+            encoding,
+            1,
+        );
+        let target_partitions = benchmarking_context.options().target_partitions.unwrap();
+        let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
-    let (runtime, benchmark_context, store) =
-        setup_benchmark_env(&benchmarking_context, &benchmark);
-    let queries = get_queries(&benchmark_context, target_partitions);
+        let (runtime, benchmark_context, store) =
+            setup_benchmark_env(&benchmarking_context, &benchmark);
+        let queries = get_queries(&benchmark_context);
 
-    for (benchmark_name, query_text) in queries {
-        c.bench_function(&benchmark_name, |b| {
-            b.to_async(&runtime).iter(|| async {
-                let result = store
-                    .query_opt(&query_text, QueryOptions::default())
-                    .await
-                    .unwrap();
-                consume_results(result).await.unwrap();
+        for (query_name, query_text) in queries {
+            let benchmark_name = format!(
+                "Execution ({encoding}, partitions={target_partitions}): Wind Farm 16 - {query_name}"
+            );
+            c.bench_function(&benchmark_name, |b| {
+                b.to_async(&runtime).iter(|| async {
+                    let result = store
+                        .query_opt(&query_text, QueryOptions::default())
+                        .await
+                        .unwrap();
+                    consume_results(result).await.unwrap();
+                });
             });
-        });
+        }
     }
 }
 
@@ -80,10 +86,7 @@ criterion_group!(
 );
 criterion_main!(wind_farm);
 
-fn get_queries(
-    benchmark_context: &BenchmarkContext,
-    target_partitions: usize,
-) -> Vec<(String, String)> {
+fn get_queries(benchmark_context: &BenchmarkContext) -> Vec<(String, String)> {
     let disabled_queries = vec![
         WindFarmQueryName::MultiGrouped1,
         WindFarmQueryName::MultiGrouped2,
@@ -98,11 +101,10 @@ fn get_queries(
                 println!("Skipping query: {}", query_name);
                 None
             } else {
-                let op = get_wind_farm_raw_sparql_operation(benchmark_context, query_name).unwrap();
-                Some((
-                    format!("Wind Farm 16 (target_partitions={target_partitions}) - {query_name}"),
-                    op.text().to_string(),
-                ))
+                let op =
+                    get_wind_farm_raw_sparql_operation(benchmark_context, query_name)
+                        .unwrap();
+                Some((query_name.to_string(), op.text().to_string()))
             }
         })
         .collect()

@@ -1,0 +1,14 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(otherProduct@0) as otherProduct, ENC_PT(sameFeatures@1) as sameFeatures]
+  SortExec: TopK(fetch=10), expr=[ENC_SORT(sameFeatures@1) DESC, ENC_SORT(ENC_TF(ENC_PT(otherProduct@0))) ASC], preserve_partitioning=[false]
+    HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(otherProduct@0, otherProduct@0)], projection=[otherProduct@0, sameFeatures@2]
+      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?otherProduct <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Product>], blank_node_mode=Variable, pushed_filters=[otherProduct@0 != <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>]
+      ProjectionExec: expr=[otherProduct@0 as otherProduct, <uuid>@1 as sameFeatures]
+        AggregateExec: mode=Single, gby=[otherProduct@0 as otherProduct], aggr=[<uuid>]
+          ProjectionExec: expr=[otherProduct@1 as otherProduct, otherFeature@2 as otherFeature]
+            NestedLoopJoinExec: join_type=Inner, filter=EBV(EQ(join_proj_push_down_1@0, join_proj_push_down_2@1)), projection=[feature@0, otherProduct@2, otherFeature@3]
+              DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature], blank_node_mode=Variable, projection=[feature, join_proj_push_down_1]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?otherProduct <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?otherFeature], blank_node_mode=Variable, projection=[otherProduct, otherFeature, join_proj_push_down_2], pushed_filters=[otherProduct@0 != <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>]

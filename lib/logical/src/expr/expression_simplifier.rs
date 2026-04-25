@@ -220,6 +220,10 @@ fn replace_equality_with_same_term(
                 Err(err) => plan_err!("Failed to encode term: {}", err)?,
             }
         }
+        EncodingName::String => encodings
+            .string_encoding()
+            .encode_term(Ok(term.as_ref()))?
+            .into_scalar_value(),
         EncodingName::TypedFamily => {
             unreachable!("Handled in caller")
         }
@@ -276,6 +280,7 @@ mod tests {
     use insta::assert_snapshot;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
+    use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
     use rdf_fusion_encoding::{
         EncodingName, QuadStorageEncoding, RdfFusionEncodings, TermEncoding,
@@ -440,6 +445,7 @@ mod tests {
             Arc::new(TypedFamilyEncoding::default()),
             None,
             Arc::clone(&SORTABLE_TERM_ENCODING),
+            Arc::clone(&STRING_ENCODING),
         );
         let registry = Arc::new(DefaultRdfFusionFunctionRegistry::new(encodings.clone()));
         RdfFusionContextView::new(registry, encodings, QuadStorageEncoding::PlainTerm)

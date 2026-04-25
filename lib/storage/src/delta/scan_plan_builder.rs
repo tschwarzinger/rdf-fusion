@@ -345,7 +345,10 @@ impl DeltaQuadStorageScanPlanBuilder {
         // and will remove the FilterExec, the projection pushdown is not yet implemented for Delta.
         // If the projection pushdown works for Delta, we can remove this hack and use
         // supports_filters_pushdown() to determine if the filters are pushed down exactly.
-        let can_push_filters = matches!(self.encoding, QuadStorageEncoding::ObjectId(_));
+        let can_push_filters = match &self.encoding {
+            QuadStorageEncoding::ObjectId(_) | QuadStorageEncoding::String => true,
+            QuadStorageEncoding::PlainTerm => false,
+        };
         let assume_filters_exact = self
             .session_state
             .config_options()

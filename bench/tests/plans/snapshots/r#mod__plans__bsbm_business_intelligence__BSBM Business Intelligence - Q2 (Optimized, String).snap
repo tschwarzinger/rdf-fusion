@@ -1,0 +1,19 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&explanation.optimized_logical_plan.to_string()"
+---
+Projection: ENC_PT(otherProduct) AS otherProduct, ENC_PT(sameFeatures) AS sameFeatures
+  Sort: ENC_SORT(sameFeatures) DESC NULLS FIRST, ENC_SORT(ENC_TF(ENC_PT(otherProduct))) ASC NULLS FIRST, fetch=10
+    Projection: lhs.otherProduct AS otherProduct, rhs.sameFeatures AS sameFeatures
+      Inner Join: lhs.otherProduct = rhs.otherProduct
+        SubqueryAlias: lhs
+          Filter: otherProduct != Utf8("<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>")
+            QuadPattern (?otherProduct <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Product>)
+        SubqueryAlias: rhs
+          Projection: otherProduct, <uuid> AS sameFeatures
+            Aggregate: groupBy=[[otherProduct AS otherProduct]], aggr=[[COUNT(otherFeature) AS <uuid>]]
+              Projection: otherProduct, otherFeature
+                Inner Join:  Filter: EBV(EQ(ENC_TF(ENC_PT(feature)), ENC_TF(ENC_PT(otherFeature))))
+                  QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature)
+                  Filter: otherProduct != Utf8("<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>")
+                    QuadPattern (?otherProduct <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?otherFeature)

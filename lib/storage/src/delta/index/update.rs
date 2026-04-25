@@ -1,5 +1,7 @@
 use crate::delta::error::DeltaQuadStorageError;
-use crate::delta::index::{DeltaStorageQuadIndex, DeltaStorageQuadIndexSnapshot};
+use crate::delta::index::{
+    DeltaStorageQuadIndex, DeltaStorageQuadIndexSnapshot, FILE_ROW_COUNT,
+};
 use crate::delta::log::changeset::DeltaStorageLogChangesetRef;
 use crate::delta::scan_plan_builder::DeltaQuadStorageScanPlanBuilder;
 use datafusion::arrow::compute::SortOptions;
@@ -141,7 +143,6 @@ impl DeltaStorageQuadIndexUpdater {
         let mut writer = RecordBatchWriter::for_table(&self.index_table)?
             .with_writer_properties(self.writer_properties.clone());
 
-        let target_rows_per_file = 1_048_576;
         let mut current_rows = 0;
         let mut all_actions = Vec::new();
         while let Some(batch_result) = stream.next().await {
@@ -162,7 +163,7 @@ impl DeltaStorageQuadIndexUpdater {
             current_rows += num_rows;
 
             // If the update exceeds the target row count, flush and recreate the writer (new file)
-            if current_rows >= target_rows_per_file {
+            if current_rows >= FILE_ROW_COUNT {
                 let file_actions = writer.flush().await?;
                 all_actions.extend(file_actions.into_iter().map(Action::Add));
                 writer = RecordBatchWriter::for_table(&self.index_table)?

@@ -13,10 +13,11 @@ use datafusion::execution::{SendableRecordBatchStream, SessionStateBuilder};
 use datafusion::functions_aggregate::first_last::FirstValue;
 use datafusion::logical_expr::AggregateUDF;
 use datafusion::prelude::{SessionConfig, SessionContext};
+use rdf_fusion_encoding::RdfFusionEncodings;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
+use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
-use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::functions::{
     RdfFusionFunctionRegistry, RdfFusionFunctionRegistryRef,
@@ -54,15 +55,13 @@ impl RdfFusionContext {
         storage: Arc<dyn QuadStorage>,
         typed_family_encoding: TypedFamilyEncodingRef,
     ) -> Self {
-        let object_id_encoding = match storage.encoding() {
-            QuadStorageEncoding::PlainTerm => None,
-            QuadStorageEncoding::ObjectId(encoding) => Some(Arc::clone(&encoding)),
-        };
+        let object_id_encoding = storage.encoding().object_id_encoding().cloned();
         let encodings = RdfFusionEncodings::new(
             Arc::clone(&PLAIN_TERM_ENCODING),
             typed_family_encoding,
             object_id_encoding,
             Arc::clone(&SORTABLE_TERM_ENCODING),
+            Arc::clone(&STRING_ENCODING),
         );
 
         let registry: Arc<dyn RdfFusionFunctionRegistry> =

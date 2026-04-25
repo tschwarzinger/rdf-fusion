@@ -28,6 +28,9 @@ pub enum EncodingName {
     /// for sorting. We plan to remove this encoding in the future, once we can introduce custom
     /// orderings into the query engine.
     Sortable,
+    /// Name of the [StringEncoding](crate::string::StringEncoding). Represents all terms using
+    /// their Turtle string representation.
+    String,
 }
 
 impl Display for EncodingName {
@@ -37,6 +40,7 @@ impl Display for EncodingName {
             EncodingName::PlainTerm => write!(f, "Plain Term"),
             EncodingName::TypedFamily => write!(f, "Typed Family"),
             EncodingName::Sortable => write!(f, "Sortable"),
+            EncodingName::String => write!(f, "String"),
         }
     }
 }

@@ -46,6 +46,7 @@ impl IsCompatibleSparqlOp {
         let type_signature = SparqlOpTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.plain_term().as_ref())
             .with_supported_encoding_opt(encodings.object_id().map(|e| e.as_ref()))
+            .with_supported_encoding(encodings.string_encoding().as_ref())
             .with_binary_arity()
             .build();
         Self {

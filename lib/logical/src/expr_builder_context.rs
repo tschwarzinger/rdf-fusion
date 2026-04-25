@@ -557,7 +557,8 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
     }
 }
 
-fn decide_input_encoding(
+/// Returns one of the given supported encodings based on the given actual encodings.
+pub(crate) fn decide_input_encoding(
     supported_encodings: &[EncodingName],
     actual_encodings: &[EncodingName],
 ) -> DFResult<EncodingName> {

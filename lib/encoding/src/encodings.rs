@@ -1,6 +1,7 @@
 use crate::object_id::ObjectIdEncodingRef;
 use crate::plain_term::{PlainTermEncoding, PlainTermEncodingRef};
 use crate::sortable_term::SortableTermEncodingRef;
+use crate::string::{StringEncoding, StringEncodingRef};
 use crate::typed_family::TypedFamilyEncodingRef;
 use crate::{EncodingName, TermEncoding};
 use datafusion::arrow::datatypes::DataType;
@@ -18,14 +19,16 @@ use std::sync::Arc;
 /// The equality and hashing functions check for pointer equality of the underlying encodings.
 #[derive(Debug, Clone)]
 pub struct RdfFusionEncodings {
-    /// The [PlainTermEncoding] configuration.
+    /// The [`PlainTermEncoding`] configuration.
     plain_term: PlainTermEncodingRef,
-    /// The [TypedFamilies] configuration.
+    /// The [`TypedFamilyEncoding`] configuration.
     typed_family: TypedFamilyEncodingRef,
-    /// The [ObjectIdEncoding] configuration.
+    /// The [`ObjectIdEncoding`] configuration.
     object_id: Option<ObjectIdEncodingRef>,
-    /// The [SortableTermEncoding] configuration.
+    /// The [`SortableTermEncoding`] configuration.
     sortable_term: SortableTermEncodingRef,
+    /// The [`StringEncoding`] configuration.
+    string_encoding: StringEncodingRef,
 }
 
 impl RdfFusionEncodings {
@@ -35,12 +38,14 @@ impl RdfFusionEncodings {
         typed_family: TypedFamilyEncodingRef,
         object_id: Option<ObjectIdEncodingRef>,
         sortable_term: SortableTermEncodingRef,
+        string_encoding: StringEncodingRef,
     ) -> Self {
         Self {
             plain_term,
             typed_family,
             object_id,
             sortable_term,
+            string_encoding,
         }
     }
 
@@ -62,6 +67,11 @@ impl RdfFusionEncodings {
     /// Provides a reference to the used [`SortableTermEncodingRef`].
     pub fn sortable_term(&self) -> &SortableTermEncodingRef {
         &self.sortable_term
+    }
+
+    /// Provides a reference to the used [`StringEncodingRef`].
+    pub fn string_encoding(&self) -> &StringEncodingRef {
+        &self.string_encoding
     }
 
     /// Returns a vector of [EncodingName] for the given `names`.
@@ -87,6 +97,10 @@ impl RdfFusionEncodings {
 
         if names.contains(&EncodingName::Sortable) {
             result.push(self.sortable_term.data_type().clone());
+        }
+
+        if names.contains(&EncodingName::String) {
+            result.push(self.string_encoding.data_type().clone());
         }
 
         result
@@ -115,6 +129,10 @@ impl RdfFusionEncodings {
             return Some(EncodingName::Sortable);
         }
 
+        if data_type == StringEncoding.data_type() {
+            return Some(EncodingName::String);
+        }
+
         None
     }
 }
@@ -131,6 +149,7 @@ impl PartialEq for RdfFusionEncodings {
             && Arc::ptr_eq(&self.plain_term, &other.plain_term)
             && Arc::ptr_eq(&self.typed_family, &other.typed_family)
             && Arc::ptr_eq(&self.sortable_term, &other.sortable_term)
+            && Arc::ptr_eq(&self.string_encoding, &other.string_encoding)
     }
 }
 
@@ -144,5 +163,6 @@ impl Hash for RdfFusionEncodings {
             state.write_usize(Arc::as_ptr(object_id) as usize);
         }
         state.write_usize(Arc::as_ptr(&self.sortable_term) as usize);
+        state.write_usize(Arc::as_ptr(&self.string_encoding) as usize);
     }
 }

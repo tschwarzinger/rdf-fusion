@@ -20,3 +20,11 @@ insta.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "with_plain_term_encoding"
+harness = false
+
+[[bench]]
+name = "with_string_encoding"
+harness = false

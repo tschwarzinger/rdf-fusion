@@ -25,7 +25,7 @@ pub enum ObjectIdDataType {
 
 impl ObjectIdDataType {
     /// Returns the data type as an arrow [`DataType`].
-    pub fn as_arrow_type(self) -> DataType {
+    pub fn term_type(self) -> DataType {
         self.into()
     }
 }

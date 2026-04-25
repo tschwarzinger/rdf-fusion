@@ -29,18 +29,21 @@ use std::path::PathBuf;
 
 #[tokio::test]
 pub async fn bsbm_1000_test_results_plain_term() {
-    run_bsbm_1000_test_results(QuadStorageEncodingName::PlainTerm, "Plain Term").await;
+    run_bsbm_1000_test_results(QuadStorageEncodingName::PlainTerm).await;
 }
 
 #[tokio::test]
 pub async fn bsbm_1000_test_results_object_id() {
-    run_bsbm_1000_test_results(QuadStorageEncodingName::ObjectId, "Object ID").await;
+    run_bsbm_1000_test_results(QuadStorageEncodingName::ObjectId).await;
 }
 
-async fn run_bsbm_1000_test_results(
-    encoding: QuadStorageEncodingName,
-    encoding_name: &str,
-) {
+#[tokio::test]
+pub async fn bsbm_1000_test_results_string() {
+    run_bsbm_1000_test_results(QuadStorageEncodingName::String).await;
+}
+
+async fn run_bsbm_1000_test_results(encoding: QuadStorageEncodingName) {
+    let encoding_name = encoding.to_string();
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
     let benchmark =

@@ -1,0 +1,25 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&string"
+---
+ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST]@2) as product, ENC_PT(first_value(productLabel) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST]@3) as productLabel]
+  SortExec: TopK(fetch=5), expr=[ENC_SORT(ENC_TF(ENC_PT(productLabel)))@0 ASC, product@1 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(ENC_TF(ENC_PT(productLabel)))@0 ASC]
+    AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(ENC_TF(ENC_PT(productLabel))), product@1 as product], aggr=[first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(productLabel) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
+      ProjectionExec: expr=[ENC_SORT(ENC_TF(ENC_PT(productLabel@1))) as __common_expr_1, product@0 as product, productLabel@1 as productLabel]
+        SortExec: expr=[ENC_SORT(ENC_TF(ENC_PT(productLabel@1))) ASC], preserve_partitioning=[false]
+          HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], filter=EBV(LT(ENC_TF(ENC_PT(simProperty2@1)), ADD(ENC_TF(ENC_PT(origProperty2@0)), 4:4:170))) AND EBV(GT(ENC_TF(ENC_PT(simProperty2@1)), SUB(ENC_TF(ENC_PT(origProperty2@0)), 4:4:170))), projection=[product@0, productLabel@1]
+            CrossJoinExec
+              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], filter=EBV(LT(ENC_TF(ENC_PT(simProperty1@1)), ADD(ENC_TF(ENC_PT(origProperty1@0)), 4:4:120))) AND EBV(GT(ENC_TF(ENC_PT(simProperty1@1)), SUB(ENC_TF(ENC_PT(origProperty1@0)), 4:4:120))), projection=[product@0, productLabel@1]
+                CrossJoinExec
+                  HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(prodFeature@2, prodFeature@1), (product@0, product@0)], projection=[product@0, productLabel@1]
+                    CrossJoinExec
+                      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel], blank_node_mode=Variable, pushed_filters=[product@0 != <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890>]
+                      DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature], blank_node_mode=Variable
+                    FilterExec: DynamicFilter [ empty ]
+                      DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature], blank_node_mode=Variable, pushed_filters=[product@0 != <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890>, DynamicFilter [ empty ]]
+                  DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?origProperty1], blank_node_mode=Variable
+                FilterExec: DynamicFilter [ empty ]
+                  DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?simProperty1], blank_node_mode=Variable, pushed_filters=[product@0 != <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890>, DynamicFilter [ empty ]]
+              DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?origProperty2], blank_node_mode=Variable
+            FilterExec: DynamicFilter [ empty ]
+              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?simProperty2], blank_node_mode=Variable, pushed_filters=[product@0 != <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890>, DynamicFilter [ empty ]]

@@ -8,7 +8,8 @@ use crate::scalar::comparison::{
     less_or_equal_udf, less_than_udf,
 };
 use crate::scalar::conversion::encoding::{
-    with_plain_term_encoding, with_sortable_term_encoding, with_typed_family_encoding,
+    with_plain_term_encoding, with_sortable_term_encoding, with_string_encoding,
+    with_typed_family_encoding,
 };
 use crate::scalar::conversion::native::{
     effective_boolean_value_udf, native_boolean_as_term, native_int64_as_term,
@@ -250,6 +251,7 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
                     EncodingName::ObjectId,
                     EncodingName::Sortable,
                     EncodingName::TypedFamily,
+                    EncodingName::String,
                 ]),
                 Volatility::Immutable,
             )),
@@ -278,6 +280,7 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
         with_sortable_term_encoding(registry.encodings.clone()),
         with_plain_term_encoding(registry.encodings.clone()),
         with_typed_family_encoding(registry.encodings.clone()),
+        with_string_encoding(registry.encodings.clone()),
         effective_boolean_value_udf(registry.encodings.clone())?,
         is_compatible_udf(registry.encodings.clone())?,
     ];

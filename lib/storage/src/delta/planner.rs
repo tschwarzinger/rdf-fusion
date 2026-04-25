@@ -11,7 +11,7 @@ use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_logical::object_id::EncodeAsObjectIdNode;
+use rdf_fusion_logical::encoding::object_id::EncodeAsObjectIdNode;
 use rdf_fusion_logical::quad_pattern::QuadPatternNode;
 use rdf_fusion_model::DFResult;
 use std::sync::Arc;
@@ -154,7 +154,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_planner_skips_apply_changeset_when_versions_match() {
-        let (session, _, planner, node) = setup(vec![IndexComponents::GSPO]).await;
+        let (session, _, planner, node) = setup(
+            QuadStorageEncodingName::ObjectId,
+            vec![IndexComponents::GSPO],
+        )
+        .await;
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
             (r"@\d", "@<col>"),
@@ -171,8 +175,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_planner_pushes_down_filter_string_encoding() {
+        let (session, _, planner, node) =
+            setup(QuadStorageEncodingName::String, vec![IndexComponents::GSPO]).await;
+        let plan = plan_node(&planner, &node, &session).await;
+        insta::with_settings!({filters => vec![
+            (r"@\d", "@<col>"),
+        ]}, {
+            assert_snapshot!(
+                print_scan_implementation(plan.as_ref()),
+                @r"
+            ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
+              DeltaScan
+                DataSourceExec: file_groups={1 group: [[]]}, projection=[predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = <https://my.at/>, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= <https://my.at/> AND <https://my.at/> <= subject_max@<col>, required_guarantees=[subject in (<https://my.at/>)]
+            "
+            )
+        });
+    }
+
+    #[tokio::test]
     async fn test_no_index_no_change() {
-        let (session, _, planner, node) = setup(vec![]).await;
+        let (session, _, planner, node) =
+            setup(QuadStorageEncodingName::ObjectId, vec![]).await;
         let plan = plan_node(&planner, &node, &session).await;
 
         assert_snapshot!(
@@ -183,7 +207,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_index_with_change() {
-        let (session, storage, planner, node) = setup(vec![]).await;
+        let (session, storage, planner, node) =
+            setup(QuadStorageEncodingName::ObjectId, vec![]).await;
 
         let df = quads_to_plain_term_dataframe(
             &session,
@@ -212,7 +237,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_planner_with_additions() {
-        let (session, storage, planner, node) = setup(vec![IndexComponents::GSPO]).await;
+        let (session, storage, planner, node) = setup(
+            QuadStorageEncodingName::ObjectId,
+            vec![IndexComponents::GSPO],
+        )
+        .await;
 
         storage
             .insert(quads_to_plain_term_dataframe(
@@ -252,7 +281,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_planner_with_deletions_inserts_anti_join() {
-        let (session, storage, planner, node) = setup(vec![IndexComponents::GSPO]).await;
+        let (session, storage, planner, node) = setup(
+            QuadStorageEncodingName::ObjectId,
+            vec![IndexComponents::GSPO],
+        )
+        .await;
 
         storage
             .remove(quads_to_plain_term_dataframe(
@@ -289,7 +322,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_planner_with_additions_and_deletions() {
-        let (session, storage, planner, node) = setup(vec![IndexComponents::GSPO]).await;
+        let (session, storage, planner, node) = setup(
+            QuadStorageEncodingName::ObjectId,
+            vec![IndexComponents::GSPO],
+        )
+        .await;
 
         storage
             .insert(quads_to_plain_term_dataframe(
@@ -347,6 +384,7 @@ mod tests {
     }
 
     async fn setup(
+        encoding: QuadStorageEncodingName,
         indexes: Vec<IndexComponents>,
     ) -> (
         SessionContext,
@@ -361,7 +399,7 @@ mod tests {
 
         let storage = Arc::new(
             DeltaQuadStorage::new_in_memory(
-                QuadStorageEncodingName::ObjectId,
+                encoding,
                 indexes,
                 Arc::new(Default::default()),
             )

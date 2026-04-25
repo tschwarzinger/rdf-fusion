@@ -1,3 +1,4 @@
+use crate::encoding::change::ChangeEncodingNode;
 use crate::extend::ExtendNode;
 use crate::join::{SparqlJoinNode, SparqlJoinType, compute_sparql_join_columns};
 use crate::logical_plan_builder_context::RdfFusionLogicalPlanBuilderContext;
@@ -10,7 +11,7 @@ use datafusion::logical_expr::{
     Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort, SortExpr,
     UserDefinedLogicalNode, col,
 };
-use rdf_fusion_encoding::EncodingName;
+use rdf_fusion_encoding::{EncodingName, QuadStorageEncoding};
 use rdf_fusion_model::Variable;
 use rdf_fusion_model::{DFResult, TermPattern};
 use std::collections::{HashMap, HashSet};
@@ -29,6 +30,7 @@ use std::sync::Arc;
 /// # use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 /// # use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings};
 /// # use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
+/// # use rdf_fusion_encoding::string::STRING_ENCODING;
 /// # use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 /// # use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 /// # use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
@@ -38,7 +40,8 @@ use std::sync::Arc;
 /// #     Arc::clone(&PLAIN_TERM_ENCODING),
 /// #     Arc::new(TypedFamilyEncoding::default()),
 /// #     None,
-/// #     Arc::clone(&SORTABLE_TERM_ENCODING)
+/// #     Arc::clone(&SORTABLE_TERM_ENCODING),
+/// #     Arc::clone(&STRING_ENCODING)
 /// # );
 /// # let rdf_fusion_context = RdfFusionContextView::new(
 /// #     Arc::new(DefaultRdfFusionFunctionRegistry::new(encodings.clone())),
@@ -260,7 +263,11 @@ impl RdfFusionLogicalPlanBuilder {
         Ok(self
             .expr_builder_root()
             .variable(v.as_ref())?
-            .with_any_encoding(&[EncodingName::PlainTerm, EncodingName::ObjectId])?
+            .with_any_encoding(&[
+                EncodingName::PlainTerm,
+                EncodingName::String,
+                EncodingName::ObjectId,
+            ])?
             .build()?
             .alias(v.as_str()))
     }
@@ -317,23 +324,13 @@ impl RdfFusionLogicalPlanBuilder {
 
     /// Ensures all columns are encoded as plain terms.
     pub fn with_plain_terms(self) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let with_correct_encoding = self
-            .schema()
-            .columns()
-            .into_iter()
-            .map(|c| {
-                let name = c.name().to_owned();
-                let expr = self
-                    .expr_builder(col(c))?
-                    .with_encoding(EncodingName::PlainTerm)?
-                    .build()?
-                    .alias(name);
-                Ok(expr)
-            })
-            .collect::<DFResult<Vec<_>>>()?;
+        let change_encoding_node = ChangeEncodingNode::try_new(
+            self.plan_builder.build()?,
+            QuadStorageEncoding::PlainTerm,
+        )?;
         Ok(Self {
             context: self.context,
-            plan_builder: self.plan_builder.project(with_correct_encoding)?,
+            plan_builder: create_extension_plan(change_encoding_node),
         })
     }
 

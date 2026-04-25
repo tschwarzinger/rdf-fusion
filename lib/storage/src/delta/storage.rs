@@ -10,20 +10,21 @@ use crate::index::IndexComponents;
 use async_trait::async_trait;
 use datafusion::common::ScalarValue;
 use datafusion::common::stats::Precision;
+use datafusion::error::DataFusionError;
 use datafusion::execution::{SessionState, TaskContext};
 use datafusion::logical_expr::{Extension, LogicalPlan};
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use datafusion::physical_planner::ExtensionPlanner;
 use datafusion::prelude::DataFrame;
-use deltalake::arrow::error::ArrowError;
 use futures::StreamExt;
 use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName, TermEncoding};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_logical::object_id::EncodeAsObjectIdNode;
+use rdf_fusion_logical::encoding::change::ChangeEncodingNode;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use rdf_fusion_model::sparql::Update;
 use rdf_fusion_model::{
@@ -72,6 +73,7 @@ impl DeltaQuadStorage {
                     QuadStorageEncoding::ObjectId(Arc::new(encoding)),
                 )
             }
+            QuadStorageEncodingName::String => (None, QuadStorageEncoding::String),
         };
 
         let log = DeltaStorageLog::try_new_at_location(
@@ -177,29 +179,17 @@ impl DeltaQuadStorage {
             return Ok(quads);
         };
 
-        if let QuadStorageEncoding::ObjectId(encoding) = &self.storage_encoding {
-            if quads_schema == QuadStorageEncoding::PlainTerm.quad_schema().as_ref() {
-                let (state, logical_plan) = quads.into_parts();
+        let (state, logical_plan) = quads.into_parts();
 
-                let encoded = EncodeAsObjectIdNode::try_new(
-                    logical_plan,
-                    encoding.object_id_data_type(),
-                )
+        let encoded =
+            ChangeEncodingNode::try_new(logical_plan, self.storage_encoding.clone())
                 .expect("Data Types checked");
-                return Ok(DataFrame::new(
-                    state,
-                    LogicalPlan::Extension(Extension {
-                        node: Arc::new(encoded),
-                    }),
-                ));
-            }
-        }
-
-        Err(StorageError::Other(Box::new(
-            ArrowError::InvalidArgumentError(
-                "Cannot transform to expected schema".to_string(),
-            ),
-        )))
+        Ok(DataFrame::new(
+            state,
+            LogicalPlan::Extension(Extension {
+                node: Arc::new(encoded),
+            }),
+        ))
     }
 }
 
@@ -300,6 +290,10 @@ impl QuadStorage for DeltaQuadStorage {
                 QuadStorageEncoding::ObjectId(encoding) => {
                     encoding.mapping().decode_array(column)?
                 }
+                QuadStorageEncoding::String => STRING_ENCODING
+                    .try_new_array(Arc::clone(column))?
+                    .as_plain_term_array()
+                    .map_err(|err| DataFusionError::ArrowError(Box::new(err), None))?,
             };
 
             let new_named_nodes = plain_term_array

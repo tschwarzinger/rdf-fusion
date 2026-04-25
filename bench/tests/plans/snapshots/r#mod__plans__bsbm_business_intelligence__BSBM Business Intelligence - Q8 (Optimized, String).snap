@@ -1,0 +1,64 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&explanation.optimized_logical_plan.to_string()"
+---
+Projection: ENC_PT(vendor) AS vendor, ENC_PT(cheapExpensiveRatio) AS cheapExpensiveRatio
+  Sort: ENC_SORT(DIV(xsd:float(belowAvg), offerCount)) DESC NULLS FIRST, ENC_SORT(ENC_TF(ENC_PT(vendor))) ASC NULLS FIRST, fetch=10
+    Projection: lhs.vendor AS vendor, lhs.belowAvg AS belowAvg, rhs.offerCount AS offerCount, DIV(xsd:float(lhs.belowAvg), rhs.offerCount) AS cheapExpensiveRatio
+      Inner Join: lhs.vendor = rhs.vendor
+        SubqueryAlias: lhs
+          Projection: vendor, <uuid> AS belowAvg
+            Aggregate: groupBy=[[vendor AS vendor]], aggr=[[COUNT(offer) AS <uuid>]]
+              Projection: lhs.offer AS offer, lhs.vendor AS vendor
+                Inner Join: lhs.product = rhs.product Filter: EBV(LT(xsd:float(xsd:string(ENC_TF(ENC_PT(lhs.price)))), rhs.avgPrice))
+                  SubqueryAlias: lhs
+                    Projection: lhs.product AS product, lhs.offer AS offer, lhs.vendor AS vendor, rhs.price AS price
+                      Inner Join: lhs.offer = rhs.offer
+                        SubqueryAlias: lhs
+                          Projection: lhs.product AS product, lhs.offer AS offer, rhs.vendor AS vendor
+                            Inner Join: lhs.offer = rhs.offer
+                              SubqueryAlias: lhs
+                                Projection: lhs.product AS product, rhs.offer AS offer
+                                  Inner Join: lhs.product = rhs.product
+                                    SubqueryAlias: lhs
+                                      QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>)
+                                    SubqueryAlias: rhs
+                                      QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
+                              SubqueryAlias: rhs
+                                QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
+                        SubqueryAlias: rhs
+                          QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
+                  SubqueryAlias: rhs
+                    Projection: product, <uuid> AS avgPrice
+                      Aggregate: groupBy=[[product AS product]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(ENC_PT(price))))) AS <uuid>]]
+                        Projection: lhs.product AS product, rhs.price AS price
+                          Inner Join: lhs.offer = rhs.offer
+                            SubqueryAlias: lhs
+                              Projection: lhs.product AS product, lhs.offer AS offer
+                                Inner Join: lhs.offer = rhs.offer
+                                  SubqueryAlias: lhs
+                                    Projection: lhs.product AS product, rhs.offer AS offer
+                                      Inner Join: lhs.product = rhs.product
+                                        SubqueryAlias: lhs
+                                          QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>)
+                                        SubqueryAlias: rhs
+                                          QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
+                                  SubqueryAlias: rhs
+                                    Projection: offer
+                                      QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
+                            SubqueryAlias: rhs
+                              QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
+        SubqueryAlias: rhs
+          Projection: vendor, <uuid> AS offerCount
+            Aggregate: groupBy=[[vendor AS vendor]], aggr=[[COUNT(offer) AS <uuid>]]
+              Projection: lhs.offer AS offer, rhs.vendor AS vendor
+                Inner Join: lhs.offer = rhs.offer
+                  SubqueryAlias: lhs
+                    Projection: rhs.offer AS offer
+                      Inner Join: lhs.product = rhs.product
+                        SubqueryAlias: lhs
+                          QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>)
+                        SubqueryAlias: rhs
+                          QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
+                  SubqueryAlias: rhs
+                    QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)

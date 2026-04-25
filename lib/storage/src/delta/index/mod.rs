@@ -14,6 +14,7 @@ use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
 use deltalake::kernel::transaction::CommitProperties;
 use deltalake::kernel::{Add, Transaction};
 use deltalake::operations::create::CreateBuilder;
+use deltalake::parquet::basic::{Compression, ZstdLevel};
 use deltalake::parquet::file::metadata::SortingColumn;
 use deltalake::parquet::file::properties::EnabledStatistics;
 use deltalake::parquet::schema::types::ColumnPath;
@@ -28,6 +29,13 @@ use rdf_fusion_model::{
 pub use snapshot::DeltaStorageQuadIndexSnapshot;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+/// TODO: Make this configurable
+const PAGE_ROW_COUNT: usize = 8_192;
+/// TODO: Make this configurable
+const ROW_GROUP_ROW_COUNT: usize = 8_192 * 32;
+/// TODO: Make this configurable
+const FILE_ROW_COUNT: usize = ROW_GROUP_ROW_COUNT * 32;
 
 /// The state of the index table.
 ///
@@ -245,22 +253,31 @@ impl DeltaStorageQuadIndex {
             })
             .collect();
 
-        let last_component = self.components.inner()[3];
+        let last_component =
+            ColumnPath::new(vec![self.components.inner()[3].column_name().to_owned()]);
         let mut writer_properties_builder = WriterProperties::builder()
-            .set_max_row_group_row_count(Some(8_192 * 16))
-            .set_data_page_row_count_limit(8_192)
+            .set_max_row_group_row_count(Some(ROW_GROUP_ROW_COUNT))
+            .set_data_page_row_count_limit(PAGE_ROW_COUNT)
             .set_bloom_filter_enabled(false)
+            .set_column_bloom_filter_enabled(last_component.clone(), true)
             .set_sorting_columns(Some(sorting_columns))
+            .set_compression(Compression::ZSTD(ZstdLevel::default()))
+            .set_column_dictionary_enabled(last_component.clone(), false)
             .set_statistics_enabled(EnabledStatistics::Page);
 
         if self.storage_encoding.term_type().is_primitive() {
             writer_properties_builder = writer_properties_builder
+                .set_dictionary_enabled(false)
                 .set_encoding(Encoding::RLE)
-                .set_column_encoding(
-                    ColumnPath::new(vec![last_component.column_name().to_owned()]),
-                    Encoding::PLAIN,
-                );
+                .set_column_encoding(last_component, Encoding::PLAIN);
+        } else {
+            writer_properties_builder = writer_properties_builder
+                .set_dictionary_enabled(true)
+                .set_encoding(Encoding::DELTA_LENGTH_BYTE_ARRAY)
+                .set_statistics_truncate_length(Some(256)) // IRIs might be long
+                .set_column_index_truncate_length(Some(256)) // IRIs might be long;
         }
+
         writer_properties_builder.build()
     }
 }

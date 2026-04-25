@@ -5,7 +5,6 @@ use crate::prepare::{
 use crate::prepare::{ensure_file_download, prepare_file_download};
 use crate::{BenchmarkStorageBackend, BenchmarkingOptions};
 use anyhow::bail;
-use datafusion::execution::cache::cache_manager::CacheManagerConfig;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::encoding::QuadStorageEncodingName;
@@ -85,8 +84,7 @@ impl RdfFusionBenchContext {
     }
 
     pub async fn create_store(&self) -> Store {
-        let cache_config = CacheManagerConfig::default();
-        let mut builder = RuntimeEnvBuilder::new().with_cache_manager(cache_config);
+        let mut builder = RuntimeEnvBuilder::new();
         if let Some(memory_size) = self.options.memory_size {
             builder = builder.with_memory_limit(memory_size * 1024 * 1024, 1.0);
         }

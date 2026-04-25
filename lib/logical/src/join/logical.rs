@@ -222,9 +222,12 @@ fn validate_inputs(
             .into_iter()
             .next()
             .expect("Length already checked");
-        if !matches!(encoding, EncodingName::PlainTerm | EncodingName::ObjectId) {
+        if !matches!(
+            encoding,
+            EncodingName::PlainTerm | EncodingName::ObjectId | EncodingName::String
+        ) {
             return plan_err!(
-                "Join column '{field_name}' must be in the PlainTermEncoding or ObjectIdEncoding."
+                "Join column '{field_name}' must be in the PlainTermEncoding, ObjectIdEncoding or StringEncoding."
             );
         }
     }

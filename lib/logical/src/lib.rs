@@ -16,6 +16,7 @@
 extern crate core;
 
 mod active_graph;
+pub mod encoding;
 pub mod expr;
 mod expr_builder;
 mod expr_builder_context;
@@ -24,7 +25,6 @@ pub mod join;
 mod logical_plan_builder;
 mod logical_plan_builder_context;
 pub mod minus;
-pub mod object_id;
 pub mod paths;
 pub mod patterns;
 pub mod quad_pattern;

@@ -40,6 +40,7 @@
 //! or [TermEncoding::try_new_scalar] for creating datum instances, as the static way of creating
 //! them will no longer work at some point.
 
+pub mod compute;
 mod encoding;
 mod encoding_name;
 mod encodings;
@@ -48,10 +49,12 @@ pub mod plain_term;
 mod quad_storage_encoding;
 mod scalar_encoder;
 pub mod sortable_term;
+pub mod string;
 pub mod typed_family;
 
 use crate::object_id::ObjectIdArgs;
 use crate::plain_term::{PlainTermArgs, PlainTermQuadsBuilder};
+use crate::string::StringArgs;
 use crate::typed_family::TypedFamilyArgs;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::DataType;
@@ -76,6 +79,8 @@ pub enum DowncastEncodingArgs {
     PlainTerm(PlainTermArgs),
     /// Arrays of the Typed Family encoding
     TypedFamily(TypedFamilyArgs),
+    /// Arrays of the String encoding
+    String(StringArgs),
 }
 
 impl DowncastEncodingArgs {
@@ -118,6 +123,14 @@ impl DowncastEncodingArgs {
                     args.number_rows,
                     arrays,
                 ))
+            }
+            EncodingName::String => {
+                let arrays =
+                    try_from_arrays_for_encoding(encodings.string_encoding(), args)?
+                        .into_iter()
+                        .map(|d| d.to_array(args.number_rows))
+                        .collect::<Vec<_>>();
+                DowncastEncodingArgs::String(StringArgs::new_unchecked(arrays))
             }
             EncodingName::Sortable => {
                 return exec_err!(
