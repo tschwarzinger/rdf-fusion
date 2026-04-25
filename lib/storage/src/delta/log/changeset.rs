@@ -5,8 +5,8 @@ use datafusion::execution::SessionState;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
 
-/// A reference to a [`DeltaStorageLogChangeset`].
-pub type DeltaStorageLogChangesetRef = Arc<dyn DeltaStorageLogChangeset>;
+/// A reference to a [`DeltaQuadStorageLogChangeset`].
+pub type DeltaQuadStorageLogChangesetRef = Arc<dyn DeltaQuadStorageLogChangeset>;
 
 /// Trait for a changeset between two versions of the [`DeltaStorageLog`].
 ///
@@ -23,15 +23,12 @@ pub type DeltaStorageLogChangesetRef = Arc<dyn DeltaStorageLogChangeset>;
 /// All functions return the *effective change* between two versions. For example, adding a quad and
 /// removing the same quad only contains an entry in the removed quads list.
 #[async_trait]
-pub trait DeltaStorageLogChangeset: Send + Sync {
+pub trait DeltaQuadStorageLogChangeset: Send + Sync {
+    /// Returns the changeset as [`Any`].
+    fn as_any(&self) -> &dyn std::any::Any;
+
     /// Returns the version range that this changeset reflects.
     fn version_range(&self) -> DeltaStorageLogVersionRange;
-
-    /// Whether the changeset includes an [`DeltaStorageLogOperation::ClearAll`].
-    async fn contains_clear_all(
-        &self,
-        state: &SessionState,
-    ) -> Result<bool, DeltaQuadStorageError>;
 
     /// Returns the list of cleared graphs.
     ///

@@ -31,11 +31,20 @@
 //! ```
 
 use crate::error::{LoaderError, SerializerError};
-use datafusion::logical_expr::col;
+use datafusion::logical_expr::{col, lit};
+use datafusion::optimizer::OptimizerConfig;
+use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
+use datafusion::physical_optimizer::PhysicalOptimizerRule;
+use datafusion::physical_plan::filter::FilterExec;
+use datafusion::physical_plan::{execute_stream, ExecutionPlan};
 use futures::StreamExt;
 use oxrdfio::RdfSerializer;
-use rdf_fusion_encoding::quads_to_plain_term_dataframe;
+use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
+use rdf_fusion_encoding::{
+    quads_to_plain_term_dataframe, QuadStorageEncoding, TermEncoding,
+};
 use rdf_fusion_execution::ingest::{RdfParserOptions, RdfParserTableProvider};
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
 use rdf_fusion_execution::sparql::error::QueryEvaluationError;
@@ -43,8 +52,9 @@ use rdf_fusion_execution::sparql::{
     QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate, UpdateOptions,
 };
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
-use rdf_fusion_model::StorageError;
+use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_model::{CorruptionError, StorageError};
 use rdf_fusion_model::{
     GraphNameRef, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
     TermRef, Variable,
@@ -458,7 +468,7 @@ impl Store {
     ///     file.as_ref(),
     ///     RdfParserOptions::with_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com".to_owned())?
-    ///         .without_named_graphs() // No named graphs allowed in the input
+    ///         .without_named_graphs(false) // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
     /// ).await?;
     ///
@@ -495,12 +505,14 @@ impl Store {
                 col(COL_OBJECT).alias(COL_OBJECT),
             ])
             .expect("TODO");
-        self.context
+        let transaction = self
+            .context
             .storage()
-            .insert(quads)
-            .await
-            .map(|_| ())
-            .map_err(LoaderError::from)
+            .begin_transaction(&self.context.session_context().state())
+            .await?;
+        transaction.insert(quads).await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     /// Adds a quad to this store.
@@ -529,29 +541,40 @@ impl Store {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<Option<bool>, StorageError> {
-        self.context
+        let quad = quad.into();
+        let transaction = self
+            .context
             .storage()
+            .begin_transaction(&self.context.session_context().state())
+            .await?;
+        let result = transaction
             .insert(quads_to_plain_term_dataframe(
                 self.context.session_context(),
-                &[quad.into().into_owned()],
+                &[quad.into_owned()],
             ))
-            .await
-            .map(|inserted| inserted.map(|inserted| inserted > 0))
+            .await?
+            .map(|inserted| inserted > 0);
+        transaction.commit().await?;
+        Ok(result)
     }
-
     /// Atomically adds a set of quads to this store.
     pub async fn extend(
         &self,
         quads: impl IntoIterator<Item = impl Into<Quad>>,
     ) -> Result<(), StorageError> {
         let quads = quads.into_iter().map(Into::into).collect::<Vec<_>>();
-        self.context
+        let transaction = self
+            .context
             .storage()
+            .begin_transaction(&self.context.session_context().state())
+            .await?;
+        transaction
             .insert(quads_to_plain_term_dataframe(
                 self.context.session_context(),
                 &quads,
             ))
             .await?;
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -582,13 +605,20 @@ impl Store {
         &self,
         quad: impl Into<QuadRef<'a>>,
     ) -> Result<Option<bool>, StorageError> {
-        self.context
+        let quad = quad.into();
+        let transaction = self
+            .context
             .storage()
+            .begin_transaction(&self.context.session_context().state())
+            .await?;
+        let result = transaction
             .remove(quads_to_plain_term_dataframe(
                 self.context.session_context(),
-                &[quad.into().into_owned()],
+                &[quad.into_owned()],
             ))
-            .await
+            .await?;
+        transaction.commit().await?;
+        Ok(result)
     }
 
     /// Dumps the store into a file.
@@ -685,10 +715,62 @@ impl Store {
     /// # }).unwrap();
     /// ```
     pub async fn named_graphs(&self) -> Result<Vec<NamedOrBlankNode>, StorageError> {
-        self.context
+        let state = self.context.session_context().state();
+        let storage_encoding = self.context.storage().encoding();
+        let named_graphs = self
+            .context
             .storage()
+            .snapshot()
+            .await?
             .named_graphs(&self.context.session_context().state())
-            .await
+            .await?;
+
+        let mut result = Vec::new();
+        let mut stream = execute_stream(named_graphs, state.task_ctx())
+            .map_err(|e| StorageError::Other(Box::new(e)))?;
+
+        while let Some(record_batch) = stream.next().await {
+            let record_batch =
+                record_batch.map_err(|e| StorageError::Other(Box::new(e)))?;
+            let column = &record_batch.columns()[0];
+            let plain_term_array = match &storage_encoding {
+                QuadStorageEncoding::PlainTerm => PLAIN_TERM_ENCODING
+                    .try_new_array(Arc::clone(column))
+                    .map_err(|e| StorageError::Other(Box::new(e)))?,
+                QuadStorageEncoding::ObjectId(encoding) => encoding
+                    .mapping()
+                    .decode_array(column)
+                    .map_err(|e| StorageError::Other(Box::new(e)))?,
+                QuadStorageEncoding::String => STRING_ENCODING
+                    .try_new_array(Arc::clone(column))
+                    .map_err(|e| StorageError::Other(Box::new(e)))?
+                    .as_plain_term_array()
+                    .map_err(|e| StorageError::Other(Box::new(e)))?,
+            };
+
+            let new_named_nodes = plain_term_array
+                .iter()
+                .map(|term| match term.as_term() {
+                    Ok(term) => match term {
+                        TermRef::NamedNode(named_node) => {
+                            Ok(named_node.to_owned().into())
+                        }
+                        TermRef::BlankNode(blank_node) => {
+                            Ok(blank_node.to_owned().into())
+                        }
+                        TermRef::Literal(_) => Err(StorageError::Corruption(
+                            CorruptionError::new("Named graphs contained null"),
+                        )),
+                    },
+                    Err(_) => Err(StorageError::Corruption(CorruptionError::new(
+                        "Named graphs contained null",
+                    ))),
+                })
+                .collect::<Result<Vec<NamedOrBlankNode>, StorageError>>()?;
+            result.extend(new_named_nodes);
+        }
+
+        Ok(result)
     }
 
     /// Checks if the store contains a given graph
@@ -705,19 +787,35 @@ impl Store {
     /// assert!(store.contains_named_graph(&ex).await?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
-    /// ```
     pub async fn contains_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<bool, QueryEvaluationError> {
-        self.context
-            .storage()
-            .contains_named_graph(
-                &self.context.session_context().state(),
-                graph_name.into(),
-            )
-            .await
-            .map_err(Into::into)
+    ) -> Result<bool, StorageError> {
+        let state = self.context.session_context().state();
+        let graph_name = graph_name.into();
+        let storage_encoding = self.context.storage().encoding();
+        let scalar = storage_encoding.encode_term_scalar(graph_name.into())?;
+
+        let snapshot = self.context.storage().snapshot().await?;
+        let graphs = snapshot.named_graphs(&state).await?;
+        let filter_expr = state.create_physical_expr(
+            col(COL_GRAPH).eq(lit(scalar)),
+            storage_encoding.quad_schema().as_ref(),
+        )?;
+
+        let filter = FilterExec::try_new(filter_expr, graphs).expect("Valid filter");
+        let plan = Arc::new(filter) as Arc<dyn ExecutionPlan>;
+
+        // Try to push the filter down into the scan.
+        let optimized = FilterPushdown::new().optimize(plan, state.options().as_ref())?;
+
+        let mut stream = execute_stream(optimized, state.task_ctx())?;
+        while let Some(batch) = stream.next().await {
+            if batch?.num_rows() > 0 {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Inserts a graph into this store.
@@ -744,44 +842,49 @@ impl Store {
     pub async fn insert_named_graph<'a>(
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<Option<bool>, StorageError> {
-        self.context
+    ) -> Result<bool, StorageError> {
+        let transaction = self
+            .context
             .storage()
-            .insert_named_graph(
-                &self.context.session_context().state(),
-                graph_name.into(),
-            )
-            .await
+            .begin_transaction(&self.context.session_context().state())
+            .await?;
+        let result = transaction.create_named_graph(graph_name.into()).await?;
+        transaction.commit().await?;
+        Ok(result.unwrap_or(true))
     }
 
     /// Clears a graph from this store.
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::{NamedNodeRef, QuadRef};
+    /// use rdf_fusion::model::{NamedNode, QuadRef};
     /// use rdf_fusion::store::Store;
+    /// use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
     ///
     /// # tokio_test::block_on(async {
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex.as_ref(), ex.as_ref(), ex.as_ref(), ex.as_ref());
     /// let store = Store::new_in_memory().await;
     /// store.insert(quad).await?;
     /// assert_eq!(1, store.len().await?);
     ///
-    /// store.clear_graph(ex).await?;
+    /// store.clear_graph(&QuadStorageGraphTarget::NamedNode(ex)).await?;
     /// assert!(store.is_empty().await?);
     /// assert_eq!(1, store.named_graphs().await?.len());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    pub async fn clear_graph<'a>(
+    pub async fn clear_graph(
         &self,
-        graph_name: impl Into<GraphNameRef<'a>>,
+        graph: &QuadStorageGraphTarget,
     ) -> Result<(), StorageError> {
-        self.context
+        let transaction = self
+            .context
             .storage()
-            .clear_graph(&self.context.session_context().state(), graph_name.into())
-            .await
+            .begin_transaction(&self.context.session_context().state())
+            .await?;
+        transaction.clear_graph(graph).await?;
+        transaction.commit().await
     }
 
     /// Removes a graph from this store.
@@ -790,56 +893,35 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::{NamedNodeRef, QuadRef};
+    /// use rdf_fusion::model::{NamedNode, NamedNodeRef, QuadRef};
     /// use rdf_fusion::store::Store;
+    /// use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
     ///
     /// # tokio_test::block_on(async {
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let quad = QuadRef::new(ex, ex, ex, ex);
+    /// let ex = NamedNode::new("http://example.com")?;
+    /// let quad = QuadRef::new(ex.as_ref(), ex.as_ref(), ex.as_ref(), ex.as_ref());
     /// let store = Store::new_in_memory().await;
     /// store.insert(quad).await?;
     /// assert_eq!(1, store.len().await?);
     ///
-    /// assert!(store.remove_named_graph(ex).await?.unwrap());
+    /// store.drop_graph(&QuadStorageGraphTarget::NamedNode(ex.to_owned())).await?;
     /// assert!(store.is_empty().await?);
     /// assert_eq!(0, store.named_graphs().await?.len());
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    pub async fn remove_named_graph<'a>(
+    pub async fn drop_graph(
         &self,
-        graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
-    ) -> Result<Option<bool>, StorageError> {
-        self.context
+        graph: &QuadStorageGraphTarget,
+    ) -> Result<(), StorageError> {
+        let transaction = self
+            .context
             .storage()
-            .drop_named_graph(&self.context.session_context().state(), graph_name.into())
-            .await
-    }
-
-    /// Clears the store.
-    ///
-    /// Usage example:
-    /// ```
-    /// use rdf_fusion::model::*;
-    /// use rdf_fusion::store::Store;
-    ///
-    /// # tokio_test::block_on(async {
-    /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = Store::new_in_memory().await;
-    /// store.insert(QuadRef::new(ex, ex, ex, ex)).await?;
-    /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph)).await?;
-    /// assert_eq!(2, store.len().await?);
-    ///
-    /// store.clear().await?;
-    /// assert!(store.is_empty().await?);
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// # }).unwrap();
-    /// ```
-    pub async fn clear(&self) -> Result<(), StorageError> {
-        self.context
-            .storage()
-            .clear(&self.context.session_context().state())
-            .await
+            .begin_transaction(&self.context.session_context().state())
+            .await?;
+        transaction.drop_graph(graph).await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     /// Optimizes the database for future workload.

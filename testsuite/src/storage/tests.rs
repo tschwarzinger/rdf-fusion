@@ -1,25 +1,27 @@
 use anyhow::Result;
+use datafusion::physical_plan::execute_stream;
 use datafusion::prelude::SessionContext;
-use rdf_fusion::api::storage::QuadStorage;
+use futures::StreamExt;
+use rdf_fusion::api::storage::{QuadStorage, QuadStorageGraphTarget};
 use rdf_fusion::encoding::quads_to_plain_term_dataframe;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::model::{
-    GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNode, Quad, Term,
-};
+use rdf_fusion::model::{GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use std::slice;
 use std::sync::Arc;
 
 pub async fn insert_quad(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    let inserted = storage
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    let inserted = transaction
         .insert(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
         .await?;
+    transaction.commit().await?;
 
     if let Some(inserted) = inserted {
         assert_eq!(inserted, 1);
     }
 
-    assert_eq!(storage.len(&ctx.state()).await?, 1);
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 1);
     storage.validate(&ctx.state()).await?;
     Ok(())
 }
@@ -28,18 +30,25 @@ pub async fn insert_duplicate_quads_no_effect(
     storage: Arc<dyn QuadStorage>,
 ) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    storage
+    {
+        let transaction = storage.begin_transaction(&ctx.state()).await?;
+        transaction
+            .insert(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
+            .await?;
+        transaction.commit().await?;
+    }
+
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    let inserted = transaction
         .insert(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
         .await?;
-    let inserted = storage
-        .insert(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
-        .await?;
+    transaction.commit().await?;
 
     if let Some(inserted) = inserted {
         assert_eq!(inserted, 0);
     }
 
-    assert_eq!(storage.len(&ctx.state()).await?, 1);
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 1);
     storage.validate(&ctx.state()).await?;
     Ok(())
 }
@@ -48,18 +57,20 @@ pub async fn insert_duplicate_quads_in_same_operation(
     storage: Arc<dyn QuadStorage>,
 ) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    let inserted = storage
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    let inserted = transaction
         .insert(quads_to_plain_term_dataframe(
             &ctx,
             &[example_quad(), example_quad()],
         ))
         .await?;
+    transaction.commit().await?;
 
     if let Some(inserted) = inserted {
         assert_eq!(inserted, 1);
     }
 
-    assert_eq!(storage.len(&ctx.state()).await?, 1);
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 1);
     storage.validate(&ctx.state()).await?;
     Ok(())
 }
@@ -71,24 +82,15 @@ pub async fn named_graph_insertion_and_query(
     let graph =
         NamedOrBlankNode::NamedNode(NamedNode::new_unchecked("http://example.com/graph"));
 
-    let inserted = storage
-        .insert_named_graph(&ctx.state(), graph.as_ref())
-        .await?;
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    let inserted = transaction.create_named_graph(graph.as_ref()).await?;
+    transaction.commit().await?;
 
     if let Some(inserted) = inserted {
         assert!(inserted);
     }
 
-    let exists = storage
-        .contains_named_graph(&ctx.state(), graph.as_ref())
-        .await?;
-    assert!(exists);
-
-    let graphs = storage.named_graphs(&ctx.state()).await?;
-    assert_eq!(graphs.len(), 1);
-    assert_eq!(graphs[0], graph);
-
-    storage.validate(&ctx.state()).await?;
+    assert_named_graph_count(storage, &ctx, 1).await?;
     Ok(())
 }
 
@@ -96,19 +98,26 @@ pub async fn remove_quad(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
     let quad = example_quad_in_graph("http://example.com/g");
 
-    storage
-        .insert(quads_to_plain_term_dataframe(&ctx, slice::from_ref(&quad)))
-        .await?;
-    assert_eq!(storage.len(&ctx.state()).await?, 1);
+    {
+        let transaction = storage.begin_transaction(&ctx.state()).await?;
+        transaction
+            .insert(quads_to_plain_term_dataframe(&ctx, slice::from_ref(&quad)))
+            .await?;
+        transaction.commit().await?;
+    }
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 1);
 
-    let removed = storage
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    let removed = transaction
         .remove(quads_to_plain_term_dataframe(&ctx, slice::from_ref(&quad)))
         .await?;
+    transaction.commit().await?;
+
     if let Some(removed) = removed {
         assert!(removed);
     }
 
-    assert_eq!(storage.len(&ctx.state()).await?, 0);
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 0);
 
     storage.validate(&ctx.state()).await?;
     Ok(())
@@ -119,22 +128,25 @@ pub async fn clear_graph(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let g1 = "http://example.com/g1";
     let g2 = "http://example.com/g2";
 
-    storage
-        .insert(quads_to_plain_term_dataframe(
-            &ctx,
-            &[example_quad_in_graph(g1), example_quad_in_graph(g2)],
-        ))
-        .await?;
-    assert_eq!(storage.len(&ctx.state()).await?, 2);
+    {
+        let transaction = storage.begin_transaction(&ctx.state()).await?;
+        transaction
+            .insert(quads_to_plain_term_dataframe(
+                &ctx,
+                &[example_quad_in_graph(g1), example_quad_in_graph(g2)],
+            ))
+            .await?;
+        transaction.commit().await?;
+    }
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 2);
 
-    storage
-        .clear_graph(
-            &ctx.state(),
-            GraphNameRef::NamedNode(NamedNode::new_unchecked(g1).as_ref()),
-        )
-        .await?;
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    let graph_target =
+        QuadStorageGraphTarget::NamedNode(NamedNode::new_unchecked(g1.to_string()));
+    transaction.clear_graph(&graph_target).await?;
+    transaction.commit().await?;
 
-    assert_eq!(storage.len(&ctx.state()).await?, 1);
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 1);
 
     storage.validate(&ctx.state()).await?;
     Ok(())
@@ -144,56 +156,59 @@ pub async fn insert_named_graph(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
     let graph =
         NamedOrBlankNode::NamedNode(NamedNode::new_unchecked("http://example.com/graph"));
-    storage
-        .insert_named_graph(&ctx.state(), graph.as_ref())
-        .await?;
-    let exists = storage
-        .contains_named_graph(&ctx.state(), graph.as_ref())
-        .await?;
-    assert!(exists);
-    storage.validate(&ctx.state()).await?;
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction.create_named_graph(graph.as_ref()).await?;
+    transaction.commit().await?;
+
+    assert_named_graph_count(storage, &ctx, 1).await?;
+
     Ok(())
 }
 
 pub async fn remove_named_graph(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    let graph =
-        NamedOrBlankNode::NamedNode(NamedNode::new_unchecked("http://example.com/graph"));
+    let graph = NamedNode::new_unchecked("http://example.com/graph");
 
-    storage
-        .insert_named_graph(&ctx.state(), graph.as_ref())
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction
+        .create_named_graph(graph.as_ref().into())
         .await?;
-    let removed = storage
-        .drop_named_graph(&ctx.state(), graph.as_ref())
-        .await?;
-    if let Some(removed) = removed {
-        assert!(removed);
-    }
+    transaction.commit().await?;
 
-    let exists = storage
-        .contains_named_graph(&ctx.state(), graph.as_ref())
-        .await?;
-    assert!(!exists);
-    storage.validate(&ctx.state()).await?;
+    let graph_target = QuadStorageGraphTarget::NamedNode(graph.clone());
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction.drop_graph(&graph_target).await?;
+    transaction.commit().await?;
+
+    assert_named_graph_count(storage, &ctx, 0).await?;
     Ok(())
 }
 
 pub async fn clear_all(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    storage
-        .insert(quads_to_plain_term_dataframe(
-            &ctx,
-            &[
-                example_quad(),
-                example_quad_in_graph("http://example.com/g1"),
-                example_quad_in_graph("http://example.com/g2"),
-            ],
-        ))
-        .await?;
-    assert_eq!(storage.len(&ctx.state()).await?, 3);
+    {
+        let transaction = storage.begin_transaction(&ctx.state()).await?;
+        transaction
+            .insert(quads_to_plain_term_dataframe(
+                &ctx,
+                &[
+                    example_quad(),
+                    example_quad_in_graph("http://example.com/g1"),
+                    example_quad_in_graph("http://example.com/g2"),
+                ],
+            ))
+            .await?;
+        transaction.commit().await?;
+    }
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 3);
 
-    storage.clear(&ctx.state()).await?;
-    assert_eq!(storage.len(&ctx.state()).await?, 0);
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction
+        .clear_graph(&QuadStorageGraphTarget::AllGraphs)
+        .await?;
+    transaction.commit().await?;
+
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 0);
 
     storage.validate(&ctx.state()).await?;
     Ok(())
@@ -201,9 +216,11 @@ pub async fn clear_all(storage: Arc<dyn QuadStorage>) -> Result<()> {
 
 pub async fn optimize(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    storage
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction
         .insert(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
         .await?;
+    transaction.commit().await?;
     storage.optimize(&ctx.state()).await?;
     storage.validate(&ctx.state()).await?;
     Ok(())
@@ -219,24 +236,28 @@ pub async fn optimize_empty(storage: Arc<dyn QuadStorage>) -> Result<()> {
 /// Tries to provoke a failure by calling [`QuadStorage::insert`] with an empty [`DataFrame`].
 pub async fn empty_insert(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    storage
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction
         .insert(quads_to_plain_term_dataframe(&ctx, &[]))
         .await?;
+    transaction.commit().await?;
     storage.validate(&ctx.state()).await?;
 
-    assert_eq!(storage.len(&ctx.state()).await?, 0);
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 0);
     Ok(())
 }
 
 /// Tries to provoke a failure by calling [`QuadStorage::remove`] with an empty [`DataFrame`].
 pub async fn empty_remove(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
-    storage
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction
         .remove(quads_to_plain_term_dataframe(&ctx, &[]))
         .await?;
+    transaction.commit().await?;
     storage.validate(&ctx.state()).await?;
 
-    assert_eq!(storage.len(&ctx.state()).await?, 0);
+    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 0);
     Ok(())
 }
 
@@ -268,4 +289,20 @@ fn example_quad_in_graph(graph: &str) -> Quad {
         Term::Literal(Literal::new_simple_literal("value")),
         GraphName::NamedNode(NamedNode::new_unchecked(graph)),
     )
+}
+
+async fn assert_named_graph_count(
+    storage: Arc<dyn QuadStorage>,
+    ctx: &SessionContext,
+    expected: usize,
+) -> Result<()> {
+    let snapshot = storage.snapshot().await?;
+    let exists = snapshot.named_graphs(&ctx.state()).await?;
+    let result = execute_stream(exists, ctx.task_ctx())?
+        .map(|batch| batch.unwrap())
+        .collect::<Vec<_>>()
+        .await;
+    let count = result.iter().map(|rb| rb.num_rows()).sum::<usize>();
+    assert_eq!(count, expected);
+    Ok(())
 }

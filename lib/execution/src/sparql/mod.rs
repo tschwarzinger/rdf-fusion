@@ -6,12 +6,14 @@ mod evaluate_query;
 mod explanation;
 mod optimizer;
 mod rewriting;
+mod update;
 
 pub use crate::sparql::algebra::{QueryDataset, RdfFusionQuery, RdfFusionUpdate};
 pub use crate::sparql::explanation::QueryExplanation;
-pub use evaluate_query::evaluate_query;
+pub use evaluate_query::{evaluate_query, evaluate_query_with_snapshot};
 pub use optimizer::{create_optimizer_rules, create_pyhsical_optimizer_rules};
 pub use rdf_fusion_model::{Variable, VariableNameParseError};
+pub use update::evaluate_update;
 
 /// Defines how many optimizations the query optimizer should apply.
 ///

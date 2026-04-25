@@ -1,13 +1,12 @@
-pub(crate) mod changeset;
+mod changeset;
 mod changeset_eager;
-pub(crate) mod compute_log_changes;
-mod transaction;
+mod compute_log_changes;
+
+pub(crate) use changeset::*;
+pub(crate) use changeset_eager::*;
+pub(crate) use compute_log_changes::*;
 
 use crate::delta::error::DeltaQuadStorageError;
-use crate::delta::log::changeset::DeltaStorageLogChangesetRef;
-use crate::delta::log::changeset_eager::EagerDeltaStorageLogChangeset;
-use crate::delta::log::compute_log_changes::ComputeLogChangesetExec;
-use crate::delta::log::transaction::DeltaStorageLogTransaction;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion::catalog::Session;
@@ -15,7 +14,6 @@ use datafusion::execution::SessionState;
 use datafusion::optimizer::OptimizerConfig;
 use datafusion::physical_expr::LexOrdering;
 use datafusion::physical_expr::PhysicalSortExpr;
-use datafusion::physical_expr::expressions::col;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
@@ -79,10 +77,6 @@ impl Display for DeltaStorageLogVersionRange {
 /// Represents a deletion or addition operation in the log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DeltaStorageLogOperation {
-    /// Clears the entire database.
-    ///
-    /// All other attributes are NULL.
-    ClearDatabase,
     /// Drops a single graph.
     ///
     /// The graph column either is null (DROP the default graph) or set (DROP a named graph). The
@@ -115,8 +109,6 @@ impl DeltaStorageLogOperation {
     /// This uses an `i8` (as opposed to an `u8`) because of Delta's byte type.
     pub const fn as_stored(self) -> i8 {
         match self {
-            // Global Operations
-            DeltaStorageLogOperation::ClearDatabase => 0,
             // Graph Operations
             DeltaStorageLogOperation::DropGraph => 10,
             DeltaStorageLogOperation::ClearGraph => 11,
@@ -131,7 +123,6 @@ impl DeltaStorageLogOperation {
     /// operation.
     pub fn from_stored(value: i8) -> Option<Self> {
         match value {
-            0 => Some(DeltaStorageLogOperation::ClearDatabase),
             10 => Some(DeltaStorageLogOperation::DropGraph),
             11 => Some(DeltaStorageLogOperation::ClearGraph),
             12 => Some(DeltaStorageLogOperation::CreateGraph),
@@ -141,11 +132,6 @@ impl DeltaStorageLogOperation {
         }
     }
 
-    /// Returns true if this operation is a global operation.
-    pub fn is_global_operation(&self) -> bool {
-        matches!(self, DeltaStorageLogOperation::ClearDatabase)
-    }
-
     /// Returns true if the operation is a graph-level operation.
     pub fn is_graph_operation(self) -> bool {
         matches!(
@@ -153,14 +139,6 @@ impl DeltaStorageLogOperation {
             DeltaStorageLogOperation::DropGraph
                 | DeltaStorageLogOperation::CreateGraph
                 | DeltaStorageLogOperation::ClearGraph
-        )
-    }
-
-    /// Returns true if the operation is a quad-level operation.
-    pub fn is_quad_operation(self) -> bool {
-        matches!(
-            self,
-            DeltaStorageLogOperation::RemoveQuad | DeltaStorageLogOperation::AddQuad
         )
     }
 }
@@ -275,28 +253,19 @@ impl DeltaStorageLog {
         &self.table
     }
 
-    /// Returns a new transaction on the log.
-    pub fn transaction(&self, state: &SessionState) -> DeltaStorageLogTransaction {
-        DeltaStorageLogTransaction::new(
-            state.clone(),
-            Arc::clone(&self.table),
-            Arc::clone(&self.table_schema),
-        )
-    }
-
     /// Computes the difference between two versions of the log.
     pub async fn compute_changeset(
         &self,
         state: &SessionState,
         version_range: DeltaStorageLogVersionRange,
-    ) -> Result<DeltaStorageLogChangesetRef, DeltaQuadStorageError> {
+    ) -> Result<DeltaQuadStorageLogChangesetRef, DeltaQuadStorageError> {
         let table = self.table.read().await.clone();
         let cdf_scan = query_cdf(state, version_range, table).await?;
         let current_plan = Self::create_changeset_plan(state, cdf_scan)?;
 
         let stream = execute_stream(current_plan, state.task_ctx())?;
         return Ok(Arc::new(
-            EagerDeltaStorageLogChangeset::partition_operations(
+            EagerDeltaQuadStorageChangeset::partition_operations(
                 state,
                 version_range,
                 stream,
@@ -331,9 +300,12 @@ impl DeltaStorageLog {
             };
 
             let sort_exprs = vec![PhysicalSortExpr {
-                expr: col(COL_COMMIT_VERSION, cdf_scan.schema().as_ref())
-                    .expect("Corruption error"),
-                options: SortOptions::default().desc(),
+                expr: datafusion::physical_expr::expressions::col(
+                    COL_COMMIT_VERSION,
+                    cdf_scan.schema().as_ref(),
+                )
+                .expect("Corruption error"),
+                options: SortOptions::default().asc(),
             }];
 
             Ok(Arc::new(SortExec::new(
@@ -367,7 +339,8 @@ impl DeltaStorageLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delta::log::changeset::DeltaStorageLogChangeset;
+    use crate::delta::DeltaQuadStorage;
+    use crate::delta::log::changeset::DeltaQuadStorageLogChangeset;
     use datafusion::arrow::array::{NullArray, RecordBatch};
     use datafusion::arrow::datatypes::{Field, Schema};
     use datafusion::dataframe::DataFrame;
@@ -379,26 +352,26 @@ mod tests {
     use rdf_fusion_encoding::plain_term::{
         PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
     };
-    use rdf_fusion_encoding::{EncodingArray, TermEncoding};
+    use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
+    use rdf_fusion_encoding::{EncodingArray, QuadStorageEncodingName, TermEncoding};
+    use rdf_fusion_extensions::storage::QuadStorage;
     use rdf_fusion_model::NamedNodeRef;
     use std::sync::Arc;
 
     #[tokio::test]
-    async fn test_append_quads_plain_term() -> Result<(), DeltaQuadStorageError> {
+    async fn test_append_quads_plain_term() {
         let session = create_session();
-        let log = create_log_table().await;
-        let transaction = log.transaction(&session.state());
+        let storage = create_storage().await;
+        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
 
         let a_quads = create_plain_term_quads_with_postfix(&session, "A");
         let b_quads = create_plain_term_quads_with_postfix(&session, "B");
 
-        transaction
-            .append_quads(a_quads)?
-            .append_quads(b_quads)?
-            .execute()
-            .await?;
+        transaction.insert(a_quads).await.unwrap();
+        transaction.insert(b_quads).await.unwrap();
+        transaction.commit().await.unwrap();
 
-        let result = collect_table_snapshot(&log).await;
+        let result = collect_table_snapshot(storage.log()).await;
         assert_snapshot!(result, @"
         +-----------+-------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+
         | operation | graph | subject                                                               | predicate                                                             | object                                                                |
@@ -407,17 +380,16 @@ mod tests {
         | 21        |       | {term_type: 0, value: https://my.com/sB, data_type: , language_tag: } | {term_type: 0, value: https://my.com/pB, data_type: , language_tag: } | {term_type: 0, value: https://my.com/oB, data_type: , language_tag: } |
         +-----------+-------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+
         ");
-        Ok(())
     }
 
     #[tokio::test]
     async fn test_append_quads_with_wrong_schema() {
         let session = create_session();
-        let log = create_log_table().await;
-        let transaction = log.transaction(&session.state());
+        let storage = create_storage().await;
+        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
 
         let quads = create_data_frame_with_wrong_schema(&session);
-        let error = transaction.append_quads(quads).unwrap_err();
+        let error = transaction.insert(quads).await.unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -446,13 +418,14 @@ mod tests {
     #[tokio::test]
     async fn test_remove_quads_plain_term() -> Result<(), DeltaQuadStorageError> {
         let session = create_session();
-        let log = create_log_table().await;
-        let transaction = log.transaction(&session.state());
+        let storage = create_storage().await;
+        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
 
         let quads_to_remove = create_plain_term_quads_with_postfix(&session, "A");
-        transaction.remove_quads(quads_to_remove)?.execute().await?;
+        transaction.remove(quads_to_remove).await?;
+        transaction.commit().await?;
 
-        let result = collect_table_snapshot(&log).await;
+        let result = collect_table_snapshot(storage.log()).await;
         assert_snapshot!(result, @"
         +-----------+-------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+
         | operation | graph | subject                                                               | predicate                                                             | object                                                                |
@@ -467,20 +440,21 @@ mod tests {
     async fn test_compute_changeset_with_add_changes() -> Result<(), DeltaQuadStorageError>
     {
         let session = create_session();
-        let log = create_log_table().await;
-        let transaction = log.transaction(&session.state());
+        let storage = create_storage().await;
+        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
 
         let a_quads = create_plain_term_quads_with_postfix(&session, "A");
         let b_quads = create_plain_term_quads_with_postfix(&session, "B");
 
-        transaction
-            .append_quads(a_quads)?
-            .append_quads(b_quads)?
-            .execute()
-            .await?;
+        transaction.insert(a_quads).await?;
+        transaction.insert(b_quads).await?;
+        transaction.commit().await?;
 
         let range = DeltaStorageLogVersionRange(0, 2);
-        let result = log.compute_changeset(&session.state(), range).await?;
+        let result = storage
+            .log()
+            .compute_changeset(&session.state(), range)
+            .await?;
 
         assert_snapshot!(
             print_added_quads(&session.state(), result.as_ref()).await,
@@ -499,19 +473,20 @@ mod tests {
     async fn test_compute_changeset_with_duplicate_add()
     -> Result<(), DeltaQuadStorageError> {
         let session = create_session();
-        let log = create_log_table().await;
-        let transaction = log.transaction(&session.state());
+        let storage = create_storage().await;
+        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
 
         let a_quads = create_plain_term_quads_with_postfix(&session, "A");
 
-        transaction
-            .append_quads(a_quads.clone())?
-            .append_quads(a_quads)?
-            .execute()
-            .await?;
+        transaction.insert(a_quads.clone()).await?;
+        transaction.insert(a_quads).await?;
+        transaction.commit().await?;
 
         let range = DeltaStorageLogVersionRange(0, 2);
-        let result = log.compute_changeset(&session.state(), range).await?;
+        let result = storage
+            .log()
+            .compute_changeset(&session.state(), range)
+            .await?;
 
         assert_snapshot!(
             print_added_quads(&session.state(), result.as_ref()).await,
@@ -529,22 +504,26 @@ mod tests {
     async fn test_compute_changeset_with_add_and_then_remove()
     -> Result<(), DeltaQuadStorageError> {
         let session = create_session();
-        let log = create_log_table().await;
-        let transaction = log.transaction(&session.state());
+        let storage = create_storage().await;
+        let transaction = storage
+            .begin_transaction(&session.state())
+            .await
+            .map_err(|e| DeltaQuadStorageError::from(e.to_string()))?;
 
         let a_quads = create_plain_term_quads_with_postfix(&session, "A");
 
-        transaction
-            .append_quads(a_quads.clone())?
-            .remove_quads(a_quads)?
-            .execute()
-            .await?;
+        transaction.insert(a_quads.clone()).await?;
+        transaction.remove(a_quads).await?;
+        transaction.commit().await?;
 
         let range = DeltaStorageLogVersionRange(0, 2);
-        let result = log.compute_changeset(&session.state(), range).await?;
+        let result = storage
+            .log()
+            .compute_changeset(&session.state(), range)
+            .await?;
 
         assert_snapshot!(
-            print_added_quads(&session.state(), result.as_ref()).await,
+            print_removed_quads(&session.state(), result.as_ref()).await,
             @"
         +-------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+-----------------------------------------------------------------------+
         | graph | subject                                                               | predicate                                                             | object                                                                |
@@ -555,17 +534,33 @@ mod tests {
         Ok(())
     }
 
+    async fn print_removed_quads(
+        state: &SessionState,
+        changeset: &dyn DeltaQuadStorageLogChangeset,
+    ) -> String {
+        let plan = changeset
+            .removed_quads(state)
+            .await
+            .expect("Failed to obtain removals")
+            .expect("Removals are empty");
+        let batches = collect(plan, state.task_ctx()).await.unwrap();
+        pretty_format_batches(&batches).unwrap().to_string()
+    }
+
     /// Creates a new session context for the test
     fn create_session() -> SessionContext {
         let options = SessionConfig::default().with_target_partitions(1);
         SessionContext::new_with_config(options)
     }
 
-    /// Helper: Create the Delta Storage Log table
-    async fn create_log_table() -> DeltaStorageLog {
-        DeltaStorageLog::try_new_at_location(QuadStorageEncoding::PlainTerm, "memory:///")
-            .await
-            .unwrap()
+    /// Helper: Create the Delta Storage
+    async fn create_storage() -> DeltaQuadStorage {
+        DeltaQuadStorage::new_in_memory(
+            QuadStorageEncodingName::PlainTerm,
+            vec![],
+            Arc::new(TypedFamilyEncoding::default()),
+        )
+        .await
     }
 
     /// Generate a mocked stream of Quads with a postfix to make the quad unique
@@ -639,7 +634,7 @@ mod tests {
 
     async fn print_added_quads(
         state: &SessionState,
-        changeset: &dyn DeltaStorageLogChangeset,
+        changeset: &dyn DeltaQuadStorageLogChangeset,
     ) -> String {
         let plan = changeset
             .added_quads(state)

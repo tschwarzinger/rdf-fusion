@@ -430,6 +430,7 @@ pub async fn load_to_store(
                 base_iri: Some(url.parse()?),
                 rename_blank_nodes: false,
                 default_graph: Some(to_graph_name.into()),
+                without_named_graphs: false,
             },
         )
         .await?;

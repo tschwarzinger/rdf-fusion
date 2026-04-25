@@ -1968,7 +1968,8 @@ checksum = "ac6b926516df9c60bfa16e107b21086399f8285a44ca9711344b9e553c5146e2"
 [[package]]
 name = "deltalake"
 version = "0.32.0"
-source = "git+https://github.com/delta-io/delta-rs?rev=8b5e16210863817a94739543b7ac29732642b7ec#8b5e16210863817a94739543b7ac29732642b7ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fa1982d9e81550676c64169e8e9feaaf8aafb218c88418a1e50642eecd2508e"
 dependencies = [
  "buoyant_kernel",
  "ctor",
@@ -1978,7 +1979,8 @@ dependencies = [
 [[package]]
 name = "deltalake-core"
 version = "0.32.0"
-source = "git+https://github.com/delta-io/delta-rs?rev=8b5e16210863817a94739543b7ac29732642b7ec#8b5e16210863817a94739543b7ac29732642b7ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fe744c5c69db390db74a114f7d5e412f1b5d8cc3dcef50bf19599035ad8fff6"
 dependencies = [
  "arrow",
  "arrow-arith",
@@ -2031,7 +2033,8 @@ dependencies = [
 [[package]]
 name = "deltalake-derive"
 version = "1.0.0"
-source = "git+https://github.com/delta-io/delta-rs?rev=8b5e16210863817a94739543b7ac29732642b7ec#8b5e16210863817a94739543b7ac29732642b7ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5a646e2b05608db1e5f91e75b6af841d92294ea0864789bb01f3f818e5f7b25"
 dependencies = [
  "convert_case",
  "itertools 0.14.0",
@@ -4179,9 +4182,11 @@ dependencies = [
  "rdf-fusion-logical",
  "rdf-fusion-model",
  "rdf-fusion-physical",
+ "reqwest 0.13.2",
  "sparesults",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -4286,7 +4291,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "clap",
  "datafusion",
  "futures",
  "oxttl",
@@ -4438,7 +4442,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
+ "wasm-streams 0.4.2",
  "web-sys",
 ]
 
@@ -4452,6 +4456,7 @@ dependencies = [
  "bytes",
  "encoding_rs",
  "futures-core",
+ "futures-util",
  "h2",
  "http",
  "http-body",
@@ -4471,12 +4476,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams 0.5.0",
  "web-sys",
 ]
 
@@ -5732,6 +5739,19 @@ name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
 dependencies = [
  "futures-util",
  "js-sys",

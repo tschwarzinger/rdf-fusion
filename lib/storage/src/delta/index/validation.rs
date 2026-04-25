@@ -1,5 +1,5 @@
 use crate::delta::error::DeltaQuadStorageError;
-use crate::delta::index::snapshot::DeltaStorageQuadIndexSnapshot;
+use crate::delta::index::snapshot::DeltaQuadStorageIndexSnapshot;
 use crate::index::IndexComponents;
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
@@ -11,10 +11,10 @@ use std::sync::Arc;
 /// Implements [`DeltaStorageQuadIndex::validate`](crate::delta::DeltaStorageQuadIndex::validate).
 pub async fn validate_index(
     state: &SessionState,
-    snapshot: &DeltaStorageQuadIndexSnapshot,
+    snapshot: &DeltaQuadStorageIndexSnapshot,
 ) -> Result<(), DeltaQuadStorageError> {
     let provider = DeltaTableProvider::try_new(
-        snapshot.snapshot().clone(),
+        snapshot.eager_snapshot().clone(),
         Arc::clone(snapshot.log_store()),
         Default::default(),
     )?;
@@ -112,11 +112,11 @@ mod tests {
     }
 
     /// Creates an in-memory Delta table from the provided RecordBatch and wraps it in a
-    /// [`DeltaStorageQuadIndexSnapshot`].
+    /// [`DeltaQuadStorageIndexSnapshot`].
     async fn create_snapshot(
         batch: RecordBatch,
         components: IndexComponents,
-    ) -> DeltaStorageQuadIndexSnapshot {
+    ) -> DeltaQuadStorageIndexSnapshot {
         let fields = batch
             .schema()
             .fields()
@@ -141,7 +141,7 @@ mod tests {
             .clone();
 
         // The encoding doesn't match the given input. This may break in the future.
-        DeltaStorageQuadIndexSnapshot::new(
+        DeltaQuadStorageIndexSnapshot::new(
             QuadStorageEncoding::PlainTerm,
             snapshot,
             log_store,

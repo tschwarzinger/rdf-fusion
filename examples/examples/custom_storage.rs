@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
-use datafusion::common::HashSet;
+use datafusion::common::{HashSet, exec_datafusion_err};
 use datafusion::datasource::TableProvider;
 use datafusion::datasource::{DefaultTableSource, MemTable};
 use datafusion::execution::SessionState;
@@ -10,9 +10,11 @@ use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder, UserDefinedLogic
 use datafusion::optimizer::OptimizerRule;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
-use datafusion::prelude::{DataFrame, SessionConfig};
+use datafusion::prelude::SessionConfig;
 use rdf_fusion::api::RdfFusionContextView;
-use rdf_fusion::api::storage::QuadStorage;
+use rdf_fusion::api::storage::{
+    QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
+};
 use rdf_fusion::encoding::object_id::ObjectIdMapping;
 use rdf_fusion::encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
@@ -23,11 +25,7 @@ use rdf_fusion::logical::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion::logical::patterns::PatternLoweringRule;
 use rdf_fusion::logical::quad_pattern::QuadPatternNode;
 use rdf_fusion::model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion::model::sparql::Update;
-use rdf_fusion::model::{
-    GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
-    StorageError, TermPattern,
-};
+use rdf_fusion::model::{GraphName, NamedNode, Quad, StorageError, TermPattern};
 use rdf_fusion::store::Store;
 use std::sync::Arc;
 
@@ -52,7 +50,7 @@ pub async fn main() -> anyhow::Result<()> {
     let context = RdfFusionContext::new(
         SessionConfig::default(),
         RuntimeEnvBuilder::new().build_arc()?,
-        Arc::new(VecQuadStorage(vec)),
+        Arc::new(VecQuadStorage(Arc::new(vec))),
         Arc::new(TypedFamilyEncoding::default()),
     );
     let store = Store::new(context);
@@ -87,59 +85,8 @@ pub async fn main() -> anyhow::Result<()> {
 ///
 /// The database is a simple set of quads that cannot be changed after creating the storage (for
 /// the sake of simplicity).
-struct VecQuadStorage(HashSet<Quad>);
-
-impl VecQuadStorage {
-    /// Creates a [MemTable] for the set. This is a struct from DataFusion that simply emits
-    /// references to record batches.
-    pub fn create_mem_table(&self) -> MemTable {
-        let mut graph_name = PlainTermArrayElementBuilder::with_capacity(self.0.len());
-        let mut subject = PlainTermArrayElementBuilder::with_capacity(self.0.len());
-        let mut predicate = PlainTermArrayElementBuilder::with_capacity(self.0.len());
-        let mut object = PlainTermArrayElementBuilder::with_capacity(self.0.len());
-
-        for quad in &self.0 {
-            match &quad.graph_name {
-                GraphName::NamedNode(node) => {
-                    graph_name.append_term(node.as_ref().into())
-                }
-                GraphName::BlankNode(node) => {
-                    graph_name.append_term(node.as_ref().into())
-                }
-                GraphName::DefaultGraph => graph_name.append_null(),
-            }
-            subject.append_term(quad.subject.as_ref().into());
-            predicate.append_term(quad.predicate.as_ref().into());
-            object.append_term(quad.object.as_ref().into());
-        }
-
-        let graph_name = graph_name.finish();
-        let subject = subject.finish();
-        let predicate = predicate.finish();
-        let object = object.finish();
-
-        let schema = SchemaRef::new(Schema::new(vec![
-            Field::new(COL_GRAPH, PlainTermEncoding::data_type(), true),
-            Field::new(COL_SUBJECT, PlainTermEncoding::data_type(), false),
-            Field::new(COL_PREDICATE, PlainTermEncoding::data_type(), false),
-            Field::new(COL_OBJECT, PlainTermEncoding::data_type(), false),
-        ]));
-
-        let record_batch = RecordBatch::try_new(
-            Arc::clone(&schema),
-            vec![
-                graph_name.into_array_ref(),
-                subject.into_array_ref(),
-                predicate.into_array_ref(),
-                object.into_array_ref(),
-            ],
-        )
-        .expect("Schema and length always match");
-
-        MemTable::try_new(Arc::clone(&schema), vec![vec![record_batch]])
-            .expect("Schemas always match")
-    }
-}
+#[derive(Clone)]
+struct VecQuadStorage(Arc<HashSet<Quad>>);
 
 #[async_trait]
 impl QuadStorage for VecQuadStorage {
@@ -153,72 +100,19 @@ impl QuadStorage for VecQuadStorage {
         None
     }
 
-    async fn planners(
+    async fn snapshot(&self) -> Result<Arc<dyn QuadStorageSnapshot>, StorageError> {
+        Ok(Arc::new(VecQuadStorageSnapshot {
+            quads: Arc::clone(&self.0),
+        }))
+    }
+
+    async fn begin_transaction(
         &self,
-        context: &RdfFusionContextView,
-    ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
-        // One important thing is that the storage layer is responsible for planning the quad nodes.
-        // This is why we need to register a custom planner.
-        let mem_table = self.create_mem_table();
-        vec![Arc::new(VecQuadStoragePlanner(
-            context.clone(),
-            Arc::new(mem_table),
-        ))]
-    }
-
-    async fn insert(&self, _quads: DataFrame) -> Result<Option<usize>, StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn remove(&self, _quads: DataFrame) -> Result<Option<bool>, StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn insert_named_graph<'a>(
-        &self,
-        _state: &SessionState,
-        _graph_name: NamedOrBlankNodeRef<'a>,
-    ) -> Result<Option<bool>, StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn named_graphs(
-        &self,
-        _state: &SessionState,
-    ) -> Result<Vec<NamedOrBlankNode>, StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn contains_named_graph<'a>(
-        &self,
-        _state: &SessionState,
-        _graph_name: NamedOrBlankNodeRef<'a>,
-    ) -> Result<bool, StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn clear(&self, _state: &SessionState) -> Result<(), StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn clear_graph<'a>(
-        &self,
-        _state: &SessionState,
-        _graph_name: GraphNameRef<'a>,
-    ) -> Result<(), StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn drop_named_graph(
-        &self,
-        _state: &SessionState,
-        _graph_name: NamedOrBlankNodeRef<'_>,
-    ) -> Result<Option<bool>, StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
-    }
-
-    async fn len(&self, _state: &SessionState) -> Result<usize, StorageError> {
-        Ok(self.0.len())
+        _session: &SessionState,
+    ) -> Result<Box<dyn QuadStorageTransaction>, StorageError> {
+        Err(StorageError::Other(Box::new(exec_datafusion_err!(
+            "Transactions are not supported for the VecQuadStorage."
+        ))))
     }
 
     async fn optimize(&self, _state: &SessionState) -> Result<(), StorageError> {
@@ -227,14 +121,6 @@ impl QuadStorage for VecQuadStorage {
 
     async fn validate(&self, _state: &SessionState) -> Result<(), StorageError> {
         Ok(())
-    }
-
-    async fn execute_update(
-        &self,
-        _state: &SessionState,
-        _update: &Update,
-    ) -> Result<(), StorageError> {
-        unimplemented!("Mutating a VecQuadStorage is not supported")
     }
 }
 
@@ -299,5 +185,91 @@ impl ExtensionPlanner for VecQuadStoragePlanner {
             .create_physical_plan(&pattern, session_state)
             .await
             .map(Some)
+    }
+}
+
+/// Represents a snapshot of the [`VecQuadStorage`].
+struct VecQuadStorageSnapshot {
+    /// A copy of the original quad set.
+    quads: Arc<HashSet<Quad>>,
+}
+
+impl VecQuadStorageSnapshot {
+    /// Creates a [MemTable] for the set. This is a struct from DataFusion that simply emits
+    /// references to record batches.
+    pub fn create_mem_table(&self) -> MemTable {
+        let num_quads = self.quads.len();
+        let mut graph_name = PlainTermArrayElementBuilder::with_capacity(num_quads);
+        let mut subject = PlainTermArrayElementBuilder::with_capacity(num_quads);
+        let mut predicate = PlainTermArrayElementBuilder::with_capacity(num_quads);
+        let mut object = PlainTermArrayElementBuilder::with_capacity(num_quads);
+
+        for quad in self.quads.iter() {
+            match &quad.graph_name {
+                GraphName::NamedNode(node) => {
+                    graph_name.append_term(node.as_ref().into())
+                }
+                GraphName::BlankNode(node) => {
+                    graph_name.append_term(node.as_ref().into())
+                }
+                GraphName::DefaultGraph => graph_name.append_null(),
+            }
+            subject.append_term(quad.subject.as_ref().into());
+            predicate.append_term(quad.predicate.as_ref().into());
+            object.append_term(quad.object.as_ref().into());
+        }
+
+        let graph_name = graph_name.finish();
+        let subject = subject.finish();
+        let predicate = predicate.finish();
+        let object = object.finish();
+
+        let schema = SchemaRef::new(Schema::new(vec![
+            Field::new(COL_GRAPH, PlainTermEncoding::data_type(), true),
+            Field::new(COL_SUBJECT, PlainTermEncoding::data_type(), false),
+            Field::new(COL_PREDICATE, PlainTermEncoding::data_type(), false),
+            Field::new(COL_OBJECT, PlainTermEncoding::data_type(), false),
+        ]));
+
+        let record_batch = RecordBatch::try_new(
+            Arc::clone(&schema),
+            vec![
+                graph_name.into_array_ref(),
+                subject.into_array_ref(),
+                predicate.into_array_ref(),
+                object.into_array_ref(),
+            ],
+        )
+        .expect("Schema and length always match");
+
+        MemTable::try_new(Arc::clone(&schema), vec![vec![record_batch]])
+            .expect("Schemas always match")
+    }
+}
+
+#[async_trait]
+impl QuadStorageSnapshot for VecQuadStorageSnapshot {
+    async fn planners(
+        &self,
+        context: &RdfFusionContextView,
+    ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
+        let mem_table = self.create_mem_table();
+        vec![Arc::new(VecQuadStoragePlanner(
+            context.clone(),
+            Arc::new(mem_table),
+        ))]
+    }
+
+    async fn named_graphs(
+        &self,
+        _state: &SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        Err(StorageError::Other(Box::new(exec_datafusion_err!(
+            "Obtaining named graphs is not supported for the VecQuadStorage."
+        ))))
+    }
+
+    async fn len(&self, _state: &SessionState) -> Result<usize, StorageError> {
+        Ok(self.quads.len())
     }
 }

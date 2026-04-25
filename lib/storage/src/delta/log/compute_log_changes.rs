@@ -1,10 +1,12 @@
-use crate::delta::log::{COL_COMMIT_VERSION, COL_OPERATION, DeltaStorageLogOperation};
-use datafusion::arrow::array::{ArrayRef, Int8Builder, RecordBatch};
+use crate::delta::log::{DeltaStorageLogOperation, COL_COMMIT_VERSION, COL_OPERATION};
+use datafusion::arrow::array::{
+    ArrayRef, Int64Array, Int64Builder, Int8Builder, RecordBatch, UInt64Array,
+};
 use datafusion::arrow::compute::BatchCoalescer;
 use datafusion::arrow::compute::SortOptions;
-use datafusion::arrow::datatypes::{Schema, SchemaRef};
-use datafusion::arrow::row::{Row, RowConverter, SortField};
-use datafusion::common::{DataFusionError, exec_err};
+use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use datafusion::arrow::row::{RowConverter, SortField};
+use datafusion::common::{exec_err, DataFusionError};
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
 use datafusion::physical_expr::expressions::col;
 use datafusion::physical_expr::{
@@ -19,12 +21,11 @@ use datafusion::physical_plan::{
     RecordBatchStream,
 };
 use deltalake::arrow::array::Int8Array;
-use futures::{Stream, StreamExt, ready};
-use rdf_fusion_model::DFResult;
+use futures::{ready, Stream, StreamExt};
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_model::DFResult;
 use std::any::Any;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -95,6 +96,7 @@ impl ComputeLogChangesetExec {
                     .field_with_name(COL_OBJECT)
                     .expect("validated schema")
                     .clone(),
+                Field::new(COL_COMMIT_VERSION, DataType::Int64, true),
             ]));
 
             let sort_expr = PhysicalSortExpr {
@@ -141,7 +143,7 @@ impl ExecutionPlan for ComputeLogChangesetExec {
             col(COL_COMMIT_VERSION, self.inner.schema().as_ref()).expect("Column exists");
         let sort_expr = PhysicalSortRequirement::new(
             commit_version,
-            Some(SortOptions::default().desc()),
+            Some(SortOptions::default().asc()),
         );
         let required_ordering =
             LexRequirement::new([sort_expr]).expect("Ordering not empty");
@@ -198,9 +200,6 @@ impl ExecutionPlan for ComputeLogChangesetExec {
             graph_converter,
             batch_coalescer: BatchCoalescer::new(self.schema(), target_batch_size),
             state: BTreeMap::new(),
-            global_cleared: None,
-            cleared_graphs: HashSet::new(),
-            dropped_graphs: HashSet::default(),
             finished: false,
         }))
     }
@@ -225,15 +224,8 @@ struct ComputeLogChangesetStream {
     graph_converter: RowConverter,
     /// The batch coalescer used to split the result into multiple batches.
     batch_coalescer: BatchCoalescer,
-    /// Mapping of the converted quads/graph-ops to their final operation.
-    state: BTreeMap<Box<[u8]>, i8>,
-    /// Whether a global CLEAR has been encountered (indicated by [`Some`]). The row will contain
-    /// all nulls, but it is necessary to use the [`RowConverter`].
-    global_cleared: Option<Box<[u8]>>,
-    /// Set of graphs that have been cleared.
-    cleared_graphs: HashSet<Box<[u8]>>,
-    /// Set of graphs that have been dropped.
-    dropped_graphs: HashSet<Box<[u8]>>,
+    /// Mapping of the converted quads/graph-ops to their final (operation, version).
+    state: BTreeMap<Box<[u8]>, (i8, i64)>,
     /// Whether the stream has finished.
     finished: bool,
 }
@@ -243,6 +235,30 @@ impl ComputeLogChangesetStream {
     fn process_batch(&mut self, batch: &RecordBatch) -> DFResult<()> {
         // Extract and downcast the operational columns
         let operations = get_downcast_array::<Int8Array>(batch, COL_OPERATION)?;
+
+        let version_array = get_array(batch, COL_COMMIT_VERSION)?;
+        let versions: Vec<i64> = match version_array.data_type() {
+            DataType::Int64 => version_array
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .values()
+                .to_vec(),
+            DataType::UInt64 => version_array
+                .as_any()
+                .downcast_ref::<UInt64Array>()
+                .unwrap()
+                .values()
+                .iter()
+                .map(|&v| v as i64)
+                .collect(),
+            _ => {
+                return exec_err!(
+                    "Unsupported type for {COL_COMMIT_VERSION}: {:?}",
+                    version_array.data_type()
+                );
+            }
+        };
 
         let quad_rows = self.row_converter.convert_columns(&[
             Arc::clone(get_array(batch, COL_GRAPH)?),
@@ -256,7 +272,7 @@ impl ComputeLogChangesetStream {
             .convert_columns(&[Arc::clone(get_array(batch, COL_GRAPH)?)])?;
 
         // Update the state
-        for i in 0..batch.num_rows() {
+        for (i, version_val) in versions.iter().enumerate().take(batch.num_rows()) {
             let op_val = operations.value(i);
             let operation =
                 DeltaStorageLogOperation::from_stored(op_val).expect("stored op valid");
@@ -265,42 +281,30 @@ impl ComputeLogChangesetStream {
             let graph_row = graph_rows.row(i);
 
             match operation {
-                DeltaStorageLogOperation::ClearDatabase => {
-                    self.global_cleared = Some(quad_row.as_ref().into());
-                    break;
-                }
                 DeltaStorageLogOperation::DropGraph => {
-                    if !self.dropped_graphs.contains(graph_row.as_ref()) {
-                        let mut key = quad_row.as_ref().to_vec();
-                        key.push(op_val as u8);
-                        self.state.insert(key.into_boxed_slice(), op_val);
-                        self.dropped_graphs.insert(graph_row.as_ref().into());
-                    }
+                    self.remove_entries_for_graph(graph_row.as_ref(), true);
+                    let mut key = quad_row.as_ref().to_vec();
+                    key.push(op_val as u8);
+                    self.state
+                        .insert(key.into_boxed_slice(), (op_val, *version_val));
                 }
                 DeltaStorageLogOperation::ClearGraph => {
-                    if !self.cleared_graphs.contains(graph_row.as_ref())
-                        && !self.dropped_graphs.contains(graph_row.as_ref())
-                    {
-                        let mut key = quad_row.as_ref().to_vec();
-                        key.push(op_val as u8);
-                        self.state.insert(key.into_boxed_slice(), op_val);
-                        self.cleared_graphs.insert(graph_row.as_ref().into());
-                    }
+                    self.remove_entries_for_graph(graph_row.as_ref(), false);
+                    let mut key = quad_row.as_ref().to_vec();
+                    key.push(op_val as u8);
+                    self.state
+                        .insert(key.into_boxed_slice(), (op_val, *version_val));
                 }
                 DeltaStorageLogOperation::CreateGraph => {
-                    if !self.dropped_graphs.contains(graph_row.as_ref()) {
-                        let mut key = quad_row.as_ref().to_vec();
-                        key.push(op_val as u8);
-                        self.state.insert(key.into_boxed_slice(), op_val);
-                    }
+                    let mut key = quad_row.as_ref().to_vec();
+                    key.push(op_val as u8);
+                    self.state
+                        .insert(key.into_boxed_slice(), (op_val, *version_val));
                 }
-                DeltaStorageLogOperation::AddQuad => {
-                    self.add_row_if_graph_not_cleared(op_val, quad_row, graph_row);
-                    // TODO: Handle add quads that have created a new graph, which was cleared
-                    // later.
-                }
-                DeltaStorageLogOperation::RemoveQuad => {
-                    self.add_row_if_graph_not_cleared(op_val, quad_row, graph_row);
+                DeltaStorageLogOperation::AddQuad
+                | DeltaStorageLogOperation::RemoveQuad => {
+                    self.state
+                        .insert(quad_row.as_ref().into(), (op_val, *version_val));
                 }
             }
         }
@@ -332,25 +336,25 @@ impl ComputeLogChangesetStream {
         }
     }
 
-    fn add_row_if_graph_not_cleared(
-        &mut self,
-        op_val: i8,
-        quad_row: Row,
-        graph_row: Row,
-    ) {
-        if !self.cleared_graphs.contains(graph_row.as_ref())
-            && !self.dropped_graphs.contains(graph_row.as_ref())
-        {
-            let quad_bytes: Box<[u8]> = quad_row.as_ref().into();
-            match self.state.entry(quad_bytes) {
-                Entry::Occupied(_) => {
-                    // Ignore. The action already encountered happened later and thus
-                    // overrules any older action.
+    fn remove_entries_for_graph(&mut self, graph_bytes: &[u8], remove_all: bool) {
+        let to_remove: Vec<_> = self
+            .state
+            .range::<[u8], _>((
+                std::ops::Bound::Included(graph_bytes),
+                std::ops::Bound::Unbounded,
+            ))
+            .take_while(|(k, _)| k.starts_with(graph_bytes))
+            .filter_map(|(k, (op, _))| {
+                let op_type = DeltaStorageLogOperation::from_stored(*op).unwrap();
+                if remove_all || !op_type.is_graph_operation() {
+                    Some(k.clone())
+                } else {
+                    None
                 }
-                Entry::Vacant(vac) => {
-                    vac.insert(op_val);
-                }
-            }
+            })
+            .collect();
+        for k in to_remove {
+            self.state.remove(&k);
         }
     }
 
@@ -360,24 +364,19 @@ impl ComputeLogChangesetStream {
 
         let mut rows_to_convert = Vec::with_capacity(state.len());
         let mut operation_builder = Int8Builder::with_capacity(state.len());
+        let mut version_builder = Int64Builder::with_capacity(state.len());
 
-        if let Some(row) = &self.global_cleared {
-            rows_to_convert.push(row.clone());
-            operation_builder
-                .append_value(DeltaStorageLogOperation::ClearDatabase.as_stored());
-        }
-
-        for (row_bytes, op_val) in state {
+        for (row_bytes, (op_val, version_val)) in state {
             let operation =
                 DeltaStorageLogOperation::from_stored(op_val).expect("valid op");
-            let row_bytes =
-                if operation.is_graph_operation() || operation.is_global_operation() {
-                    row_bytes[..row_bytes.len() - 1].into()
-                } else {
-                    row_bytes
-                };
+            let row_bytes = if operation.is_graph_operation() {
+                row_bytes[..row_bytes.len() - 1].into()
+            } else {
+                row_bytes
+            };
             rows_to_convert.push(row_bytes);
             operation_builder.append_value(op_val);
+            version_builder.append_value(version_val);
         }
 
         // Parse bytes back into Arrow format
@@ -389,6 +388,8 @@ impl ComputeLogChangesetStream {
 
         // Attach the operation column
         arrays.insert(0, Arc::new(operation_builder.finish()) as ArrayRef);
+        // Attach the version column
+        arrays.push(Arc::new(version_builder.finish()) as ArrayRef);
 
         let batch = RecordBatch::try_new(Arc::clone(&self.schema), arrays)?;
         self.batch_coalescer.push_batch(batch)?;
@@ -453,7 +454,7 @@ mod tests {
     use deltalake::arrow::util::pretty::pretty_format_batches;
     use insta::assert_snapshot;
     use rdf_fusion_encoding::plain_term::{
-        PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
+        PlainTermArrayElementBuilder, PLAIN_TERM_ENCODING,
     };
     use rdf_fusion_encoding::{EncodingArray, TermEncoding};
     use rdf_fusion_model::NamedNodeRef;
@@ -505,48 +506,14 @@ mod tests {
         );
 
         let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | operation | graph | subject                                                        | predicate                                                      | object                                                         |
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | 20        |       | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } |
-        | 21        |       | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
-        | 21        |       | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } |
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        ");
-    }
-
-    #[tokio::test]
-    async fn test_compute_change_log_clear_barrier() {
-        let mut builder = TestChangesetBuilder::new();
-        builder.add_quad(
-            None,
-            "https://s1",
-            "https://p1",
-            "https://o1",
-            DeltaStorageLogOperation::AddQuad,
-            1,
-        );
-
-        builder.add_clear(2);
-
-        builder.add_quad(
-            None,
-            "https://s2",
-            "https://p2",
-            "https://o2",
-            DeltaStorageLogOperation::AddQuad,
-            3,
-        );
-
-        let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | operation | graph | subject                                                        | predicate                                                      | object                                                         |
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | 0         |       |                                                                |                                                                |                                                                |
-        | 21        |       | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | operation | graph | subject                                                        | predicate                                                      | object                                                         | _commit_version |
+        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | 20        |       | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } | 2               |
+        | 21        |       | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 4               |
+        | 21        |       | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } | 5               |
+        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
         ");
     }
 
@@ -581,14 +548,14 @@ mod tests {
         );
 
         let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | 11        | {term_type: 0, value: https://gA, data_type: , language_tag: } |                                                                |                                                                |                                                                |
-        | 21        | {term_type: 0, value: https://gA, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
-        | 21        | {term_type: 0, value: https://gB, data_type: , language_tag: } | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | 11        | {term_type: 0, value: https://gA, data_type: , language_tag: } |                                                                |                                                                |                                                                | 2               |
+        | 21        | {term_type: 0, value: https://gA, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 3               |
+        | 21        | {term_type: 0, value: https://gB, data_type: , language_tag: } | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } | 1               |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
         ");
     }
 
@@ -618,14 +585,14 @@ mod tests {
         let result = builder.execute().await;
         // Result: Drop(g1), Create(g1), Add(s2)
         // v1-v2 are wiped by v3 Drop.
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
-        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
-        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 3               |
+        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 4               |
+        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } | 5               |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
         ");
     }
 
@@ -651,13 +618,13 @@ mod tests {
         );
 
         let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
-        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 2               |
+        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 3               |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
         ");
     }
 
@@ -668,12 +635,12 @@ mod tests {
         builder.add_drop_graph("https://g1", 2);
 
         let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | operation | graph                                                          | subject | predicate | object |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        | operation | graph                                                          | subject | predicate | object | _commit_version |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 2               |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
         ");
     }
 
@@ -684,12 +651,12 @@ mod tests {
         builder.add_drop_graph("https://g1", 2);
 
         let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | operation | graph                                                          | subject | predicate | object |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        | operation | graph                                                          | subject | predicate | object | _commit_version |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 2               |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
         ");
     }
 
@@ -700,13 +667,13 @@ mod tests {
         builder.add_clear_graph("https://g1", 2);
 
         let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | operation | graph                                                          | subject | predicate | object |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
-        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        | operation | graph                                                          | subject | predicate | object | _commit_version |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 2               |
+        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 1               |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
         ");
     }
 
@@ -733,51 +700,13 @@ mod tests {
 
         let result = builder.execute().await;
         // Result: Clear(g1) and Add(s2). s1 should be wiped.
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
-        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
-        ");
-    }
-
-    #[tokio::test]
-    async fn test_compute_change_log_clear_all_barrier_graph_ops() {
-        let mut builder = TestChangesetBuilder::new();
-        // v1: Create G1
-        builder.add_create_graph("https://g1", 1);
-        // v2: ClearAll
-        builder.add_clear(2);
-        // v3: Create G2
-        builder.add_create_graph("https://g2", 3);
-
-        let result = builder.execute().await;
-        // Result: ClearAll and Create(g2). Create(g1) should be wiped.
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | operation | graph                                                          | subject | predicate | object |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        | 0         |                                                                |         |           |        |
-        | 12        | {term_type: 0, value: https://g2, data_type: , language_tag: } |         |           |        |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+
-        ");
-    }
-
-    #[tokio::test]
-    async fn test_compute_change_log_clear_all_as_last_operation() {
-        let mut builder = TestChangesetBuilder::new();
-        builder.add_create_graph("https://g1", 1);
-        builder.add_clear(2);
-
-        let result = builder.execute().await;
-        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @"
-        +-----------+-------+---------+-----------+--------+
-        | operation | graph | subject | predicate | object |
-        +-----------+-------+---------+-----------+--------+
-        | 0         |       |         |           |        |
-        +-----------+-------+---------+-----------+--------+
+        assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 2               |
+        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 3               |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
         ");
     }
 
@@ -829,17 +758,6 @@ mod tests {
             ));
         }
 
-        fn add_clear(&mut self, v: i64) {
-            self.rows.push((
-                None,
-                None,
-                None,
-                None,
-                DeltaStorageLogOperation::ClearDatabase.as_stored(),
-                v,
-            ));
-        }
-
         fn add_clear_graph(&mut self, g: &str, v: i64) {
             self.rows.push((
                 Some(g.to_string()),
@@ -874,8 +792,8 @@ mod tests {
         }
 
         async fn execute(mut self) -> RecordBatch {
-            // Sort rows by version DESC to simulate what CDF scan + SortExec does
-            self.rows.sort_by(|a, b| b.5.cmp(&a.5));
+            // Sort rows by version ASC to simulate what CDF scan + SortExec does
+            self.rows.sort_by(|a, b| a.5.cmp(&b.5));
 
             let mut graph_builder = PlainTermArrayElementBuilder::new();
             let mut subject_builder = PlainTermArrayElementBuilder::new();
@@ -937,7 +855,7 @@ mod tests {
             let commit_version_col =
                 col(COL_COMMIT_VERSION, self.schema.as_ref()).unwrap();
             let sort_expr =
-                PhysicalSortExpr::new(commit_version_col, SortOptions::default().desc());
+                PhysicalSortExpr::new(commit_version_col, SortOptions::default().asc());
             let sort_exec = Arc::new(SortExec::new(
                 LexOrdering::new(vec![sort_expr]).unwrap(),
                 single_partition_exec,

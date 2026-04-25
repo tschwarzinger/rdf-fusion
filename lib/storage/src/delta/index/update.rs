@@ -1,8 +1,8 @@
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::index::{
-    DeltaStorageQuadIndex, DeltaStorageQuadIndexSnapshot, FILE_ROW_COUNT,
+    DeltaQuadStorageIndex, DeltaQuadStorageIndexSnapshot, FILE_ROW_COUNT,
 };
-use crate::delta::log::changeset::DeltaStorageLogChangesetRef;
+use crate::delta::log::DeltaQuadStorageLogChangesetRef;
 use crate::delta::scan_plan_builder::DeltaQuadStorageScanPlanBuilder;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::record_batch::RecordBatch;
@@ -23,14 +23,14 @@ use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Implements the updating process for a [`DeltaStorageQuadIndex`].
+/// Implements the updating process for a [`DeltaQuadStorageIndex`].
 pub struct DeltaStorageQuadIndexUpdater {
     /// The index to update.
-    index: Arc<DeltaStorageQuadIndexSnapshot>,
+    index: DeltaQuadStorageIndexSnapshot,
     /// The delta table to update.
     index_table: DeltaTable,
     /// The target version to update to.
-    changeset: DeltaStorageLogChangesetRef,
+    changeset: DeltaQuadStorageLogChangesetRef,
     /// The session state to use.
     state: SessionState,
     /// The writer properties to use.
@@ -40,9 +40,9 @@ pub struct DeltaStorageQuadIndexUpdater {
 impl DeltaStorageQuadIndexUpdater {
     /// Creates a new [`DeltaStorageQuadIndexUpdater`].
     pub fn new(
-        index: Arc<DeltaStorageQuadIndexSnapshot>,
+        index: DeltaQuadStorageIndexSnapshot,
         index_table: DeltaTable,
-        changeset: DeltaStorageLogChangesetRef,
+        changeset: DeltaQuadStorageLogChangesetRef,
         state: SessionState,
         writer_properties: WriterProperties,
     ) -> Self {
@@ -71,7 +71,7 @@ impl DeltaStorageQuadIndexUpdater {
             QuadPattern::for_all_quads(),
             self.index.encoding(),
         )
-        .with_index(Arc::clone(&self.index))
+        .with_index(self.index.clone())
         .with_changeset(Arc::clone(&self.changeset))
         .build()
         .await?;
@@ -226,7 +226,7 @@ impl DeltaStorageQuadIndexUpdater {
         };
 
         let sync_txn = Transaction {
-            app_id: DeltaStorageQuadIndex::APP_ID.to_string(),
+            app_id: DeltaQuadStorageIndex::APP_ID.to_string(),
             version: self.changeset.version_range().ending_version() as i64,
             last_updated: None,
         };

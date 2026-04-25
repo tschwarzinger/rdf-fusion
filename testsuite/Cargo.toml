@@ -8,12 +8,10 @@ Implementation of testsuites for RdfFusion
 """
 edition.workspace = true
 rust-version.workspace = true
-publish = false
 
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-clap = { workspace = true, features = ["derive"] }
 datafusion.workspace = true
 futures.workspace = true
 rdf-fusion.workspace = true

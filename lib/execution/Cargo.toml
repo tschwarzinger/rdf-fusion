@@ -21,9 +21,11 @@ futures.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-physical.workspace = true
 oxrdfio.workspace = true
+reqwest.workspace = true
 sparesults.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

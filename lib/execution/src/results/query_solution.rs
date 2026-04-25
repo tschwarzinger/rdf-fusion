@@ -122,21 +122,20 @@ impl Stream for QuerySolutionStream {
 }
 
 fn to_query_solution(
-    variables: &Arc<[Variable]>,
+    variables: &[Variable],
     batch: &RecordBatch,
 ) -> Result<<Vec<QuerySolution> as IntoIterator>::IntoIter, QueryEvaluationError> {
-    let schema = batch.schema();
     let num_rows = batch.num_rows();
 
     // Get column terms first - compute all terms for each column
-    let mut column_terms = Vec::with_capacity(schema.fields().len());
+    let mut column_terms = Vec::with_capacity(variables.len());
 
-    for field in schema.fields() {
-        let column = batch.column_by_name(field.name()).ok_or(
-            QueryEvaluationError::InternalError(
-                "Field was not present in result.".into(),
-            ),
-        )?;
+    for variable in variables {
+        let column = batch.column_by_name(variable.as_str()).ok_or_else(|| {
+            QueryEvaluationError::InternalError(format!(
+                "Variable {variable} was not present in result."
+            ))
+        })?;
 
         // Convert the column to a PlainTermEncoding array
         let array = PLAIN_TERM_ENCODING
@@ -165,6 +164,7 @@ fn to_query_solution(
 
     // Now build the solutions row by row
     let mut result = Vec::with_capacity(num_rows);
+    let variables_arc: Arc<[Variable]> = variables.into();
     for _ in 0..num_rows {
         let mut row_terms = Vec::with_capacity(column_terms.len());
 
@@ -175,7 +175,7 @@ fn to_query_solution(
             row_terms.push(term);
         }
 
-        result.push((Arc::clone(variables), row_terms).into());
+        result.push((Arc::clone(&variables_arc), row_terms).into());
     }
 
     Ok(result.into_iter())

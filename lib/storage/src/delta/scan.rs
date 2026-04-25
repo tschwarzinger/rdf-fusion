@@ -651,8 +651,7 @@ mod tests {
             storage.encoding().clone(),
         );
         let plan_result = builder
-            .with_best_index(storage.indexes())
-            .await
+            .with_best_index(&storage.index_snapshots().await.unwrap())
             .expect("Failed to apply best index")
             .build()
             .await

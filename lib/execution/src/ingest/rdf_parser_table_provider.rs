@@ -33,6 +33,8 @@ pub struct RdfParserOptions {
     pub rename_blank_nodes: bool,
     /// The default graph for the parser.
     pub default_graph: Option<GraphName>,
+    /// Whether to allow named graphs.
+    pub without_named_graphs: bool,
 }
 
 impl RdfParserOptions {
@@ -43,6 +45,7 @@ impl RdfParserOptions {
             base_iri: None,
             rename_blank_nodes: false,
             default_graph: None,
+            without_named_graphs: false,
         }
     }
 
@@ -63,8 +66,14 @@ impl RdfParserOptions {
     }
 
     /// Sets the default graph for the parser.
-    pub fn with_default_graph(mut self, default_graph: GraphName) -> Self {
-        self.default_graph = Some(default_graph);
+    pub fn with_default_graph(mut self, default_graph: impl Into<GraphName>) -> Self {
+        self.default_graph = Some(default_graph.into());
+        self
+    }
+
+    /// Sets whether named graphs are allowed.
+    pub fn without_named_graphs(mut self, without_named_graphs: bool) -> Self {
+        self.without_named_graphs = without_named_graphs;
         self
     }
 }
@@ -82,12 +91,19 @@ impl<R: AsyncRead + Unpin + Send + 'static> RdfParserTableProvider<R> {
     /// Creates a new [`RdfParserTableProvider`].
     pub fn new(read: R, options: RdfParserOptions) -> Result<Self, IriParseError> {
         let mut reader = RdfParser::from_format(options.format);
+
         if let Some(base_iri) = options.base_iri {
             reader = reader.with_base_iri(base_iri.to_string())?;
         }
+
         if options.rename_blank_nodes {
             reader = reader.rename_blank_nodes();
         }
+
+        if options.without_named_graphs {
+            reader = reader.without_named_graphs();
+        }
+
         if let Some(default_graph) = options.default_graph {
             reader = reader.with_default_graph(default_graph);
         }

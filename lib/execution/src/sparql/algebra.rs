@@ -189,8 +189,8 @@ impl From<Update> for RdfFusionUpdate {
     }
 }
 
-/// A SPARQL query [dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+/// A SPARQL [query dataset specification](https://www.w3.org/TR/sparql11-query/#specifyingDataset)
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Default)]
 pub struct QueryDataset {
     default: Option<Vec<GraphName>>,
     named: Option<Vec<NamedOrBlankNode>>,

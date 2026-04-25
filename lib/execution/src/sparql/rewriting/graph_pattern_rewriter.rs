@@ -12,7 +12,7 @@ use rdf_fusion_model::Iri;
 use rdf_fusion_model::sparql::algebra::{
     AggregateExpression, AggregateFunction, Expression, GraphPattern, OrderExpression,
 };
-use rdf_fusion_model::{DFResult, NamedNodePattern};
+use rdf_fusion_model::{DFResult, NamedNodePattern, NamedOrBlankNode};
 use rdf_fusion_model::{GraphName, Variable};
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -435,7 +435,15 @@ fn compute_active_graph_for_pattern(
 ) -> ActiveGraph {
     match name {
         NamedNodePattern::NamedNode(nn) => {
-            ActiveGraph::Union(vec![GraphName::NamedNode(nn.clone())])
+            if let Some(allowed) = dataset.available_named_graphs() {
+                if allowed.contains(&NamedOrBlankNode::NamedNode(nn.clone())) {
+                    ActiveGraph::Union(vec![GraphName::NamedNode(nn.clone())])
+                } else {
+                    ActiveGraph::Union(vec![])
+                }
+            } else {
+                ActiveGraph::Union(vec![GraphName::NamedNode(nn.clone())])
+            }
         }
         NamedNodePattern::Variable(_) => match dataset.available_named_graphs() {
             None => ActiveGraph::AnyNamedGraph,

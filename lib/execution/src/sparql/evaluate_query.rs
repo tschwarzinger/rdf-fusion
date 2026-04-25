@@ -1,4 +1,5 @@
 use crate::RdfFusionContext;
+use crate::planner::RdfFusionPlanner;
 use crate::results::{QueryResults, QuerySolutionStream, QueryTripleStream};
 use crate::sparql::error::QueryEvaluationError;
 use crate::sparql::optimizer::{create_optimizer_rules, create_pyhsical_optimizer_rules};
@@ -10,6 +11,7 @@ use datafusion::execution::{SessionState, SessionStateBuilder};
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use itertools::izip;
+use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion_model::Variable;
 use rdf_fusion_model::sparql::Query;
@@ -27,6 +29,25 @@ pub async fn evaluate_query(
     query: &RdfFusionQuery,
     options: QueryOptions,
 ) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
+    evaluate_query_with_snapshot(
+        ctx,
+        builder_context,
+        query,
+        options,
+        ctx.storage().snapshot().await?,
+    )
+    .await
+}
+
+/// Evaluates a SPARQL query over a specific snapshot and returns the results along with execution
+/// information.
+pub async fn evaluate_query_with_snapshot(
+    ctx: &RdfFusionContext,
+    builder_context: RdfFusionLogicalPlanBuilderContext,
+    query: &RdfFusionQuery,
+    options: QueryOptions,
+    snapshot: Arc<dyn QuadStorageSnapshot>,
+) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
     let session_state = SessionStateBuilder::from(ctx.session_context().state())
         .with_optimizer_rules(create_optimizer_rules(
             ctx.create_view(),
@@ -35,6 +56,10 @@ pub async fn evaluate_query(
         .with_physical_optimizer_rules(create_pyhsical_optimizer_rules(
             options.optimization_level,
         ))
+        .with_query_planner(Arc::new(RdfFusionPlanner::new_with_snapshot(
+            ctx.create_view(),
+            snapshot,
+        )))
         .build();
 
     match &query.inner {

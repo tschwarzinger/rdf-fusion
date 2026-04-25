@@ -4,7 +4,7 @@ use crate::sparql::error::QueryEvaluationError;
 use crate::sparql::{
     OptimizationLevel, QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate,
     UpdateOptions, create_optimizer_rules, create_pyhsical_optimizer_rules,
-    evaluate_query,
+    evaluate_query, evaluate_update,
 };
 use datafusion::dataframe::DataFrame;
 use datafusion::error::DataFusionError;
@@ -159,6 +159,9 @@ impl RdfFusionContext {
     /// Returns the number of quads in the instance.
     pub async fn len(&self) -> DFResult<usize> {
         self.storage
+            .snapshot()
+            .await
+            .map_err(|err| DataFusionError::External(Box::new(err)))?
             .len(&self.ctx.state())
             .await
             .map_err(|err| DataFusionError::External(Box::new(err)))
@@ -208,13 +211,15 @@ impl RdfFusionContext {
     pub async fn execute_update(
         &self,
         query: &RdfFusionUpdate,
-        _options: UpdateOptions,
+        options: UpdateOptions,
     ) -> Result<(), QueryEvaluationError> {
-        self.storage
-            .execute_update(&self.ctx.state(), &query.inner)
-            .await
-            .expect("TODO");
-        Ok(())
+        Box::pin(evaluate_update(
+            self,
+            self.plan_builder_context(),
+            query,
+            options,
+        ))
+        .await
     }
 }
 

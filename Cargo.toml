@@ -1,20 +1,20 @@
 [workspace]
 members = [
-  "bench",
-  "cli",
-  "examples",
-  "lib/compute",
-  "lib/extensions",
-  "lib/model",
-  "lib/encoding",
-  "lib/execution",
-  "lib/functions",
-  "lib/logical",
-  "lib/physical",
-  "lib/storage",
-  "lib/rdf-fusion",
-  "lib/web",
-  "testsuite",
+    "bench",
+    "cli",
+    "examples",
+    "lib/compute",
+    "lib/extensions",
+    "lib/model",
+    "lib/encoding",
+    "lib/execution",
+    "lib/functions",
+    "lib/logical",
+    "lib/physical",
+    "lib/storage",
+    "lib/rdf-fusion",
+    "lib/web",
+    "testsuite",
 ]
 resolver = "2"
 
@@ -42,7 +42,7 @@ md-5 = "0.11"
 rand = "0.10"
 rand_distr = "0.6"
 regex = "1.12"
-reqwest = "0.13"
+reqwest = { version = "0.13", features = ["stream"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha1 = "0.11"
@@ -50,7 +50,7 @@ sha2 = "0.11"
 snmalloc-rs = "0.7"
 thiserror = "2.0"
 time = "0.3"
-tokio-util = "0.7"
+tokio-util = { version = "0.7", features = ["io"] }
 uuid = "1.23"
 zip = "8.4"
 
@@ -58,9 +58,9 @@ zip = "8.4"
 ahash = "0.8"
 arrow-string = "58.1"
 datafusion = "53.1"
-deltalake = { git = "https://github.com/delta-io/delta-rs", rev = "8b5e16210863817a94739543b7ac29732642b7ec", features = [
-  "datafusion",
-  "datafusion-ext",
+deltalake = { version = "0.32", features = [
+    "datafusion",
+    "datafusion-ext",
 ] }
 hashbrown = "0.16.1"
 tokio = { version = "1.51", features = ["rt", "rt-multi-thread", "fs"] }
@@ -168,8 +168,8 @@ clone_on_ref_ptr = "warn"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
-  'cfg(datafusion_coop, values("tokio", "tokio_fallback", "per_stream"))',
-  "cfg(tarpaulin)",
-  "cfg(tarpaulin_include)",
+    'cfg(datafusion_coop, values("tokio", "tokio_fallback", "per_stream"))',
+    "cfg(tarpaulin)",
+    "cfg(tarpaulin_include)",
 ] }
 unused_qualifications = "deny"

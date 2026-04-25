@@ -143,6 +143,11 @@ impl QuadStorageEncoding {
             }
         }
     }
+
+    /// Creates a null scalar for the given storage encoding.
+    pub fn create_null_scalar(&self) -> DFResult<ScalarValue> {
+        ScalarValue::try_new_null(self.term_type())
+    }
 }
 
 impl Display for QuadStorageEncoding {

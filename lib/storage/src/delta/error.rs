@@ -29,6 +29,18 @@ pub enum DeltaQuadStorageError {
     Other(String),
 }
 
+impl From<StorageError> for DeltaQuadStorageError {
+    fn from(value: StorageError) -> Self {
+        DeltaQuadStorageError::Other(value.to_string())
+    }
+}
+
+impl From<String> for DeltaQuadStorageError {
+    fn from(value: String) -> Self {
+        DeltaQuadStorageError::Other(value)
+    }
+}
+
 impl From<DeltaQuadStorageError> for StorageError {
     fn from(value: DeltaQuadStorageError) -> Self {
         StorageError::Other(Box::new(value))

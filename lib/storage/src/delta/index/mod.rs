@@ -5,7 +5,7 @@ mod validation;
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::index::update::DeltaStorageQuadIndexUpdater;
 use crate::delta::index::validation::validate_index;
-use crate::delta::log::changeset::DeltaStorageLogChangesetRef;
+use crate::delta::log::DeltaQuadStorageLogChangesetRef;
 use crate::index::IndexComponents;
 use datafusion::execution::SessionState;
 use datafusion::parquet::basic::Encoding;
@@ -21,12 +21,9 @@ use deltalake::parquet::schema::types::ColumnPath;
 use deltalake::{DataType as DeltaDataType, DeltaTable, StructField};
 use futures::TryStreamExt;
 use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{
-    BlankNodeMatchingMode, NamedNodePattern, QuadComponent, TermPattern, TriplePattern,
-};
-pub use snapshot::DeltaStorageQuadIndexSnapshot;
+use rdf_fusion_model::{BlankNodeMatchingMode, NamedNodePattern, TermPattern};
+pub use snapshot::DeltaQuadStorageIndexSnapshot;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -67,7 +64,7 @@ impl IndexTableState {
 /// Represents a mutable index for the Delta storage.
 ///
 /// An index is a Delta table that stores a full snapshot of the quads at a specific log version.
-pub struct DeltaStorageQuadIndex {
+pub struct DeltaQuadStorageIndex {
     /// The encodings used for storing quads
     storage_encoding: QuadStorageEncoding,
     /// The underlying delta table (guarded for concurrent mutable updates).
@@ -76,11 +73,11 @@ pub struct DeltaStorageQuadIndex {
     components: IndexComponents,
 }
 
-impl DeltaStorageQuadIndex {
+impl DeltaQuadStorageIndex {
     /// The application id used to store the log version in delta transactions.
     const APP_ID: &'static str = "rdf_fusion.index_updater";
 
-    /// Tries to create a new [`DeltaStorageQuadIndex`].
+    /// Tries to create a new [`DeltaQuadStorageIndex`].
     pub async fn try_new(
         storage_encoding: QuadStorageEncoding,
         location: &str,
@@ -137,59 +134,23 @@ impl DeltaStorageQuadIndex {
     /// another process (vacuuming).
     pub async fn snapshot(
         &self,
-    ) -> Result<Arc<DeltaStorageQuadIndexSnapshot>, DeltaQuadStorageError> {
+    ) -> Result<DeltaQuadStorageIndexSnapshot, DeltaQuadStorageError> {
         let guard = self.table.read().await;
-        Ok(Arc::new(DeltaStorageQuadIndexSnapshot::new(
+        Ok(DeltaQuadStorageIndexSnapshot::new(
             self.storage_encoding.clone(),
             guard.table.snapshot()?.snapshot().clone(),
             guard.table.log_store(),
             Arc::clone(&guard.active_files),
             self.components,
             guard.log_transaction_version,
-        )))
-    }
-
-    /// Computes the scan score for this index given the active graph and the pattern.
-    pub fn compute_scan_score(
-        &self,
-        active_graph: &ActiveGraph,
-        pattern: &TriplePattern,
-        blank_node_mode: BlankNodeMatchingMode,
-    ) -> usize {
-        let graph_bound = matches!(
-            active_graph,
-            ActiveGraph::DefaultGraph | ActiveGraph::Union(_)
-        );
-        let subject_bound = is_term_bound(pattern.subject.clone(), blank_node_mode);
-        let predicate_bound =
-            is_named_node_bound(pattern.predicate.clone(), blank_node_mode);
-        let object_bound = is_term_bound(pattern.object.clone(), blank_node_mode);
-
-        let mut score = 0;
-        for (i, component) in self.components.inner().iter().enumerate() {
-            let is_bound = match component {
-                QuadComponent::GraphName => graph_bound,
-                QuadComponent::Subject => subject_bound,
-                QuadComponent::Predicate => predicate_bound,
-                QuadComponent::Object => object_bound,
-            };
-
-            // We don't stop after finding a non-bound component, because components that are
-            // part of the sort order should still exhibit a better clustering, even though the
-            // scan is no longer restricted to a slice of the index.
-            if is_bound {
-                let position = 3 - i;
-                score += 1 << position;
-            }
-        }
-        score
+        ))
     }
 
     /// Updates the index to the given `target_version` by applying the changes from the log.
     pub async fn update(
         &self,
         state: &SessionState,
-        changeset: DeltaStorageLogChangesetRef,
+        changeset: DeltaQuadStorageLogChangesetRef,
     ) -> Result<(), DeltaQuadStorageError> {
         let updater = DeltaStorageQuadIndexUpdater::new(
             self.snapshot().await?,
@@ -267,7 +228,6 @@ impl DeltaStorageQuadIndex {
 
         if self.storage_encoding.term_type().is_primitive() {
             writer_properties_builder = writer_properties_builder
-                .set_dictionary_enabled(false)
                 .set_encoding(Encoding::RLE)
                 .set_column_encoding(last_component, Encoding::PLAIN);
         } else {
@@ -294,202 +254,5 @@ fn is_named_node_bound(pattern: NamedNodePattern, _mode: BlankNodeMatchingMode) 
     match pattern {
         NamedNodePattern::NamedNode(_) => true,
         NamedNodePattern::Variable(_) => false,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::delta::DeltaQuadStorage;
-    use crate::index::IndexComponents;
-    use datafusion::prelude::{SessionConfig, SessionContext};
-    use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
-    use rdf_fusion_encoding::{
-        QuadStorageEncoding, QuadStorageEncodingName, quads_to_plain_term_dataframe,
-    };
-    use rdf_fusion_extensions::storage::QuadStorage;
-    use rdf_fusion_model::{GraphName, NamedNode, Quad, TriplePattern, Variable};
-
-    #[tokio::test]
-    async fn test_scan_score_fully_bound() {
-        let index = create_test_index(IndexComponents::GSPO).await;
-
-        let pattern = TriplePattern {
-            subject: bound_term(),
-            predicate: bound_named_node(),
-            object: bound_term(),
-        };
-
-        let score = index.compute_scan_score(
-            &ActiveGraph::DefaultGraph,
-            &pattern,
-            BlankNodeMatchingMode::Filter,
-        );
-
-        assert_eq!(score, 15);
-    }
-
-    #[tokio::test]
-    async fn test_scan_score_longer_prefixes_score_higher() {
-        let index = create_test_index(IndexComponents::GSPO).await;
-
-        let pattern_g = TriplePattern {
-            subject: variable_term(),
-            predicate: variable_named_node(),
-            object: variable_term(),
-        };
-        let score_g = index.compute_scan_score(
-            &ActiveGraph::DefaultGraph,
-            &pattern_g,
-            BlankNodeMatchingMode::Filter,
-        );
-
-        let pattern_gs = TriplePattern {
-            subject: bound_term(),
-            predicate: variable_named_node(),
-            object: variable_term(),
-        };
-        let score_gs = index.compute_scan_score(
-            &ActiveGraph::DefaultGraph,
-            &pattern_gs,
-            BlankNodeMatchingMode::Filter,
-        );
-
-        let pattern_gsp = TriplePattern {
-            subject: bound_term(),
-            predicate: bound_named_node(),
-            object: variable_term(),
-        };
-        let score_gsp = index.compute_scan_score(
-            &ActiveGraph::DefaultGraph,
-            &pattern_gsp,
-            BlankNodeMatchingMode::Filter,
-        );
-
-        // Assert that a longer continuous prefix strictly increases the score
-        assert!(score_gsp > score_gs);
-        assert!(score_gs > score_g);
-    }
-
-    #[tokio::test]
-    async fn test_scan_score_broken_prefix() {
-        let index = create_test_index(IndexComponents::GSPO).await;
-
-        let pattern_broken = TriplePattern {
-            subject: variable_term(),
-            predicate: bound_named_node(),
-            object: bound_term(),
-        };
-
-        let score = index.compute_scan_score(
-            &ActiveGraph::DefaultGraph,
-            &pattern_broken,
-            BlankNodeMatchingMode::Filter,
-        );
-
-        assert_eq!(score, 11);
-    }
-
-    #[tokio::test]
-    async fn test_scan_score_unbound_first_component() {
-        let index = create_test_index(IndexComponents::GSPO).await;
-
-        let pattern = TriplePattern {
-            subject: bound_term(),
-            predicate: bound_named_node(),
-            object: bound_term(),
-        };
-
-        let score = index.compute_scan_score(
-            &ActiveGraph::AllGraphs,
-            &pattern,
-            BlankNodeMatchingMode::Filter,
-        );
-
-        assert_eq!(score, 7);
-    }
-
-    #[tokio::test]
-    async fn test_index_update_with_only_adds() {
-        let config = SessionConfig::new().with_target_partitions(1);
-        let session_context = SessionContext::new_with_config(config);
-        let storage = DeltaQuadStorage::new_in_memory(
-            QuadStorageEncodingName::PlainTerm,
-            vec![IndexComponents::GSPO],
-            Arc::new(Default::default()),
-        )
-        .await;
-
-        storage
-            .insert(quads_to_plain_term_dataframe(
-                &session_context,
-                &[
-                    Quad::new(
-                        NamedNode::new_unchecked("https://my.test/1"),
-                        NamedNode::new_unchecked("https://my.test/1"),
-                        NamedNode::new_unchecked("https://my.test/1"),
-                        GraphName::DefaultGraph,
-                    ),
-                    Quad::new(
-                        NamedNode::new_unchecked("https://my.test/2"),
-                        NamedNode::new_unchecked("https://my.test/2"),
-                        NamedNode::new_unchecked("https://my.test/2"),
-                        GraphName::DefaultGraph,
-                    ),
-                ],
-            ))
-            .await
-            .unwrap();
-
-        // Update indexes
-        let state = session_context.state();
-        storage.optimize(&state).await.unwrap();
-
-        let index = storage.indexes()[0].clone();
-        assert_quad_count(session_context, index, 2).await;
-    }
-
-    async fn create_test_index(components: IndexComponents) -> DeltaStorageQuadIndex {
-        let encoding = QuadStorageEncoding::PlainTerm;
-        DeltaStorageQuadIndex::try_new(encoding, "memory:///test", components)
-            .await
-            .expect("Failed to create test index")
-    }
-
-    fn bound_term() -> TermPattern {
-        NamedNode::new_unchecked("http://example.org/bound").into()
-    }
-
-    fn variable_term() -> TermPattern {
-        Variable::new_unchecked("v").into()
-    }
-
-    fn bound_named_node() -> NamedNodePattern {
-        NamedNode::new_unchecked("http://example.org/bound").into()
-    }
-
-    fn variable_named_node() -> NamedNodePattern {
-        Variable::new_unchecked("v").into()
-    }
-
-    async fn assert_quad_count(
-        session_context: SessionContext,
-        index: Arc<DeltaStorageQuadIndex>,
-        expected_count: usize,
-    ) {
-        let index = index.snapshot().await.unwrap();
-        let table_provider = DeltaTableProvider::try_new(
-            index.snapshot().clone(),
-            index.log_store().clone(),
-            DeltaScanConfig::default(),
-        )
-        .unwrap();
-        let count = session_context
-            .read_table(Arc::new(table_provider))
-            .unwrap()
-            .count()
-            .await
-            .unwrap();
-        assert_eq!(count, expected_count);
     }
 }

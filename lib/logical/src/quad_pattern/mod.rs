@@ -189,16 +189,43 @@ impl QuadPattern {
             ActiveGraph::DefaultGraph => Ok(Some(graph_col.is_null())),
             ActiveGraph::AnyNamedGraph => Ok(Some(graph_col.is_not_null())),
             ActiveGraph::Union(graphs) => {
-                let mut literals = Vec::new();
-                for g in graphs {
-                    let term = match g.as_ref() {
-                        GraphNameRef::NamedNode(nn) => nn.into(),
-                        GraphNameRef::BlankNode(bn) => bn.into(),
-                        GraphNameRef::DefaultGraph => continue,
-                    };
-                    literals.push(lit(storage_encoding.encode_term_scalar(term)?));
+                if graphs.is_empty() {
+                    return Ok(Some(lit(false)));
                 }
-                Ok(Some(graph_col.in_list(literals, false)))
+
+                let mut literals = Vec::new();
+                let mut include_default = false;
+                for g in graphs {
+                    match g.as_ref() {
+                        GraphNameRef::NamedNode(nn) => {
+                            literals.push(lit(
+                                storage_encoding.encode_term_scalar(nn.into())?
+                            ));
+                        }
+                        GraphNameRef::BlankNode(bn) => {
+                            literals.push(lit(
+                                storage_encoding.encode_term_scalar(bn.into())?
+                            ));
+                        }
+                        GraphNameRef::DefaultGraph => include_default = true,
+                    };
+                }
+
+                let filter = if literals.is_empty() {
+                    if include_default {
+                        graph_col.is_null()
+                    } else {
+                        lit(false)
+                    }
+                } else if include_default {
+                    graph_col
+                        .clone()
+                        .in_list(literals, false)
+                        .or(graph_col.is_null())
+                } else {
+                    graph_col.in_list(literals, false)
+                };
+                Ok(Some(filter))
             }
             ActiveGraph::AllGraphs => Ok(None),
         }
