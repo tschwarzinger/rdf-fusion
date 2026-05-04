@@ -75,8 +75,8 @@ fn bench_full_execution(c: &mut Criterion) {
             );
             c.bench_function(&benchmark_name, |b| {
                 b.to_async(&runtime).iter(|| async {
-                    let (result, exp) = store
-                        .explain_query_opt(&query_text, QueryOptions::default())
+                    let result = store
+                        .query_opt(&query_text, QueryOptions::default())
                         .await
                         .unwrap();
                     consume_results(result).await.unwrap();

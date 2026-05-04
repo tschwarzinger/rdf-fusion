@@ -7,6 +7,7 @@ use crate::benchmarks::windfarm::WindFarmBenchmark;
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::RdfFusionBenchContext;
 use clap::ValueEnum;
+use datafusion::prelude::SessionConfig;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use std::fs;
 use std::path::PathBuf;
@@ -34,14 +35,14 @@ pub struct BenchmarkingOptions {
     /// For example, while non-verbose results could show an aggregated version of multiple runs,
     /// verbose results could write the results for each run.
     pub verbose_results: bool,
-    /// The number of partitions to use for configuring DataFusion.
-    pub target_partitions: Option<usize>,
     /// The number of MiBs that DataFusion is allowed to Suse.
     pub memory_size: Option<usize>,
     /// The storage backend to use for the benchmark.
     pub storage_backend: BenchmarkStorageBackend,
     /// The storage encoding to use for the benchmark.
     pub storage_encoding: QuadStorageEncodingName,
+    /// The DataFusion config.
+    pub config: SessionConfig,
 }
 
 /// Represents the possible storage backends a benchmark.

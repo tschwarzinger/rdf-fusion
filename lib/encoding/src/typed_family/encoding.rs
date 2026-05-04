@@ -3,7 +3,9 @@ use crate::typed_family::families::{
     BooleanFamily, DateTimeFamily, DurationFamily, NullFamily, NumericFamily,
     ResourceFamily, StringFamily, TypedFamilyRef, UnknownFamily,
 };
-use crate::typed_family::{FamilyArray, NullFamilyArray, TypedFamily, TypedFamilyArray};
+use crate::typed_family::{
+    FamilyArray, NullFamilyArray, TypeClaim, TypedFamily, TypedFamilyArray,
+};
 use crate::typed_family::{TypedFamilyArrayBuilder, TypedFamilyId, TypedFamilyScalar};
 use crate::{EncodingArray, EncodingName, TermEncoding};
 use datafusion::arrow::array::{
@@ -15,6 +17,7 @@ use datafusion::arrow::error::ArrowError;
 use datafusion::common::{ScalarValue, exec_datafusion_err};
 use rdf_fusion_model::{AResult, DFResult};
 use std::clone::Clone;
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::Arc;
 
@@ -45,6 +48,8 @@ pub struct TypedFamilyEncoding {
     data_type: DataType,
     /// The registered families
     families: Vec<TypedFamilyRef>,
+    /// Cache mapping datatype string to the family's index in `self.families`.
+    cache: HashMap<String, i8, ahash::RandomState>,
 }
 
 impl TypedFamilyEncoding {
@@ -63,10 +68,25 @@ impl TypedFamilyEncoding {
             TypedFamilyRef::new::<DurationFamily>(),
             TypedFamilyRef::new::<UnknownFamily>(),
         ];
+        Self::new_with_families(families)
+    }
+
+    /// Creates a new [`TypedFamilyEncoding`] with the given families.
+    fn new_with_families(families: Vec<TypedFamilyRef>) -> Self {
+        let mut cache = HashMap::with_hasher(ahash::RandomState::new());
+
+        for (i, family) in families.iter().enumerate() {
+            if let TypeClaim::Literal(data_types) = family.claim() {
+                for data_type in data_types {
+                    cache.insert(data_type.as_str().to_owned(), i as i8);
+                }
+            }
+        }
 
         Self {
             data_type: build_data_type(&families),
             families,
+            cache,
         }
     }
 
@@ -88,7 +108,19 @@ impl TypedFamilyEncoding {
         self: &Arc<Self>,
         array: &PlainTermArray,
     ) -> AResult<TypedFamilyArray> {
-        let (row_to_family, family_to_rows) = assign_rows_to_families(self, array);
+        if array.is_empty() {
+            return self.create_null_array(0);
+        }
+
+        let row_to_family = compute_row_to_family(self, array);
+
+        if let Some(result) =
+            try_cast_from_plain_term_array_fast_path(self, array, &row_to_family)?
+        {
+            return Ok(result);
+        }
+
+        let family_to_rows = compute_family_to_rows(self, &row_to_family);
         let family_arrays = create_array_for_families(self, array, &family_to_rows)?;
         let (final_type_ids, final_offsets, family_arrays) =
             extract_null_values(&row_to_family, family_arrays);
@@ -101,22 +133,18 @@ impl TypedFamilyEncoding {
         .with_family_arrays(family_arrays)?
         .finish();
 
-        /// Assigns rows indices to the type families that are responsible for them.
-        ///
-        /// Returns a row-to-family mapping and a family-to-rows mapping.
-        fn assign_rows_to_families(
+        /// Computes the mapping from row index to its corresponding type family ID.
+        fn compute_row_to_family(
             encoding: &TypedFamilyEncoding,
             array: &PlainTermArray,
-        ) -> (Vec<i8>, Vec<Vec<usize>>) {
+        ) -> Vec<i8> {
             let parts = array.as_parts();
             let len = parts.struct_array.len();
             let mut row_to_family = Vec::with_capacity(len);
-            let mut family_to_rows = vec![Vec::new(); encoding.families.len()];
 
             for i in 0..len {
                 if parts.struct_array.is_null(i) {
                     row_to_family.push(TypedFamilyEncoding::NULL_TYPE_ID);
-                    family_to_rows[TypedFamilyEncoding::NULL_TYPE_ID as usize].push(i);
                     continue;
                 }
 
@@ -126,30 +154,60 @@ impl TypedFamilyEncoding {
 
                 let family_info = match term_type {
                     PlainTermType::NamedNode | PlainTermType::BlankNode => {
-                        Some(encoding.resource_family_type_id())
+                        encoding.resource_family_type_id()
                     }
-                    PlainTermType::Literal => encoding
-                        .find_type_family_for_datatype(datatype)
-                        .map(|(tid, _)| tid),
+                    PlainTermType::Literal => {
+                        encoding.find_type_family_for_datatype(datatype).0
+                    }
                 };
-
-                if let Some(family_id) = family_info {
-                    row_to_family.push(family_id);
-                    family_to_rows[family_id as usize].push(i);
-                } else {
-                    let unknown_id = encoding.unknown_family_type_id();
-                    row_to_family.push(unknown_id);
-                    family_to_rows[unknown_id as usize].push(i);
-                }
+                row_to_family.push(family_info);
             }
 
-            (row_to_family, family_to_rows)
+            row_to_family
+        }
+
+        /// Maps the precomputed family IDs back to their respective row indices.
+        fn compute_family_to_rows(
+            encoding: &TypedFamilyEncoding,
+            row_to_family: &[i8],
+        ) -> Vec<Vec<usize>> {
+            let mut family_to_rows = vec![Vec::new(); encoding.families.len()];
+
+            for (i, &family_id) in row_to_family.iter().enumerate() {
+                family_to_rows[family_id as usize].push(i);
+            }
+
+            family_to_rows
+        }
+
+        /// Implements a specialized fast path that checks if all rows map to the same family.
+        fn try_cast_from_plain_term_array_fast_path(
+            encoding: &TypedFamilyEncodingRef,
+            array: &PlainTermArray,
+            row_to_family: &[i8],
+        ) -> AResult<Option<TypedFamilyArray>> {
+            let first_family = row_to_family[0];
+            let all_same_family = row_to_family.iter().all(|&f| f == first_family);
+
+            if !all_same_family {
+                return Ok(None);
+            }
+
+            // Since all rows map to the exact same family, we can process the whole array at once
+            if first_family == encoding.resource_family_type_id() {
+                let family = ResourceFamily::create_array_from_plain_term(array)?;
+                Ok(Some(encoding.create_array_from_family(family)?))
+            } else {
+                let family = &encoding.families[first_family as usize];
+                let family_array = family.cast_from_plain_term_array(array)?;
+                Ok(Some(encoding.create_array_with_single_family(
+                    family.family_id(),
+                    family_array,
+                )?))
+            }
         }
 
         /// Creates an array for each type family based on the given family to rows mapping.
-        ///
-        /// The resulting arrays may still contain null values. Removing these null values will be
-        /// handled in the subsequent phase.
         fn create_array_for_families(
             encoding: &TypedFamilyEncoding,
             input: &PlainTermArray,
@@ -181,9 +239,7 @@ impl TypedFamilyEncoding {
             Ok(family_results)
         }
 
-        /// Extract the null values from the family arrays and replace them with the global null
-        /// array. This allows the conversion functions to return NULLs to indicate an invalid
-        /// lexical value.
+        /// Extract the null values from the family arrays and replace them with the global null array.
         fn extract_null_values(
             row_to_family: &[i8],
             family_arrays: Vec<ArrayRef>,
@@ -194,6 +250,7 @@ impl TypedFamilyEncoding {
                 .collect();
             let no_null_handling_necessary =
                 family_null_masks.iter().all(|arr| arr.true_count() == 0);
+
             if no_null_handling_necessary {
                 let mut family_offsets = vec![0; family_arrays.len()];
                 let offsets = row_to_family
@@ -299,15 +356,14 @@ impl TypedFamilyEncoding {
     }
 
     /// Tries to find a registered [`TypedFamilyRef`] that is responsible for the given `datatype`.
-    pub fn find_type_family_for_datatype(
-        &self,
-        datatype: &str,
-    ) -> Option<(i8, &TypedFamilyRef)> {
-        self.families
-            .iter()
-            .enumerate()
-            .find(|(_, f)| f.claim().is_responsible_for_datatype(datatype))
-            .map(|(i, f)| (i as i8, f))
+    pub fn find_type_family_for_datatype(&self, datatype: &str) -> (i8, &TypedFamilyRef) {
+        let index = self
+            .cache
+            .get(datatype)
+            .copied()
+            .unwrap_or((self.families.len() - 1) as i8);
+        let index_usize = index as usize;
+        (index, &self.families[index_usize])
     }
 
     /// Creates a new [`TypedFamilyArray`] with the given number of nulls.

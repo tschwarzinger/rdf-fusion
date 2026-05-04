@@ -1,7 +1,7 @@
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::index::DeltaQuadStorageIndexSnapshot;
 use crate::delta::log::{
-    DeltaQuadStorageLogChangesetRef, DeltaStorageLog, DeltaStorageLogVersionRange,
+    DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
 use std::collections::HashSet;
 
@@ -91,7 +91,7 @@ impl DeltaQuadStorageScanPlanBuilder {
 
     pub async fn with_changeset_for_log(
         self,
-        log: &DeltaStorageLog,
+        log: &DeltaQuadStorageLog,
         target_version: Option<u64>,
     ) -> Result<Self, DeltaQuadStorageError> {
         let target_version = match target_version {
@@ -133,11 +133,7 @@ impl DeltaQuadStorageScanPlanBuilder {
 
         let initial_plan = match (&self.index, &self.changeset) {
             (Some(index), Some(changeset)) => {
-                // When a changeset is present, we must scan all 4 quad columns for the joins
-                // in apply_changeset_data_physical. Indices are 0, 1, 2, 3 for G, S, P, O.
-                let base_scan = self
-                    .scan_index_physical(index, &[0, 1, 2, 3], &filters)
-                    .await?;
+                let base_scan = self.scan_index_physical(index, None, &filters).await?;
                 let applied_scan = self
                     .apply_changeset_data_physical(
                         base_scan,
@@ -156,7 +152,7 @@ impl DeltaQuadStorageScanPlanBuilder {
 
             (Some(index), None) => {
                 let base_scan = self
-                    .scan_index_physical(index, &projection, &filters)
+                    .scan_index_physical(index, Some(&projection), &filters)
                     .await?;
 
                 Ok(QuadPatternScanPlanningResult {
@@ -253,9 +249,6 @@ impl DeltaQuadStorageScanPlanBuilder {
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
         let mut current_plan = base_scan;
 
-        // Ensure we join on all 4 quad columns for Removed and Added
-        let quad_projection = [0, 1, 2, 3]; // (g, s, p, o) relative to quad_schema
-
         // 1. Handle Cleared Graphs (LeftAnti Join on COL_GRAPH)
         if let Some(cleared_plan) = changeset.cleared_graphs(&self.session_state).await? {
             let left_schema = current_plan.schema();
@@ -265,8 +258,8 @@ impl DeltaQuadStorageScanPlanBuilder {
             let r_idx = right_schema.index_of(COL_GRAPH).expect("Scan has column");
 
             let join_on = vec![(
-                Arc::new(PhysColumn::new(COL_GRAPH, l_idx)) as Arc<dyn PhysicalExpr>,
                 Arc::new(PhysColumn::new(COL_GRAPH, r_idx)) as Arc<dyn PhysicalExpr>,
+                Arc::new(PhysColumn::new(COL_GRAPH, l_idx)) as Arc<dyn PhysicalExpr>,
             )];
 
             current_plan = Arc::new(HashJoinExec::try_new(
@@ -287,13 +280,13 @@ impl DeltaQuadStorageScanPlanBuilder {
         let removed_plan = changeset
             .removed_quads(&self.session_state)
             .await?
-            .map(|df| self.filter_and_project(df, &quad_projection, filters))
+            .map(|df| self.filter_and_project(df, None, filters))
             .transpose()?;
 
         let added_plan = changeset
             .added_quads(&self.session_state)
             .await?
-            .map(|df| self.filter_and_project(df, &quad_projection, filters))
+            .map(|df| self.filter_and_project(df, None, filters))
             .transpose()?;
 
         // 3. Phase 1: The Masking Anti-Join -> (Base \ (Removed U Added))
@@ -317,8 +310,8 @@ impl DeltaQuadStorageScanPlanBuilder {
                     let l_idx = left_schema.index_of(name).expect("Schema has column");
                     let r_idx = right_schema.index_of(name).expect("Schema has column");
                     join_on.push((
-                        Arc::new(PhysColumn::new(name, l_idx)) as Arc<dyn PhysicalExpr>,
                         Arc::new(PhysColumn::new(name, r_idx)) as Arc<dyn PhysicalExpr>,
+                        Arc::new(PhysColumn::new(name, l_idx)) as Arc<dyn PhysicalExpr>,
                     ));
                 }
 
@@ -350,18 +343,11 @@ impl DeltaQuadStorageScanPlanBuilder {
         let schema = current_plan.schema();
         let mut projections = Vec::with_capacity(projection.len());
         for &idx in projection {
-            // idx is index into quad_schema [g, s, p, o]
-            let name = match idx {
-                0 => COL_GRAPH,
-                1 => COL_SUBJECT,
-                2 => COL_PREDICATE,
-                3 => COL_OBJECT,
-                _ => panic!("Invalid projection index"),
-            };
-            let col_idx = schema.index_of(name).expect("Column exists");
+            let field = schema.field(idx);
+            let name = field.name();
             projections.push((
-                Arc::new(PhysColumn::new(name, col_idx)) as Arc<dyn PhysicalExpr>,
-                name.to_string(),
+                Arc::new(PhysColumn::new(name, idx)) as Arc<dyn PhysicalExpr>,
+                name.clone(),
             ));
         }
 
@@ -374,7 +360,7 @@ impl DeltaQuadStorageScanPlanBuilder {
     async fn scan_index_physical(
         &self,
         index: &DeltaQuadStorageIndexSnapshot,
-        projections: &[usize],
+        projections: Option<&Vec<usize>>,
         filters: &[Expr],
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
         let relevant_files = prune_cached_files(
@@ -418,12 +404,7 @@ impl DeltaQuadStorageScanPlanBuilder {
             }
             (true, true) => {
                 table_provider
-                    .scan(
-                        &self.session_state,
-                        Some(&projections.to_vec()),
-                        filters,
-                        None,
-                    )
+                    .scan(&self.session_state, projections, filters, None)
                     .await?
             }
             (true, false) => {
@@ -451,15 +432,19 @@ impl DeltaQuadStorageScanPlanBuilder {
                 initial_scan
             };
 
-            let projections = projections.iter().map(|&idx| {
-                let field = schema.field(idx);
-                ProjectionExpr::new(
-                    Arc::new(Column::new(field.name(), idx)),
-                    field.name(),
-                )
-            });
-            let projected = Arc::new(ProjectionExec::try_new(projections, filtered)?)
-                as Arc<dyn ExecutionPlan>;
+            let projected = if let Some(projections) = &projections {
+                let projections = projections.iter().map(|&idx| {
+                    let field = schema.field(idx);
+                    ProjectionExpr::new(
+                        Arc::new(Column::new(field.name(), idx)),
+                        field.name(),
+                    )
+                });
+                Arc::new(ProjectionExec::try_new(projections, filtered)?)
+                    as Arc<dyn ExecutionPlan>
+            } else {
+                filtered
+            };
 
             Ok(projected)
         };
@@ -536,7 +521,7 @@ impl DeltaQuadStorageScanPlanBuilder {
     fn filter_and_project(
         &self,
         plan: Arc<dyn ExecutionPlan>,
-        projections: &[usize],
+        projections: Option<&[usize]>,
         filters: &[Expr],
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
         let mut current_plan = plan;
@@ -552,16 +537,19 @@ impl DeltaQuadStorageScanPlanBuilder {
             current_plan = Arc::new(FilterExec::try_new(phys_filter, current_plan)?);
         }
 
-        let schema = current_plan.schema();
-        let mut exprs = Vec::with_capacity(projections.len());
-        for &idx in projections {
-            let field = schema.field(idx);
-            let expr =
-                Arc::new(PhysColumn::new(field.name(), idx)) as Arc<dyn PhysicalExpr>;
-            exprs.push((expr, field.name().to_string()));
+        if let Some(projections) = projections {
+            let schema = current_plan.schema();
+            let mut exprs = Vec::with_capacity(projections.len());
+            for &idx in projections {
+                let field = schema.field(idx);
+                let expr =
+                    Arc::new(PhysColumn::new(field.name(), idx)) as Arc<dyn PhysicalExpr>;
+                exprs.push((expr, field.name().to_string()));
+            }
+            Ok(Arc::new(ProjectionExec::try_new(exprs, current_plan)?))
+        } else {
+            Ok(current_plan)
         }
-
-        Ok(Arc::new(ProjectionExec::try_new(exprs, current_plan)?))
     }
 }
 

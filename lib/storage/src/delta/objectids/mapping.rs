@@ -2,15 +2,23 @@ use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::objectids::mapping_in_memory::ObjectIdInMemoryMapping;
 use datafusion::arrow::array::{Array, ArrayRef, Int64Array};
 use datafusion::arrow::datatypes::{Field, SchemaRef};
+use datafusion::catalog::TableProvider;
 use datafusion::common::ScalarValue;
+use datafusion::common::stats::Precision;
+use datafusion::execution::SessionState;
+use datafusion::logical_expr::col;
+use datafusion::prelude::SessionContext;
 use deltalake::arrow::datatypes::Schema;
+use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
 use deltalake::kernel::Action;
 use deltalake::kernel::engine::arrow_conversion::{TryFromArrow, TryFromKernel};
-use deltalake::kernel::transaction::CommitBuilder;
+use deltalake::kernel::transaction::{CommitBuilder, TableReference};
+use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
 use deltalake::protocol::{DeltaOperation, SaveMode};
 use deltalake::writer::{DeltaWriter, RecordBatchWriter};
-use deltalake::{DataType as DeltaDataType, DeltaTable, StructField};
+use deltalake::{DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField};
+use futures::StreamExt;
 use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_encoding::object_id::{
     ObjectIdDataType, ObjectIdMapping, ObjectIdMappingError,
@@ -21,6 +29,7 @@ use rdf_fusion_encoding::plain_term::{
 use rdf_fusion_encoding::typed_family::{TypedFamilyArray, TypedFamilyEncodingRef};
 use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
+use tracing::info;
 
 /// Implements [ObjectIdMapping] using a [ObjectIdInMemoryMapping] backed by Delta Lake.
 #[derive(Debug)]
@@ -43,8 +52,7 @@ pub struct DeltaObjectIdMapping {
 impl DeltaObjectIdMapping {
     /// Creates a new [DeltaObjectIdMapping] from a dictionary and a table.
     pub async fn try_new_at_location(
-        location: &str,
-        typed_family_encoding: TypedFamilyEncodingRef,
+        log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadStorageError> {
         let delta_columns = vec![
             StructField::new("id", DeltaDataType::LONG, false),
@@ -60,18 +68,71 @@ impl DeltaObjectIdMapping {
             .collect::<Vec<_>>();
 
         let table = CreateBuilder::new()
-            .with_location(location)
+            .with_log_store(log_store)
             .with_columns(delta_columns)
             .await?;
         let table_schema = Arc::new(Schema::new(arrow_columns));
 
         Ok(Self {
-            in_memory_mapping: Arc::new(RwLock::new(ObjectIdInMemoryMapping::empty(
-                typed_family_encoding,
-            ))),
+            in_memory_mapping: Arc::new(RwLock::new(ObjectIdInMemoryMapping::empty())),
             table: Arc::new(tokio::sync::RwLock::new(table)),
             table_schema,
             flush_lock: Arc::new(Mutex::new(0)),
+        })
+    }
+
+    pub async fn try_load(
+        session: &SessionState,
+        log_store: LogStoreRef,
+    ) -> Result<Self, DeltaQuadStorageError> {
+        let mut table = DeltaTable::new(log_store, DeltaTableConfig::default());
+        table.load().await?;
+
+        let delta_columns = [
+            StructField::new("id", DeltaDataType::LONG, false),
+            StructField::new(
+                "term",
+                DeltaDataType::try_from_arrow(PLAIN_TERM_ENCODING.data_type()).unwrap(),
+                true,
+            ),
+        ];
+        let arrow_columns = delta_columns
+            .iter()
+            .map(|c| Field::try_from_kernel(c).expect("Valid field"))
+            .collect::<Vec<_>>();
+        let table_schema = Arc::new(Schema::new(arrow_columns));
+
+        info!("Loaded object id mapping state. Rebuilding in-memory dictionary ...");
+
+        let mut in_memory_mapping = ObjectIdInMemoryMapping::empty();
+        let session = SessionContext::new_with_state(session.clone());
+        let table_provider = DeltaTableProvider::try_new(
+            table.snapshot()?.eager_snapshot().clone(),
+            table.log_store(),
+            DeltaScanConfig::default(),
+        )?;
+
+        if let Some(stats) = table_provider.statistics() {
+            if let Precision::Exact(num_rows) = stats.num_rows {
+                info!("Length of dictionary: {} rows", num_rows)
+            }
+        }
+
+        // Build a DataFrame, sort by `id` ascending, and execute
+        let df = session.read_table(Arc::new(table_provider))?;
+        let df = df.sort(vec![col("id").sort(true, false)])?;
+
+        let mut stream = df.execute_stream().await?;
+        while let Some(batch) = stream.next().await {
+            in_memory_mapping.add_batch(&batch?)?;
+        }
+
+        let highest_flushed_id = in_memory_mapping.next_id().saturating_sub(1);
+        Ok(Self {
+            in_memory_mapping: Arc::new(RwLock::new(in_memory_mapping)),
+            table: Arc::new(tokio::sync::RwLock::new(table)),
+            table_schema,
+            flush_lock: Arc::new(Mutex::new(highest_flushed_id)),
         })
     }
 
@@ -102,11 +163,21 @@ impl DeltaObjectIdMapping {
 
         let table = self.table.read().await;
 
+        let mut actions = Vec::new();
+        let mut pending_rows = 0;
         let mut writer = RecordBatchWriter::for_table(&table)?;
         for batch in batches {
+            pending_rows += batch.num_rows();
             writer.write(batch).await?;
+
+            if pending_rows >= 1_000_000 {
+                info!("Flushing ~1M object ids ...");
+                actions.extend(writer.flush().await?);
+                pending_rows = 0;
+            }
         }
-        let actions = writer.flush().await?;
+        actions.extend(writer.flush().await?);
+        info!("Object id data files flushed.");
 
         let result = CommitBuilder::default()
             .with_actions(actions.into_iter().map(Action::Add).collect())
@@ -124,6 +195,11 @@ impl DeltaObjectIdMapping {
 
         let mut table = self.table.write().await;
         table.state = Some(result.snapshot);
+
+        info!(
+            "New object id table version committed. Txn id: {}",
+            result.version
+        );
 
         Ok(())
     }
@@ -204,10 +280,14 @@ impl ObjectIdMapping for DeltaObjectIdMapping {
             .read()
             .expect("In-memory mapping lock is poisoned");
         let typed_value_col = dict
-            .resolve_typed_values(id_array)
+            .resolve_plain_terms(id_array)
             .map_err(ObjectIdMappingError::from)?;
 
-        TypedFamilyArray::try_new(Arc::clone(encoding), Arc::clone(&typed_value_col))
-            .map_err(|e| ObjectIdMappingError::IllegalArgument(e.to_string()))
+        let plain_terms = PLAIN_TERM_ENCODING
+            .try_new_array(typed_value_col)
+            .expect("Decoded Plain Term Array");
+        let result = encoding.cast_from_plain_term_array(&plain_terms)?;
+
+        Ok(result)
     }
 }

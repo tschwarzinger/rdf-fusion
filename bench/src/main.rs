@@ -1,6 +1,7 @@
 use anyhow::Context;
 use clap::{Parser, ValueEnum};
 use datafusion::common::runtime::SpawnedTask;
+use datafusion::prelude::SessionConfig;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::{
@@ -26,10 +27,10 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(QuadStorageEncodingName::ObjectId);
     let options = BenchmarkingOptions {
         verbose_results: args.verbose_results,
-        target_partitions: args.target_partitions,
         memory_size: args.memory_limit.map(|val| 1024 * 1024 * val),
         storage_backend,
         storage_encoding,
+        config: SessionConfig::from_env().context("Failed to obtain session config")?,
     };
 
     let task = SpawnedTask::spawn(async move {
@@ -51,9 +52,6 @@ pub struct RdfFusionBenchArgs {
     /// Indicates whether the benchmark results should be verbose.
     #[arg(short, long, default_value = "false")]
     pub verbose_results: bool,
-    /// Defines how many target partitions DataFusion should use.
-    #[arg(short, long)]
-    pub target_partitions: Option<usize>,
     /// Defines how much memory DataFusion is allowed to use. In MiB.
     #[arg(long)]
     pub memory_limit: Option<usize>,

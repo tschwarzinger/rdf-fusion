@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueHint};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
 #[command(about, version, name = "rdf-fusion")]
@@ -39,5 +40,10 @@ pub enum Command {
         /// This is equivalent as setting the union-default-graph option in all SPARQL queries
         #[arg(long)]
         union_default_graph: bool,
+    },
+    /// Build a database at the configured location.
+    BuildDatabase {
+        #[arg(long)]
+        inputs: Vec<PathBuf>,
     },
 }

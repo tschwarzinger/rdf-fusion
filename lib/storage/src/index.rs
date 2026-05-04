@@ -9,13 +9,6 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IndexComponents([QuadComponent; 4]);
 
-impl IndexComponents {
-    /// Returns a reference to the inner array.
-    pub fn inner(&self) -> &[QuadComponent; 4] {
-        &self.0
-    }
-}
-
 impl Display for IndexComponents {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for component in self.0.iter() {
@@ -25,34 +18,69 @@ impl Display for IndexComponents {
     }
 }
 
+// Allows concisely generating all 24 constants
+macro_rules! define_indexes {
+    ($($name:ident => [$a:ident, $b:ident, $c:ident, $d:ident]),* $(,)?) => {
+        $(
+            #[doc = concat!("A ", stringify!($name), " index.")]
+            pub const $name: IndexComponents = IndexComponents([
+                QuadComponent::$a,
+                QuadComponent::$b,
+                QuadComponent::$c,
+                QuadComponent::$d,
+            ]);
+        )*
+
+        /// Returns a list of all 24 valid [`IndexComponents`] permutations.
+        pub const fn list_all() -> &'static [IndexComponents; 24] {
+            &[$(Self::$name),*]
+        }
+    };
+}
+
 impl IndexComponents {
-    /// A GSPO index.
-    pub const GSPO: IndexComponents = IndexComponents([
-        QuadComponent::GraphName,
-        QuadComponent::Subject,
-        QuadComponent::Predicate,
-        QuadComponent::Object,
-    ]);
+    define_indexes! {
+        // Subject First
+        SPOG => [Subject, Predicate, Object, GraphName],
+        SPGO => [Subject, Predicate, GraphName, Object],
+        SOPG => [Subject, Object, Predicate, GraphName],
+        SOGP => [Subject, Object, GraphName, Predicate],
+        SGPO => [Subject, GraphName, Predicate, Object],
+        SGOP => [Subject, GraphName, Object, Predicate],
 
-    /// A GPOS index.
-    pub const GPOS: IndexComponents = IndexComponents([
-        QuadComponent::GraphName,
-        QuadComponent::Predicate,
-        QuadComponent::Object,
-        QuadComponent::Subject,
-    ]);
+        // Predicate First
+        PSOG => [Predicate, Subject, Object, GraphName],
+        PSGO => [Predicate, Subject, GraphName, Object],
+        POSG => [Predicate, Object, Subject, GraphName],
+        POGS => [Predicate, Object, GraphName, Subject],
+        PGSO => [Predicate, GraphName, Subject, Object],
+        PGOS => [Predicate, GraphName, Object, Subject],
 
-    /// A GPSO index.
-    pub const GOSP: IndexComponents = IndexComponents([
-        QuadComponent::GraphName,
-        QuadComponent::Object,
-        QuadComponent::Subject,
-        QuadComponent::Predicate,
-    ]);
+        // Object First
+        OSPG => [Object, Subject, Predicate, GraphName],
+        OSGP => [Object, Subject, GraphName, Predicate],
+        OPSG => [Object, Predicate, Subject, GraphName],
+        OPGS => [Object, Predicate, GraphName, Subject],
+        OGSP => [Object, GraphName, Subject, Predicate],
+        OGPS => [Object, GraphName, Predicate, Subject],
 
-    /// Tries to create a new [IndexConfiguration].
+        // GraphName First
+        GSPO => [GraphName, Subject, Predicate, Object],
+        GSOP => [GraphName, Subject, Object, Predicate],
+        GPSO => [GraphName, Predicate, Subject, Object],
+        GPOS => [GraphName, Predicate, Object, Subject],
+        GOSP => [GraphName, Object, Subject, Predicate],
+        GOPS => [GraphName, Object, Predicate, Subject],
+    }
+
+    /// Returns a reference to the inner array.
+    pub const fn inner(&self) -> &[QuadComponent; 4] {
+        &self.0
+    }
+
+    /// Tries to create a new [IndexComponents].
     ///
-    /// Returns an error if an [QuadComponent] appears more than once.
+    /// Returns an error if a [QuadComponent] appears more than once.
     pub fn try_new(
         components: [QuadComponent; 4],
     ) -> Result<Self, IndexComponentsCreationError> {

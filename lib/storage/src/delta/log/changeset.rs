@@ -1,5 +1,5 @@
 use crate::delta::error::DeltaQuadStorageError;
-use crate::delta::log::DeltaStorageLogVersionRange;
+use crate::delta::log::{DeltaStorageLogVersionRange, EagerChangeset};
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use datafusion::physical_plan::ExecutionPlan;
@@ -11,22 +11,22 @@ pub type DeltaQuadStorageLogChangesetRef = Arc<dyn DeltaQuadStorageLogChangeset>
 /// Trait for a changeset between two versions of the [`DeltaStorageLog`].
 ///
 /// This behavior is encapsulated in a trait to allow for two implementations:
-/// - An eagerly compute changeset that is held in-memory and can be shared by multiple requests
-/// - A lazily computed changeset that is computed on-demand and is always recomputed
+/// - [`EagerChangeset`]: An eagerly compute changeset that is held in-memory and can be shared by
+///   multiple requests.
+/// - [`LazyInsertionOnlyChangeset`](crate::delta::log::LazyInsertionOnlyChangeset): A lazily
+///   computed changeset that is computed on-demand and is always recomputed. This changeset
+///   only supports transactions that only insert quads (e.g., bulk insertions).
 ///
 /// The first implementation is used for "small" changesets. For such changesets, we want to
 /// amortize the cost of pre-computing the changeset by sharing it for multiple consumers (e.g.,
 /// index updaters, queries). However, if the changeset is huge, it can be that the available memory
-/// cannot hold the entire changeset (e.g., on the initial insert of a dataset). Then, we fall back
-/// to a lazily computed changeset which directly accesses the log table.
+/// cannot hold the entire changeset (e.g., on the initial insert of a dataset). Then, if possible,
+/// we fall back to a lazily computed changeset which directly accesses the log table.
 ///
 /// All functions return the *effective change* between two versions. For example, adding a quad and
 /// removing the same quad only contains an entry in the removed quads list.
 #[async_trait]
 pub trait DeltaQuadStorageLogChangeset: Send + Sync {
-    /// Returns the changeset as [`Any`].
-    fn as_any(&self) -> &dyn std::any::Any;
-
     /// Returns the version range that this changeset reflects.
     fn version_range(&self) -> DeltaStorageLogVersionRange;
 
@@ -65,4 +65,14 @@ pub trait DeltaQuadStorageLogChangeset: Send + Sync {
         &self,
         state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError>;
+
+    /// Returns the current changeset as an [`EagerChangeset`]. This is necessary for updating the
+    /// changeset during transactions.
+    async fn as_eager_changeset(
+        &self,
+        state: &SessionState,
+    ) -> Result<EagerChangeset, DeltaQuadStorageError>;
+
+    /// Returns the size of the changeset in bytes.
+    fn size(&self) -> usize;
 }

@@ -21,12 +21,14 @@ rdf-fusion-encoding.workspace = true
 rdf-fusion-functions.workspace = true
 rdf-fusion-model.workspace = true
 futures.workspace = true
+object_store.workspace = true
 rdf-fusion-execution.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-storage.workspace = true
 oxrdfio.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }

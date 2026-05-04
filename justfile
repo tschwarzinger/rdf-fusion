@@ -39,13 +39,9 @@ prepare-benches:
     cargo run --profile profiling-nonlto prepare bsbm-explore --num-products 10000 # BSBM use cases share the data
     cargo run --profile profiling-nonlto prepare wind-farm --num-turbines 16
 
-# Starts a webserver that can answer SPARQL queries (debug)
-serve-dbg:
-    cargo run --bin rdf-fusion -- serve --bind 0.0.0.0:7878
-
-# Starts a webserver that can answer SPARQL queries (profiling)
-serve:
-    RUSTFLAGS="-C target-cpu=native" cargo run --profile profiling --bin rdf-fusion -- serve --bind 0.0.0.0:7878
+# Starts a webserver that can answer SPARQL queries
+serve location="memory:///" profile="profiling-nonlto":
+    RUSTFLAGS="-C target-cpu=native" cargo run --profile {{profile}} --bin rdf-fusion -- --location {{location}} serve --bind 0.0.0.0:7878 --cors
 
 #
 # Releases

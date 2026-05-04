@@ -33,17 +33,16 @@
 use crate::error::{LoaderError, SerializerError};
 use datafusion::logical_expr::{col, lit};
 use datafusion::optimizer::OptimizerConfig;
-use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
+use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
 use datafusion::physical_plan::filter::FilterExec;
-use datafusion::physical_plan::{execute_stream, ExecutionPlan};
+use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use oxrdfio::RdfSerializer;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
-use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion_encoding::{
-    quads_to_plain_term_dataframe, QuadStorageEncoding, TermEncoding,
+    QuadStorageEncoding, TermEncoding, quads_to_plain_term_dataframe,
 };
 use rdf_fusion_execution::ingest::{RdfParserOptions, RdfParserTableProvider};
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
@@ -60,8 +59,10 @@ use rdf_fusion_model::{
     TermRef, Variable,
 };
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion_storage::logstore::{StorageConfig, logstore_with};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
+use url::Url;
 
 static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
     Arc::new([
@@ -120,14 +121,18 @@ impl Store {
     /// [`RdfFusionContextBuilder`] and the implementation of the used quad storage (e.g.
     /// [`DeltaQuadStorageBuilder`]).
     pub async fn new_in_memory() -> Store {
-        let delta_storage =
-            DeltaQuadStorageBuilder::new(Arc::new(TypedFamilyEncoding::default()))
-                .with_location("memory://")
-                .build()
-                .await
-                .expect("Default in-memory works");
+        let memory_store = Arc::new(object_store::memory::InMemory::new());
+        let url = Url::parse("memory://").unwrap();
+        let log_store = logstore_with(memory_store, &url, StorageConfig::default())
+            .expect("Valid log store");
 
-        let context = RdfFusionContextBuilder::new(delta_storage)
+        let delta_storage = DeltaQuadStorageBuilder::new()
+            .with_log_store(log_store)
+            .build()
+            .await
+            .expect("Default in-memory works");
+
+        let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
             .with_single_partition_session_config()
             .build()
             .expect("Default in-memory works. Session config is set.");
@@ -492,7 +497,8 @@ impl Store {
                         .map(|i| i.to_string())
                         .expect("Iri Parser Errors requires base iri"),
                     error: e,
-                })?;
+                })?
+                .with_track_progress(true);
         let quads = self
             .context
             .session_context()
@@ -893,7 +899,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::{NamedNode, NamedNodeRef, QuadRef};
+    /// use rdf_fusion::model::{NamedNode, QuadRef};
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
     ///

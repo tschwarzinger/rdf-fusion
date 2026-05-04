@@ -22,11 +22,14 @@ doc = false
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 datafusion.workspace = true
+deltalake.workspace = true
 rdf-fusion.workspace = true
 rdf-fusion-web.workspace = true
 snmalloc-rs.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 tracing-subscriber.workspace = true
+url.workspace = true
 
 [build-dependencies]
 clap = { workspace = true, features = ["derive"] }

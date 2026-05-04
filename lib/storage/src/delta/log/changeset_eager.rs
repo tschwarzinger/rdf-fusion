@@ -1,16 +1,17 @@
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::log::changeset::DeltaQuadStorageLogChangeset;
+use crate::delta::log::operations_changeset_stream::OperationsChangesetStream;
 use crate::delta::log::{
-    COL_COMMIT_VERSION, COL_OPERATION, ComputeLogChangesetExec, DeltaStorageLogOperation,
-    DeltaStorageLogVersionRange,
+    COL_COMMIT_VERSION, COL_OPERATION, COL_OPERATION_SEQ_ID, ComputeLogChangesetExec,
+    DeltaStorageLogOperation, DeltaStorageLogVersionRange,
 };
 use async_trait::async_trait;
 use datafusion::arrow::array::{
     ArrayRef, AsArray, Int8Array, Int64Array, RecordBatch, UInt64Builder, new_null_array,
 };
 use datafusion::arrow::compute::BatchCoalescer;
-use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
-use datafusion::execution::{SendableRecordBatchStream, SessionState};
+use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use datafusion::execution::SessionState;
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::{
     ExecutionPlan, ExecutionPlanProperties, collect, execute_stream,
@@ -24,7 +25,8 @@ use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT}
 use std::sync::Arc;
 
 /// Represents a changeset between two versions of the [`DeltaStorageLog`].
-pub struct EagerDeltaQuadStorageChangeset {
+#[derive(Clone)]
+pub struct EagerChangeset {
     session_context: SessionContext,
     version_range: DeltaStorageLogVersionRange,
     operation_schema: SchemaRef,
@@ -35,12 +37,12 @@ pub struct EagerDeltaQuadStorageChangeset {
     dropped_named_graphs: Vec<RecordBatch>,
 }
 
-impl EagerDeltaQuadStorageChangeset {
-    /// Partitions a stream of operations for creating an [`EagerDeltaQuadStorageChangeset`].
+impl EagerChangeset {
+    /// Partitions a stream of operations for creating an [`EagerChangeset`].
     pub async fn partition_operations(
         state: &SessionState,
         version_range: DeltaStorageLogVersionRange,
-        operations: SendableRecordBatchStream,
+        operations: OperationsChangesetStream,
     ) -> Result<Self, DeltaQuadStorageError> {
         partition_changeset_operations(state, version_range, operations).await
     }
@@ -58,7 +60,7 @@ impl EagerDeltaQuadStorageChangeset {
         all_ops.extend(new_ops);
 
         if all_ops.is_empty() {
-            return Ok(EagerDeltaQuadStorageChangeset {
+            return Ok(EagerChangeset {
                 session_context: self.session_context.clone(),
                 version_range: DeltaStorageLogVersionRange::new_unchecked(
                     self.version_range.starting_version(),
@@ -91,7 +93,8 @@ impl EagerDeltaQuadStorageChangeset {
         // Note: No SortExec needed here because we've appended new operations (which are chronologically
         // ordered) to the existing ones (which have version 0).
         let compute_plan = ComputeLogChangesetExec::try_new(combined_plan)?;
-        let stream = execute_stream(Arc::new(compute_plan), state.task_ctx())?;
+        let raw_stream = execute_stream(Arc::new(compute_plan), state.task_ctx())?;
+        let stream = OperationsChangesetStream::try_new(raw_stream);
 
         let new_range = DeltaStorageLogVersionRange::new_unchecked(
             self.version_range.starting_version(),
@@ -128,7 +131,7 @@ impl EagerDeltaQuadStorageChangeset {
         self.append_category_to_ops(
             &mut result,
             &self.added_quads,
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
         )?;
 
         Ok(result)
@@ -144,19 +147,39 @@ impl EagerDeltaQuadStorageChangeset {
             return Ok(());
         }
 
-        let schema = Arc::clone(&self.operation_schema);
+        let data_type = self
+            .operation_schema
+            .field(OperationsChangesetStream::GRAPH_IDX)
+            .data_type()
+            .clone();
+        let schema = Arc::new(Schema::new(vec![
+            Field::new(COL_COMMIT_VERSION, DataType::Int64, true),
+            Field::new(COL_OPERATION_SEQ_ID, DataType::Int64, false),
+            Field::new(COL_OPERATION, DataType::Int8, false),
+            Field::new(COL_GRAPH, data_type.clone(), true),
+            Field::new(COL_SUBJECT, data_type.clone(), true),
+            Field::new(COL_PREDICATE, data_type.clone(), true),
+            Field::new(COL_OBJECT, data_type, true),
+        ]));
+
         let op_val = operation.as_stored();
+        let commit_version = self.version_range.ending_version() as i64;
 
         for batch in batches {
             let num_rows = batch.num_rows();
             let op_array = Arc::new(Int8Array::from_value(op_val, num_rows)) as ArrayRef;
-            let version_array = Arc::new(Int64Array::from_value(0, num_rows)) as ArrayRef;
+            let seq_array = Arc::new(Int64Array::from_value(0, num_rows)) as ArrayRef;
+            let version_array =
+                Arc::new(Int64Array::from_value(commit_version, num_rows)) as ArrayRef;
 
             let mut columns = Vec::with_capacity(schema.fields().len());
             for field in schema.fields() {
                 match field.name().as_str() {
                     COL_OPERATION => columns.push(Arc::clone(&op_array)),
                     COL_COMMIT_VERSION => columns.push(Arc::clone(&version_array)),
+                    COL_OPERATION_SEQ_ID => {
+                        columns.push(Arc::clone(&seq_array));
+                    }
                     name => {
                         if let Ok(idx) = batch.schema().index_of(name) {
                             columns.push(Arc::clone(batch.column(idx)));
@@ -172,23 +195,20 @@ impl EagerDeltaQuadStorageChangeset {
     }
 }
 
-/// Partitions the operations for an index update dynamically from the stream.
 async fn partition_changeset_operations(
     state: &SessionState,
     version_range: DeltaStorageLogVersionRange,
-    mut operations: SendableRecordBatchStream,
-) -> Result<EagerDeltaQuadStorageChangeset, DeltaQuadStorageError> {
-    let operation_schema = operations.schema();
+    operations: OperationsChangesetStream,
+) -> Result<EagerChangeset, DeltaQuadStorageError> {
+    let operation_schema = operations.inner().schema();
 
-    // Map necessary columns and projection indices
-    let op_idx = operation_schema.index_of(COL_OPERATION).unwrap_or(0);
-    let graph_idx = operation_schema.index_of(COL_GRAPH).unwrap_or(1);
-    let sub_idx = operation_schema.index_of(COL_SUBJECT).unwrap_or(2);
-    let pred_idx = operation_schema.index_of(COL_PREDICATE).unwrap_or(3);
-    let obj_idx = operation_schema.index_of(COL_OBJECT).unwrap_or(4);
-
-    let quad_proj = vec![graph_idx, sub_idx, pred_idx, obj_idx];
-    let graph_proj = vec![graph_idx];
+    let quad_proj = vec![
+        OperationsChangesetStream::GRAPH_IDX,
+        OperationsChangesetStream::SUBJECT_IDX,
+        OperationsChangesetStream::PREDICATE_IDX,
+        OperationsChangesetStream::OBJECT_IDX,
+    ];
+    let graph_proj = vec![OperationsChangesetStream::GRAPH_IDX];
 
     let quad_schema = Arc::new(operation_schema.project(&quad_proj)?);
     let graph_schema = Arc::new(operation_schema.project(&graph_proj)?);
@@ -208,16 +228,17 @@ async fn partition_changeset_operations(
     let mut added_quads_coal = BatchCoalescer::new(Arc::clone(&quad_schema), batch_size);
 
     // --- Execute Streaming Processing ---
+    let mut operations = operations.into_inner();
     while let Some(batch) = operations.next().await {
         let batch = batch?;
         if batch.num_rows() == 0 {
             continue;
         }
 
-        let graph_col = batch.column(graph_idx);
-        let sub_col = batch.column(sub_idx);
-        let pred_col = batch.column(pred_idx);
-        let obj_col = batch.column(obj_idx);
+        let graph_col = batch.column(OperationsChangesetStream::GRAPH_IDX);
+        let sub_col = batch.column(OperationsChangesetStream::SUBJECT_IDX);
+        let pred_col = batch.column(OperationsChangesetStream::PREDICATE_IDX);
+        let obj_col = batch.column(OperationsChangesetStream::OBJECT_IDX);
 
         let mut cleared_graphs_idx = UInt64Builder::new();
         let mut dropped_named_graphs_idx = UInt64Builder::new();
@@ -226,7 +247,9 @@ async fn partition_changeset_operations(
         let mut added_quads_idx = UInt64Builder::new();
 
         // Single linear pass over the batch rows
-        let ops = batch.column(op_idx).as_primitive::<Int8Type>();
+        let ops = batch
+            .column(OperationsChangesetStream::OP_IDX)
+            .as_primitive::<Int8Type>();
         for row in 0..batch.num_rows() {
             let op = DeltaStorageLogOperation::from_stored(ops.value(row)).ok_or_else(
                 || {
@@ -256,6 +279,9 @@ async fn partition_changeset_operations(
                 }
                 DeltaStorageLogOperation::ClearGraph => {
                     cleared_graphs_idx.append_value(row_u64);
+                    if graph_valid {
+                        added_named_graphs_idx.append_value(row_u64);
+                    }
                 }
                 DeltaStorageLogOperation::CreateGraph => {
                     if graph_valid {
@@ -268,7 +294,7 @@ async fn partition_changeset_operations(
                     }
                     removed_quads_idx.append_value(row_u64);
                 }
-                DeltaStorageLogOperation::AddQuad => {
+                DeltaStorageLogOperation::InsertQuad => {
                     if !quad_valid {
                         return Err(DeltaQuadStorageError::Corruption("Invalid remove quad operation: missing subject, predicate, or object".to_string()));
                     }
@@ -320,16 +346,18 @@ async fn partition_changeset_operations(
     let added_named_graphs = if added_named_graphs.is_empty() {
         vec![]
     } else {
-        let df = session_context.read_batches(added_named_graphs)?;
-        df.distinct()?.collect().await?
+        session_context
+            .read_batches(added_named_graphs)?
+            .distinct()?
+            .collect()
+            .await?
     };
 
-    let removed_quads =
-        enforce_non_nullable(removed_quads, &[COL_SUBJECT, COL_PREDICATE, COL_OBJECT])?;
-    let added_quads =
-        enforce_non_nullable(added_quads, &[COL_SUBJECT, COL_PREDICATE, COL_OBJECT])?;
+    let non_null_quad_columns = [1, 2, 3];
+    let removed_quads = enforce_non_nullable(removed_quads, &non_null_quad_columns)?;
+    let added_quads = enforce_non_nullable(added_quads, &non_null_quad_columns)?;
 
-    Ok(EagerDeltaQuadStorageChangeset {
+    Ok(EagerChangeset {
         session_context,
         version_range,
         operation_schema,
@@ -354,7 +382,7 @@ fn drain_coalescer(mut coal: BatchCoalescer) -> AResult<Vec<RecordBatch>> {
 /// Rebuilds the RecordBatches with a strict, non-nullable schema for the specified columns.
 fn enforce_non_nullable(
     batches: Vec<RecordBatch>,
-    non_nullable_cols: &[&str],
+    non_nullable_cols: &[usize],
 ) -> AResult<Vec<RecordBatch>> {
     if batches.is_empty() {
         return Ok(batches);
@@ -363,8 +391,8 @@ fn enforce_non_nullable(
     let old_schema = batches[0].schema();
     let mut new_fields = Vec::with_capacity(old_schema.fields().len());
 
-    for field in old_schema.fields() {
-        if non_nullable_cols.contains(&field.name().as_str()) {
+    for (idx, field) in old_schema.fields().iter().enumerate() {
+        if non_nullable_cols.contains(&idx) {
             new_fields.push(Arc::new(Field::new(
                 field.name(),
                 field.data_type().clone(),
@@ -386,11 +414,7 @@ fn enforce_non_nullable(
 }
 
 #[async_trait]
-impl DeltaQuadStorageLogChangeset for EagerDeltaQuadStorageChangeset {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
+impl DeltaQuadStorageLogChangeset for EagerChangeset {
     fn version_range(&self) -> DeltaStorageLogVersionRange {
         self.version_range
     }
@@ -429,6 +453,40 @@ impl DeltaQuadStorageLogChangeset for EagerDeltaQuadStorageChangeset {
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
         create_result(&self.session_context, &self.dropped_named_graphs).await
     }
+
+    async fn as_eager_changeset(
+        &self,
+        _state: &SessionState,
+    ) -> Result<EagerChangeset, DeltaQuadStorageError> {
+        Ok(self.clone())
+    }
+
+    fn size(&self) -> usize {
+        self.cleared_graphs
+            .iter()
+            .map(|b| b.get_array_memory_size())
+            .sum::<usize>()
+            + self
+                .removed_quads
+                .iter()
+                .map(|b| b.get_array_memory_size())
+                .sum::<usize>()
+            + self
+                .added_quads
+                .iter()
+                .map(|b| b.get_array_memory_size())
+                .sum::<usize>()
+            + self
+                .added_named_graphs
+                .iter()
+                .map(|b| b.get_array_memory_size())
+                .sum::<usize>()
+            + self
+                .dropped_named_graphs
+                .iter()
+                .map(|b| b.get_array_memory_size())
+                .sum::<usize>()
+    }
 }
 
 /// Creates a [`DataFrame`] from the given batches.
@@ -441,7 +499,7 @@ async fn create_result(
     }
 
     let result = session_context
-        .read_batches(batches.iter().cloned())?
+        .read_batches(batches.to_vec())?
         .create_physical_plan()
         .await?;
     Ok(Some(result))
@@ -451,7 +509,6 @@ async fn create_result(
 mod tests {
     use super::*;
     use crate::delta::log::DeltaStorageLogOperation;
-    use datafusion::arrow::array::Int64Builder;
     use datafusion::arrow::datatypes::{DataType, Field};
     use datafusion::physical_plan::collect;
     use deltalake::arrow::util::pretty::pretty_format_batches;
@@ -460,12 +517,13 @@ mod tests {
     };
     use rdf_fusion_encoding::{EncodingArray, TermEncoding};
     use rdf_fusion_model::NamedNodeRef;
+    use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 
     #[tokio::test]
     async fn test_extend_eager_changeset() {
         let session = SessionContext::new();
         let state = session.state();
-        let schema = create_operation_schema();
+        let schema = create_operation_log_table_schema();
 
         // 1. Initial changeset: Add s1
         let batch1 = create_batch(
@@ -475,20 +533,19 @@ mod tests {
                 "https://s1",
                 "https://p1",
                 "https://o1",
-                DeltaStorageLogOperation::AddQuad,
-                1,
+                DeltaStorageLogOperation::InsertQuad,
             )],
         );
         let stream1 = session
-            .read_batch(batch1)
+            .read_batch(batch1.project(&vec![2, 3, 4, 5, 6]).unwrap())
             .unwrap()
             .execute_stream()
             .await
             .unwrap();
-        let changeset = EagerDeltaQuadStorageChangeset::partition_operations(
+        let changeset = EagerChangeset::partition_operations(
             &state,
             DeltaStorageLogVersionRange::new_unchecked(0, 1),
-            stream1,
+            OperationsChangesetStream::try_new(stream1),
         )
         .await
         .unwrap();
@@ -503,15 +560,13 @@ mod tests {
                     "https://p1",
                     "https://o1",
                     DeltaStorageLogOperation::RemoveQuad,
-                    2,
                 ),
                 (
                     None,
                     "https://s2",
                     "https://p2",
                     "https://o2",
-                    DeltaStorageLogOperation::AddQuad,
-                    3,
+                    DeltaStorageLogOperation::InsertQuad,
                 ),
             ],
         );
@@ -553,7 +608,7 @@ mod tests {
     async fn test_extend_eager_changeset_with_barriers() {
         let session = SessionContext::new();
         let state = session.state();
-        let schema = create_operation_schema();
+        let schema = create_operation_log_table_schema();
 
         // 1. Initial changeset: Add s1 in g1
         let batch1 = create_batch(
@@ -563,20 +618,19 @@ mod tests {
                 "https://s1",
                 "https://p1",
                 "https://o1",
-                DeltaStorageLogOperation::AddQuad,
-                1,
+                DeltaStorageLogOperation::InsertQuad,
             )],
         );
         let stream1 = session
-            .read_batch(batch1)
+            .read_batch(batch1.project(&vec![2, 3, 4, 5, 6]).unwrap())
             .unwrap()
             .execute_stream()
             .await
             .unwrap();
-        let changeset = EagerDeltaQuadStorageChangeset::partition_operations(
+        let changeset = EagerChangeset::partition_operations(
             &state,
             DeltaStorageLogVersionRange::new_unchecked(0, 1),
-            stream1,
+            OperationsChangesetStream::try_new(stream1),
         )
         .await
         .unwrap();
@@ -589,14 +643,15 @@ mod tests {
         let batch2 = RecordBatch::try_new(
             Arc::clone(&schema),
             vec![
-                Arc::clone(&g1_term),
-                new_null_array(schema.field(1).data_type(), 1), // subject
-                new_null_array(schema.field(2).data_type(), 1), // predicate
-                new_null_array(schema.field(3).data_type(), 1), // object
+                Arc::new(Int64Array::from(vec![2])), // version
+                Arc::new(Int64Array::from(vec![0])), // seq_id
                 Arc::new(Int8Array::from(vec![
                     DeltaStorageLogOperation::ClearGraph.as_stored(),
                 ])),
-                Arc::new(Int64Array::from(vec![2])),
+                Arc::clone(&g1_term),
+                new_null_array(schema.field(4).data_type(), 1), // subject
+                new_null_array(schema.field(5).data_type(), 1), // predicate
+                new_null_array(schema.field(6).data_type(), 1), // object
             ],
         )
         .unwrap();
@@ -608,8 +663,7 @@ mod tests {
                 "https://s2",
                 "https://p2",
                 "https://o2",
-                DeltaStorageLogOperation::AddQuad,
-                3,
+                DeltaStorageLogOperation::InsertQuad,
             )],
         );
 
@@ -647,37 +701,32 @@ mod tests {
         assert!(cleared.contains("https://g1"));
     }
 
-    fn create_operation_schema() -> SchemaRef {
+    fn create_operation_log_table_schema() -> SchemaRef {
         let data_type = PLAIN_TERM_ENCODING.data_type().clone();
         Arc::new(Schema::new(vec![
+            Field::new(COL_COMMIT_VERSION, DataType::Int64, false),
+            Field::new(COL_OPERATION_SEQ_ID, DataType::Int64, false),
+            Field::new(COL_OPERATION, DataType::Int8, false),
             Field::new(COL_GRAPH, data_type.clone(), true),
             Field::new(COL_SUBJECT, data_type.clone(), true),
             Field::new(COL_PREDICATE, data_type.clone(), true),
             Field::new(COL_OBJECT, data_type, true),
-            Field::new(COL_OPERATION, DataType::Int8, false),
-            Field::new(COL_COMMIT_VERSION, DataType::Int64, false),
         ]))
     }
 
     fn create_batch(
         schema: &SchemaRef,
-        rows: Vec<(
-            Option<&str>,
-            &str,
-            &str,
-            &str,
-            DeltaStorageLogOperation,
-            i64,
-        )>,
+        rows: Vec<(Option<&str>, &str, &str, &str, DeltaStorageLogOperation)>,
     ) -> RecordBatch {
         let mut graph_builder = PlainTermArrayElementBuilder::new();
         let mut subject_builder = PlainTermArrayElementBuilder::new();
         let mut predicate_builder = PlainTermArrayElementBuilder::new();
         let mut object_builder = PlainTermArrayElementBuilder::new();
         let mut op_builder = Int8Array::builder(rows.len());
-        let mut version_builder = Int64Builder::with_capacity(rows.len());
+        let mut seq_builder = Int64Array::builder(rows.len());
+        let mut version_builder = Int64Array::builder(rows.len());
 
-        for (g, s, p, o, op, v) in rows {
+        for (idx, (g, s, p, o, op)) in rows.into_iter().enumerate() {
             if let Some(g) = g {
                 graph_builder.append_named_node(NamedNodeRef::new_unchecked(g));
             } else {
@@ -687,18 +736,20 @@ mod tests {
             predicate_builder.append_named_node(NamedNodeRef::new_unchecked(p));
             object_builder.append_named_node(NamedNodeRef::new_unchecked(o));
             op_builder.append_value(op.as_stored());
-            version_builder.append_value(v);
+            seq_builder.append_value(idx as i64);
+            version_builder.append_value(1);
         }
 
         RecordBatch::try_new(
             Arc::clone(schema),
             vec![
+                Arc::new(version_builder.finish()),
+                Arc::new(seq_builder.finish()),
+                Arc::new(op_builder.finish()),
                 Arc::new(graph_builder.finish().into_array_ref()),
                 Arc::new(subject_builder.finish().into_array_ref()),
                 Arc::new(predicate_builder.finish().into_array_ref()),
                 Arc::new(object_builder.finish().into_array_ref()),
-                Arc::new(op_builder.finish()),
-                Arc::new(version_builder.finish()),
             ],
         )
         .unwrap()
@@ -708,7 +759,7 @@ mod tests {
     async fn test_changeset_execution_plan_schemas() {
         let session = SessionContext::new();
         let state = session.state();
-        let schema = create_operation_schema();
+        let schema = create_operation_log_table_schema();
 
         let batch = create_batch(
             &schema,
@@ -718,8 +769,7 @@ mod tests {
                     "https://s1",
                     "https://p1",
                     "https://o1",
-                    DeltaStorageLogOperation::AddQuad,
-                    1,
+                    DeltaStorageLogOperation::InsertQuad,
                 ),
                 (
                     Some("https://g1"),
@@ -727,7 +777,6 @@ mod tests {
                     "https://p1",
                     "https://o1",
                     DeltaStorageLogOperation::RemoveQuad,
-                    2,
                 ),
                 (
                     Some("https://g2"),
@@ -735,7 +784,6 @@ mod tests {
                     "https://p2",
                     "https://o2",
                     DeltaStorageLogOperation::CreateGraph,
-                    3,
                 ),
                 (
                     Some("https://g3"),
@@ -743,7 +791,6 @@ mod tests {
                     "https://p3",
                     "https://o3",
                     DeltaStorageLogOperation::DropGraph,
-                    4,
                 ),
                 (
                     None,
@@ -751,20 +798,19 @@ mod tests {
                     "https://p4",
                     "https://o4",
                     DeltaStorageLogOperation::ClearGraph,
-                    5,
                 ),
             ],
         );
         let stream = session
-            .read_batch(batch)
+            .read_batch(batch.project(&vec![2, 3, 4, 5, 6]).unwrap())
             .unwrap()
             .execute_stream()
             .await
             .unwrap();
-        let changeset = EagerDeltaQuadStorageChangeset::partition_operations(
+        let changeset = EagerChangeset::partition_operations(
             &state,
             DeltaStorageLogVersionRange::new_unchecked(0, 5),
-            stream,
+            OperationsChangesetStream::try_new(stream),
         )
         .await
         .unwrap();

@@ -33,6 +33,7 @@ reqwest.workspace = true
 serde_json.workspace = true
 snmalloc-rs.workspace = true
 tokio.workspace = true
+url.workspace = true
 zip.workspace = true
 
 [dev-dependencies]

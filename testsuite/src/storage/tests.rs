@@ -1,5 +1,5 @@
 use anyhow::Result;
-use datafusion::physical_plan::execute_stream;
+use datafusion::physical_plan::{collect, execute_stream};
 use datafusion::prelude::SessionContext;
 use futures::StreamExt;
 use rdf_fusion::api::storage::{QuadStorage, QuadStorageGraphTarget};
@@ -23,6 +23,41 @@ pub async fn insert_quad(storage: Arc<dyn QuadStorage>) -> Result<()> {
 
     assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 1);
     storage.validate(&ctx.state()).await?;
+    Ok(())
+}
+
+/// Inserts a query and then obtains a snapshot of the same transaction. This snaphsot should return
+/// the inserted quad.
+pub async fn insert_quad_and_query_within_transaction(
+    storage: Arc<dyn QuadStorage>,
+) -> Result<()> {
+    let ctx = create_session_context(&storage).await;
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction
+        .insert(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
+        .await?;
+    let snapshot = transaction.snapshot().await?;
+    let result = snapshot.len(&ctx.state()).await?;
+    assert_eq!(result, 1);
+    Ok(())
+}
+
+/// Inserts a query and then obtains a snapshot of the same transaction. This snaphsot should return
+/// the inserted quad.
+pub async fn insert_and_remove_quad_and_query_within_transaction(
+    storage: Arc<dyn QuadStorage>,
+) -> Result<()> {
+    let ctx = create_session_context(&storage).await;
+    let transaction = storage.begin_transaction(&ctx.state()).await?;
+    transaction
+        .insert(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
+        .await?;
+    transaction
+        .remove(quads_to_plain_term_dataframe(&ctx, &[example_quad()]))
+        .await?;
+    let snapshot = transaction.snapshot().await?;
+    let result = snapshot.len(&ctx.state()).await?;
+    assert_eq!(result, 0);
     Ok(())
 }
 
@@ -200,7 +235,16 @@ pub async fn clear_all(storage: Arc<dyn QuadStorage>) -> Result<()> {
             .await?;
         transaction.commit().await?;
     }
-    assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 3);
+
+    let snapshot = storage.snapshot().await?;
+    assert_eq!(snapshot.len(&ctx.state()).await?, 3);
+
+    let named_graphs =
+        collect(snapshot.named_graphs(&ctx.state()).await?, ctx.task_ctx()).await?;
+    assert_eq!(
+        named_graphs.iter().map(|rb| rb.num_rows()).sum::<usize>(),
+        2
+    );
 
     let transaction = storage.begin_transaction(&ctx.state()).await?;
     transaction

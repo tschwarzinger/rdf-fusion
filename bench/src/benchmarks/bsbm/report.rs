@@ -147,9 +147,13 @@ impl<TUseCase: BsbmUseCase> BsbmReport<TUseCase> {
             "\
 Query Type: {:?}
 Total Time: {:?}
-Planning Time: {:?}
+Planning Latency: {:?}
+Planning Compute: {}
 ",
-            details.query_type, details.total_time, details.explanation.planning_time
+            details.query_type,
+            details.total_time,
+            details.explanation.planning_latency,
+            details.explanation.planning_compute
         );
         fs::write(output_file, text).with_context(|| {
             format!(

@@ -1,26 +1,32 @@
-use crate::delta::DeltaStorageTransaction;
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::index::{DeltaQuadStorageIndex, DeltaQuadStorageIndexSnapshot};
-use crate::delta::log::{DeltaStorageLog, DeltaStorageLogVersionRange};
+use crate::delta::log::{DeltaQuadStorageLog, DeltaStorageLogVersionRange};
 use crate::delta::objectids::DeltaObjectIdMapping;
 use crate::delta::snapshot::DeltaQuadStorageSnapshot;
+use crate::delta::{DeltaQuadStorageBuilder, DeltaQuadStorageTransaction};
 use crate::index::IndexComponents;
 use async_trait::async_trait;
+use datafusion::arrow::datatypes::DataType;
 use datafusion::execution::SessionState;
+use deltalake::logstore::{LogStoreRef, logstore_with};
+use futures::StreamExt;
+use object_store::path::Path;
 use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
-use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
-use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
+use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::string::STRING_ENCODING;
+use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName, TermEncoding};
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
 use rdf_fusion_model::StorageError;
+use rdf_fusion_model::quads::COL_GRAPH;
 use std::sync::Arc;
 
 /// A quad storage that uses Delta Lake tables for storing quads.
 #[derive(Clone)]
 pub struct DeltaQuadStorage {
     /// The log that records the changes made to the storage
-    log: Arc<DeltaStorageLog>,
+    log: Arc<DeltaQuadStorageLog>,
     /// The encodings used for storing quads
     storage_encoding: QuadStorageEncoding,
     /// The indexes of the storage
@@ -34,19 +40,25 @@ impl DeltaQuadStorage {
     pub async fn new_at_location(
         encoding: QuadStorageEncodingName,
         index_configurations: Vec<IndexComponents>,
-        base_location: &str,
-        typed_family_encoding: TypedFamilyEncodingRef,
+        base_log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadStorageError> {
+        let options = base_log_store.config().options().clone();
+        let base_url = base_log_store.config().location().clone();
+
         let (object_id_mapping, storage_encoding) = match encoding {
             QuadStorageEncodingName::PlainTerm => (None, QuadStorageEncoding::PlainTerm),
             QuadStorageEncodingName::String => (None, QuadStorageEncoding::String),
             QuadStorageEncodingName::ObjectId => {
+                let mapping_url = base_url.join("object_ids/").unwrap();
+                let mapping_log_store = logstore_with(
+                    base_log_store.root_object_store(None),
+                    &mapping_url,
+                    options.clone(),
+                )
+                .map_err(DeltaQuadStorageError::from)?;
+
                 let mapping = Arc::new(
-                    DeltaObjectIdMapping::try_new_at_location(
-                        &format!("{base_location}/object_ids",),
-                        typed_family_encoding,
-                    )
-                    .await?,
+                    DeltaObjectIdMapping::try_new_at_location(mapping_log_store).await?,
                 );
                 let encoding = ObjectIdEncoding::new(
                     Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>
@@ -59,18 +71,33 @@ impl DeltaQuadStorage {
             }
         };
 
-        let log = DeltaStorageLog::try_new_at_location(
-            storage_encoding.clone(),
-            &format!("{base_location}/log"),
+        let log_url = base_url.join("log/").unwrap();
+        let log_log_store = logstore_with(
+            base_log_store.root_object_store(None),
+            &log_url,
+            options.clone(),
         )
-        .await
-        .expect("TODO");
+        .map_err(DeltaQuadStorageError::from)?;
+
+        let log = DeltaQuadStorageLog::try_new_at_location(
+            storage_encoding.clone(),
+            log_log_store,
+        )
+        .await?;
 
         let mut indexes = Vec::new();
         for index in index_configurations {
+            let index_url = base_url.join(&format!("{index}/")).unwrap();
+            let index_log_store = logstore_with(
+                base_log_store.root_object_store(None),
+                &index_url,
+                options.clone(),
+            )
+            .map_err(DeltaQuadStorageError::from)?;
+
             let new_index = DeltaQuadStorageIndex::try_new(
                 storage_encoding.clone(),
-                &format!("{base_location}/{index}"),
+                index_log_store,
                 index,
             )
             .await
@@ -86,52 +113,113 @@ impl DeltaQuadStorage {
         })
     }
 
-    /// Creates a new [`DeltaQuadStorage`] with default settings (ObjectId encoding) at the given `base_location`.
-    pub async fn new_default_at_location(
-        index_configurations: Vec<IndexComponents>,
-        base_location: &str,
-        typed_family_encoding: TypedFamilyEncodingRef,
-    ) -> Result<Self, DeltaQuadStorageError> {
-        Self::new_at_location(
-            QuadStorageEncodingName::ObjectId,
-            index_configurations,
-            base_location,
-            typed_family_encoding,
-        )
-        .await
-    }
-
     /// Creates a new [`DeltaQuadStorage`] in memory.
     pub async fn new_in_memory(
         encoding: QuadStorageEncodingName,
         index_configurations: Vec<IndexComponents>,
-        typed_family_encoding: TypedFamilyEncodingRef,
     ) -> Self {
-        Self::new_at_location(
-            encoding,
-            index_configurations,
-            "memory://",
-            typed_family_encoding,
-        )
-        .await
-        .expect("In Memory should always initialize successfully")
+        DeltaQuadStorageBuilder::new()
+            .with_encoding(encoding)
+            .with_indexes(index_configurations)
+            .build()
+            .await
+            .expect("Failed to build in-memory DeltaQuadStorage")
     }
 
-    /// Creates a new [`DeltaQuadStorage`] in memory with default settings (ObjectId encoding).
-    pub async fn new_default_in_memory(
-        index_configurations: Vec<IndexComponents>,
-        typed_family_encoding: TypedFamilyEncodingRef,
-    ) -> Self {
-        Self::new_in_memory(
-            QuadStorageEncodingName::ObjectId,
-            index_configurations,
-            typed_family_encoding,
+    /// Tries to load an existing [`DeltaQuadStorage`] based on the given `base_location`.
+    pub async fn try_load(
+        state: &SessionState,
+        base_log_store: LogStoreRef,
+    ) -> Result<Self, DeltaQuadStorageError> {
+        let options = base_log_store.config().options().clone();
+        let base_url = base_log_store.config().location().clone();
+
+        let log_url = base_url.join("log/").unwrap();
+        let log_log_store = logstore_with(
+            base_log_store.root_object_store(None),
+            &log_url,
+            options.clone(),
         )
-        .await
+        .map_err(DeltaQuadStorageError::from)?;
+
+        let log = DeltaQuadStorageLog::try_load(log_log_store).await?;
+
+        let graph_column = log.schema().column_with_name(COL_GRAPH).ok_or_else(|| {
+            DeltaQuadStorageError::Corruption(
+                "Graph column not found in log schema".to_string(),
+            )
+        })?;
+        let data_type = graph_column.1.data_type();
+
+        let (storage_encoding, object_id_mapping) = if data_type
+            == PLAIN_TERM_ENCODING.data_type()
+        {
+            (QuadStorageEncoding::PlainTerm, None)
+        } else if data_type == STRING_ENCODING.data_type() {
+            (QuadStorageEncoding::String, None)
+        } else if data_type == &DataType::Int64 {
+            let mapping_url = base_url.join("object_ids/").unwrap();
+            let mapping_log_store = logstore_with(
+                base_log_store.root_object_store(None),
+                &mapping_url,
+                options.clone(),
+            )
+            .map_err(DeltaQuadStorageError::from)?;
+
+            let mapping =
+                DeltaObjectIdMapping::try_load(state, mapping_log_store).await?;
+            let mapping = Arc::new(mapping);
+            let encoding =
+                ObjectIdEncoding::new(Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>);
+
+            (
+                QuadStorageEncoding::ObjectId(Arc::new(encoding)),
+                Some(mapping),
+            )
+        } else {
+            return Err(DeltaQuadStorageError::Other(format!(
+                "Loading for data type {data_type} not supported."
+            )));
+        };
+
+        let mut indexes = Vec::new();
+        let object_store = base_log_store.root_object_store(None);
+        for index in IndexComponents::list_all() {
+            let index_url = base_url.join(&format!("{index}/")).unwrap();
+            let prefix_path = Path::from(index_url.path());
+
+            let mut list_stream = object_store.list(Some(&prefix_path));
+            let exists = list_stream.next().await.is_some();
+            if !exists {
+                continue;
+            }
+
+            let index_log_store = logstore_with(
+                base_log_store.root_object_store(None),
+                &index_url,
+                options.clone(),
+            )
+            .map_err(DeltaQuadStorageError::from)?;
+
+            let new_index = DeltaQuadStorageIndex::try_load(
+                storage_encoding.clone(),
+                index_log_store,
+                *index,
+            )
+            .await?;
+            indexes.push(Arc::new(new_index));
+        }
+
+        Ok(Self {
+            log: Arc::new(log),
+            storage_encoding,
+            indexes,
+            object_id_mapping,
+        })
     }
 
     /// Returns the log that records the changes made to the storage.
-    pub fn log(&self) -> &Arc<DeltaStorageLog> {
+    pub fn log(&self) -> &Arc<DeltaQuadStorageLog> {
         &self.log
     }
 
@@ -203,12 +291,12 @@ impl QuadStorage for DeltaQuadStorage {
 
     async fn begin_transaction(
         &self,
-        session: &SessionState,
+        state: &SessionState,
     ) -> Result<Box<dyn QuadStorageTransaction>, StorageError> {
         let snapshot = self.snapshot_impl().await?;
-        Ok(Box::new(DeltaStorageTransaction::new(
+        Ok(Box::new(DeltaQuadStorageTransaction::new(
             Arc::new(self.clone()),
-            session.clone(),
+            state.clone(),
             Arc::clone(self.log.table()),
             Arc::clone(self.log.schema()),
             Arc::new(snapshot),

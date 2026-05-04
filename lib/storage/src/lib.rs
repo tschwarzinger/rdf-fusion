@@ -10,3 +10,6 @@
 
 pub mod delta;
 pub mod index;
+mod physical;
+
+pub use deltalake::logstore;

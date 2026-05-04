@@ -31,6 +31,14 @@ impl StorageTestSuiteBuilder {
 
         suite_builder.add_test("insert_quad", insert_quad);
         suite_builder.add_test(
+            "insert_quad_and_query_within_transaction",
+            insert_quad_and_query_within_transaction,
+        );
+        suite_builder.add_test(
+            "insert_and_remove_quad_and_query_within_transaction",
+            insert_and_remove_quad_and_query_within_transaction,
+        );
+        suite_builder.add_test(
             "insert_duplicate_quads_no_effect",
             insert_duplicate_quads_no_effect,
         );

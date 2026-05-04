@@ -1,6 +1,6 @@
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::log::{
-    COL_COMMIT_VERSION, COL_OPERATION, DeltaStorageLogOperation,
+    COL_COMMIT_VERSION, COL_OPERATION, COL_OPERATION_SEQ_ID, DeltaStorageLogOperation,
     DeltaStorageLogVersionRange,
 };
 use crate::delta::snapshot::DeltaQuadStorageSnapshot;
@@ -28,10 +28,12 @@ use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT}
 use rdf_fusion_model::{NamedOrBlankNodeRef, StorageError};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
+use tracing::info;
 
 /// A transaction on a [`DeltaStorageLog`].
-pub struct DeltaStorageTransaction {
+pub struct DeltaQuadStorageTransaction {
     /// The storage
     storage: Arc<DeltaQuadStorage>,
     /// The session context.
@@ -46,10 +48,13 @@ pub struct DeltaStorageTransaction {
     /// evaluated and their results are written to disk. Then, the resulting files are appended to
     /// the log table.
     parts: RwLock<Vec<DataFrame>>,
+    /// Indicates whether the result of the transaction can depend on the database state. This flag
+    /// is set to true if a snapshot from the transaction is obtained.
+    may_depend_on_database_state: AtomicBool,
 }
 
-impl DeltaStorageTransaction {
-    /// Creates a new [`DeltaStorageTransaction`].
+impl DeltaQuadStorageTransaction {
+    /// Creates a new [`DeltaQuadStorageTransaction`].
     pub fn new(
         storage: Arc<DeltaQuadStorage>,
         state: SessionState,
@@ -64,6 +69,7 @@ impl DeltaStorageTransaction {
             table_schema,
             base_snapshot,
             parts: RwLock::new(vec![]),
+            may_depend_on_database_state: AtomicBool::new(false),
         }
     }
 
@@ -74,7 +80,7 @@ impl DeltaStorageTransaction {
         &self,
         quads: DataFrame,
     ) -> Result<(), DeltaQuadStorageError> {
-        self.append_quads_with_operation(quads, DeltaStorageLogOperation::AddQuad)
+        self.append_quads_with_operation(quads, DeltaStorageLogOperation::InsertQuad)
             .await
     }
 
@@ -103,8 +109,10 @@ impl DeltaStorageTransaction {
     ) -> Result<(), DeltaQuadStorageError> {
         validate_data_frame_schema(&self.table_schema, quads.schema().inner())?;
 
-        let quads_with_operation = add_operation_to_quads(quads, operation);
-        self.parts.write().await.push(quads_with_operation);
+        let mut parts = self.parts.write().await;
+        let seq_id = parts.len() as i64;
+        let quads_with_operation = add_operation_to_quads(quads, operation, seq_id);
+        parts.push(quads_with_operation);
 
         return Ok(());
 
@@ -115,7 +123,7 @@ impl DeltaStorageTransaction {
             actual: &SchemaRef,
         ) -> Result<(), DeltaQuadStorageError> {
             let expected_stream_schema = output_schema
-                .project(&[1, 2, 3, 4])
+                .project(&[2, 3, 4, 5])
                 .expect("Valid projection");
 
             // Don't use equality because the expected_stream_schema is nullable
@@ -131,17 +139,19 @@ impl DeltaStorageTransaction {
         fn add_operation_to_quads(
             quads: DataFrame,
             operation: DeltaStorageLogOperation,
+            seq_id: i64,
         ) -> DataFrame {
             let schema = quads.schema().clone();
             let mut exprs = Vec::new();
-            exprs.push(lit(operation.as_stored()).alias(COL_OPERATION));
-            exprs.extend(schema.columns().into_iter().map(Expr::from));
             exprs.push(
                 lit(ScalarValue::Int64(None))
                     .cast_to(&DataType::Int64, &schema)
                     .unwrap()
                     .alias(COL_COMMIT_VERSION),
             );
+            exprs.push(lit(seq_id).alias(COL_OPERATION_SEQ_ID));
+            exprs.push(lit(operation.as_stored()).alias(COL_OPERATION));
+            exprs.extend(schema.columns().into_iter().map(Expr::from));
 
             quads.select(exprs).expect("Valid projection")
         }
@@ -153,8 +163,19 @@ impl DeltaStorageTransaction {
         operation: DeltaStorageLogOperation,
         graph: ScalarValue,
     ) -> Result<(), DeltaQuadStorageError> {
+        let (index, _) = self
+            .table_schema
+            .fields()
+            .iter()
+            .enumerate()
+            .find(|(_, f)| f.name() == COL_GRAPH)
+            .expect("Schema validated");
         let batch = RecordBatch::try_new(
-            Arc::new(self.table_schema.project(&[1]).expect("Valid projection")),
+            Arc::new(
+                self.table_schema
+                    .project(&[index])
+                    .expect("Valid projection"),
+            ),
             vec![
                 graph
                     .to_array_of_size(1)
@@ -173,33 +194,37 @@ impl DeltaStorageTransaction {
         operation: DeltaStorageLogOperation,
         graphs: DataFrame,
     ) -> Result<(), DeltaQuadStorageError> {
+        let mut parts = self.parts.write().await;
+        let seq_id = parts.len() as i64;
         let null_lit = self.storage.storage_encoding().create_null_scalar()?;
         let schema = graphs.schema().clone();
         let data_frame = graphs.select([
+            lit(ScalarValue::Int64(None))
+                .cast_to(&DataType::Int64, &schema)
+                .unwrap()
+                .alias(COL_COMMIT_VERSION),
+            lit(seq_id).alias(COL_OPERATION_SEQ_ID),
             lit(ScalarValue::Int8(Some(operation.as_stored()))).alias(COL_OPERATION),
             col(COL_GRAPH),
             lit(null_lit.clone()).alias(COL_SUBJECT),
             lit(null_lit.clone()).alias(COL_PREDICATE),
             lit(null_lit).alias(COL_OBJECT),
-            lit(ScalarValue::Int64(None))
-                .cast_to(&DataType::Int64, &schema)
-                .unwrap()
-                .alias(COL_COMMIT_VERSION),
         ])?;
-        self.parts.write().await.push(data_frame);
+        parts.push(data_frame);
         Ok(())
     }
 
     /// Executes the transaction, writing the commits to the storage backend and changing the table
     /// state.
     pub async fn execute(self) -> Result<(), DeltaQuadStorageError> {
-        let DeltaStorageTransaction {
+        let DeltaQuadStorageTransaction {
             storage: _,
             base_snapshot: _,
             parts,
             table_schema,
             table,
             state: _,
+            may_depend_on_database_state,
         } = self;
 
         let parts = parts.into_inner();
@@ -208,29 +233,47 @@ impl DeltaStorageTransaction {
         }
 
         let mut writer = create_record_batch_writer(&table).await?;
-        let aligned_schema = Arc::new(table_schema.project(&(0..5).collect::<Vec<_>>())?);
+        let aligned_schema = Arc::new(table_schema.project(&(0..6).collect::<Vec<_>>())?);
 
+        let mut add_actions = Vec::new();
+
+        let mut current_count = 0;
         for part in parts {
             let mut batch_stream = part.execute_stream().await?;
             while let Some(batch) = batch_stream.next().await {
                 let batch = batch?;
                 // Project columns into the target schema (make subject etc. nullable)
-                // Use only first 5 columns for writing (op, g, s, p, o)
+                // Use only columns 1..7 for writing (op, seq_id, g, s, p, o)
+                // index 0 is _commit_version
                 let batch = RecordBatch::try_new(
                     Arc::clone(&aligned_schema),
-                    batch.columns()[0..5].to_vec(),
+                    batch.columns()[1..7].to_vec(),
                 )
                 .expect("Failed to align schema nullability");
 
+                current_count += batch.num_rows();
                 writer.write(batch).await?;
+
+                if current_count >= 10_000_000 {
+                    info!("Flushing ~10M operations during large transaction ...");
+                    let new_files = writer.flush().await?;
+                    add_actions.extend(new_files);
+                    current_count = 0;
+                }
             }
         }
 
-        let add_actions = writer.flush().await?;
+        let new_files = writer.flush().await?;
+        add_actions.extend(new_files);
+
         let mut table = table.write().await;
         let table_state = table.state.as_ref().expect("Table loaded");
-        let result = CommitBuilder::default()
-            .with_actions(add_actions.into_iter().map(Action::Add).collect())
+        let mut commit_builder = CommitBuilder::default()
+            .with_actions(add_actions.into_iter().map(Action::Add).collect());
+        if may_depend_on_database_state.load(Ordering::Relaxed) {
+            commit_builder = commit_builder.with_max_retries(0);
+        }
+        let result = commit_builder
             .build(
                 Some(table_state),
                 table.log_store(),
@@ -354,8 +397,10 @@ async fn create_record_batch_writer(
 }
 
 #[async_trait]
-impl QuadStorageTransaction for DeltaStorageTransaction {
+impl QuadStorageTransaction for DeltaQuadStorageTransaction {
     async fn snapshot(&self) -> Result<Arc<dyn QuadStorageSnapshot>, StorageError> {
+        self.may_depend_on_database_state
+            .store(true, Ordering::Relaxed);
         let parts = self.parts.read().await.clone();
         if parts.is_empty() {
             return Ok(Arc::clone(&self.base_snapshot) as Arc<dyn QuadStorageSnapshot>);
@@ -376,48 +421,32 @@ impl QuadStorageTransaction for DeltaStorageTransaction {
         }
 
         let context = SessionContext::new_with_state(self.state.clone());
-        let mut fields = self
-            .table_schema
-            .fields()
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>();
+        let mut fields = Vec::with_capacity(7);
         fields.push(Arc::new(Field::new(
             COL_COMMIT_VERSION,
             DataType::Int64,
             true,
         )));
+        fields.extend(
+            self.table_schema
+                .fields()
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+        );
         let ops_schema = Arc::new(Schema::new(fields));
 
         let new_ops = new_ops
             .into_iter()
             .map(|batch| {
-                let mut columns = batch.columns().to_vec();
-                if columns.len() == 5 {
-                    columns.push(Arc::new(
-                        datafusion::arrow::array::Int64Array::from_value(
-                            0,
-                            batch.num_rows(),
-                        ),
-                    ));
-                }
+                let columns = batch.columns().to_vec();
                 RecordBatch::try_new(Arc::clone(&ops_schema), columns)
                     .map_err(|e| StorageError::Other(Box::new(e)))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let df_schema = datafusion::common::DFSchema::try_from(Arc::clone(&ops_schema))
-            .map_err(|e| StorageError::Other(Box::new(e)))?;
-
         let new_ops_plan = context
             .read_batches(new_ops)?
-            .select(
-                ops_schema
-                    .fields()
-                    .iter()
-                    .map(|f| col(f.name()).cast_to(f.data_type(), &df_schema).unwrap())
-                    .collect::<Vec<_>>(),
-            )?
             .create_physical_plan()
             .await?;
 
@@ -431,18 +460,7 @@ impl QuadStorageTransaction for DeltaStorageTransaction {
             .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;
 
-        // 3. Extend the initial changeset with the new operations
-        // We need to downcast initial_changeset to EagerDeltaQuadStorageChangeset
-        // to call extend.
-        let eager_changeset = initial_changeset
-            .as_any()
-            .downcast_ref::<crate::delta::log::EagerDeltaQuadStorageChangeset>()
-            .ok_or_else(|| {
-                StorageError::Other(
-                    "Failed to downcast changeset to EagerDeltaQuadStorageChangeset"
-                        .into(),
-                )
-            })?;
+        let eager_changeset = initial_changeset.as_eager_changeset(&self.state).await?;
 
         // The new version range is just for metadata here, we use the base version + 1
         let new_range = DeltaStorageLogVersionRange::new_unchecked(
@@ -522,7 +540,7 @@ impl QuadStorageTransaction for DeltaStorageTransaction {
     }
 }
 
-impl Debug for DeltaStorageTransaction {
+impl Debug for DeltaQuadStorageTransaction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeltaStorageLogTransaction")
             .field("table", &self.table)

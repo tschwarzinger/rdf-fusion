@@ -20,6 +20,8 @@ impl ChangeEncodingNode {
         input: LogicalPlan,
         target_encoding: QuadStorageEncoding,
     ) -> DFResult<Self> {
+        // TODO: Validate that the inputs are String or Plain Term encoded
+
         let encoded_type = target_encoding.term_type().clone();
         let df_schema = input
             .schema()

@@ -166,8 +166,6 @@ impl DeltaStorageQuadIndexUpdater {
             if current_rows >= FILE_ROW_COUNT {
                 let file_actions = writer.flush().await?;
                 all_actions.extend(file_actions.into_iter().map(Action::Add));
-                writer = RecordBatchWriter::for_table(&self.index_table)?
-                    .with_writer_properties(self.writer_properties.clone());
                 current_rows = 0;
             }
         }

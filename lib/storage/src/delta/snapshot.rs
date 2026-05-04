@@ -1,6 +1,6 @@
 use crate::delta::index::DeltaQuadStorageIndexSnapshot;
 use crate::delta::log::{
-    DeltaQuadStorageLogChangesetRef, DeltaStorageLog, DeltaStorageLogVersionRange,
+    DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
 use crate::delta::objectids::DeltaObjectIdMapping;
 use crate::delta::planner::DeltaQuadStoragePlanner;
@@ -25,7 +25,7 @@ use std::sync::Arc;
 /// A snapshot of a [`DeltaQuadStorage`].
 #[derive(Clone)]
 pub struct DeltaQuadStorageSnapshot {
-    log: Arc<DeltaStorageLog>,
+    log: Arc<DeltaQuadStorageLog>,
     indexes: Vec<DeltaQuadStorageIndexSnapshot>,
     encoding: QuadStorageEncoding,
     object_id_mapping: Option<Arc<DeltaObjectIdMapping>>,
@@ -36,7 +36,7 @@ pub struct DeltaQuadStorageSnapshot {
 impl DeltaQuadStorageSnapshot {
     /// Creates a new [`DeltaQuadStorageSnapshot`].
     pub fn new(
-        log: Arc<DeltaStorageLog>,
+        log: Arc<DeltaQuadStorageLog>,
         indexes: Vec<DeltaQuadStorageIndexSnapshot>,
         encoding: QuadStorageEncoding,
         object_id_mapping: Option<Arc<DeltaObjectIdMapping>>,
@@ -52,7 +52,7 @@ impl DeltaQuadStorageSnapshot {
         }
     }
 
-    pub fn log(&self) -> &Arc<DeltaStorageLog> {
+    pub fn log(&self) -> &Arc<DeltaQuadStorageLog> {
         &self.log
     }
 

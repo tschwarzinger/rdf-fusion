@@ -10,6 +10,7 @@ RDF Fusion Term Encodings
 """
 
 [dependencies]
+ahash.workspace = true
 rdf-fusion-model.workspace = true
 datafusion.workspace = true
 thiserror.workspace = true

@@ -7,20 +7,38 @@ use rdf_fusion::execution::sparql::QueryOptions;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-struct SparqlQueryParamsRaw {
+pub struct SparqlQueryParamsRaw {
     #[serde(default)]
-    query: Option<String>,
+    pub query: Option<String>,
     #[serde(default)]
     #[serde(rename = "using-union-graph")]
-    using_union_graph: Option<bool>,
+    pub using_union_graph: Option<bool>,
     #[serde(default)]
     #[serde(rename = "using-graph-uri")]
-    using_graph_uri: Vec<String>,
+    pub using_graph_uri: Vec<String>,
     #[serde(default)]
     #[serde(rename = "using-named-graph-uri")]
-    using_named_graph_uri: Vec<String>,
+    pub using_named_graph_uri: Vec<String>,
 }
 
+impl SparqlQueryParamsRaw {
+    pub fn into_params_unchecked(
+        self,
+        graph_as_union_default: bool,
+    ) -> SparqlQueryParams {
+        SparqlQueryParams {
+            query: self.query,
+            base_uri: "http://localhost:7878".to_owned(), // TODO
+            default_graph_uris: self.using_graph_uri,
+            named_graph_uris: self.using_named_graph_uri,
+            default_graph_as_union: self
+                .using_union_graph
+                .unwrap_or(graph_as_union_default),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct SparqlQueryParams {
     pub query: Option<String>,
     pub base_uri: String,

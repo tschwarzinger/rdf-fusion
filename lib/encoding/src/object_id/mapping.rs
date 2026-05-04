@@ -22,7 +22,7 @@ pub enum ObjectIdMappingError {
     IllegalArgument(String),
     #[error("A literal was encountered at a position where a graph name is expected.")]
     LiteralAsGraphName,
-    #[error("An error occurred while accessing the object id storage.")]
+    #[error("An error occurred while accessing the object id storage. {0}")]
     Storage(Box<dyn Error + Sync + Send>),
     #[error("Unexpected object id format: {0}")]
     UnexpectedObjectIdFormat(String),

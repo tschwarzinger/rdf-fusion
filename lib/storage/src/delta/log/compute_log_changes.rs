@@ -1,17 +1,19 @@
-use crate::delta::log::{DeltaStorageLogOperation, COL_COMMIT_VERSION, COL_OPERATION};
+use crate::delta::log::{
+    COL_COMMIT_VERSION, COL_OPERATION, COL_OPERATION_SEQ_ID, DeltaStorageLogOperation,
+};
 use datafusion::arrow::array::{
-    ArrayRef, Int64Array, Int64Builder, Int8Builder, RecordBatch, UInt64Array,
+    ArrayRef, Int8Builder, Int64Array, RecordBatch, UInt64Array,
 };
 use datafusion::arrow::compute::BatchCoalescer;
 use datafusion::arrow::compute::SortOptions;
-use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use datafusion::arrow::datatypes::{DataType, Schema, SchemaRef};
 use datafusion::arrow::row::{RowConverter, SortField};
-use datafusion::common::{exec_err, DataFusionError};
+use datafusion::common::{DataFusionError, exec_err};
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
 use datafusion::physical_expr::expressions::col;
 use datafusion::physical_expr::{
     Distribution, EquivalenceProperties, LexRequirement, OrderingRequirements,
-    PhysicalSortExpr, PhysicalSortRequirement,
+    PhysicalSortRequirement,
 };
 use datafusion::physical_plan::execution_plan::{
     Boundedness, EmissionType, Partitioning,
@@ -21,9 +23,9 @@ use datafusion::physical_plan::{
     RecordBatchStream,
 };
 use deltalake::arrow::array::Int8Array;
-use futures::{ready, Stream, StreamExt};
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use futures::{Stream, StreamExt, ready};
 use rdf_fusion_model::DFResult;
+use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
@@ -61,6 +63,7 @@ impl ComputeLogChangesetExec {
                 COL_PREDICATE,
                 COL_OBJECT,
                 COL_OPERATION,
+                COL_OPERATION_SEQ_ID,
                 COL_COMMIT_VERSION,
             ];
 
@@ -96,19 +99,10 @@ impl ComputeLogChangesetExec {
                     .field_with_name(COL_OBJECT)
                     .expect("validated schema")
                     .clone(),
-                Field::new(COL_COMMIT_VERSION, DataType::Int64, true),
             ]));
 
-            let sort_expr = PhysicalSortExpr {
-                expr: col(COL_OPERATION, output_schema.as_ref()).expect("Column exists"),
-                options: SortOptions::default().asc(),
-            };
-
-            let mut equiv_props = EquivalenceProperties::new(Arc::clone(&output_schema));
-            equiv_props.add_ordering([sort_expr]);
-
             PlanProperties::new(
-                equiv_props,
+                EquivalenceProperties::new(Arc::clone(&output_schema)),
                 Partitioning::UnknownPartitioning(1),
                 EmissionType::Final,
                 Boundedness::Bounded,
@@ -141,12 +135,16 @@ impl ExecutionPlan for ComputeLogChangesetExec {
     fn required_input_ordering(&self) -> Vec<Option<OrderingRequirements>> {
         let commit_version =
             col(COL_COMMIT_VERSION, self.inner.schema().as_ref()).expect("Column exists");
-        let sort_expr = PhysicalSortRequirement::new(
-            commit_version,
-            Some(SortOptions::default().asc()),
-        );
-        let required_ordering =
-            LexRequirement::new([sort_expr]).expect("Ordering not empty");
+        let seq_id = col(COL_OPERATION_SEQ_ID, self.inner.schema().as_ref())
+            .expect("Column exists");
+        let required_ordering = LexRequirement::new(vec![
+            PhysicalSortRequirement::new(
+                commit_version,
+                Some(SortOptions::default().asc()),
+            ),
+            PhysicalSortRequirement::new(seq_id, Some(SortOptions::default().asc())),
+        ])
+        .expect("Ordering not empty");
         vec![Some(OrderingRequirements::Hard(vec![required_ordering]))]
     }
 
@@ -224,8 +222,8 @@ struct ComputeLogChangesetStream {
     graph_converter: RowConverter,
     /// The batch coalescer used to split the result into multiple batches.
     batch_coalescer: BatchCoalescer,
-    /// Mapping of the converted quads/graph-ops to their final (operation, version).
-    state: BTreeMap<Box<[u8]>, (i8, i64)>,
+    /// Mapping of the converted quads/graph-ops to their final (operation, seq_id, version).
+    state: BTreeMap<Box<[u8]>, i8>,
     /// Whether the stream has finished.
     finished: bool,
 }
@@ -235,6 +233,7 @@ impl ComputeLogChangesetStream {
     fn process_batch(&mut self, batch: &RecordBatch) -> DFResult<()> {
         // Extract and downcast the operational columns
         let operations = get_downcast_array::<Int8Array>(batch, COL_OPERATION)?;
+        let seq_ids = get_downcast_array::<Int64Array>(batch, COL_OPERATION_SEQ_ID)?;
 
         let version_array = get_array(batch, COL_COMMIT_VERSION)?;
         let versions: Vec<i64> = match version_array.data_type() {
@@ -272,8 +271,9 @@ impl ComputeLogChangesetStream {
             .convert_columns(&[Arc::clone(get_array(batch, COL_GRAPH)?)])?;
 
         // Update the state
-        for (i, version_val) in versions.iter().enumerate().take(batch.num_rows()) {
+        for (i, _version_val) in versions.iter().enumerate().take(batch.num_rows()) {
             let op_val = operations.value(i);
+            let _seq_id_val = seq_ids.value(i);
             let operation =
                 DeltaStorageLogOperation::from_stored(op_val).expect("stored op valid");
 
@@ -285,26 +285,22 @@ impl ComputeLogChangesetStream {
                     self.remove_entries_for_graph(graph_row.as_ref(), true);
                     let mut key = quad_row.as_ref().to_vec();
                     key.push(op_val as u8);
-                    self.state
-                        .insert(key.into_boxed_slice(), (op_val, *version_val));
+                    self.state.insert(key.into_boxed_slice(), op_val);
                 }
                 DeltaStorageLogOperation::ClearGraph => {
                     self.remove_entries_for_graph(graph_row.as_ref(), false);
                     let mut key = quad_row.as_ref().to_vec();
                     key.push(op_val as u8);
-                    self.state
-                        .insert(key.into_boxed_slice(), (op_val, *version_val));
+                    self.state.insert(key.into_boxed_slice(), op_val);
                 }
                 DeltaStorageLogOperation::CreateGraph => {
                     let mut key = quad_row.as_ref().to_vec();
                     key.push(op_val as u8);
-                    self.state
-                        .insert(key.into_boxed_slice(), (op_val, *version_val));
+                    self.state.insert(key.into_boxed_slice(), op_val);
                 }
-                DeltaStorageLogOperation::AddQuad
+                DeltaStorageLogOperation::InsertQuad
                 | DeltaStorageLogOperation::RemoveQuad => {
-                    self.state
-                        .insert(quad_row.as_ref().into(), (op_val, *version_val));
+                    self.state.insert(quad_row.as_ref().into(), op_val);
                 }
             }
         }
@@ -344,7 +340,7 @@ impl ComputeLogChangesetStream {
                 std::ops::Bound::Unbounded,
             ))
             .take_while(|(k, _)| k.starts_with(graph_bytes))
-            .filter_map(|(k, (op, _))| {
+            .filter_map(|(k, op)| {
                 let op_type = DeltaStorageLogOperation::from_stored(*op).unwrap();
                 if remove_all || !op_type.is_graph_operation() {
                     Some(k.clone())
@@ -364,9 +360,8 @@ impl ComputeLogChangesetStream {
 
         let mut rows_to_convert = Vec::with_capacity(state.len());
         let mut operation_builder = Int8Builder::with_capacity(state.len());
-        let mut version_builder = Int64Builder::with_capacity(state.len());
 
-        for (row_bytes, (op_val, version_val)) in state {
+        for (row_bytes, op_val) in state {
             let operation =
                 DeltaStorageLogOperation::from_stored(op_val).expect("valid op");
             let row_bytes = if operation.is_graph_operation() {
@@ -376,7 +371,6 @@ impl ComputeLogChangesetStream {
             };
             rows_to_convert.push(row_bytes);
             operation_builder.append_value(op_val);
-            version_builder.append_value(version_val);
         }
 
         // Parse bytes back into Arrow format
@@ -388,8 +382,6 @@ impl ComputeLogChangesetStream {
 
         // Attach the operation column
         arrays.insert(0, Arc::new(operation_builder.finish()) as ArrayRef);
-        // Attach the version column
-        arrays.push(Arc::new(version_builder.finish()) as ArrayRef);
 
         let batch = RecordBatch::try_new(Arc::clone(&self.schema), arrays)?;
         self.batch_coalescer.push_batch(batch)?;
@@ -446,7 +438,7 @@ mod tests {
     use datafusion::arrow::array::Int64Builder;
     use datafusion::arrow::compute::concat_batches;
     use datafusion::arrow::datatypes::{DataType, Field};
-    use datafusion::physical_expr::LexOrdering;
+    use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
     use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
     use datafusion::physical_plan::collect;
     use datafusion::physical_plan::sorts::sort::SortExec;
@@ -454,7 +446,7 @@ mod tests {
     use deltalake::arrow::util::pretty::pretty_format_batches;
     use insta::assert_snapshot;
     use rdf_fusion_encoding::plain_term::{
-        PlainTermArrayElementBuilder, PLAIN_TERM_ENCODING,
+        PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
     };
     use rdf_fusion_encoding::{EncodingArray, TermEncoding};
     use rdf_fusion_model::NamedNodeRef;
@@ -467,7 +459,7 @@ mod tests {
             "https://s1",
             "https://p1",
             "https://o1",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             1,
         );
         builder.add_quad(
@@ -492,7 +484,7 @@ mod tests {
             "https://s2",
             "https://p2",
             "https://o2",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             4,
         );
 
@@ -501,19 +493,19 @@ mod tests {
             "https://s3",
             "https://p3",
             "https://o3",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             5,
         );
 
         let result = builder.execute().await;
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | operation | graph | subject                                                        | predicate                                                      | object                                                         | _commit_version |
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | 20        |       | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } | 2               |
-        | 21        |       | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 4               |
-        | 21        |       | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } | 5               |
-        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | operation | graph | subject                                                        | predicate                                                      | object                                                         |
+        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | 20        |       | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } |
+        | 21        |       | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
+        | 21        |       | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } |
+        +-----------+-------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
         ");
     }
 
@@ -525,7 +517,7 @@ mod tests {
             "https://s1",
             "https://p1",
             "https://o1",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             1,
         );
         builder.add_quad(
@@ -533,7 +525,7 @@ mod tests {
             "https://s3",
             "https://p3",
             "https://o3",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             1,
         );
 
@@ -543,19 +535,19 @@ mod tests {
             "https://s2",
             "https://p2",
             "https://o2",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             3,
         );
 
         let result = builder.execute().await;
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | 11        | {term_type: 0, value: https://gA, data_type: , language_tag: } |                                                                |                                                                |                                                                | 2               |
-        | 21        | {term_type: 0, value: https://gA, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 3               |
-        | 21        | {term_type: 0, value: https://gB, data_type: , language_tag: } | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } | 1               |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | 11        | {term_type: 0, value: https://gA, data_type: , language_tag: } |                                                                |                                                                |                                                                |
+        | 21        | {term_type: 0, value: https://gA, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
+        | 21        | {term_type: 0, value: https://gB, data_type: , language_tag: } | {term_type: 0, value: https://s3, data_type: , language_tag: } | {term_type: 0, value: https://p3, data_type: , language_tag: } | {term_type: 0, value: https://o3, data_type: , language_tag: } |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
         ");
     }
 
@@ -568,7 +560,7 @@ mod tests {
             "https://s1",
             "https://p1",
             "https://o1",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             2,
         );
         builder.add_drop_graph("https://g1", 3);
@@ -578,7 +570,7 @@ mod tests {
             "https://s1",
             "https://p1",
             "https://o1",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             5,
         );
 
@@ -586,13 +578,13 @@ mod tests {
         // Result: Drop(g1), Create(g1), Add(s2)
         // v1-v2 are wiped by v3 Drop.
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 3               |
-        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 4               |
-        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } | 5               |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
+        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
+        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s1, data_type: , language_tag: } | {term_type: 0, value: https://p1, data_type: , language_tag: } | {term_type: 0, value: https://o1, data_type: , language_tag: } |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
         ");
     }
 
@@ -604,7 +596,7 @@ mod tests {
             "https://s1",
             "https://p1",
             "https://o1",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             1,
         );
         builder.add_drop_graph("https://g1", 2);
@@ -613,18 +605,18 @@ mod tests {
             "https://s2",
             "https://p2",
             "https://o2",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             3,
         );
 
         let result = builder.execute().await;
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 2               |
-        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 3               |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
+        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
         ");
     }
 
@@ -636,11 +628,11 @@ mod tests {
 
         let result = builder.execute().await;
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
-        | operation | graph                                                          | subject | predicate | object | _commit_version |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 2               |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        | operation | graph                                                          | subject | predicate | object |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
         ");
     }
 
@@ -652,11 +644,11 @@ mod tests {
 
         let result = builder.execute().await;
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
-        | operation | graph                                                          | subject | predicate | object | _commit_version |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
-        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 2               |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        | operation | graph                                                          | subject | predicate | object |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        | 10        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
         ");
     }
 
@@ -668,12 +660,12 @@ mod tests {
 
         let result = builder.execute().await;
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
-        | operation | graph                                                          | subject | predicate | object | _commit_version |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
-        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 2               |
-        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        | 1               |
-        +-----------+----------------------------------------------------------------+---------+-----------+--------+-----------------+
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        | operation | graph                                                          | subject | predicate | object |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
+        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
+        | 12        | {term_type: 0, value: https://g1, data_type: , language_tag: } |         |           |        |
+        +-----------+----------------------------------------------------------------+---------+-----------+--------+
         ");
     }
 
@@ -685,7 +677,7 @@ mod tests {
             "https://s1",
             "https://p1",
             "https://o1",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             1,
         );
         builder.add_clear_graph("https://g1", 2);
@@ -694,19 +686,19 @@ mod tests {
             "https://s2",
             "https://p2",
             "https://o2",
-            DeltaStorageLogOperation::AddQuad,
+            DeltaStorageLogOperation::InsertQuad,
             3,
         );
 
         let result = builder.execute().await;
         // Result: Clear(g1) and Add(s2). s1 should be wiped.
         assert_snapshot!(pretty_format_batches(&[result]).unwrap(), @r"
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         | _commit_version |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
-        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                | 2               |
-        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } | 3               |
-        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+-----------------+
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | operation | graph                                                          | subject                                                        | predicate                                                      | object                                                         |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
+        | 11        | {term_type: 0, value: https://g1, data_type: , language_tag: } |                                                                |                                                                |                                                                |
+        | 21        | {term_type: 0, value: https://g1, data_type: , language_tag: } | {term_type: 0, value: https://s2, data_type: , language_tag: } | {term_type: 0, value: https://p2, data_type: , language_tag: } | {term_type: 0, value: https://o2, data_type: , language_tag: } |
+        +-----------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+----------------------------------------------------------------+
         ");
     }
 
@@ -719,6 +711,7 @@ mod tests {
             Option<String>,
             i8,
             i64,
+            i64,
         )>,
     }
 
@@ -726,11 +719,12 @@ mod tests {
         fn new() -> Self {
             let data_type = PLAIN_TERM_ENCODING.data_type().clone();
             let schema = Arc::new(Schema::new(vec![
+                Field::new(COL_OPERATION_SEQ_ID, DataType::Int64, false),
+                Field::new(COL_OPERATION, DataType::Int8, false),
                 Field::new(COL_GRAPH, data_type.clone(), true),
                 Field::new(COL_SUBJECT, data_type.clone(), true),
                 Field::new(COL_PREDICATE, data_type.clone(), true),
                 Field::new(COL_OBJECT, data_type, true),
-                Field::new(COL_OPERATION, DataType::Int8, false),
                 Field::new(COL_COMMIT_VERSION, DataType::Int64, false),
             ]));
             Self {
@@ -748,61 +742,70 @@ mod tests {
             op: DeltaStorageLogOperation,
             v: i64,
         ) {
+            let seq_id = self.rows.len() as i64;
             self.rows.push((
                 g.map(|s| s.to_string()),
                 Some(s.to_string()),
                 Some(p.to_string()),
                 Some(o.to_string()),
                 op.as_stored(),
+                seq_id,
                 v,
             ));
         }
 
         fn add_clear_graph(&mut self, g: &str, v: i64) {
+            let seq_id = self.rows.len() as i64;
             self.rows.push((
                 Some(g.to_string()),
                 None,
                 None,
                 None,
                 DeltaStorageLogOperation::ClearGraph.as_stored(),
+                seq_id,
                 v,
             ));
         }
 
         fn add_drop_graph(&mut self, g: &str, v: i64) {
+            let seq_id = self.rows.len() as i64;
             self.rows.push((
                 Some(g.to_string()),
                 None,
                 None,
                 None,
                 DeltaStorageLogOperation::DropGraph.as_stored(),
+                seq_id,
                 v,
             ));
         }
 
         fn add_create_graph(&mut self, g: &str, v: i64) {
+            let seq_id = self.rows.len() as i64;
             self.rows.push((
                 Some(g.to_string()),
                 None,
                 None,
                 None,
                 DeltaStorageLogOperation::CreateGraph.as_stored(),
+                seq_id,
                 v,
             ));
         }
 
         async fn execute(mut self) -> RecordBatch {
-            // Sort rows by version ASC to simulate what CDF scan + SortExec does
-            self.rows.sort_by(|a, b| a.5.cmp(&b.5));
+            // Sort rows by version ASC and then seq_id ASC to simulate what CDF scan + SortExec does
+            self.rows.sort_by(|a, b| a.6.cmp(&b.6).then(a.5.cmp(&b.5)));
 
             let mut graph_builder = PlainTermArrayElementBuilder::new();
             let mut subject_builder = PlainTermArrayElementBuilder::new();
             let mut predicate_builder = PlainTermArrayElementBuilder::new();
             let mut object_builder = PlainTermArrayElementBuilder::new();
             let mut op_builder = Int8Builder::with_capacity(self.rows.len());
+            let mut seq_id_builder = Int64Builder::with_capacity(self.rows.len());
             let mut version_builder = Int64Builder::with_capacity(self.rows.len());
 
-            for (g, s, p, o, op, v) in self.rows {
+            for (g, s, p, o, op, seq_id, v) in self.rows {
                 if let Some(g) = g {
                     graph_builder.append_named_node(NamedNodeRef::new_unchecked(&g));
                 } else {
@@ -824,17 +827,19 @@ mod tests {
                     object_builder.append_null();
                 }
                 op_builder.append_value(op);
+                seq_id_builder.append_value(seq_id);
                 version_builder.append_value(v);
             }
 
             let batch = RecordBatch::try_new(
                 Arc::clone(&self.schema),
                 vec![
+                    Arc::new(seq_id_builder.finish()),
+                    Arc::new(op_builder.finish()),
                     Arc::new(graph_builder.finish().into_array_ref()),
                     Arc::new(subject_builder.finish().into_array_ref()),
                     Arc::new(predicate_builder.finish().into_array_ref()),
                     Arc::new(object_builder.finish().into_array_ref()),
-                    Arc::new(op_builder.finish()),
                     Arc::new(version_builder.finish()),
                 ],
             )
@@ -854,10 +859,13 @@ mod tests {
             // Add the sort ordering property
             let commit_version_col =
                 col(COL_COMMIT_VERSION, self.schema.as_ref()).unwrap();
-            let sort_expr =
-                PhysicalSortExpr::new(commit_version_col, SortOptions::default().asc());
+            let seq_id_col = col(COL_OPERATION_SEQ_ID, self.schema.as_ref()).unwrap();
+            let sort_exprs = vec![
+                PhysicalSortExpr::new(commit_version_col, SortOptions::default().asc()),
+                PhysicalSortExpr::new(seq_id_col, SortOptions::default().asc()),
+            ];
             let sort_exec = Arc::new(SortExec::new(
-                LexOrdering::new(vec![sort_expr]).unwrap(),
+                LexOrdering::new(sort_exprs).unwrap(),
                 single_partition_exec,
             ));
 

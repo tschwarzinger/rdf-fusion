@@ -8,13 +8,16 @@ pub use mapping::*;
 #[cfg(test)]
 mod tests {
     use crate::delta::objectids::DeltaObjectIdMapping;
+    use crate::logstore::{StorageConfig, logstore_with};
     use datafusion::arrow::util::pretty::pretty_format_columns;
     use insta::assert_snapshot;
+    use object_store::memory::InMemory;
     use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_encoding::object_id::ObjectIdMapping;
     use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
     use rdf_fusion_model::NamedNodeRef;
     use std::sync::Arc;
+    use url::Url;
 
     #[tokio::test]
     async fn test_encode_decode_roundtrip() {
@@ -91,11 +94,12 @@ mod tests {
     }
 
     async fn setup_mapping() -> DeltaObjectIdMapping {
-        DeltaObjectIdMapping::try_new_at_location(
-            "memory:///",
-            Arc::new(Default::default()),
-        )
-        .await
-        .unwrap()
+        let memory_store = Arc::new(InMemory::new());
+        let url = Url::parse("memory://").unwrap();
+        let log_store =
+            logstore_with(memory_store, &url, StorageConfig::default()).unwrap();
+        DeltaObjectIdMapping::try_new_at_location(log_store)
+            .await
+            .unwrap()
     }
 }

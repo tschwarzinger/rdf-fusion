@@ -6,7 +6,6 @@ use clap_mangen::Man;
 use std::env::var_os;
 use std::fs::create_dir_all;
 use std::io::Result;
-use std::path::PathBuf;
 
 fn main() -> Result<()> {
     let out_dir = PathBuf::from(var_os("OUT_DIR").unwrap());

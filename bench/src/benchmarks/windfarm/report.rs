@@ -105,9 +105,12 @@ impl WindFarmReport {
         let text = format!(
             "\
 Total Time: {:?}
-Planning Time: {:?}
+Planning Latency: {:?}
+Planning Compute: {}
 ",
-            details.total_time, details.explanation.planning_time
+            details.total_time,
+            details.explanation.planning_latency,
+            details.explanation.planning_compute
         );
         fs::write(output_file, text).with_context(|| {
             format!(

@@ -1,4 +1,4 @@
-use crate::delta::log::{DeltaStorageLog, DeltaStorageLogVersionRange};
+use crate::delta::log::{DeltaQuadStorageLog, DeltaStorageLogVersionRange};
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::common::{Statistics, plan_err};
@@ -36,7 +36,7 @@ use std::task::{Context, Poll};
 /// methods simply delegate to the inner plan.
 #[derive(Debug)]
 pub struct DeltaQuadStorageScanExec {
-    log: Arc<DeltaStorageLog>,
+    log: Arc<DeltaQuadStorageLog>,
     quad_pattern: QuadPattern,
     changeset_version: Option<DeltaStorageLogVersionRange>,
     inner: Arc<dyn ExecutionPlan>,
@@ -49,7 +49,7 @@ pub struct DeltaQuadStorageScanExec {
 impl DeltaQuadStorageScanExec {
     #[allow(clippy::too_many_arguments)]
     pub fn try_new(
-        log: Arc<DeltaStorageLog>, // TODO Snapshot
+        log: Arc<DeltaQuadStorageLog>, // TODO Snapshot
         quad_pattern: QuadPattern,
         changeset_version: Option<DeltaStorageLogVersionRange>,
         inner: Arc<dyn ExecutionPlan>,
@@ -640,7 +640,6 @@ mod tests {
             DeltaQuadStorage::new_in_memory(
                 QuadStorageEncodingName::ObjectId,
                 vec![IndexComponents::GSPO],
-                Arc::new(Default::default()),
             )
             .await,
         );

@@ -122,16 +122,17 @@ mod tests {
     use crate::delta::DeltaQuadStorage;
     use crate::delta::index::DeltaQuadStorageIndex;
     use crate::index::IndexComponents;
+    use crate::logstore::{StorageConfig, logstore_with};
     use datafusion::prelude::{SessionConfig, SessionContext};
     use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
-    use rdf_fusion_encoding::{
-        QuadStorageEncoding, QuadStorageEncodingName, quads_to_plain_term_dataframe,
-    };
+    use object_store::memory::InMemory;
+    use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
     use rdf_fusion_extensions::storage::QuadStorage;
     use rdf_fusion_model::{
         GraphName, NamedNode, NamedNodePattern, Quad, TermPattern, TriplePattern,
         Variable,
     };
+    use url::Url;
 
     #[tokio::test]
     async fn test_scan_score_fully_bound() {
@@ -239,7 +240,6 @@ mod tests {
         let storage = DeltaQuadStorage::new_in_memory(
             QuadStorageEncodingName::PlainTerm,
             vec![IndexComponents::GSPO],
-            Arc::new(Default::default()),
         )
         .await;
 
@@ -278,10 +278,17 @@ mod tests {
     }
 
     async fn create_test_index(components: IndexComponents) -> DeltaQuadStorageIndex {
-        let encoding = QuadStorageEncoding::PlainTerm;
-        DeltaQuadStorageIndex::try_new(encoding, "memory:///test", components)
-            .await
-            .expect("Failed to create test index")
+        let memory_store = Arc::new(InMemory::new());
+        let url = Url::parse("memory://").unwrap();
+        let log_store =
+            logstore_with(memory_store, &url, StorageConfig::default()).unwrap();
+        DeltaQuadStorageIndex::try_new(
+            QuadStorageEncoding::PlainTerm,
+            log_store,
+            components,
+        )
+        .await
+        .expect("Failed to create test index")
     }
 
     fn bound_term() -> TermPattern {

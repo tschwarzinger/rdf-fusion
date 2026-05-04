@@ -22,6 +22,7 @@ thiserror.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 rdf-fusion.workspace = true
+serde_urlencoded.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 anyhow.workspace = true

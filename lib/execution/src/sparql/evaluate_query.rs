@@ -8,6 +8,7 @@ use crate::sparql::{QueryDataset, QueryExplanation, QueryOptions, RdfFusionQuery
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::instant::Instant;
 use datafusion::execution::{SessionState, SessionStateBuilder};
+use datafusion::physical_expr_common::metrics::Time;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use itertools::izip;
@@ -17,7 +18,10 @@ use rdf_fusion_model::Variable;
 use rdf_fusion_model::sparql::Query;
 use rdf_fusion_model::sparql::algebra::GraphPattern;
 use rdf_fusion_model::{Iri, TriplePattern};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 /// Evaluates a SPARQL query and returns the results along with execution information.
 ///
@@ -186,20 +190,29 @@ async fn create_execution_plan(
     pattern: &GraphPattern,
     base_iri: &Option<Iri<String>>,
 ) -> Result<(Arc<dyn ExecutionPlan>, QueryExplanation), QueryEvaluationError> {
+    let planning_compute = Time::new();
+    let handle = planning_compute.timer();
+
     let planning_time_start = Instant::now();
     let logical_plan =
         GraphPatternRewriter::new(builder_context, dataset.clone(), base_iri.clone())
             .rewrite(pattern)
             .map_err(|e| e.context("Cannot rewrite SPARQL query"))?;
     let optimized_plan = state.optimize(&logical_plan)?;
-    let physical_plan = state
+    drop(handle); // Add synchronous computation to the planning time
+
+    let physical_plan_future = state
         .query_planner()
-        .create_physical_plan(&optimized_plan, &state)
-        .await?;
-    let planning_time = planning_time_start.elapsed();
+        .create_physical_plan(&optimized_plan, &state);
+    let physical_plan = MeasurePoll {
+        inner: Box::pin(physical_plan_future),
+        time_metric: planning_compute.clone(),
+    }
+    .await?;
 
     let explanation = QueryExplanation {
-        planning_time,
+        planning_latency: planning_time_start.elapsed(),
+        planning_compute,
         initial_logical_plan: logical_plan,
         optimized_logical_plan: optimized_plan,
         execution_plan: Arc::clone(&physical_plan),
@@ -215,4 +228,22 @@ fn create_variables(schema: &Schema) -> Arc<[Variable]> {
         .map(|f| Variable::new(f.name()).expect("Variables already checked."))
         .collect::<Vec<_>>()
         .into()
+}
+
+/// A wrapper that measures strictly the CPU time spent actively polling.
+struct MeasurePoll<F> {
+    inner: Pin<Box<F>>,
+    time_metric: Time,
+}
+
+impl<F: Future> Future for MeasurePoll<F> {
+    type Output = F::Output;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let cloned_inner = self.time_metric.clone();
+        let handle = cloned_inner.timer();
+        let result = self.inner.as_mut().poll(cx);
+        drop(handle);
+        result
+    }
 }

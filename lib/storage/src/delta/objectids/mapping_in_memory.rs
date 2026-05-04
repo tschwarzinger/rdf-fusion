@@ -1,54 +1,36 @@
 use datafusion::arrow::array::{Array, ArrayRef, Int64Array, RecordBatch};
-use datafusion::arrow::compute::{concat, interleave};
 use datafusion::arrow::datatypes::SchemaRef;
-use datafusion::common::exec_err;
+use datafusion::common::{exec_datafusion_err, exec_err};
 use datafusion::error::Result as DFResult;
 use deltalake::arrow::array::Int64Builder;
-use hashbrown::{Equivalent, HashMap};
+use hashbrown::HashMap;
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::{
-    PLAIN_TERM_ENCODING, PlainTermArray, PlainTermArrayElementBuilder,
-    PlainTermArrayParts, PlainTermScalar,
+    PlainTermArray, PlainTermArrayElementBuilder, PlainTermScalar,
 };
-use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
 use std::sync::Arc;
 
-/// Determines how large the chunks are in [`ObjectIdInMemoryMapping`].
-const CHUNK_SIZE: usize = 8192;
-
-/// Implements an in-memory mapping for ObjectIds. This struct does not handle persistence at all.
+/// Implements an in-memory mapping for ObjectIds using a string interner.
 #[derive(Debug)]
 pub struct ObjectIdInMemoryMapping {
-    /// The plain term arrays loaded in memory.
-    plain_terms: Vec<ArrayRef>,
-    /// The typed family arrays loaded in memory.
-    typed_family: Vec<ArrayRef>,
-    /// Mapping from Terms to IDs for fast encoding using hashbrown.
-    term_to_id: HashMap<MappedTerm, i64>,
+    /// String interner for deduplicating term values, datatypes, and languages.
+    interner: StringInterner,
+    /// Direct mapping from Object ID (the Vec index) to the MappedTerm.
+    terms: Vec<MappedTerm>,
+    /// Reverse mapping from MappedTerm to Object ID for fast encoding.
+    term_to_id: HashMap<MappedTerm, i64, ahash::RandomState>,
     /// The next available Object ID.
     next_id: i64,
-    /// Encoding for typed values.
-    typed_family_encoding: TypedFamilyEncodingRef,
 }
 
 impl ObjectIdInMemoryMapping {
     /// Creates a new object id dictionary.
-    pub fn empty(typed_family_encoding: TypedFamilyEncodingRef) -> Self {
-        let plain_terms = vec![PLAIN_TERM_ENCODING.create_null_array(1).into_array_ref()];
-
-        let typed_family = vec![
-            typed_family_encoding
-                .create_null_array(1)
-                .unwrap()
-                .into_array_ref(),
-        ];
-
+    pub fn empty() -> Self {
         Self {
-            term_to_id: HashMap::new(),
-            plain_terms,
-            typed_family,
+            interner: StringInterner::new(),
+            terms: Vec::new(),
+            term_to_id: HashMap::with_hasher(ahash::RandomState::new()),
             next_id: 0,
-            typed_family_encoding,
         }
     }
 
@@ -57,168 +39,113 @@ impl ObjectIdInMemoryMapping {
         let array_parts = array.as_parts();
         let mut result_ids = Int64Builder::with_capacity(array.len());
 
-        let mut new_terms = PlainTermArrayElementBuilder::new();
-
         for idx in 0..array.len() {
             if array.inner().is_null(idx) {
                 result_ids.append_null();
                 continue;
             }
 
-            let term_ref = MappedTermRef::from_parts(&array_parts, idx);
-            if let Some(id) = self.term_to_id.get(&term_ref) {
-                result_ids.append_value(*id);
+            let term_type = array_parts.term_type.value(idx);
+            let value = array_parts.value.value(idx);
+            let data_type = array_parts
+                .data_type
+                .is_valid(idx)
+                .then(|| array_parts.data_type.value(idx));
+            let language = array_parts
+                .language_tag
+                .is_valid(idx)
+                .then(|| array_parts.language_tag.value(idx));
+
+            let value_id = self.interner.get_or_intern(value);
+            let data_type_id = data_type.map(|dt| self.interner.get_or_intern(dt));
+            let language_id = language.map(|lang| self.interner.get_or_intern(lang));
+
+            let mapped_term = MappedTerm {
+                term_type,
+                value: value_id,
+                data_type: data_type_id,
+                language: language_id,
+            };
+
+            if let Some(&id) = self.term_to_id.get(&mapped_term) {
+                result_ids.append_value(id);
             } else {
                 let id = self.next_id;
                 self.next_id += 1;
 
-                self.term_to_id.insert(term_ref.to_mapped_term(), id);
-
-                new_terms.append_raw(
-                    term_ref.term_type,
-                    term_ref.value,
-                    term_ref.datatype,
-                    term_ref.language,
-                );
+                self.term_to_id.insert(mapped_term, id); // mapped_term is Copy now!
+                self.terms.push(mapped_term);
 
                 result_ids.append_value(id);
             }
         }
 
-        let new_terms = new_terms.finish();
-        if !new_terms.is_empty() {
-            let new_typed_array = self
-                .typed_family_encoding
-                .cast_from_plain_term_array(&new_terms)?
-                .into_array_ref();
-            self.append_to_chunks(new_terms.into_array_ref(), new_typed_array)?;
-        }
-
         Ok(result_ids.finish())
-    }
-
-    /// Appends plain terms and typed arrays to exactly CHUNK_SIZE blocks
-    fn append_to_chunks(
-        &mut self,
-        new_plain: ArrayRef,
-        new_typed: ArrayRef,
-    ) -> DFResult<()> {
-        let mut offset = 0;
-        let total_new = new_typed.len();
-
-        while offset < total_new {
-            let last_idx = self.typed_family.len() - 1;
-            let last_len = self.typed_family[last_idx].len();
-            let remaining = total_new - offset;
-
-            if last_idx == 0 || last_len == CHUNK_SIZE {
-                let take_len = remaining.min(CHUNK_SIZE);
-
-                self.plain_terms.push(new_plain.slice(offset, take_len));
-                self.typed_family.push(new_typed.slice(offset, take_len));
-
-                offset += take_len;
-            } else {
-                let available = CHUNK_SIZE - last_len;
-                let take_len = remaining.min(available);
-
-                // Concat plain_term
-                let slice_plain = new_plain.slice(offset, take_len);
-                let combined_plain =
-                    concat(&[&self.plain_terms[last_idx], &slice_plain])?;
-                self.plain_terms[last_idx] = combined_plain;
-
-                // Concat typed chunk
-                let slice_typed = new_typed.slice(offset, take_len);
-                let combined_typed =
-                    concat(&[&self.typed_family[last_idx], &slice_typed])?;
-                self.typed_family[last_idx] = combined_typed;
-
-                offset += take_len;
-            }
-        }
-        Ok(())
     }
 
     /// Resolves a bulk of Object IDs into their corresponding RDF Plain Terms
     pub fn resolve_plain_terms(&self, ids: &Int64Array) -> DFResult<ArrayRef> {
-        let source: Vec<&dyn Array> =
-            self.plain_terms.iter().map(|a| a.as_ref()).collect();
-        let indices = self.compute_indices(ids)?;
-        Ok(interleave(&source, &indices)?)
-    }
+        let mut builder = PlainTermArrayElementBuilder::with_capacity(ids.len());
 
-    /// Resolves a bulk of Object IDs into their corresponding Typed Values.
-    pub fn resolve_typed_values(&self, ids: &Int64Array) -> DFResult<ArrayRef> {
-        let source: Vec<&dyn Array> =
-            self.typed_family.iter().map(|a| a.as_ref()).collect();
-        let indices = self.compute_indices(ids)?;
-        Ok(interleave(&source, &indices)?)
+        for i in 0..ids.len() {
+            if ids.is_valid(i) {
+                let id = ids.value(i);
+
+                if id >= 0 && (id as usize) < self.terms.len() {
+                    let term = &self.terms[id as usize];
+                    self.append_term_to_builder(term, &mut builder);
+                } else {
+                    return exec_err!("Object ID {} not found in dictionary", id);
+                }
+            } else {
+                builder.append_null();
+            }
+        }
+
+        Ok(builder.finish().into_array_ref())
     }
 
     /// Returns a list of RecordBatches for terms between start_id and self.next_id.
-    /// Each batch corresponds to the internal CHUNK_SIZE for efficiency.
     pub fn read_batches_since_id(
         &self,
         start_id: i64,
         schema: &SchemaRef,
     ) -> DFResult<Vec<RecordBatch>> {
+        const CHUNK_SIZE: usize = 8192;
+
         let current_next_id = self.next_id;
 
-        if start_id > current_next_id {
+        if start_id >= current_next_id {
             return Ok(vec![]);
         }
 
         let mut batches = Vec::new();
         let mut current_id = start_id;
+
         while current_id < current_next_id {
-            let id_usize = current_id as usize;
-            // Map ID to internal storage (index 0 is null-chunk, so +1)
-            let batch_idx = (id_usize / CHUNK_SIZE) + 1;
-            let row_offset = id_usize % CHUNK_SIZE;
-
-            let chunk = &self.plain_terms[batch_idx];
-            let available_in_chunk = chunk.len() - row_offset;
             let total_remaining = (current_next_id - current_id) as usize;
-            let take = available_in_chunk.min(total_remaining);
+            let take = total_remaining.min(CHUNK_SIZE);
 
-            // Slice the term array and generate matching IDs
+            let mut builder = PlainTermArrayElementBuilder::new();
+
             let ids_slice = Arc::new(Int64Array::from_iter_values(
                 current_id..(current_id + take as i64),
             ));
-            let terms_slice = chunk.slice(row_offset, take);
+
+            for id in current_id..(current_id + take as i64) {
+                let term = &self.terms[id as usize];
+                self.append_term_to_builder(term, &mut builder);
+            }
+
+            let terms_array = builder.finish().into_array_ref();
             let batch =
-                RecordBatch::try_new(Arc::clone(schema), vec![ids_slice, terms_slice])?;
+                RecordBatch::try_new(Arc::clone(schema), vec![ids_slice, terms_array])?;
 
             batches.push(batch);
             current_id += take as i64;
         }
 
         Ok(batches)
-    }
-
-    /// Index computation for resolving chunk routing. A chunk index of 0 corresponds to the null
-    /// chunk.
-    fn compute_indices(&self, ids: &Int64Array) -> DFResult<Vec<(usize, usize)>> {
-        let mut indices = Vec::with_capacity(ids.len());
-
-        for i in 0..ids.len() {
-            if ids.is_valid(i) {
-                let id = ids.value(i);
-                if id < self.next_id {
-                    let id_usize = id as usize;
-                    // + 1 because index 0 is the null chunk
-                    let batch_idx = (id_usize / CHUNK_SIZE) + 1;
-                    let row_idx = id_usize % CHUNK_SIZE;
-                    indices.push((batch_idx, row_idx));
-                } else {
-                    return exec_err!("Object ID {} not found in dictionary", id);
-                }
-            } else {
-                indices.push((0, 0));
-            }
-        }
-        Ok(indices)
     }
 
     pub fn next_id(&self) -> i64 {
@@ -228,70 +155,343 @@ impl ObjectIdInMemoryMapping {
     pub fn get_id_by_term(&self, term: &PlainTermScalar) -> Option<i64> {
         let parts = term.as_parts()?;
 
-        let term_ref = MappedTermRef {
-            term_type: parts.term_type,
-            value: parts.value,
-            datatype: parts.data_type,
-            language: parts.language_tag,
+        let value_id = self.interner.get_id(parts.value)?;
+        let data_type_id = match parts.data_type {
+            Some(dt) => Some(self.interner.get_id(dt)?),
+            None => None,
+        };
+        let language_id = match parts.language_tag {
+            Some(lang) => Some(self.interner.get_id(lang)?),
+            None => None,
         };
 
-        self.term_to_id.get(&term_ref).copied()
+        let mapped_term = MappedTerm {
+            term_type: parts.term_type,
+            value: value_id,
+            data_type: data_type_id,
+            language: language_id,
+        };
+
+        self.term_to_id.get(&mapped_term).copied()
     }
-}
 
-/// Represents an owned, allocated encoded term for storage in the HashMap.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct MappedTerm {
-    term_type: i8,
-    value: String,
-    datatype: Option<String>,
-    language: Option<String>,
-}
+    /// Loads a sorted RecordBatch of `(id, term)` into the memory mapping. Fails if the incoming
+    /// Object IDs are not perfectly contiguous and sorted.
+    pub fn add_batch(&mut self, batch: &RecordBatch) -> DFResult<()> {
+        let id_col = batch
+            .column_by_name("id")
+            .expect("Missing 'id' column")
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(|| exec_datafusion_err!("Expected Int64Array for id column"))?;
 
-/// Represents a zero-allocation view into the Arrow arrays for a single row.
-#[derive(Debug, Hash, PartialEq, Eq)]
-struct MappedTermRef<'a> {
-    term_type: i8,
-    value: &'a str,
-    datatype: Option<&'a str>,
-    language: Option<&'a str>,
-}
+        let term_col = batch.column_by_name("term").expect("Missing 'term' column");
 
-impl<'a> MappedTermRef<'a> {
-    #[inline]
-    fn from_parts(array: &'a PlainTermArrayParts<'_>, idx: usize) -> Self {
-        Self {
-            term_type: array.term_type.value(idx),
-            value: array.value.value(idx),
-            datatype: array
+        let plain_term_array = PlainTermArray::try_from(Arc::clone(term_col))?;
+        let array_parts = plain_term_array.as_parts();
+
+        for i in 0..batch.num_rows() {
+            let id = id_col.value(i);
+
+            // Strict contiguous validation
+            if id != self.next_id {
+                return exec_err!(
+                    "Non-contiguous or unsorted object ID detected. Expected {}, found {}",
+                    self.next_id,
+                    id
+                );
+            }
+
+            // Extract term parts
+            let term_type = array_parts.term_type.value(i);
+            let value = array_parts.value.value(i);
+            let data_type = array_parts
                 .data_type
-                .is_valid(idx)
-                .then(|| array.data_type.value(idx)),
-            language: array
+                .is_valid(i)
+                .then(|| array_parts.data_type.value(i));
+            let language = array_parts
                 .language_tag
-                .is_valid(idx)
-                .then(|| array.language_tag.value(idx)),
+                .is_valid(i)
+                .then(|| array_parts.language_tag.value(i));
+
+            // Intern strings
+            let value_id = self.interner.get_or_intern(value);
+            let data_type_id = data_type.map(|dt| self.interner.get_or_intern(dt));
+            let language_id = language.map(|lang| self.interner.get_or_intern(lang));
+
+            let mapped_term = MappedTerm {
+                term_type,
+                value: value_id,
+                data_type: data_type_id,
+                language: language_id,
+            };
+
+            // Because IDs are exactly `self.next_id`, the position in `self.terms`
+            // naturally aligns with `id`.
+            self.terms.push(mapped_term);
+            self.term_to_id.insert(mapped_term, id);
+
+            self.next_id += 1;
         }
+
+        Ok(())
     }
 
-    /// Converts the borrowed parts into an owned [`MappedTerm`].
-    fn to_mapped_term(&self) -> MappedTerm {
-        MappedTerm {
-            term_type: self.term_type,
-            value: self.value.to_owned(),
-            datatype: self.datatype.map(|s| s.to_owned()),
-            language: self.language.map(|s| s.to_owned()),
+    /// Helper method to safely unpack a MappedTerm and insert it into an ArrayBuilder.
+    #[inline]
+    fn append_term_to_builder(
+        &self,
+        term: &MappedTerm,
+        builder: &mut PlainTermArrayElementBuilder,
+    ) {
+        let term_type = term.term_type;
+
+        let value_str = self.interner.resolve(&term.value).unwrap_or("");
+        let dt_str = term
+            .data_type
+            .as_ref()
+            .and_then(|id| self.interner.resolve(id));
+        let lang_str = term
+            .language
+            .as_ref()
+            .and_then(|id| self.interner.resolve(id));
+
+        builder.append_raw(term_type, value_str, dt_str, lang_str);
+    }
+}
+
+/// Represents an interned RDF term. Now implements `Copy` since all internal types are `Copy`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MappedTerm {
+    term_type: i8,
+    value: InternedStr,
+    data_type: Option<InternedStr>,
+    language: Option<InternedStr>,
+}
+
+/// The maximum byte length for a string to be stored inline.
+/// Strings larger than this will be allocated and interned in the HashMap.
+const SMALL_STRING_SIZE: usize = 14;
+
+/// Represents an interned string, either stored inline (if small) or by reference ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InternedStr {
+    Small {
+        len: u8,
+        bytes: [u8; SMALL_STRING_SIZE],
+    },
+    Interned(u64),
+}
+
+impl InternedStr {
+    /// Creates a new `Small` variant from a string slice.
+    /// Panics if the string length exceeds `SMALL_STRING_SIZE`.
+    #[inline]
+    fn new_small(s: &str) -> Self {
+        debug_assert!(s.len() <= SMALL_STRING_SIZE);
+        let mut bytes = [0u8; SMALL_STRING_SIZE];
+        bytes[..s.len()].copy_from_slice(s.as_bytes());
+        Self::Small {
+            len: s.len() as u8,
+            bytes,
         }
     }
 }
 
-/// THE MAGIC: Tells hashbrown how to compare our borrowed TermRef against an owned MappedTerm.
-impl<'a> Equivalent<MappedTerm> for MappedTermRef<'a> {
-    #[inline]
-    fn equivalent(&self, key: &MappedTerm) -> bool {
-        self.term_type == key.term_type
-            && self.value == key.value
-            && self.datatype == key.datatype.as_deref()
-            && self.language == key.language.as_deref()
+/// A simple string interner to deduplicate String allocations, with inline small string optimization.
+#[derive(Debug, Default)]
+pub struct StringInterner {
+    str_to_id: HashMap<Arc<str>, u64, ahash::RandomState>,
+    id_to_str: HashMap<u64, Arc<str>, ahash::RandomState>,
+    next_id: u64,
+}
+
+impl StringInterner {
+    /// Creates a new empty [`StringInterner`].
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns the `InternedStr` for a string. If it's small, it's inlined.
+    /// Otherwise, it's interned in the HashMap if it doesn't already exist.
+    pub fn get_or_intern(&mut self, s: &str) -> InternedStr {
+        if s.len() <= SMALL_STRING_SIZE {
+            return InternedStr::new_small(s);
+        }
+
+        if let Some(&id) = self.str_to_id.get(s) {
+            return InternedStr::Interned(id);
+        }
+
+        let id = self.next_id;
+        self.next_id += 1;
+
+        let arc_str: Arc<str> = Arc::from(s);
+        self.str_to_id.insert(Arc::clone(&arc_str), id);
+        self.id_to_str.insert(id, arc_str);
+
+        InternedStr::Interned(id)
+    }
+
+    /// Gets the `InternedStr` for a string if it exists or if it's small enough to be inlined.
+    pub fn get_id(&self, s: &str) -> Option<InternedStr> {
+        if s.len() <= SMALL_STRING_SIZE {
+            return Some(InternedStr::new_small(s));
+        }
+        self.str_to_id.get(s).copied().map(InternedStr::Interned)
+    }
+
+    /// Resolves an `InternedStr` back to its string slice.
+    pub fn resolve<'a>(&'a self, interned: &'a InternedStr) -> Option<&'a str> {
+        match interned {
+            InternedStr::Small { len, bytes } => {
+                // Safe because we only construct it from valid utf8 strings in `new_small`
+                unsafe { Some(std::str::from_utf8_unchecked(&bytes[..*len as usize])) }
+            }
+            InternedStr::Interned(id) => self.id_to_str.get(id).map(|arc| &**arc),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::arrow::datatypes::{DataType, Field, Schema};
+    use datafusion::error::Result as DFResult;
+    use rdf_fusion_encoding::TermEncoding;
+    use rdf_fusion_encoding::plain_term::{
+        PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
+    };
+
+    #[test]
+    fn test_interned_str_size() {
+        assert_eq!(size_of::<InternedStr>(), 16);
+    }
+
+    #[test]
+    fn test_encode_return_correct_type() -> DFResult<()> {
+        let mut mapping = ObjectIdInMemoryMapping::empty();
+
+        let input_array = create_test_array();
+
+        let encoded_ids = mapping.encode_array(&input_array)?;
+        let resolved_array_ref = mapping.resolve_plain_terms(&encoded_ids)?;
+
+        assert_eq!(
+            resolved_array_ref.data_type(),
+            PLAIN_TERM_ENCODING.data_type()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_encode_and_resolve_terms() -> DFResult<()> {
+        let mut mapping = ObjectIdInMemoryMapping::empty();
+
+        let input_array = create_test_array();
+
+        let encoded_ids = mapping.encode_array(&input_array)?;
+        let resolved_array_ref = mapping.resolve_plain_terms(&encoded_ids)?;
+
+        assert_eq!(input_array.inner().as_ref(), resolved_array_ref.as_ref(),);
+        Ok(())
+    }
+
+    #[test]
+    fn test_encode_twice_get_same_result() -> DFResult<()> {
+        let mut mapping = ObjectIdInMemoryMapping::empty();
+
+        let input_array = create_test_array();
+
+        let encoded_ids1 = mapping.encode_array(&input_array)?;
+        let encoded_ids2 = mapping.encode_array(&input_array)?;
+
+        assert_eq!(encoded_ids1, encoded_ids2,);
+        Ok(())
+    }
+    #[test]
+    fn test_add_batch_contiguous_success() -> DFResult<()> {
+        let mut mapping = ObjectIdInMemoryMapping::empty();
+
+        // 1. Create a contiguous ID array matching the empty mapping's next_id (0, 1)
+        let id_array = Arc::new(Int64Array::from(vec![0, 1]));
+
+        // 2. Create the corresponding PlainTermArray
+        let mut builder = PlainTermArrayElementBuilder::new();
+        builder.append_raw(1, "http://example.org/A", None, None);
+        builder.append_raw(1, "http://example.org/B", None, None);
+        let term_array = builder.finish().into_array_ref();
+
+        // 3. Build the RecordBatch
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("term", PLAIN_TERM_ENCODING.data_type().clone(), true),
+        ]));
+
+        let batch = RecordBatch::try_new(schema, vec![id_array, term_array])?;
+
+        // 4. Test adding the batch
+        let result = mapping.add_batch(&batch);
+        assert!(result.is_ok(), "Failed to add valid contiguous batch");
+        assert_eq!(
+            mapping.next_id(),
+            2,
+            "next_id was not incremented correctly"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_batch_rejects_non_contiguous_ids() -> DFResult<()> {
+        let mut mapping = ObjectIdInMemoryMapping::empty();
+
+        // 1. Create an ID array with a gap (0, 2) - skipping 1
+        let id_array = Arc::new(Int64Array::from(vec![0, 2]));
+
+        // 2. Create the corresponding PlainTermArray
+        let mut builder = PlainTermArrayElementBuilder::new();
+        builder.append_raw(1, "http://example.org/A", None, None);
+        builder.append_raw(1, "http://example.org/C", None, None);
+        let term_array = builder.finish().into_array_ref();
+
+        // 3. Build the RecordBatch
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("term", PLAIN_TERM_ENCODING.data_type().clone(), true),
+        ]));
+
+        let batch = RecordBatch::try_new(schema, vec![id_array, term_array])?;
+
+        // 4. Test adding the batch - this should FAIL due to strict contiguous validation
+        let result = mapping.add_batch(&batch);
+        assert!(
+            result.is_err(),
+            "add_batch should have failed on non-contiguous IDs"
+        );
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Expected 1, found 2"),
+            "Error message did not contain expected validation details: {}",
+            err_msg
+        );
+
+        Ok(())
+    }
+
+    fn create_test_array() -> PlainTermArray {
+        let mut builder = PlainTermArrayElementBuilder::new();
+        builder.append_raw(1, "http://example.org/Alice", None, None);
+        builder.append_raw(2, "b0", None, None);
+        builder.append_raw(3, "Hello", None, Some("en"));
+        builder.append_raw(
+            3,
+            "42",
+            Some("http://www.w3.org/2001/XMLSchema#integer"),
+            None,
+        );
+        let input_array = builder.finish();
+        input_array
     }
 }

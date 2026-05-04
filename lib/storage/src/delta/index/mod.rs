@@ -13,12 +13,13 @@ use datafusion::parquet::file::properties::WriterProperties;
 use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
 use deltalake::kernel::transaction::CommitProperties;
 use deltalake::kernel::{Add, Transaction};
+use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
 use deltalake::parquet::basic::{Compression, ZstdLevel};
 use deltalake::parquet::file::metadata::SortingColumn;
 use deltalake::parquet::file::properties::EnabledStatistics;
 use deltalake::parquet::schema::types::ColumnPath;
-use deltalake::{DataType as DeltaDataType, DeltaTable, StructField};
+use deltalake::{DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField};
 use futures::TryStreamExt;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -30,7 +31,7 @@ use tokio::sync::RwLock;
 /// TODO: Make this configurable
 const PAGE_ROW_COUNT: usize = 8_192;
 /// TODO: Make this configurable
-const ROW_GROUP_ROW_COUNT: usize = 8_192 * 32;
+const ROW_GROUP_ROW_COUNT: usize = PAGE_ROW_COUNT * 32;
 /// TODO: Make this configurable
 const FILE_ROW_COUNT: usize = ROW_GROUP_ROW_COUNT * 32;
 
@@ -80,7 +81,7 @@ impl DeltaQuadStorageIndex {
     /// Tries to create a new [`DeltaQuadStorageIndex`].
     pub async fn try_new(
         storage_encoding: QuadStorageEncoding,
-        location: &str,
+        log_store: LogStoreRef,
         components: IndexComponents,
     ) -> Result<Self, DeltaQuadStorageError> {
         let data_type = storage_encoding.term_type().clone();
@@ -103,7 +104,7 @@ impl DeltaQuadStorageIndex {
             CommitProperties::default().with_application_transaction(sync_txn);
 
         let table = CreateBuilder::new()
-            .with_location(location)
+            .with_log_store(log_store)
             .with_columns(delta_columns)
             .with_commit_properties(commit_props)
             .with_table_name(format!("Index_{components}"))
@@ -120,6 +121,43 @@ impl DeltaQuadStorageIndex {
         };
 
         Ok(index)
+    }
+
+    /// TODO
+    pub async fn try_load(
+        storage_encoding: QuadStorageEncoding,
+        log_store: LogStoreRef,
+        components: IndexComponents,
+    ) -> Result<Self, DeltaQuadStorageError> {
+        let mut table =
+            DeltaTable::new(Arc::clone(&log_store), DeltaTableConfig::default());
+        table.load().await?;
+
+        let snapshot = table.snapshot()?.snapshot();
+        let active_files = Arc::new(
+            snapshot
+                .log_data()
+                .into_iter()
+                .map(|file| {
+                    #[allow(deprecated)]
+                    file.add_action().clone()
+                })
+                .collect(),
+        );
+        let log_transaction_version = snapshot
+            .transaction_version(log_store.as_ref(), Self::APP_ID)
+            .await?
+            .unwrap_or(0) as u64;
+
+        Ok(Self {
+            storage_encoding,
+            table: Arc::new(RwLock::new(IndexTableState::new(
+                table,
+                active_files,
+                log_transaction_version,
+            ))),
+            components,
+        })
     }
 
     /// Returns a reference to the used [`IndexComponents`].
@@ -228,12 +266,10 @@ impl DeltaQuadStorageIndex {
 
         if self.storage_encoding.term_type().is_primitive() {
             writer_properties_builder = writer_properties_builder
-                .set_encoding(Encoding::RLE)
                 .set_column_encoding(last_component, Encoding::PLAIN);
         } else {
             writer_properties_builder = writer_properties_builder
-                .set_dictionary_enabled(true)
-                .set_encoding(Encoding::DELTA_LENGTH_BYTE_ARRAY)
+                .set_encoding(Encoding::DELTA_LENGTH_BYTE_ARRAY) // Good for common prefixes
                 .set_statistics_truncate_length(Some(256)) // IRIs might be long
                 .set_column_index_truncate_length(Some(256)) // IRIs might be long;
         }

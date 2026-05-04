@@ -173,9 +173,7 @@ pub async fn evaluate_update(
                         })
                         .unwrap_or(RdfFormat::Turtle);
 
-                    let stream = response
-                        .bytes_stream()
-                        .map_err(|e| io::Error::other(e));
+                    let stream = response.bytes_stream().map_err(io::Error::other);
                     let reader = StreamReader::new(stream);
                     let mut parser = RdfParser::from_format(format)
                         .with_base_iri(source.as_str())
@@ -192,10 +190,8 @@ pub async fn evaluate_update(
                     while let Some(quad) = parser.next().await {
                         let mut quad =
                             quad.map_err(QueryEvaluationError::GraphParsing)?;
-                        if !format.supports_datasets() {
-                            quad.graph_name = destination.clone();
-                        } else if matches!(quad.graph_name, GraphName::DefaultGraph)
-                            && !matches!(destination, GraphName::DefaultGraph)
+                        if !format.supports_datasets()
+                            || matches!(quad.graph_name, GraphName::DefaultGraph)
                         {
                             quad.graph_name = destination.clone();
                         }
@@ -266,7 +262,6 @@ fn convert_ground_term(term: rdf_fusion_model::sparql::term::GroundTerm) -> Term
 }
 
 fn convert_graph_target(graph: &GraphTarget) -> QuadStorageGraphTarget {
-    
     match graph {
         GraphTarget::NamedNode(n) => QuadStorageGraphTarget::NamedNode(n.clone()),
         GraphTarget::DefaultGraph => QuadStorageGraphTarget::DefaultGraph,

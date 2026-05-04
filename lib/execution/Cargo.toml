@@ -11,8 +11,11 @@ RDF Fusion Execution Engine
 
 [dependencies]
 async-trait.workspace = true
+bytes.workspace = true
 datafusion.workspace = true
 itertools.workspace = true
+moka.workspace = true
+object_store.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-functions.workspace = true
@@ -26,6 +29,8 @@ sparesults.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+tracing.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

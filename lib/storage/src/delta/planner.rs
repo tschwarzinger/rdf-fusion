@@ -147,7 +147,7 @@ mod tests {
     use datafusion::physical_plan::displayable;
     use datafusion::physical_planner::DefaultPhysicalPlanner;
     use datafusion::prelude::{SessionConfig, SessionContext};
-    use insta::assert_snapshot;
+    use insta::{Settings, assert_snapshot};
     use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
     use rdf_fusion_execution::RdfFusionContextBuilder;
     use rdf_fusion_extensions::storage::QuadStorage;
@@ -166,6 +166,7 @@ mod tests {
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
             (r"@\d", "@<col>"),
+            (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
@@ -180,11 +181,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_planner_pushes_down_filter_string_encoding() {
-        let (session, _, planner, node) =
+        let (session, storage, node) =
             setup(QuadStorageEncodingName::String, vec![IndexComponents::GSPO]).await;
+
+        let planner =
+            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
             (r"@\d", "@<col>"),
+            (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
@@ -234,16 +239,21 @@ mod tests {
             DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
 
-        assert_snapshot!(
-            print_scan_implementation(plan.as_ref()),
-            @r"
-        ProjectionExec: expr=[predicate@0 as p, object@1 as o]
-          ProjectionExec: expr=[predicate@2 as predicate, object@3 as object]
-            ProjectionExec: expr=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object]
-              FilterExec: graph@0 IS NULL AND subject@1 = 4
-                DataSourceExec: partitions=1, partition_sizes=[1]
-        "
-        )
+        let mut settings = Settings::default();
+        settings.add_filter(r"part-.*\.parquet", "<name>.parquet");
+        settings.bind(|| {
+            assert_snapshot!(
+                print_scan_implementation(plan.as_ref()),
+                @"
+            ProjectionExec: expr=[predicate@0 as p, object@1 as o]
+              ProjectionExec: expr=[predicate@2 as predicate, object@3 as object]
+                FilterExec: graph@0 IS NULL AND subject@1 = 4
+                  VerifyNotNullExec: columns=[1, 2, 3]
+                    AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[]
+                      DataSourceExec: file_groups={1 group: [[<name>.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
+            "
+            )
+        })
     }
 
     #[tokio::test]
@@ -274,22 +284,25 @@ mod tests {
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
             (r"@\d", "@<col>"),
+            (r"part-.*\.parquet", "<file>.parquet"),
         ]}, {
                 assert_snapshot!(
                     print_scan_implementation(plan.as_ref()),
-                        @r"
+                        @"
                 ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
                   ProjectionExec: expr=[predicate@<col> as predicate, object@<col> as object]
                     UnionExec
                       HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@<col>, graph@<col>), (subject@<col>, subject@<col>), (predicate@<col>, predicate@<col>), (object@<col>, object@<col>)], NullsEqual: true
-                        ProjectionExec: expr=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object]
-                          FilterExec: graph@<col> IS NULL AND subject@<col> = 4
-                            DataSourceExec: partitions=1, partition_sizes=[1]
+                        FilterExec: graph@<col> IS NULL AND subject@<col> = 4
+                          VerifyNotNullExec: columns=[1, 2, 3]
+                            AggregateExec: mode=Single, gby=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object], aggr=[]
+                              DataSourceExec: file_groups={1 group: [[<file>.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
                         DeltaScan
                           DataSourceExec: file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 4, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 4 AND 4 <= subject_max@<col>, required_guarantees=[subject in (4)]
-                      ProjectionExec: expr=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object]
-                        FilterExec: graph@<col> IS NULL AND subject@<col> = 4
-                          DataSourceExec: partitions=1, partition_sizes=[1]
+                      FilterExec: graph@<col> IS NULL AND subject@<col> = 4
+                        VerifyNotNullExec: columns=[1, 2, 3]
+                          AggregateExec: mode=Single, gby=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object], aggr=[]
+                            DataSourceExec: file_groups={1 group: [[<file>.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
                 "
                 )
         });
@@ -324,16 +337,16 @@ mod tests {
 
         insta::with_settings!({filters => vec![
             (r"@\d", "@<col>"),
+            (r"part-.*\.parquet", "<file>.parquet"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
-                @r"
+                @"
             ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
               ProjectionExec: expr=[predicate@<col> as predicate, object@<col> as object]
                 HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@<col>, graph@<col>), (subject@<col>, subject@<col>), (predicate@<col>, predicate@<col>), (object@<col>, object@<col>)], NullsEqual: true
-                  ProjectionExec: expr=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object]
-                    FilterExec: graph@<col> IS NULL AND subject@<col> = 4
-                      DataSourceExec: partitions=1, partition_sizes=[1]
+                  FilterExec: graph@<col> IS NULL AND subject@<col> = 4
+                    DataSourceExec: partitions=1, partition_sizes=[1]
                   DeltaScan
                     DataSourceExec: file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 4, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 4 AND 4 <= subject_max@<col>, required_guarantees=[subject in (4)]
             "
@@ -383,29 +396,28 @@ mod tests {
 
         insta::with_settings!({filters => vec![
             (r"@\d", "@<col>"),
+            (r"part-.*\.parquet", "<file>.parquet"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
-                @r"
+                @"
             ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
               ProjectionExec: expr=[predicate@<col> as predicate, object@<col> as object]
                 UnionExec
                   HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@<col>, graph@<col>), (subject@<col>, subject@<col>), (predicate@<col>, predicate@<col>), (object@<col>, object@<col>)], NullsEqual: true
                     CoalescePartitionsExec
                       UnionExec
-                        ProjectionExec: expr=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object]
-                          FilterExec: graph@<col> IS NULL AND subject@<col> = 8
-                            DataSourceExec: partitions=1, partition_sizes=[1]
-                        ProjectionExec: expr=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object]
-                          FilterExec: graph@<col> IS NULL AND subject@<col> = 8
-                            DataSourceExec: partitions=1, partition_sizes=[1]
+                        FilterExec: graph@<col> IS NULL AND subject@<col> = 8
+                          DataSourceExec: partitions=1, partition_sizes=[1]
+                        FilterExec: graph@<col> IS NULL AND subject@<col> = 8
+                          DataSourceExec: partitions=1, partition_sizes=[1]
                     DeltaScan
                       DataSourceExec: file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 8, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 8 AND 8 <= subject_max@<col>, required_guarantees=[subject in (8)]
-                  ProjectionExec: expr=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object]
-                    FilterExec: graph@<col> IS NULL AND subject@<col> = 8
-                      DataSourceExec: partitions=1, partition_sizes=[1]
+                  FilterExec: graph@<col> IS NULL AND subject@<col> = 8
+                    DataSourceExec: partitions=1, partition_sizes=[1]
             "
-            );
+                    );
+
         });
     }
 
@@ -418,14 +430,7 @@ mod tests {
         options.optimizer.enable_dynamic_filter_pushdown = true;
         options.execution.parquet.pushdown_filters = true;
 
-        let storage = Arc::new(
-            DeltaQuadStorage::new_in_memory(
-                encoding,
-                indexes,
-                Arc::new(Default::default()),
-            )
-            .await,
-        );
+        let storage = Arc::new(DeltaQuadStorage::new_in_memory(encoding, indexes).await);
 
         let storage = Arc::clone(&storage);
         let context =

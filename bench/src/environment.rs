@@ -5,15 +5,19 @@ use crate::prepare::{
 use crate::prepare::{ensure_file_download, prepare_file_download};
 use crate::{BenchmarkStorageBackend, BenchmarkingOptions};
 use anyhow::bail;
+use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion::execution::RdfFusionContextBuilder;
+use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion::storage::logstore::{StorageConfig, logstore_with};
 use rdf_fusion::store::Store;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use url::Url;
 
 /// Represents a context used to execute benchmarks.
 pub struct RdfFusionBenchContext {
@@ -54,13 +58,17 @@ impl RdfFusionBenchContext {
         storage_encoding: QuadStorageEncodingName,
         target_partitions: usize,
     ) -> Self {
+        let mut config = SessionConfig::new();
+        config.options_mut().execution.target_partitions = target_partitions;
+        config.options_mut().execution.parquet.pushdown_filters = true;
+
         Self {
             options: BenchmarkingOptions {
                 verbose_results: false,
-                target_partitions: Some(target_partitions),
                 memory_size: None,
                 storage_backend: BenchmarkStorageBackend::DeltaLakeInMemory,
                 storage_encoding,
+                config,
             },
             data_dir: Mutex::new(data_dir),
             databases_dir: Mutex::new(PathBuf::from("/tmp/database")),
@@ -88,19 +96,36 @@ impl RdfFusionBenchContext {
         if let Some(memory_size) = self.options.memory_size {
             builder = builder.with_memory_limit(memory_size * 1024 * 1024, 1.0);
         }
-        let runtime_env = builder.build_arc().expect("Failed to build RuntimeEnv");
 
-        let mut config =
-            SessionConfig::from_env().expect("Failed to create SessionConfig");
-        if let Some(target_partitions) = self.options.target_partitions {
-            config = config.with_target_partitions(target_partitions)
-        };
-        config.options_mut().execution.parquet.pushdown_filters = true;
+        let registry = Arc::clone(&builder.object_store_registry);
+        registry.register_store(
+            &Url::parse("memory:///").unwrap(),
+            Arc::new(InMemory::new()),
+        );
+
+        let registry = Arc::new(CachingObjectStoreRegistry::new(
+            registry,
+            1024 * 1024 * 1024,
+        ));
+        builder = builder.with_object_store_registry(registry);
+
+        let runtime_env = builder.build_arc().expect("Failed to build RuntimeEnv");
 
         let storage_backend = match self.options.storage_backend {
             BenchmarkStorageBackend::DeltaLakeInMemory => {
-                DeltaQuadStorageBuilder::new(Arc::new(TypedFamilyEncoding::default()))
-                    .with_location("memory://")
+                let url = ObjectStoreUrl::parse("memory://").unwrap();
+                let object_store = runtime_env
+                    .object_store(&url)
+                    .expect("Failed to get in-memory object store");
+                let log_store = logstore_with(
+                    Arc::clone(&object_store),
+                    url.as_ref(),
+                    StorageConfig::default(),
+                )
+                .expect("Failed to create log store");
+
+                DeltaQuadStorageBuilder::new()
+                    .with_log_store(log_store)
                     .with_encoding(self.options.storage_encoding)
                     .build()
                     .await
@@ -108,8 +133,22 @@ impl RdfFusionBenchContext {
             }
             BenchmarkStorageBackend::DeltaLakeOnDisk => {
                 let full_iri = prepare_database_directory(self);
-                DeltaQuadStorageBuilder::new(Arc::new(TypedFamilyEncoding::default()))
-                    .with_location(full_iri)
+                let full_iri = Url::parse(&full_iri).unwrap();
+
+                let base_url =
+                    ObjectStoreUrl::parse("file://").expect("Invalid database URL");
+                let object_store = runtime_env
+                    .object_store(&base_url)
+                    .expect("Failed to get object store");
+                let log_store = logstore_with(
+                    Arc::clone(&object_store),
+                    &full_iri,
+                    StorageConfig::default(),
+                )
+                .expect("Failed to create log store");
+
+                DeltaQuadStorageBuilder::new()
+                    .with_log_store(log_store)
                     .with_encoding(self.options.storage_encoding)
                     .build()
                     .await
@@ -117,8 +156,8 @@ impl RdfFusionBenchContext {
             }
         };
 
-        let context = RdfFusionContextBuilder::new(storage_backend)
-            .with_session_config(Some(config))
+        let context = RdfFusionContextBuilder::new(Arc::new(storage_backend))
+            .with_session_config(Some(self.options.config.clone()))
             .with_runtime_env(Some(runtime_env))
             .build()
             .expect("Failed to create RdfFusionContext");

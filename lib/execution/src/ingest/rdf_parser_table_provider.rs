@@ -1,3 +1,4 @@
+use crate::ingest::RdfParserOptions;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::catalog::{Session, TableProvider};
 use datafusion::common::{DataFusionError, exec_datafusion_err};
@@ -13,70 +14,15 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, Partitioning, PlanProperties, SendableRecordBatchStream,
 };
 use futures::stream::try_unfold;
-use oxrdfio::{RdfFormat, RdfParser, TokioAsyncReaderQuadParser};
+use oxrdfio::{RdfParser, TokioAsyncReaderQuadParser};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
-use rdf_fusion_model::{DFResult, GraphName, Iri, IriParseError};
+use rdf_fusion_model::{DFResult, IriParseError};
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use tokio::io::AsyncRead;
-
-/// Options for the RDF parser.
-#[derive(Debug, Clone)]
-pub struct RdfParserOptions {
-    /// The rdf format.
-    pub format: RdfFormat,
-    /// The base IRI for the parser.
-    pub base_iri: Option<Iri<String>>,
-    /// Whether to rename blank nodes.
-    pub rename_blank_nodes: bool,
-    /// The default graph for the parser.
-    pub default_graph: Option<GraphName>,
-    /// Whether to allow named graphs.
-    pub without_named_graphs: bool,
-}
-
-impl RdfParserOptions {
-    /// Creates a new [`RdfParserOptions`] for the given format.
-    pub fn with_format(format: RdfFormat) -> Self {
-        Self {
-            format,
-            base_iri: None,
-            rename_blank_nodes: false,
-            default_graph: None,
-            without_named_graphs: false,
-        }
-    }
-
-    /// Sets whether blank nodes should be renamed.
-    pub fn with_rename_blank_nodes(mut self, rename_blank_nodes: bool) -> Self {
-        self.rename_blank_nodes = rename_blank_nodes;
-        self
-    }
-
-    /// Sets the base IRI for the parser.
-    pub fn with_base_iri(
-        mut self,
-        base_iri: impl Into<String>,
-    ) -> Result<Self, IriParseError> {
-        let base_iri = Iri::parse(base_iri.into())?;
-        self.base_iri = Some(base_iri);
-        Ok(self)
-    }
-
-    /// Sets the default graph for the parser.
-    pub fn with_default_graph(mut self, default_graph: impl Into<GraphName>) -> Self {
-        self.default_graph = Some(default_graph.into());
-        self
-    }
-
-    /// Sets whether named graphs are allowed.
-    pub fn without_named_graphs(mut self, without_named_graphs: bool) -> Self {
-        self.without_named_graphs = without_named_graphs;
-        self
-    }
-}
+use tracing::info;
 
 /// Creates a [`TableProvider`] that reads RDF data from an [`AsyncRead`] stream.
 pub struct RdfParserTableProvider<R: AsyncRead + Unpin + Send + 'static> {
@@ -85,6 +31,8 @@ pub struct RdfParserTableProvider<R: AsyncRead + Unpin + Send + 'static> {
     /// The parser that reads the RDF data. The Mutex allows us to move the parser out of it, once
     /// the table has been scanned.
     quad_parser: Mutex<Option<TokioAsyncReaderQuadParser<R>>>,
+    /// Whether to track the progress of the stream.
+    track_progress: bool,
 }
 
 impl<R: AsyncRead + Unpin + Send + 'static> RdfParserTableProvider<R> {
@@ -113,7 +61,16 @@ impl<R: AsyncRead + Unpin + Send + 'static> RdfParserTableProvider<R> {
         Ok(Self {
             schema: Arc::clone(schema.inner()),
             quad_parser: Mutex::new(Some(quad_parser)),
+            track_progress: false,
         })
+    }
+
+    /// Enables progress tracking for this table provider.
+    pub fn with_track_progress(self, track_progress: bool) -> Self {
+        Self {
+            track_progress,
+            ..self
+        }
     }
 }
 
@@ -150,12 +107,13 @@ impl<R: AsyncRead + Unpin + Send + 'static> TableProvider for RdfParserTableProv
             exec_datafusion_err!("RDF stream has already been consumed")
         })?;
 
-        // Create and return the custom physical plan
+        // Create and return the custom physical plan, passing the track_progress flag
         Ok(Arc::new(RdfParserExec::new(
             parser,
             Arc::clone(&self.schema),
             projection.cloned(),
             limit,
+            self.track_progress,
         )))
     }
 }
@@ -169,6 +127,8 @@ struct RdfParserExec<R: AsyncRead + Unpin + Send + 'static> {
     parser: Mutex<Option<TokioAsyncReaderQuadParser<R>>>,
     /// The properties of the execution plan.
     properties: Arc<PlanProperties>,
+    /// Whether to track and log the progress of the execution
+    track_progress: bool,
 }
 
 impl<R: AsyncRead + Unpin + Send + 'static> RdfParserExec<R> {
@@ -178,12 +138,12 @@ impl<R: AsyncRead + Unpin + Send + 'static> RdfParserExec<R> {
         schema: SchemaRef,
         _projection: Option<Vec<usize>>,
         _limit: Option<usize>,
+        track_progress: bool,
     ) -> Self {
         let properties = PlanProperties::new(
             EquivalenceProperties::new(Arc::clone(&schema)),
             Partitioning::UnknownPartitioning(1),
             EmissionType::Incremental,
-            // This actually depends on the underlying tokio stream. We assume bounded for now.
             Boundedness::Bounded,
         );
 
@@ -191,6 +151,7 @@ impl<R: AsyncRead + Unpin + Send + 'static> RdfParserExec<R> {
             parser: Mutex::new(Some(parser)),
             schema,
             properties: Arc::new(properties),
+            track_progress,
         }
     }
 }
@@ -255,14 +216,19 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
             parser: TokioAsyncReaderQuadParser<R>,
             builder: PlainTermQuadsBuilder,
             target_batch_size: usize,
-            current_batch_size: usize,
+            progress: ProgressState,
+            track_progress: bool,
         }
 
         let initial_state = ParserStreamState {
             parser,
             builder: PlainTermQuadsBuilder::with_capacity(target_batch_size),
             target_batch_size,
-            current_batch_size: 0,
+            progress: ProgressState {
+                pending_batch: 0,
+                total_processed: 0,
+            },
+            track_progress: self.track_progress,
         };
 
         let stream = try_unfold(initial_state, |mut state| async move {
@@ -270,12 +236,23 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
                 match state.parser.next().await {
                     Some(Ok(quad)) => {
                         state.builder.append_quad(quad.as_ref());
-                        state.current_batch_size += 1;
+                        state.progress.pending_batch += 1;
+                        state.progress.total_processed += 1;
+
+                        // Periodically log progress if enabled (every 100k rows)
+                        if state.track_progress
+                            && state.progress.total_processed % 100_000 == 0
+                        {
+                            info!(
+                                "RDF Scan Progress: {} quads processed",
+                                state.progress.total_processed
+                            );
+                        }
 
                         // Yield a batch when we hit the configured batch size. Otherwise, keep parsing.
-                        if state.current_batch_size >= state.target_batch_size {
+                        if state.progress.pending_batch >= state.target_batch_size {
                             let batch = state.builder.finish().into_record_batch();
-                            state.current_batch_size = 0;
+                            state.progress.pending_batch = 0;
                             state.builder = PlainTermQuadsBuilder::with_capacity(
                                 state.target_batch_size,
                             );
@@ -287,10 +264,17 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
                         return Err(DataFusionError::External(Box::new(e)));
                     }
                     None => {
-                        // Stream exhausted. Yield any remaining data.
-                        return if state.current_batch_size > 0 {
+                        // Stream exhausted. Log final completion and yield any remaining data.
+                        if state.track_progress {
+                            info!(
+                                "RDF Scan Complete: Total of {} quads processed",
+                                state.progress.total_processed
+                            );
+                        }
+
+                        return if state.progress.pending_batch > 0 {
                             let batch = state.builder.finish().into_record_batch();
-                            state.current_batch_size = 0;
+                            state.progress.pending_batch = 0;
                             state.builder = PlainTermQuadsBuilder::with_capacity(0);
 
                             Ok(Some((batch, state)))
@@ -308,6 +292,15 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
             Box::pin(stream),
         )))
     }
+}
+
+/// The state that tracks the progress of the parser.
+#[derive(Debug, Clone, Default)]
+struct ProgressState {
+    /// The number of rows in the pending batch.
+    pending_batch: usize,
+    /// The total number of processed rows.
+    total_processed: usize,
 }
 
 #[cfg(test)]
