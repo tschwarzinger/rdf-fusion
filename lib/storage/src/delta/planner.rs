@@ -248,9 +248,7 @@ mod tests {
             ProjectionExec: expr=[predicate@0 as p, object@1 as o]
               ProjectionExec: expr=[predicate@2 as predicate, object@3 as object]
                 FilterExec: graph@0 IS NULL AND subject@1 = 4
-                  VerifyNotNullExec: columns=[1, 2, 3]
-                    AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[]
-                      DataSourceExec: file_groups={1 group: [[<name>.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
+                  DataSourceExec: partitions=1, partition_sizes=[1]
             "
             )
         })
@@ -294,15 +292,11 @@ mod tests {
                     UnionExec
                       HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@<col>, graph@<col>), (subject@<col>, subject@<col>), (predicate@<col>, predicate@<col>), (object@<col>, object@<col>)], NullsEqual: true
                         FilterExec: graph@<col> IS NULL AND subject@<col> = 4
-                          VerifyNotNullExec: columns=[1, 2, 3]
-                            AggregateExec: mode=Single, gby=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object], aggr=[]
-                              DataSourceExec: file_groups={1 group: [[<file>.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
+                          DataSourceExec: partitions=1, partition_sizes=[1]
                         DeltaScan
                           DataSourceExec: file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 4, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 4 AND 4 <= subject_max@<col>, required_guarantees=[subject in (4)]
                       FilterExec: graph@<col> IS NULL AND subject@<col> = 4
-                        VerifyNotNullExec: columns=[1, 2, 3]
-                          AggregateExec: mode=Single, gby=[graph@<col> as graph, subject@<col> as subject, predicate@<col> as predicate, object@<col> as object], aggr=[]
-                            DataSourceExec: file_groups={1 group: [[<file>.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
+                        DataSourceExec: partitions=1, partition_sizes=[1]
                 "
                 )
         });

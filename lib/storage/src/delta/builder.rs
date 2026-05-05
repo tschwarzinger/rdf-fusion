@@ -1,14 +1,16 @@
 use crate::delta::DeltaQuadStorage;
 use crate::delta::error::DeltaQuadStorageError;
 use crate::index::IndexComponents;
-use datafusion::common::Result;
 use datafusion::execution::SessionState;
 use deltalake::logstore::{LogStoreRef, default_logstore};
 use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::path::Path;
 use rdf_fusion_encoding::QuadStorageEncodingName;
+use std::env::VarError;
 use std::sync::Arc;
+use std::time::Duration;
+use thiserror::Error;
 use tracing::info;
 
 /// Indicates whether the storage builder should try to load an existing table.
@@ -27,6 +29,7 @@ pub struct DeltaQuadStorageBuilder {
     log_store: Option<LogStoreRef>,
     encoding: QuadStorageEncodingName,
     indexes: Vec<IndexComponents>,
+    log_max_age: Option<Duration>,
 }
 
 impl DeltaQuadStorageBuilder {
@@ -41,7 +44,36 @@ impl DeltaQuadStorageBuilder {
                 IndexComponents::GPOS,
                 IndexComponents::GOSP,
             ],
+            log_max_age: None,
         }
+    }
+
+    /// Creates a new quad [`DeltaQuadStorageBuilder`] using the environment variables.
+    pub fn from_env() -> Result<Self, DeltaQuadStorageBuilderCreationError> {
+        const LOG_MAX_AGE: &str = "RDF_FUSION_DELTA_LOG_MAX_AGE";
+
+        let max_age = match std::env::var(LOG_MAX_AGE) {
+            Ok(value) => {
+                if value.to_lowercase() == "inf" {
+                    None
+                } else {
+                    let parsed = value.parse::<u64>().map_err(|err| {
+                        DeltaQuadStorageBuilderCreationError::InvalidField(
+                            LOG_MAX_AGE.to_owned(),
+                            err.to_string(),
+                        )
+                    })?;
+                    Some(parsed)
+                }
+            }
+            Err(VarError::NotPresent) => None,
+            Err(other) => {
+                return Err(DeltaQuadStorageBuilderCreationError::EnvironmentVar(other));
+            }
+        }
+        .map(Duration::from_millis);
+
+        Ok(Self::new().with_log_max_age(max_age))
     }
 
     /// Sets the location of the delta storage.
@@ -66,6 +98,12 @@ impl DeltaQuadStorageBuilder {
     /// Defines whether an existing database should be loaded.
     pub fn with_load_mode(mut self, load_mode: LoadMode) -> Self {
         self.load_mode = load_mode;
+        self
+    }
+
+    /// Sets the maximum age of the transaction log before it is refreshed.
+    pub fn with_log_max_age(mut self, max_age: Option<Duration>) -> Self {
+        self.log_max_age = max_age;
         self
     }
 
@@ -100,6 +138,7 @@ impl DeltaQuadStorageBuilder {
                     );
 
                     let result = DeltaQuadStorage::try_load(&session, log_store).await?;
+                    result.set_transaction_max_age(self.log_max_age).await;
                     Ok(result)
                 }
             }
@@ -112,6 +151,7 @@ impl DeltaQuadStorageBuilder {
             let result =
                 DeltaQuadStorage::new_at_location(self.encoding, self.indexes, log_store)
                     .await?;
+            result.set_transaction_max_age(self.log_max_age).await;
             Ok(result)
         }
     }
@@ -121,4 +161,12 @@ impl Default for DeltaQuadStorageBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Debug, Error)]
+pub enum DeltaQuadStorageBuilderCreationError {
+    #[error("Invalid configuration for field '{0}': {1}")]
+    InvalidField(String, String),
+    #[error(transparent)]
+    EnvironmentVar(#[from] VarError),
 }

@@ -143,10 +143,10 @@ impl DeltaObjectIdMapping {
 
     /// Flushes the object id table to disk.
     pub async fn flush(&self) -> Result<(), DeltaQuadStorageError> {
-        let guard = self.flush_lock.lock().await;
+        let mut guard = self.flush_lock.lock().await;
         let last_flushed = *guard;
 
-        let batches = {
+        let (batches, new_flushed) = {
             let dictionary = self
                 .in_memory_mapping
                 .read()
@@ -158,7 +158,10 @@ impl DeltaObjectIdMapping {
                 return Ok(());
             }
 
-            dictionary.read_batches_since_id(last_flushed, &self.table_schema)?
+            (
+                dictionary.read_batches_since_id(last_flushed, &self.table_schema)?,
+                current_id,
+            )
         };
 
         let table = self.table.read().await;
@@ -201,6 +204,7 @@ impl DeltaObjectIdMapping {
             result.version
         );
 
+        *guard = new_flushed;
         Ok(())
     }
 }

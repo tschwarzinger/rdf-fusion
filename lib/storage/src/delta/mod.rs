@@ -4,6 +4,7 @@ mod index;
 mod log;
 mod objectids;
 mod planner;
+mod refresh;
 mod scan;
 mod scan_plan_builder;
 mod snapshot;

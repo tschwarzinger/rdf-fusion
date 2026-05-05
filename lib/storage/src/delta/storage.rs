@@ -2,11 +2,13 @@ use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::index::{DeltaQuadStorageIndex, DeltaQuadStorageIndexSnapshot};
 use crate::delta::log::{DeltaQuadStorageLog, DeltaStorageLogVersionRange};
 use crate::delta::objectids::DeltaObjectIdMapping;
+use crate::delta::refresh::DeltaTableRefresher;
 use crate::delta::snapshot::DeltaQuadStorageSnapshot;
 use crate::delta::{DeltaQuadStorageBuilder, DeltaQuadStorageTransaction};
 use crate::index::IndexComponents;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::common::instant::Instant;
 use datafusion::execution::SessionState;
 use deltalake::logstore::{LogStoreRef, logstore_with};
 use futures::StreamExt;
@@ -21,6 +23,7 @@ use rdf_fusion_extensions::storage::{
 use rdf_fusion_model::StorageError;
 use rdf_fusion_model::quads::COL_GRAPH;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// A quad storage that uses Delta Lake tables for storing quads.
 #[derive(Clone)]
@@ -33,6 +36,8 @@ pub struct DeltaQuadStorage {
     indexes: Vec<Arc<DeltaQuadStorageIndex>>,
     /// The object id mapping used for encoding object ids, if necessary.
     object_id_mapping: Option<Arc<DeltaObjectIdMapping>>,
+    /// Manages periodic refreshes of the delta table.
+    refresher: Arc<DeltaTableRefresher>,
 }
 
 impl DeltaQuadStorage {
@@ -110,6 +115,7 @@ impl DeltaQuadStorage {
             storage_encoding,
             indexes,
             object_id_mapping,
+            refresher: Arc::new(DeltaTableRefresher::new(None)),
         })
     }
 
@@ -215,6 +221,7 @@ impl DeltaQuadStorage {
             storage_encoding,
             indexes,
             object_id_mapping,
+            refresher: Arc::new(DeltaTableRefresher::new(None)),
         })
     }
 
@@ -252,10 +259,21 @@ impl DeltaQuadStorage {
         self.object_id_mapping.clone()
     }
 
+    /// Sets the maximum age of the transaction log before it is refreshed.
+    pub async fn set_transaction_max_age(&self, max_age: Option<Duration>) {
+        self.refresher.set_max_age(max_age).await;
+    }
+
     /// Takes a snapshot of the storage (indexes + logs).
     pub(crate) async fn snapshot_impl(
         &self,
     ) -> Result<DeltaQuadStorageSnapshot, StorageError> {
+        let arrival_time = Instant::now();
+        self.refresher
+            .ensure_fresh(arrival_time, self.log.table())
+            .await
+            .map_err(|e| StorageError::Other(Box::new(e)))?;
+
         let index_snapshots = self.index_snapshots().await?;
 
         // Get the log version after the index versions so that the index versions are always equal
