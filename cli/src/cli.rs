@@ -20,6 +20,9 @@ pub struct RuntimeConfig {
     #[arg(long)]
     pub memory_limit: Option<usize>,
     /// The location of the database. If [`None`], an in-memory database is used.
+    ///
+    /// Supported locations: in-memory database [`memory://`], file store [`file://`], S3-compatible object store [`s3a://[bucket].[endpoint]/path`].
+    /// S3 credentials are set via the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
     #[arg(long)]
     pub location: Option<String>,
 }

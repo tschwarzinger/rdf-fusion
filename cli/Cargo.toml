@@ -22,7 +22,8 @@ doc = false
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 datafusion.workspace = true
-deltalake.workspace = true
+deltalake = { workspace = true, features = ["s3"] }
+object_store = { workspace = true, features = ["aws"] }
 rdf-fusion.workspace = true
 rdf-fusion-web.workspace = true
 snmalloc-rs.workspace = true
