@@ -1,6 +1,7 @@
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::prelude::SessionContext;
+use deltalake::logstore::{IORuntime, LogStore, StorageConfig, logstore_with};
 use object_store::ObjectStore;
 use object_store::memory::InMemory;
 use rdf_fusion_encoding::EncodingArray;
@@ -10,8 +11,8 @@ use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_model::NamedNodeRef;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_storage::delta::DeltaQuadStorage;
-use rdf_fusion_storage::logstore::{LogStore, StorageConfig, logstore_with};
 use std::sync::Arc;
+use tokio::runtime::Handle;
 use url::Url;
 
 mod persistence;
@@ -23,7 +24,7 @@ fn create_test_log_store() -> Arc<dyn LogStore> {
     logstore_with(
         Arc::clone(&object_store) as Arc<dyn ObjectStore>,
         &base_url,
-        StorageConfig::default(),
+        StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
     )
     .unwrap()
 }

@@ -1,5 +1,5 @@
 use crate::test::{Test, TestOutcome};
-use crate::w3c::files::read_file_to_string;
+use crate::w3c::files::W3CTestRuntime;
 use anyhow::{Context, ensure};
 use rdf_fusion::execution::sparql::{RdfFusionQuery, RdfFusionUpdate};
 
@@ -9,6 +9,7 @@ pub struct W3CSparqlSyntaxTest {
     pub action_file: String,
     pub is_positive: bool,
     pub is_update: bool,
+    pub runtime: W3CTestRuntime,
 }
 
 #[async_trait::async_trait]
@@ -22,7 +23,7 @@ impl Test for W3CSparqlSyntaxTest {
     }
 
     async fn run(&self) -> anyhow::Result<TestOutcome> {
-        let content = read_file_to_string(&self.action_file).await?;
+        let content = self.runtime.read_file_to_string(&self.action_file).await?;
 
         let result = if self.is_positive {
             if self.is_update {

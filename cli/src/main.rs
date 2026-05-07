@@ -10,6 +10,7 @@ use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
+use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
 use rdf_fusion::execution::RdfFusionContextBuilder;
@@ -17,12 +18,12 @@ use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
 use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
-use rdf_fusion::storage::logstore::{StorageConfig, logstore_with};
 use rdf_fusion::store::Store;
 use rdf_fusion_web::ServerConfig;
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::runtime::Handle;
 use tracing::info;
 use tracing::warn;
 use tracing_subscriber::layer::SubscriberExt;
@@ -95,7 +96,7 @@ pub async fn main() -> anyhow::Result<()> {
 
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
-    let runtime_env = build_runtime_env(args);
+    let runtime_env = build_runtime_env(args)?;
     let location = args.runtime.location.as_deref().unwrap_or("memory://");
     let url = Url::parse(location).context("Invalid object store URL")?;
     let object_store_url = url.as_object_store_url();
@@ -103,9 +104,12 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
     let object_store = runtime_env
         .object_store(&object_store_url)
         .expect("Failed to get object store");
-    let log_store =
-        logstore_with(Arc::clone(&object_store), &url, StorageConfig::default())
-            .expect("Failed to create log store");
+    let log_store = logstore_with(
+        Arc::clone(&object_store),
+        &url,
+        StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
+    )
+    .expect("Failed to create log store");
 
     let session_config = SessionConfig::from_env()?;
     let loading_state = SessionStateBuilder::new()
@@ -128,7 +132,7 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
 }
 
 /// Builds the runtime environment from the given arguments.
-fn build_runtime_env(args: &Args) -> Arc<RuntimeEnv> {
+fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     let cache_config = CacheManagerConfig::default();
     let mut builder = RuntimeEnvBuilder::new().with_cache_manager(cache_config);
     if let Some(memory_limit) = args.runtime.memory_limit {
@@ -143,7 +147,7 @@ fn build_runtime_env(args: &Args) -> Arc<RuntimeEnv> {
     // Register s3-compatible object store if its in the arguments
     match args.runtime.location {
         Some(ref location) if location.starts_with("s3a://") => {
-            regiser_s3_store(&registry, location);
+            register_s3_store(&registry, location)?;
         }
         Some(ref location) if location.starts_with("file://") => {
             // Store is already registered by `create_store`
@@ -164,45 +168,45 @@ fn build_runtime_env(args: &Args) -> Arc<RuntimeEnv> {
 
     builder = builder.with_object_store_registry(registry);
 
-    builder.build_arc().expect("Failed to build RuntimeEnv")
+    builder.build_arc().context("Failed to build RuntimeEnv")
 }
 
-fn regiser_s3_store(registry: &Arc<CachingObjectStoreRegistry>, location: &String) {
+fn register_s3_store(
+    registry: &Arc<CachingObjectStoreRegistry>,
+    location: &str,
+) -> anyhow::Result<()> {
     let s3_url = Url::parse(location)
-        .context("Failed to parse the S3 URL from the location argument")
-        .unwrap();
+        .context("Failed to parse the S3 URL from the location argument")?;
     let s3_domain = s3_url
         .domain()
-        .context("The S3 URL does not contain a domain")
-        .unwrap();
+        .context("The S3 URL does not contain a domain")?;
 
     // Extract the bucket name from the s3_domain
     // [bucket].[endpoint]
     let s3_bucket_index = s3_domain
         .find(".")
-        .context("The S3 doamin does not contain a bucket name")
-        .unwrap();
+        .context("The S3 doamin does not contain a bucket name")?;
     let s3_bucket = &s3_domain[..s3_bucket_index];
     let s3_endpoint = &s3_domain[s3_bucket_index + 1..];
 
     let client_options = ClientOptions::new()
-        .with_timeout(Duration::from_mins(15))
+        .with_timeout(Duration::from_secs(15 * 60))
         .with_connect_timeout(Duration::from_secs(60))
         .with_pool_idle_timeout(Duration::from_secs(90));
 
-    if let None = env::var("AWS_ACCESS_KEY_ID").ok() {
+    if env::var("AWS_ACCESS_KEY_ID").ok().is_none() {
         warn!("AWS_ACCESS_KEY_ID not set, using default credentials")
     }
-    if let None = env::var("AWS_SECRET_ACCESS_KEY").ok() {
+    if env::var("AWS_SECRET_ACCESS_KEY").ok().is_none() {
         warn!("AWS_SECRET_ACCESS_KEY not set, using default credentials")
     }
 
     let s3_builder = AmazonS3Builder::from_env()
         .with_bucket_name(s3_bucket)
-        .with_endpoint(format!("https://{}", s3_endpoint))
+        .with_endpoint(format!("https://{s3_endpoint}"))
         .with_client_options(client_options)
         .build();
-    if let Some(s3) = s3_builder.ok() {
+    if let Ok(s3) = s3_builder {
         registry.register_store(&s3_url, Arc::new(s3));
     } else {
         warn!(
@@ -211,6 +215,8 @@ fn regiser_s3_store(registry: &Arc<CachingObjectStoreRegistry>, location: &Strin
             Check if the S3 credential environment variables are set correctly."
         )
     }
+
+    Ok(())
 }
 
 /// Starts a Web Server that serves RDF Fusion's Web API.

@@ -9,7 +9,5 @@
 //! Contains storage layer implementations for [RDF Fusion](https://docs.rs/rdf-fusion/).
 
 pub mod delta;
+mod exec;
 pub mod index;
-mod physical;
-
-pub use deltalake::logstore;

@@ -7,7 +7,7 @@ use rdf_fusion::storage::index::IndexComponents;
 use rdf_fusion_testsuite::storage::StorageTestSuiteBuilder;
 use std::sync::Arc;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delta_storage_testsuite_without_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_plain_term_encoding(vec![]).await
@@ -20,7 +20,7 @@ async fn delta_storage_testsuite_without_index() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delta_storage_testsuite_with_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_plain_term_encoding(vec![
@@ -38,7 +38,7 @@ async fn delta_storage_testsuite_with_index() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delta_storage_object_id_testsuite_without_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_object_id(vec![]).await
@@ -51,7 +51,7 @@ async fn delta_storage_object_id_testsuite_without_index() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delta_storage_object_id_testsuite_with_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_object_id(vec![
@@ -69,7 +69,7 @@ async fn delta_storage_object_id_testsuite_with_index() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delta_storage_string_testsuite_without_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_string(vec![]).await
@@ -82,7 +82,7 @@ async fn delta_storage_string_testsuite_without_index() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delta_storage_string_testsuite_with_index() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_string(vec![

@@ -12,7 +12,11 @@ use tokio::runtime::Builder;
 
 /// This benchmark measures transactionally inserting synthetic quads into the store.
 fn store_load(c: &mut Criterion) {
-    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let runtime = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
 
     c.bench_function("Store::extend", |b| {
         let store = runtime.block_on(Store::new_in_memory());
@@ -54,7 +58,11 @@ fn store_load(c: &mut Criterion) {
 /// These benchmarks measure the duration of running a simple query (1 triple pattern). Hopefully,
 /// this can provide insights into the "baseline" overhead of the query engine.
 fn store_single_pattern(c: &mut Criterion) {
-    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let runtime = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
 
     // No Quads
     c.bench_function("Store::query - Single Pattern / No Quads", |b| {
@@ -76,7 +84,11 @@ fn store_single_pattern(c: &mut Criterion) {
 /// These benchmarks measure the duration of running a simple query that fixes a single part of the
 /// pattern (i.e., subject, predicate, object, graph).
 fn store_single_pattern_with_fixed_element(c: &mut Criterion) {
-    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    let runtime = Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
 
     // Subject
     c.bench_function(

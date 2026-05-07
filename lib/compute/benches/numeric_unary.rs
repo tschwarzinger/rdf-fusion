@@ -3,34 +3,24 @@ use datafusion::arrow::array::Int32Array;
 use datafusion::arrow::datatypes::DataType;
 use rdf_fusion_compute::numeric::cast_numeric;
 use rdf_fusion_encoding::typed_family::{
-    FamilyDatum, NumericFamilyArray, NumericFamilyArrayElementBuilder,
+    NumericFamilyArray, NumericFamilyArrayElementBuilder,
 };
 use rdf_fusion_model::Numeric;
 use std::hint::black_box;
 
 /// Helper to generate a 10,000 row homogenous array (all Int32)
-fn create_homogenous_arrays(
-    len: usize,
-) -> (
-    FamilyDatum<NumericFamilyArray>,
-    FamilyDatum<NumericFamilyArray>,
-) {
+fn create_homogenous_arrays(len: usize) -> (NumericFamilyArray, NumericFamilyArray) {
     let lhs_inner = Int32Array::from_iter_values(0..len as i32);
     let rhs_inner = Int32Array::from_iter_values(0..len as i32);
 
     let lhs_array = NumericFamilyArray::new_ints(lhs_inner);
     let rhs_array = NumericFamilyArray::new_ints(rhs_inner);
 
-    (FamilyDatum::Array(lhs_array), FamilyDatum::Array(rhs_array))
+    (lhs_array, rhs_array)
 }
 
 /// Helper to generate a 10,000 row heterogeneous array (mixed Ints and Floats)
-fn create_heterogeneous_arrays(
-    len: usize,
-) -> (
-    FamilyDatum<NumericFamilyArray>,
-    FamilyDatum<NumericFamilyArray>,
-) {
+fn create_heterogeneous_arrays(len: usize) -> (NumericFamilyArray, NumericFamilyArray) {
     let mut lhs_builder = NumericFamilyArrayElementBuilder::with_capacity(len);
     let mut rhs_builder = NumericFamilyArrayElementBuilder::with_capacity(len);
 
@@ -46,10 +36,7 @@ fn create_heterogeneous_arrays(
         }
     }
 
-    (
-        FamilyDatum::Array(lhs_builder.finish()),
-        FamilyDatum::Array(rhs_builder.finish()),
-    )
+    (lhs_builder.finish(), rhs_builder.finish())
 }
 
 fn bench_cast(c: &mut Criterion) {

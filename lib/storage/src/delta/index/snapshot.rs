@@ -122,9 +122,9 @@ mod tests {
     use crate::delta::DeltaQuadStorage;
     use crate::delta::index::DeltaQuadStorageIndex;
     use crate::index::IndexComponents;
-    use crate::logstore::{StorageConfig, logstore_with};
     use datafusion::prelude::{SessionConfig, SessionContext};
     use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
+    use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
     use object_store::memory::InMemory;
     use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
     use rdf_fusion_extensions::storage::QuadStorage;
@@ -132,6 +132,7 @@ mod tests {
         GraphName, NamedNode, NamedNodePattern, Quad, TermPattern, TriplePattern,
         Variable,
     };
+    use tokio::runtime::Handle;
     use url::Url;
 
     #[tokio::test]
@@ -280,8 +281,12 @@ mod tests {
     async fn create_test_index(components: IndexComponents) -> DeltaQuadStorageIndex {
         let memory_store = Arc::new(InMemory::new());
         let url = Url::parse("memory://").unwrap();
-        let log_store =
-            logstore_with(memory_store, &url, StorageConfig::default()).unwrap();
+        let log_store = logstore_with(
+            memory_store,
+            &url,
+            StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
+        )
+        .unwrap();
         DeltaQuadStorageIndex::try_new(
             QuadStorageEncoding::PlainTerm,
             log_store,

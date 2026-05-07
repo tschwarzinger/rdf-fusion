@@ -9,15 +9,21 @@ mod utils;
 use crate::test::UnsupportedTest;
 use crate::testsuite::{TestSuite, TestSuiteBuilder};
 use crate::w3c::evaluation::W3CSparqlEvaluationTest;
+use crate::w3c::files::{TEST_RUNTIME_ENV, W3CTestRuntime};
 use crate::w3c::syntax::W3CSparqlSyntaxTest;
 use crate::w3c::update::W3CSparqlUpdateEvaluationTest;
 use anyhow::{Context, Result, bail};
+use datafusion::execution::runtime_env::RuntimeEnv;
 use futures::future::BoxFuture;
-use manifest::TestManifest;
+use manifest::TestManifests;
+use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::execution::RdfFusionContextBuilder;
+use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion::store::Store;
 use std::sync::Arc;
 
-pub type StoreFactory = Arc<dyn Fn() -> BoxFuture<'static, Store> + Send + Sync>;
+pub type StoreFactory =
+    Arc<dyn Fn(Arc<RuntimeEnv>) -> BoxFuture<'static, Store> + Send + Sync>;
 
 pub struct W3CSparqlTestSuiteBuilder {
     builder: TestSuiteBuilder,
@@ -30,8 +36,9 @@ impl W3CSparqlTestSuiteBuilder {
     pub async fn load_manifest(manifest_url: impl Into<String>) -> Result<Self> {
         let manifest_url = manifest_url.into();
         let mut manifest_tests = Vec::new();
-        let mut manifest = TestManifest::new([&manifest_url]);
-        while let Some(test) = manifest.next().await {
+        let mut manifest = TestManifests::new([&manifest_url]);
+        let runtime = W3CTestRuntime::new(TEST_RUNTIME_ENV.clone());
+        while let Some(test) = manifest.next(&runtime).await {
             manifest_tests.push(test?);
         }
         let mut builder = TestSuiteBuilder::new();
@@ -93,7 +100,22 @@ impl W3CSparqlTestSuiteBuilder {
         }
 
         let store_factory = self.store_factory.unwrap_or_else(|| {
-            Arc::new(|| Box::pin(async { Store::new_in_memory().await }))
+            Arc::new(|runtime_env| {
+                Box::pin(async {
+                    let delta_storage = DeltaQuadStorageBuilder::new()
+                        .with_encoding(QuadStorageEncodingName::ObjectId)
+                        .build()
+                        .await
+                        .unwrap();
+
+                    let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
+                        .with_runtime_env(Some(runtime_env))
+                        .with_single_partition_session_config()
+                        .build()
+                        .unwrap();
+                    Store::new(context)
+                })
+            })
         });
 
         for test in self.manifest_tests {
@@ -121,6 +143,7 @@ impl W3CSparqlTestSuiteBuilder {
                         action_file,
                         is_positive,
                         is_update,
+                        runtime: W3CTestRuntime::new(TEST_RUNTIME_ENV.clone()),
                     };
                     self.builder.add_test(Box::new(w3c_test));
                 }
@@ -132,6 +155,7 @@ impl W3CSparqlTestSuiteBuilder {
                         test_data: test,
                         optimize_after_load: self.optimize_after_load,
                         store_factory: Arc::clone(&store_factory),
+                        runtime: W3CTestRuntime::new(TEST_RUNTIME_ENV.clone()),
                     };
                     self.builder.add_test(Box::new(w3c_test));
                 }
@@ -143,6 +167,7 @@ impl W3CSparqlTestSuiteBuilder {
                         test_data: test,
                         optimize_after_load: self.optimize_after_load,
                         store_factory: Arc::clone(&store_factory),
+                        runtime: W3CTestRuntime::new(TEST_RUNTIME_ENV.clone()),
                     };
                     self.builder.add_test(Box::new(w3c_test));
                 }

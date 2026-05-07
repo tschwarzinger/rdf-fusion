@@ -45,7 +45,7 @@ const UNSUPPORTED_SPARQL10_TESTS: [&str; 9] = [
     "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/reduced/manifest#reduced-2",
 ];
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql10_query_evaluation_plain_term() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
@@ -62,7 +62,7 @@ async fn w3c_sparql10_query_evaluation_plain_term() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql10_query_evaluation_object_id() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
@@ -78,7 +78,7 @@ async fn w3c_sparql10_query_evaluation_object_id() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql10_query_evaluation_plain_term_with_optimize() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
@@ -96,7 +96,7 @@ async fn w3c_sparql10_query_evaluation_plain_term_with_optimize() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql10_query_evaluation_object_id_with_optimize() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
@@ -113,7 +113,7 @@ async fn w3c_sparql10_query_evaluation_object_id_with_optimize() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql10_query_evaluation_string() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
@@ -130,7 +130,7 @@ async fn w3c_sparql10_query_evaluation_string() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql10_query_evaluation_string_with_optimize() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
@@ -148,7 +148,7 @@ async fn w3c_sparql10_query_evaluation_string_with_optimize() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_query_evaluation_plain_term() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
@@ -164,7 +164,7 @@ async fn w3c_sparql11_query_evaluation_plain_term() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_query_evaluation_plain_term_with_optimize() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
@@ -181,7 +181,7 @@ async fn w3c_sparql11_query_evaluation_plain_term_with_optimize() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_query_evaluation_object_id() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
@@ -196,7 +196,7 @@ async fn w3c_sparql11_query_evaluation_object_id() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_query_evaluation_object_id_with_optimize() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
@@ -212,7 +212,7 @@ async fn w3c_sparql11_query_evaluation_object_id_with_optimize() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_query_evaluation_string() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
@@ -228,7 +228,7 @@ async fn w3c_sparql11_query_evaluation_string() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_query_evaluation_string_with_optimize() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
@@ -245,7 +245,7 @@ async fn w3c_sparql11_query_evaluation_string_with_optimize() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_json_evaluation() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/json-res/manifest.ttl",
@@ -260,7 +260,7 @@ async fn w3c_sparql11_json_evaluation() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_tsv_evaluation() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/csv-tsv-res/manifest.ttl",
@@ -284,8 +284,8 @@ async fn w3c_sparql11_tsv_evaluation() -> Result<()> {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn plain_term_store_factory() -> StoreFactory {
-    Arc::new(|| {
-        Box::pin(async {
+    Arc::new(|runtime_env| {
+        Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
                 .build()
@@ -293,6 +293,7 @@ fn plain_term_store_factory() -> StoreFactory {
                 .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
+                .with_runtime_env(Some(runtime_env))
                 .with_single_partition_session_config()
                 .build()
                 .unwrap();
@@ -304,8 +305,8 @@ fn plain_term_store_factory() -> StoreFactory {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn string_store_factory() -> StoreFactory {
-    Arc::new(|| {
-        Box::pin(async {
+    Arc::new(|runtime_env| {
+        Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::String)
                 .build()
@@ -313,6 +314,7 @@ fn string_store_factory() -> StoreFactory {
                 .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
+                .with_runtime_env(Some(runtime_env))
                 .with_single_partition_session_config()
                 .build()
                 .unwrap();

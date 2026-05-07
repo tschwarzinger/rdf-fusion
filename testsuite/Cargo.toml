@@ -15,11 +15,14 @@ async-trait.workspace = true
 datafusion.workspace = true
 futures.workspace = true
 rdf-fusion.workspace = true
+object_store.workspace = true
 oxttl.workspace = true
 sparesults.workspace = true
 text-diff.workspace = true
 time = { workspace = true, features = ["formatting"] }
 tokio.workspace = true
+tokio-util = { workspace = true, features = ["io"] }
+url.workspace = true
 
 [lints]
 workspace = true

@@ -106,9 +106,9 @@ fn bench_encode_array_non_existing(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    // bench_encode_array_existing,
-    // bench_encode_array_non_existing,
-    // bench_decode_array,
+    bench_encode_array_existing,
+    bench_encode_array_non_existing,
+    bench_decode_array,
     bench_decode_array_to_typed_family,
 );
 criterion_main!(benches);

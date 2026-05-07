@@ -1,5 +1,5 @@
 use crate::vocab::*;
-use crate::w3c::files::{guess_rdf_format, load_to_graph};
+use crate::w3c::files::{W3CTestRuntime, guess_rdf_format};
 use anyhow::{Context, Result, bail};
 use rdf_fusion::model::vocab::{rdf, rdfs};
 use rdf_fusion::model::{
@@ -51,26 +51,13 @@ impl fmt::Display for Test {
     }
 }
 
-pub struct TestManifest {
+pub struct TestManifests {
     graph: Graph,
     tests_to_do: VecDeque<Term>,
     manifests_to_do: VecDeque<String>,
 }
 
-impl TestManifest {
-    pub async fn next(&mut self) -> Option<Result<Test>> {
-        loop {
-            if let Some(next) = self.next_test().transpose() {
-                return Some(next);
-            }
-            match self.load_next_manifest().await {
-                Ok(Some(())) => (),
-                Ok(None) => return None,
-                Err(e) => return Some(Err(e)),
-            }
-        }
-    }
-
+impl TestManifests {
     pub fn new<S: ToString>(manifest_urls: impl IntoIterator<Item = S>) -> Self {
         Self {
             graph: Graph::new(),
@@ -79,6 +66,19 @@ impl TestManifest {
                 .into_iter()
                 .map(|url| url.to_string())
                 .collect(),
+        }
+    }
+
+    pub async fn next(&mut self, runtime: &W3CTestRuntime) -> Option<Result<Test>> {
+        loop {
+            if let Some(next) = self.next_test().transpose() {
+                return Some(next);
+            }
+            match self.load_next_manifest(runtime).await {
+                Ok(Some(())) => (),
+                Ok(None) => return None,
+                Err(e) => return Some(Err(e)),
+            }
         }
     }
 
@@ -304,12 +304,16 @@ impl TestManifest {
         }
     }
 
-    async fn load_next_manifest(&mut self) -> Result<Option<()>> {
+    async fn load_next_manifest(
+        &mut self,
+        runtime: &W3CTestRuntime,
+    ) -> Result<Option<()>> {
         let Some(url) = self.manifests_to_do.pop_front() else {
             return Ok(None);
         };
         self.graph.clear();
-        load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)
+        runtime
+            .load_to_graph(&url, &mut self.graph, guess_rdf_format(&url)?, None, false)
             .await?;
 
         let manifests = self
@@ -328,14 +332,15 @@ impl TestManifest {
                 bail!("Invalid base IRI: {base_iri}");
             };
             self.graph.clear();
-            load_to_graph(
-                &url,
-                &mut self.graph,
-                guess_rdf_format(&url)?,
-                Some(base_iri.as_str()),
-                false,
-            )
-            .await?;
+            runtime
+                .load_to_graph(
+                    &url,
+                    &mut self.graph,
+                    guess_rdf_format(&url)?,
+                    Some(base_iri.as_str()),
+                    false,
+                )
+                .await?;
             manifest = self
                 .graph
                 .subject_for_predicate_object(rdf::TYPE, mf::MANIFEST)

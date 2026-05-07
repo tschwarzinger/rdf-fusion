@@ -23,7 +23,7 @@ fn bench_planning(c: &mut Criterion) {
     let encoding = QuadStorageEncodingName::String;
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
-    let target_partitions = benchmarking_context.options().target_partitions.unwrap();
+    let target_partitions = benchmarking_context.options().config.target_partitions();
     let benchmark =
         BsbmBenchmark::<BusinessIntelligenceUseCase>::try_new(NumProducts::N10_000, None)
             .unwrap();
@@ -63,7 +63,7 @@ fn bench_full_execution(c: &mut Criterion) {
             encoding,
             1,
         );
-        let target_partitions = benchmarking_context.options().target_partitions.unwrap();
+        let target_partitions = benchmarking_context.options().config.target_partitions();
         let benchmark = BsbmBenchmark::<BusinessIntelligenceUseCase>::try_new(
             NumProducts::N10_000,
             None,

@@ -8,7 +8,7 @@ use rdf_fusion::store::Store;
 use rdf_fusion_testsuite::w3c::{StoreFactory, W3CSparqlTestSuiteBuilder};
 use std::sync::Arc;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_update_testsuite_plain_term() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-update.ttl",
@@ -24,7 +24,7 @@ async fn w3c_sparql11_update_testsuite_plain_term() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_update_testsuite_object_id() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-update.ttl",
@@ -39,7 +39,7 @@ async fn w3c_sparql11_update_testsuite_object_id() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn w3c_sparql11_update_testsuite_string() -> Result<()> {
     W3CSparqlTestSuiteBuilder::load_manifest(
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-update.ttl",
@@ -58,8 +58,8 @@ async fn w3c_sparql11_update_testsuite_string() -> Result<()> {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn plain_term_store_factory() -> StoreFactory {
-    Arc::new(|| {
-        Box::pin(async {
+    Arc::new(|runtime_env| {
+        Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
                 .build()
@@ -67,6 +67,7 @@ fn plain_term_store_factory() -> StoreFactory {
                 .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
+                .with_runtime_env(Some(runtime_env))
                 .with_single_partition_session_config()
                 .build()
                 .unwrap();
@@ -78,8 +79,8 @@ fn plain_term_store_factory() -> StoreFactory {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn string_store_factory() -> StoreFactory {
-    Arc::new(|| {
-        Box::pin(async {
+    Arc::new(|runtime_env| {
+        Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::String)
                 .build()
@@ -87,6 +88,7 @@ fn string_store_factory() -> StoreFactory {
                 .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
+                .with_runtime_env(Some(runtime_env))
                 .with_single_partition_session_config()
                 .build()
                 .unwrap();

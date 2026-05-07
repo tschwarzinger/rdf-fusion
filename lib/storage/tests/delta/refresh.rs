@@ -6,7 +6,7 @@ use rdf_fusion_storage::delta::{DeltaQuadStorage, DeltaQuadStorageBuilder, LoadM
 use std::sync::Arc;
 use std::time::Duration;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_stale_refresh() {
     // max_age = 0 triggers a refresh on every query
     let (storage1, storage2) = setup_test_storages(Some(Duration::from_millis(0))).await;
@@ -31,7 +31,7 @@ async fn test_stale_refresh() {
     assert_eq!(storage2.log().version().await, 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_staleness_tolerance() {
     let (storage1, storage2) = setup_test_storages(Some(Duration::from_secs(3600))).await;
 
@@ -47,7 +47,7 @@ async fn test_staleness_tolerance() {
     assert_eq!(storage2.log().version().await, 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_concurrent_refreshes() {
     let (storage1, storage2) = setup_test_storages(Some(Duration::from_millis(0))).await;
 
@@ -73,7 +73,7 @@ async fn test_concurrent_refreshes() {
     assert_eq!(storage2.log().version().await, 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_disabled_refresh() {
     let (storage1, storage2) = setup_test_storages(None).await;
 

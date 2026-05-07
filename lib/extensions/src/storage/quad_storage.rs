@@ -7,7 +7,6 @@ use rdf_fusion_model::StorageError;
 use std::sync::Arc;
 
 #[async_trait]
-#[allow(clippy::len_without_is_empty)]
 pub trait QuadStorage: Send + Sync {
     /// Returns the quad storage encoding.
     fn encoding(&self) -> QuadStorageEncoding;

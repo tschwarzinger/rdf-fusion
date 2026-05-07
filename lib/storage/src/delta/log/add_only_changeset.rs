@@ -5,7 +5,7 @@ use crate::delta::log::{
     COL_OPERATION, DeltaQuadStorageLogChangeset, DeltaStorageLogOperation,
     DeltaStorageLogVersionRange, EagerChangeset,
 };
-use crate::physical::verify_not_null::VerifyNotNullExec;
+use crate::exec::VerifyNotNullExec;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::datasource::listing::PartitionedFile;

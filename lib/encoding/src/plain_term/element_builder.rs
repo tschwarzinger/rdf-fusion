@@ -1,7 +1,7 @@
 use crate::plain_term::encoding::PlainTermType;
 use crate::plain_term::{PlainTermArray, PlainTermEncoding};
 use datafusion::arrow::array::{
-    Int8Builder, NullBufferBuilder, StringBuilder, StructArray,
+    ArrayBuilder, Int8Builder, NullBufferBuilder, StringBuilder, StructArray,
 };
 use rdf_fusion_model::{
     BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, TermRef,
@@ -131,6 +131,16 @@ impl PlainTermArrayElementBuilder {
         self.value.append_value(value);
         self.data_type.append_option(data_type);
         self.language_tag.append_option(language_tag);
+    }
+
+    /// Returns the number of elements in the builder.
+    pub fn len(&self) -> usize {
+        self.term_type.len()
+    }
+
+    /// Returns true if the builder is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn finish(mut self) -> PlainTermArray {

@@ -98,6 +98,16 @@ impl PlainTermQuadsBuilder {
         self.objects.append_null();
     }
 
+    /// Returns the number of quads in the builder.
+    pub fn len(&self) -> usize {
+        self.subjects.len()
+    }
+
+    /// Returns true if the builder is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn finish(self) -> PlainTermQuads {
         PlainTermQuads {
             graphs: self.graphs.finish(),

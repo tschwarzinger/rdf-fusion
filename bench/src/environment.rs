@@ -9,14 +9,15 @@ use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
+use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
-use rdf_fusion::storage::logstore::{StorageConfig, logstore_with};
 use rdf_fusion::store::Store;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tokio::runtime::Handle;
 use url::Url;
 
 /// Represents a context used to execute benchmarks.
@@ -120,7 +121,8 @@ impl RdfFusionBenchContext {
                 let log_store = logstore_with(
                     Arc::clone(&object_store),
                     url.as_ref(),
-                    StorageConfig::default(),
+                    StorageConfig::default()
+                        .with_io_runtime(IORuntime::RT(Handle::current())),
                 )
                 .expect("Failed to create log store");
 
@@ -143,7 +145,8 @@ impl RdfFusionBenchContext {
                 let log_store = logstore_with(
                     Arc::clone(&object_store),
                     &full_iri,
-                    StorageConfig::default(),
+                    StorageConfig::default()
+                        .with_io_runtime(IORuntime::RT(Handle::current())),
                 )
                 .expect("Failed to create log store");
 

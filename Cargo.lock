@@ -4647,6 +4647,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "datafusion",
+ "deltalake",
  "futures",
  "object_store",
  "oxrdfio",
@@ -4676,6 +4677,7 @@ dependencies = [
  "criterion",
  "csv",
  "datafusion",
+ "deltalake",
  "futures",
  "insta",
  "prettytable-rs",
@@ -4873,6 +4875,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "tracing",
  "url",
 ]
@@ -4885,12 +4888,15 @@ dependencies = [
  "async-trait",
  "datafusion",
  "futures",
+ "object_store",
  "oxttl",
  "rdf-fusion",
  "sparesults",
  "text-diff",
  "time",
  "tokio",
+ "tokio-util",
+ "url",
 ]
 
 [[package]]

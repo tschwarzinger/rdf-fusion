@@ -1,7 +1,5 @@
 use axum_test::TestServer;
 use criterion::{Criterion, criterion_group, criterion_main};
-use datafusion::execution::runtime_env::RuntimeEnv;
-use datafusion::prelude::SessionConfig;
 use rdf_fusion::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
 use rdf_fusion::store::Store;
 use rdf_fusion_web::{AppState, create_router};
@@ -11,10 +9,7 @@ use tokio::runtime::Builder;
 fn encode_solution(criterion: &mut Criterion) {
     let runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
-    let store = runtime.block_on(Store::new_in_memory_with_datafusion_config(
-        SessionConfig::new().with_target_partitions(1),
-        RuntimeEnv::default().into(),
-    ));
+    let store = runtime.block_on(Store::new_in_memory());
     let quads = generate_quads(8192).collect::<Vec<_>>();
     runtime.block_on(async {
         store.extend(quads.iter().map(Quad::as_ref)).await.unwrap();

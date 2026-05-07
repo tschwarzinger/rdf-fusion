@@ -1,5 +1,5 @@
 use crate::vocab::*;
-use crate::w3c::files::*;
+use crate::w3c::files::{W3CTestRuntime, guess_rdf_format};
 use crate::w3c::report::{dataset_diff, format_diff};
 use anyhow::{Result, bail};
 use futures::StreamExt;
@@ -14,21 +14,60 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
-pub async fn load_sparql_query_result(url: &str) -> Result<StaticQueryResults> {
-    if let Some(format) = url
-        .rsplit_once('.')
-        .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))
-    {
-        StaticQueryResults::from_query_results(
-            QueryResults::read(read_file(url).await?, format).await?,
-            false,
-        )
-        .await
-    } else {
-        StaticQueryResults::from_graph(
-            &load_graph(url, guess_rdf_format(url)?, false).await?,
-        )
-        .await
+pub struct W3CTestUtils {
+    runtime: W3CTestRuntime,
+}
+
+impl W3CTestUtils {
+    pub fn new(runtime: W3CTestRuntime) -> Self {
+        Self { runtime }
+    }
+
+    pub async fn load_sparql_query_result(
+        &self,
+        url: &str,
+    ) -> Result<StaticQueryResults> {
+        if let Some(format) = url
+            .rsplit_once('.')
+            .and_then(|(_, extension)| QueryResultsFormat::from_extension(extension))
+        {
+            StaticQueryResults::from_query_results(
+                QueryResults::read(self.runtime.read_file(url).await?, format).await?,
+                false,
+            )
+            .await
+        } else {
+            StaticQueryResults::from_graph(
+                &self
+                    .runtime
+                    .load_graph(url, guess_rdf_format(url)?, false)
+                    .await?,
+            )
+            .await
+        }
+    }
+
+    pub async fn load_to_store(
+        &self,
+        url: &str,
+        store: &Store,
+        to_graph_name: impl Into<GraphName>,
+    ) -> Result<()> {
+        let to_graph_name = to_graph_name.into();
+        let reader = self.runtime.read_file(url).await?;
+        store
+            .load_from_reader(
+                reader,
+                RdfParserOptions {
+                    format: guess_rdf_format(url)?,
+                    base_iri: Some(url.parse()?),
+                    rename_blank_nodes: false,
+                    default_graph: Some(to_graph_name),
+                    without_named_graphs: false,
+                },
+            )
+            .await?;
+        Ok(())
     }
 }
 
@@ -204,19 +243,6 @@ impl StaticQueryResults {
     }
 
     pub async fn from_graph(graph: &Graph) -> Result<Self> {
-        // Hack to normalize literals
-        let store = Store::new_in_memory().await;
-        let quads = graph
-            .into_iter()
-            .map(|t| t.in_graph(GraphNameRef::DefaultGraph));
-        store.extend(quads).await?;
-
-        let mut graph = Graph::new();
-        let mut stream = store.stream().await?;
-        while let Some(q) = stream.next().await {
-            graph.insert(&Triple::from(q?));
-        }
-
         if let Some(result_set) =
             graph.subject_for_predicate_object(rdf::TYPE, rs::RESULT_SET)
         {
@@ -293,6 +319,7 @@ impl StaticQueryResults {
                 })
             }
         } else {
+            let mut graph = graph.clone();
             graph.canonicalize(CanonicalizationAlgorithm::Unstable);
             Ok(Self::Graph(graph))
         }
@@ -414,25 +441,4 @@ fn solutions_to_string(solutions: Vec<Vec<(Variable, Term)>>, ordered: bool) -> 
         lines.sort_unstable();
     }
     lines.join("\n")
-}
-
-pub async fn load_to_store(
-    url: &str,
-    store: &Store,
-    to_graph_name: impl Into<GraphName>,
-) -> Result<()> {
-    let reader = read_file(url).await?;
-    store
-        .load_from_reader(
-            reader,
-            RdfParserOptions {
-                format: guess_rdf_format(url)?,
-                base_iri: Some(url.parse()?),
-                rename_blank_nodes: false,
-                default_graph: Some(to_graph_name.into()),
-                without_named_graphs: false,
-            },
-        )
-        .await?;
-    Ok(())
 }

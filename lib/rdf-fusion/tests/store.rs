@@ -2,12 +2,12 @@
 #![allow(clippy::panic_in_result_fn)]
 
 use futures::StreamExt;
+use rdf_fusion::execution::ingest::RdfParserOptions;
+use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::vocab::{rdf, xsd};
 use rdf_fusion::model::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::store::Store;
-use rdf_fusion_execution::ingest::RdfParserOptions;
-use rdf_fusion_execution::results::QueryResults;
 use std::error::Error;
 
 #[allow(clippy::non_ascii_literal)]
@@ -99,7 +99,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
     ]
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     store
@@ -115,7 +115,7 @@ async fn test_load_graph() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     store
@@ -133,7 +133,7 @@ async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     for _ in 0..2 {
@@ -148,7 +148,7 @@ async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -170,7 +170,7 @@ async fn test_dump_graph() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -185,7 +185,7 @@ async fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_query_empty_store() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     let QueryResults::Solutions(result) =

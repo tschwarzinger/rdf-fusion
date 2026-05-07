@@ -37,6 +37,7 @@ use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
+use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use futures::StreamExt;
 use oxrdfio::RdfSerializer;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
@@ -55,13 +56,13 @@ use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_model::{CorruptionError, StorageError};
 use rdf_fusion_model::{
-    GraphNameRef, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
-    TermRef, Variable,
+    GraphNameRef, Iri, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
+    QuadRef, TermRef, Variable,
 };
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
-use rdf_fusion_storage::logstore::{StorageConfig, logstore_with};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
+use tokio::runtime::Handle;
 use url::Url;
 
 static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
@@ -84,7 +85,8 @@ static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
 /// use rdf_fusion::store::Store;
 /// use futures::StreamExt;
 ///
-/// # tokio_test::block_on(async {
+/// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+/// # runtime.block_on(async {
 /// let store = Store::new_in_memory().await;
 ///
 /// // insertion
@@ -123,8 +125,13 @@ impl Store {
     pub async fn new_in_memory() -> Store {
         let memory_store = Arc::new(object_store::memory::InMemory::new());
         let url = Url::parse("memory://").unwrap();
-        let log_store = logstore_with(memory_store, &url, StorageConfig::default())
-            .expect("Valid log store");
+
+        let log_store = logstore_with(
+            memory_store,
+            &url,
+            StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
+        )
+        .expect("Valid log store");
 
         let delta_storage = DeltaQuadStorageBuilder::new()
             .with_log_store(log_store)
@@ -153,7 +160,8 @@ impl Store {
     /// use rdf_fusion::store::Store;
     /// use futures::StreamExt;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     ///
     /// // insertions
@@ -190,7 +198,8 @@ impl Store {
     /// use rdf_fusion::store::Store;
     /// use futures::StreamExt;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
     ///     "SELECT (STR(1) AS ?nt) WHERE {}",
@@ -227,7 +236,8 @@ impl Store {
     /// use rdf_fusion::execution::results::QueryResults;
     /// use futures::StreamExt;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     /// if let (QueryResults::Solutions(mut solutions), _explanation) = store.explain_query_opt(
     ///     "SELECT ?s WHERE { VALUES ?s { 1 2 3 } }",
@@ -264,7 +274,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     ///
     /// // insertion
@@ -303,7 +314,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     ///
     /// // insertion
@@ -328,7 +340,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
     ///
@@ -360,7 +373,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let store = Store::new_in_memory().await;
     /// store.insert(QuadRef::new(ex, ex, ex, ex)).await?;
@@ -380,7 +394,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     /// assert!(store.is_empty().await?);
     ///
@@ -401,7 +416,8 @@ impl Store {
     /// // use rdf-fusion::model::*;
     /// // use rdf-fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// // TODO #7: Implement Update
     /// // let store = Store::new_in_memory().await;
     /// // insertion
@@ -427,7 +443,8 @@ impl Store {
     /// // use rdf-fusion::store::Store;
     /// // use rdf-fusion::sparql::QueryOptions;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// // TODO #7: Implement Update
     /// // let store = Store::new_in_memory().await;
     /// // store.update_opt(
@@ -460,7 +477,8 @@ impl Store {
     /// use rdf_fusion::io::RdfFormat;
     /// use rdf_fusion_execution::ingest::RdfParserOptions;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     ///
     /// // insert a dataset file (former load_dataset method)
@@ -494,7 +512,7 @@ impl Store {
             RdfParserTableProvider::new(reader, options.with_rename_blank_nodes(true))
                 .map_err(|e| LoaderError::InvalidBaseIri {
                     iri: iri
-                        .map(|i| i.to_string())
+                        .map(|i: Iri<String>| i.to_string())
                         .expect("Iri Parser Errors requires base iri"),
                     error: e,
                 })?
@@ -531,7 +549,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
@@ -594,7 +613,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
@@ -638,7 +658,8 @@ impl Store {
     ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
     ///         .as_bytes();
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     /// store.load_from_reader(file, RdfParserOptions::with_format(RdfFormat::NQuads)).await?;
     ///
@@ -675,7 +696,8 @@ impl Store {
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
     /// store.load_from_reader(file.as_ref(), RdfParserOptions::with_format(RdfFormat::NTriples)).await?;
     ///
@@ -708,7 +730,8 @@ impl Store {
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new_in_memory().await;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex)).await?;
@@ -786,7 +809,8 @@ impl Store {
     /// use rdf_fusion::model::{NamedNode, QuadRef};
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let store = Store::new_in_memory().await;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex)).await?;
@@ -833,7 +857,8 @@ impl Store {
     /// use rdf_fusion::model::NamedNodeRef;
     /// use rdf_fusion::store::Store;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let store = Store::new_in_memory().await;
     /// store.insert_named_graph(ex).await?;
@@ -867,7 +892,8 @@ impl Store {
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = QuadRef::new(ex.as_ref(), ex.as_ref(), ex.as_ref(), ex.as_ref());
     /// let store = Store::new_in_memory().await;
@@ -903,7 +929,8 @@ impl Store {
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
     ///
-    /// # tokio_test::block_on(async {
+    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = QuadRef::new(ex.as_ref(), ex.as_ref(), ex.as_ref(), ex.as_ref());
     /// let store = Store::new_in_memory().await;

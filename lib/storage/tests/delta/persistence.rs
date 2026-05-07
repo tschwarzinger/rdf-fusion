@@ -7,7 +7,7 @@ use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion_storage::index::IndexComponents;
 use std::sync::Arc;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_reload_storage_plain_term() {
     let log_store = create_test_log_store();
     let session = SessionStateBuilder::new().build();
@@ -36,7 +36,7 @@ async fn test_reload_storage_plain_term() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_reload_storage_with_index_and_optimize() {
     let log_store = create_test_log_store();
     let session = SessionStateBuilder::new().build();
@@ -75,7 +75,7 @@ async fn test_reload_storage_with_index_and_optimize() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_storage_object_id() {
     let log_store = create_test_log_store();
     let session = SessionStateBuilder::new().build();

@@ -1,13 +1,14 @@
 use crate::test::{Test, TestOutcome};
 use crate::w3c::StoreFactory;
-use crate::w3c::files::read_file_to_string;
+use crate::w3c::files::W3CTestRuntime;
 use crate::w3c::report::dataset_diff;
-use crate::w3c::utils::load_to_store;
+use crate::w3c::utils::W3CTestUtils;
 use anyhow::{Context, ensure};
 use futures::StreamExt;
 use rdf_fusion::execution::sparql::RdfFusionUpdate;
 use rdf_fusion::model::dataset::CanonicalizationAlgorithm;
 use rdf_fusion::model::{Dataset, GraphName};
+use std::sync::Arc;
 
 pub struct W3CSparqlUpdateEvaluationTest {
     pub id: String,
@@ -15,6 +16,7 @@ pub struct W3CSparqlUpdateEvaluationTest {
     pub test_data: crate::w3c::manifest::Test,
     pub optimize_after_load: bool,
     pub store_factory: StoreFactory,
+    pub runtime: W3CTestRuntime,
 }
 
 #[async_trait::async_trait]
@@ -38,20 +40,27 @@ impl Test for W3CSparqlUpdateEvaluationTest {
 
 impl W3CSparqlUpdateEvaluationTest {
     async fn execute(&self) -> anyhow::Result<()> {
-        let store = (self.store_factory)().await;
+        let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(&self.runtime.env)));
+        let store = (self.store_factory)(self.runtime.fresh_env()).await;
         if let Some(data) = &self.test_data.data {
-            load_to_store(data, &store, GraphName::DefaultGraph).await?;
+            utils
+                .load_to_store(data, &store, GraphName::DefaultGraph)
+                .await?;
         }
         for (name, value) in &self.test_data.graph_data {
-            load_to_store(value, &store, name.clone()).await?;
+            utils.load_to_store(value, &store, name.clone()).await?;
         }
 
-        let result_store = (self.store_factory)().await;
+        let result_store = (self.store_factory)(self.runtime.fresh_env()).await;
         if let Some(data) = &self.test_data.result {
-            load_to_store(data, &result_store, GraphName::DefaultGraph).await?;
+            utils
+                .load_to_store(data, &result_store, GraphName::DefaultGraph)
+                .await?;
         }
         for (name, value) in &self.test_data.result_graph_data {
-            load_to_store(value, &result_store, name.clone()).await?;
+            utils
+                .load_to_store(value, &result_store, name.clone())
+                .await?;
         }
 
         if self.optimize_after_load {
@@ -65,7 +74,7 @@ impl W3CSparqlUpdateEvaluationTest {
             .as_deref()
             .context("No action found")?;
         let update = RdfFusionUpdate::parse(
-            &read_file_to_string(update_file).await?,
+            &self.runtime.read_file_to_string(update_file).await?,
             Some(update_file),
         )
         .context("Failure to parse update")?;
@@ -97,7 +106,7 @@ impl W3CSparqlUpdateEvaluationTest {
             "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
             dataset_diff(&result_store_dataset, &store_dataset),
             RdfFusionUpdate::parse(
-                &read_file_to_string(update_file).await?,
+                &self.runtime.read_file_to_string(update_file).await?,
                 Some(update_file)
             )
             .unwrap(),

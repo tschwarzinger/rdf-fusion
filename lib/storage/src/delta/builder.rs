@@ -2,7 +2,7 @@ use crate::delta::DeltaQuadStorage;
 use crate::delta::error::DeltaQuadStorageError;
 use crate::index::IndexComponents;
 use datafusion::execution::SessionState;
-use deltalake::logstore::{LogStoreRef, default_logstore};
+use deltalake::logstore::{IORuntime, LogStoreRef, StorageConfig, logstore_with};
 use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::path::Path;
@@ -11,6 +11,7 @@ use std::env::VarError;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
+use tokio::runtime::Handle;
 use tracing::info;
 
 /// Indicates whether the storage builder should try to load an existing table.
@@ -114,12 +115,13 @@ impl DeltaQuadStorageBuilder {
             let store = Arc::new(InMemory::new());
             let table_url = url::Url::parse("memory:///").unwrap();
 
-            default_logstore(
-                Arc::clone(&store) as Arc<dyn ObjectStore>,
+            logstore_with(
                 Arc::clone(&store) as Arc<dyn ObjectStore>,
                 &table_url,
-                &Default::default(),
+                StorageConfig::default()
+                    .with_io_runtime(IORuntime::RT(Handle::current())),
             )
+            .unwrap()
         });
 
         let prefix_path = Path::from(log_store.root_url().path());
