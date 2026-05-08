@@ -1,5 +1,5 @@
 use crate::functions::BuiltinName;
-use rdf_fusion_model::NamedNode;
+use rdf_fusion_common::NamedNode;
 use std::fmt::{Display, Formatter};
 
 /// Identifier for a function. Either it is an RDF Fusion builtin or a custom function.

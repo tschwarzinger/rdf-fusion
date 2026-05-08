@@ -13,8 +13,8 @@ use datafusion::arrow::array::{
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::vocab::xsd;
-use rdf_fusion_model::{
+use rdf_fusion_common::vocab::xsd;
+use rdf_fusion_common::{
     AResult, Decimal, LiteralRef, NamedNodeRef, Numeric, ThinResult, TypedValueRef,
 };
 use std::collections::BTreeSet;

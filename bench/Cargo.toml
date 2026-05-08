@@ -30,6 +30,7 @@ prettytable-rs.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 rdf-fusion.workspace = true
+rdf-fusion-extensions.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 snmalloc-rs.workspace = true

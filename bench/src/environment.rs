@@ -3,7 +3,7 @@ use crate::prepare::{
     PrepRequirement, prepare_copy_file, prepare_run_closure, prepare_run_command,
 };
 use crate::prepare::{ensure_file_download, prepare_file_download};
-use crate::{BenchmarkStorageBackend, BenchmarkingOptions};
+use crate::{BenchmarkStorageBackend, BenchmarkingConfig};
 use anyhow::bail;
 use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
@@ -13,6 +13,7 @@ use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
+use rdf_fusion::model::config::RdfFusionSessionConfigExt;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion::store::Store;
 use std::path::{Path, PathBuf};
@@ -23,7 +24,7 @@ use url::Url;
 /// Represents a context used to execute benchmarks.
 pub struct RdfFusionBenchContext {
     /// General options for the benchmarks.
-    options: BenchmarkingOptions,
+    config: BenchmarkingConfig,
     /// The path to existing benchmark files. This will always point to the root of the bench_files
     /// directory.
     bench_files_dir: PathBuf,
@@ -38,14 +39,14 @@ pub struct RdfFusionBenchContext {
 impl RdfFusionBenchContext {
     /// Creates a new [RdfFusionBenchContext].
     pub fn new(
-        options: BenchmarkingOptions,
+        options: BenchmarkingConfig,
         bench_files_dir: PathBuf,
         data_dir: PathBuf,
         database_dir: PathBuf,
         results_dir: PathBuf,
     ) -> Self {
         Self {
-            options,
+            config: options,
             bench_files_dir,
             data_dir: Mutex::new(data_dir),
             databases_dir: Mutex::new(database_dir),
@@ -64,12 +65,12 @@ impl RdfFusionBenchContext {
         config.options_mut().execution.parquet.pushdown_filters = true;
 
         Self {
-            options: BenchmarkingOptions {
+            config: BenchmarkingConfig {
                 verbose_results: false,
                 memory_size: None,
                 storage_backend: BenchmarkStorageBackend::DeltaLakeInMemory,
                 storage_encoding,
-                config,
+                data_fusion_config: config,
             },
             data_dir: Mutex::new(data_dir),
             databases_dir: Mutex::new(PathBuf::from("/tmp/database")),
@@ -78,9 +79,9 @@ impl RdfFusionBenchContext {
         }
     }
 
-    /// Returns the [BenchmarkingOptions] for this context.
-    pub fn options(&self) -> &BenchmarkingOptions {
-        &self.options
+    /// Returns the [BenchmarkingConfig] for this context.
+    pub fn options(&self) -> &BenchmarkingConfig {
+        &self.config
     }
 
     /// Resolves a relative path `file` against the data directory.
@@ -94,7 +95,7 @@ impl RdfFusionBenchContext {
 
     pub async fn create_store(&self) -> Store {
         let mut builder = RuntimeEnvBuilder::new();
-        if let Some(memory_size) = self.options.memory_size {
+        if let Some(memory_size) = self.config.memory_size {
             builder = builder.with_memory_limit(memory_size * 1024 * 1024, 1.0);
         }
 
@@ -112,7 +113,7 @@ impl RdfFusionBenchContext {
 
         let runtime_env = builder.build_arc().expect("Failed to build RuntimeEnv");
 
-        let storage_backend = match self.options.storage_backend {
+        let storage_backend = match self.config.storage_backend {
             BenchmarkStorageBackend::DeltaLakeInMemory => {
                 let url = ObjectStoreUrl::parse("memory://").unwrap();
                 let object_store = runtime_env
@@ -126,9 +127,16 @@ impl RdfFusionBenchContext {
                 )
                 .expect("Failed to create log store");
 
+                let rdf_fusion_config = self
+                    .config
+                    .data_fusion_config
+                    .rdf_fusion_options_or_from_env()
+                    .expect("Failed to get RDF Fusion options");
+
                 DeltaQuadStorageBuilder::new()
                     .with_log_store(log_store)
-                    .with_encoding(self.options.storage_encoding)
+                    .with_encoding(self.config.storage_encoding)
+                    .with_log_max_age(rdf_fusion_config.storage.delta.log_max_age)
                     .build()
                     .await
                     .expect("Failed to create DeltaQuadStorage")
@@ -150,9 +158,16 @@ impl RdfFusionBenchContext {
                 )
                 .expect("Failed to create log store");
 
+                let rdf_fusion_config = self
+                    .config
+                    .data_fusion_config
+                    .rdf_fusion_options_or_from_env()
+                    .expect("Failed to get RDF Fusion options");
+
                 DeltaQuadStorageBuilder::new()
                     .with_log_store(log_store)
-                    .with_encoding(self.options.storage_encoding)
+                    .with_encoding(self.config.storage_encoding)
+                    .with_log_max_age(rdf_fusion_config.storage.delta.log_max_age)
                     .build()
                     .await
                     .expect("Failed to create DeltaQuadStorage")
@@ -160,7 +175,7 @@ impl RdfFusionBenchContext {
         };
 
         let context = RdfFusionContextBuilder::new(Arc::new(storage_backend))
-            .with_session_config(Some(self.options.config.clone()))
+            .with_session_config(Some(self.config.data_fusion_config.clone()))
             .with_runtime_env(Some(runtime_env))
             .build()
             .expect("Failed to create RdfFusionContext");

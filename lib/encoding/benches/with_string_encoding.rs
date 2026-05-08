@@ -1,10 +1,10 @@
 use criterion::{Criterion, criterion_group, criterion_main};
+use rdf_fusion_common::{Literal, NamedNode, Term};
 use rdf_fusion_encoding::compute::with_string_encoding_from_plain_term;
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingDatum, TermEncoding};
-use rdf_fusion_model::{Literal, NamedNode, Term};
 use std::hint::black_box;
 
 fn bench_with_string_encoding_from_plain_term(c: &mut Criterion) {

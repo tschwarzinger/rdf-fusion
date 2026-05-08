@@ -12,12 +12,12 @@ use datafusion::physical_expr_common::metrics::Time;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use itertools::izip;
+use rdf_fusion_common::Variable;
+use rdf_fusion_common::sparql::Query;
+use rdf_fusion_common::sparql::algebra::GraphPattern;
+use rdf_fusion_common::{Iri, TriplePattern};
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
-use rdf_fusion_model::Variable;
-use rdf_fusion_model::sparql::Query;
-use rdf_fusion_model::sparql::algebra::GraphPattern;
-use rdf_fusion_model::{Iri, TriplePattern};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -129,7 +129,9 @@ pub async fn evaluate_query_with_snapshot(
                 .map(|(variable, rdf_type)| {
                     vec![TriplePattern {
                         subject: variable.clone().into(),
-                        predicate: rdf_fusion_model::vocab::rdf::TYPE.into_owned().into(),
+                        predicate: rdf_fusion_common::vocab::rdf::TYPE
+                            .into_owned()
+                            .into(),
                         object: rdf_type.clone().into(),
                     }]
                     .into_iter()

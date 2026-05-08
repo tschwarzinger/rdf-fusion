@@ -2,7 +2,7 @@ use crate::storage::snapshot::QuadStorageSnapshot;
 use async_trait::async_trait;
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
-use rdf_fusion_model::{BlankNode, NamedNode, NamedOrBlankNodeRef, StorageError};
+use rdf_fusion_common::{BlankNode, NamedNode, NamedOrBlankNodeRef, StorageError};
 use std::sync::Arc;
 
 /// Represents a transaction on a [`QuadStorage`](crate::storage::QuadStorage).

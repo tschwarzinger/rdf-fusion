@@ -1,7 +1,7 @@
 use crate::expr::unwrap_encoding_changes;
 use datafusion::logical_expr::Expr;
+use rdf_fusion_common::Term;
 use rdf_fusion_encoding::{EncodingName, RdfFusionEncodings, TermEncoding};
-use rdf_fusion_model::Term;
 
 /// Tries to extract a scalar [Term] from a given expression.
 ///
@@ -60,6 +60,7 @@ mod tests {
     use super::*;
     use datafusion::common::ScalarValue;
     use datafusion::logical_expr::expr::ScalarFunction;
+    use rdf_fusion_common::NamedNode;
     use rdf_fusion_encoding::EncodingScalar;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
@@ -69,7 +70,6 @@ mod tests {
         BuiltinName, FunctionName, RdfFusionFunctionRegistry,
     };
     use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
-    use rdf_fusion_model::NamedNode;
     use std::sync::Arc;
 
     #[test]

@@ -8,14 +8,14 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermType};
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
     detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::vocab::xsd;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
@@ -163,12 +163,12 @@ mod tests {
     };
     use datafusion::logical_expr::{col, lit};
     use insta::assert_snapshot;
+    use rdf_fusion_common::vocab::xsd;
     use rdf_fusion_encoding::typed_family::{
         FamilyArray, ResourceFamily, StringFamily, StringFamilyArray,
         TypedFamilyArrayBuilder, TypedFamilyId,
     };
     use rdf_fusion_encoding::{EncodingArray, EncodingScalar};
-    use rdf_fusion_model::vocab::xsd;
     use std::sync::Arc;
 
     #[tokio::test]

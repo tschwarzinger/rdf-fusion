@@ -7,9 +7,9 @@ use datafusion::logical_expr::{
 };
 use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
 use datafusion::prelude::Expr;
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::{Term, TermPattern};
 use rdf_fusion_extensions::RdfFusionContextView;
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{Term, TermPattern};
 use std::collections::{HashMap, HashSet};
 
 /// This rule is responsible for lowering a [PatternNode] into a set of filters and projections.

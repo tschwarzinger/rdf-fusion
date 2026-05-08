@@ -6,7 +6,7 @@ use datafusion::logical_expr::{
     Extension, LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNodeCore, col,
 };
 use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 
 /// An optimizer rule that lowers an [ExtendNode] into a projection.
 #[derive(Debug)]

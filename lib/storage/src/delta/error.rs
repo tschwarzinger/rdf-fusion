@@ -3,7 +3,7 @@ use datafusion::arrow::datatypes::{DataType, SchemaRef};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
 use deltalake::DeltaTableError;
-use rdf_fusion_model::StorageError;
+use rdf_fusion_common::StorageError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

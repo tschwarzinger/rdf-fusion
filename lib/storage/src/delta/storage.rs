@@ -13,6 +13,8 @@ use datafusion::execution::SessionState;
 use deltalake::logstore::{LogStoreRef, logstore_with};
 use futures::StreamExt;
 use object_store::path::Path;
+use rdf_fusion_common::StorageError;
+use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
@@ -20,8 +22,6 @@ use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName, TermEnco
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
-use rdf_fusion_model::StorageError;
-use rdf_fusion_model::quads::COL_GRAPH;
 use std::sync::Arc;
 use std::time::Duration;
 

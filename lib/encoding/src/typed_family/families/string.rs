@@ -16,8 +16,8 @@ use datafusion::arrow::compute::{
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
 use datafusion::arrow::error::ArrowError;
 use datafusion::error::Result as DFResult;
-use rdf_fusion_model::AResult;
-use rdf_fusion_model::vocab::{rdf, xsd};
+use rdf_fusion_common::AResult;
+use rdf_fusion_common::vocab::{rdf, xsd};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, LazyLock};

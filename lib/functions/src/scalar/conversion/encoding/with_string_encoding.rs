@@ -5,6 +5,7 @@ use datafusion::logical_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
     Signature, TypeSignature, Volatility,
 };
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::compute::with_string_encoding_from_plain_term;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
@@ -12,7 +13,6 @@ use rdf_fusion_encoding::{
     TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::hash::Hash;
 use std::sync::Arc;

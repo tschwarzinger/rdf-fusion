@@ -1,7 +1,7 @@
 use crate::paths::PATH_TABLE_DFSCHEMA;
 use datafusion::common::{DFSchemaRef, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 use std::cmp::Ordering;
 use std::fmt;
 

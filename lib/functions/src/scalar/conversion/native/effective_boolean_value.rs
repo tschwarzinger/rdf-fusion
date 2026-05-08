@@ -6,11 +6,11 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingName, RdfFusionEncodings, detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
@@ -106,10 +106,10 @@ mod tests {
     use datafusion::dataframe::DataFrame;
     use datafusion::logical_expr::col;
     use insta::assert_snapshot;
+    use rdf_fusion_common::LiteralRef;
+    use rdf_fusion_common::vocab::xsd;
     use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
-    use rdf_fusion_model::LiteralRef;
-    use rdf_fusion_model::vocab::xsd;
     use std::sync::Arc;
 
     #[tokio::test]

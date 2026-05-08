@@ -2,7 +2,7 @@ use crate::encoding::EncodingScalar;
 use crate::typed_family::{TypedFamilyEncoding, TypedFamilyEncodingRef};
 use crate::{EncodingArray, TermEncoding};
 use datafusion::common::{ScalarValue, exec_err};
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 use std::sync::Arc;
 
 /// Represents an Arrow scalar with a [`TypedFamilyEncoding`].

@@ -7,12 +7,12 @@ use datafusion::logical_expr::utils::merge_schema;
 use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, lit};
 use datafusion::optimizer::utils::NamePreserver;
 use datafusion::optimizer::{ApplyOrder, OptimizerConfig, OptimizerRule};
+use rdf_fusion_common::{DFResult, Term};
 use rdf_fusion_encoding::plain_term::PlainTermScalar;
 use rdf_fusion_encoding::{EncodingName, EncodingScalar, RdfFusionEncodings};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
 };
-use rdf_fusion_model::{DFResult, Term};
 use std::sync::Arc;
 
 /// An optimizer rule that tries to optimize SPARQL expressions.
@@ -278,6 +278,7 @@ mod tests {
     use datafusion::logical_expr::{EmptyRelation, LogicalPlan, LogicalPlanBuilder, col};
     use datafusion::optimizer::OptimizerContext;
     use insta::assert_snapshot;
+    use rdf_fusion_common::{BlankNodeRef, Literal, NamedNodeRef, TermRef, VariableRef};
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
@@ -288,7 +289,6 @@ mod tests {
     use rdf_fusion_extensions::RdfFusionContextView;
     use rdf_fusion_extensions::functions::FunctionName;
     use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
-    use rdf_fusion_model::{BlankNodeRef, Literal, NamedNodeRef, TermRef, VariableRef};
 
     #[test]
     fn test_is_compatible_rewrite_when_not_nullable() {

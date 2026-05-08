@@ -3,7 +3,7 @@ use crate::plain_term::{PlainTermArray, PlainTermEncoding};
 use datafusion::arrow::array::{
     ArrayBuilder, Int8Builder, NullBufferBuilder, StringBuilder, StructArray,
 };
-use rdf_fusion_model::{
+use rdf_fusion_common::{
     BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, TermRef,
 };
 use std::sync::Arc;

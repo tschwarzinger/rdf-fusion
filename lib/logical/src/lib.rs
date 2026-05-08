@@ -35,7 +35,7 @@ pub use expr_builder::RdfFusionExprBuilder;
 pub use expr_builder_context::RdfFusionExprBuilderContext;
 pub use logical_plan_builder::RdfFusionLogicalPlanBuilder;
 pub use logical_plan_builder_context::RdfFusionLogicalPlanBuilderContext;
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 
 /// Checks if two schemas are logically equivalent in terms of names and types.
 pub(crate) fn check_same_schema(

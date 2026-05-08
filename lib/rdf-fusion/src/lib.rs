@@ -385,7 +385,7 @@
 //!   for RDF Fusion.
 //! - [rdf-fusion-logical](https://docs.rs/rdf-fusion-logical/): The logical plan operators and
 //!   rewriting rules used by RDF Fusion.
-//! - [rdf-fusion-model](https://docs.rs/rdf-fusion-model/): Provides a model for RDF and SPARQL.
+//! - [rdf-fusion-common](https://docs.rs/rdf-fusion-common/): Provides a model for RDF and SPARQL.
 //! - [rdf-fusion-physical](https://docs.rs/rdf-fusion-physical/): The physical plan operators and
 //!   rewriting rules used by RDF Fusion.
 //! - [rdf-fusion](https://docs.rs/rdf-fusion/): This crate. The primary entry point for RDF Fusion.
@@ -413,7 +413,7 @@ pub mod io {
 }
 
 pub mod model {
-    pub use rdf_fusion_model::*;
+    pub use rdf_fusion_common::*;
 }
 
 pub mod logical {

@@ -1,14 +1,14 @@
 use crate::sparql::rewriting::GraphPatternRewriter;
 use datafusion::common::{internal_err, plan_err};
 use datafusion::logical_expr::{Expr, Operator, lit, or};
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::Iri;
+use rdf_fusion_common::sparql::algebra::{Expression, Function, GraphPattern};
+use rdf_fusion_common::vocab::xsd;
+use rdf_fusion_common::{DateTime, TermRef};
+use rdf_fusion_common::{Literal, NamedNode};
 use rdf_fusion_extensions::functions::FunctionName;
 use rdf_fusion_logical::{RdfFusionExprBuilder, RdfFusionExprBuilderContext};
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::Iri;
-use rdf_fusion_model::sparql::algebra::{Expression, Function, GraphPattern};
-use rdf_fusion_model::vocab::xsd;
-use rdf_fusion_model::{DateTime, TermRef};
-use rdf_fusion_model::{Literal, NamedNode};
 
 pub(super) struct ExpressionRewriter<'rewriter> {
     graph_rewriter: &'rewriter GraphPatternRewriter,

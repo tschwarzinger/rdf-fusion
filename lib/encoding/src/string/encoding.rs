@@ -4,7 +4,7 @@ use crate::{EncodingName, TermEncoder};
 use datafusion::arrow::array::{Array, ArrayRef, StringBuilder};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::{ScalarValue, exec_err};
-use rdf_fusion_model::{DFResult, TermRef, ThinResult};
+use rdf_fusion_common::{DFResult, TermRef, ThinResult};
 use std::sync::{Arc, LazyLock};
 
 /// The instance of the [StringEncoding].

@@ -14,12 +14,12 @@ use datafusion::physical_plan::empty::EmptyExec;
 use datafusion::physical_planner::ExtensionPlanner;
 use deltalake::arrow::datatypes::{Field, Schema};
 use futures::StreamExt;
+use rdf_fusion_common::StorageError;
+use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
-use rdf_fusion_model::StorageError;
-use rdf_fusion_model::quads::COL_GRAPH;
 use std::sync::Arc;
 
 /// A snapshot of a [`DeltaQuadStorage`].

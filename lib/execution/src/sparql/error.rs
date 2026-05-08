@@ -1,8 +1,8 @@
 use datafusion::error::DataFusionError;
 use oxrdfio::RdfParseError;
-use rdf_fusion_model::StorageError;
-use rdf_fusion_model::sparql::SparqlSyntaxError;
-use rdf_fusion_model::{NamedNode, Term};
+use rdf_fusion_common::StorageError;
+use rdf_fusion_common::sparql::SparqlSyntaxError;
+use rdf_fusion_common::{NamedNode, Term};
 use sparesults::QueryResultsParseError;
 use std::convert::Infallible;
 use std::error::Error;

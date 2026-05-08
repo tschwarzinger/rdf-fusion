@@ -9,8 +9,8 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::AResult;
-use rdf_fusion_model::vocab::xsd;
+use rdf_fusion_common::AResult;
+use rdf_fusion_common::vocab::xsd;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, LazyLock};

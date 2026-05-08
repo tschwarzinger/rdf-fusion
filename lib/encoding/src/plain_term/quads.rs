@@ -2,7 +2,7 @@ use crate::QuadStorageEncoding;
 use crate::encoding::EncodingArray;
 use crate::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use datafusion::arrow::array::RecordBatch;
-use rdf_fusion_model::QuadRef;
+use rdf_fusion_common::QuadRef;
 use std::sync::Arc;
 
 /// A structure containing four [`PlainTermArray`] components: graph, subject, predicate, object.
@@ -81,16 +81,16 @@ impl PlainTermQuadsBuilder {
 
     pub fn append_graph(
         &mut self,
-        graph_name: Option<rdf_fusion_model::NamedOrBlankNodeRef<'_>>,
+        graph_name: Option<rdf_fusion_common::NamedOrBlankNodeRef<'_>>,
     ) {
         let graph_name = match graph_name {
-            Some(rdf_fusion_model::NamedOrBlankNodeRef::NamedNode(nn)) => {
-                rdf_fusion_model::GraphNameRef::NamedNode(nn)
+            Some(rdf_fusion_common::NamedOrBlankNodeRef::NamedNode(nn)) => {
+                rdf_fusion_common::GraphNameRef::NamedNode(nn)
             }
-            Some(rdf_fusion_model::NamedOrBlankNodeRef::BlankNode(bn)) => {
-                rdf_fusion_model::GraphNameRef::BlankNode(bn)
+            Some(rdf_fusion_common::NamedOrBlankNodeRef::BlankNode(bn)) => {
+                rdf_fusion_common::GraphNameRef::BlankNode(bn)
             }
-            None => rdf_fusion_model::GraphNameRef::DefaultGraph,
+            None => rdf_fusion_common::GraphNameRef::DefaultGraph,
         };
         self.graphs.append_graph_name(graph_name);
         self.subjects.append_null();

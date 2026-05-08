@@ -7,18 +7,18 @@ use crate::sparql::{
 use futures::{StreamExt, TryStreamExt};
 use itertools::izip;
 use oxrdfio::{RdfFormat, RdfParser};
-use rdf_fusion_encoding::quads_to_plain_term_dataframe;
-use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
-use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
-use rdf_fusion_model::sparql::algebra::GraphTarget;
-use rdf_fusion_model::sparql::term::{
+use rdf_fusion_common::sparql::algebra::GraphTarget;
+use rdf_fusion_common::sparql::term::{
     GraphNamePattern, GroundQuadPattern, GroundTermPattern, QuadPattern,
 };
-use rdf_fusion_model::sparql::{GraphUpdateOperation, Query};
-use rdf_fusion_model::{
+use rdf_fusion_common::sparql::{GraphUpdateOperation, Query};
+use rdf_fusion_common::{
     BlankNode, GraphName, NamedNodePattern, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
     Term, TermPattern,
 };
+use rdf_fusion_encoding::quads_to_plain_term_dataframe;
+use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
+use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 use sparesults::QuerySolution;
 use std::collections::HashMap;
 use std::io;
@@ -231,33 +231,33 @@ pub async fn evaluate_update(
 }
 
 fn convert_rdf_fusion_graph_name(
-    gn: rdf_fusion_model::sparql::term::GraphName,
+    gn: rdf_fusion_common::sparql::term::GraphName,
 ) -> GraphName {
     match gn {
-        rdf_fusion_model::sparql::term::GraphName::NamedNode(n) => {
+        rdf_fusion_common::sparql::term::GraphName::NamedNode(n) => {
             GraphName::NamedNode(n)
         }
-        rdf_fusion_model::sparql::term::GraphName::DefaultGraph => {
+        rdf_fusion_common::sparql::term::GraphName::DefaultGraph => {
             GraphName::DefaultGraph
         }
     }
 }
 
-fn convert_graph_name(gn: rdf_fusion_model::sparql::term::GraphName) -> GraphName {
+fn convert_graph_name(gn: rdf_fusion_common::sparql::term::GraphName) -> GraphName {
     match gn {
-        rdf_fusion_model::sparql::term::GraphName::NamedNode(n) => {
+        rdf_fusion_common::sparql::term::GraphName::NamedNode(n) => {
             GraphName::NamedNode(n)
         }
-        rdf_fusion_model::sparql::term::GraphName::DefaultGraph => {
+        rdf_fusion_common::sparql::term::GraphName::DefaultGraph => {
             GraphName::DefaultGraph
         }
     }
 }
 
-fn convert_ground_term(term: rdf_fusion_model::sparql::term::GroundTerm) -> Term {
+fn convert_ground_term(term: rdf_fusion_common::sparql::term::GroundTerm) -> Term {
     match term {
-        rdf_fusion_model::sparql::term::GroundTerm::NamedNode(n) => Term::NamedNode(n),
-        rdf_fusion_model::sparql::term::GroundTerm::Literal(l) => Term::Literal(l),
+        rdf_fusion_common::sparql::term::GroundTerm::NamedNode(n) => Term::NamedNode(n),
+        rdf_fusion_common::sparql::term::GroundTerm::Literal(l) => Term::Literal(l),
     }
 }
 

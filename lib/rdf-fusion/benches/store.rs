@@ -6,8 +6,8 @@ use rand::SeedableRng;
 use rand::prelude::{SliceRandom, SmallRng};
 use rdf_fusion::model::{NamedOrBlankNode, Term};
 use rdf_fusion::store::Store;
+use rdf_fusion_common::{GraphName, NamedNode, Quad};
 use rdf_fusion_execution::results::QueryResults;
-use rdf_fusion_model::{GraphName, NamedNode, Quad};
 use tokio::runtime::Builder;
 
 /// This benchmark measures transactionally inserting synthetic quads into the store.

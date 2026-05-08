@@ -17,7 +17,10 @@ fn bench_planning(c: &mut Criterion) {
     let encoding = QuadStorageEncodingName::String;
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
-    let target_partitions = benchmarking_context.options().config.target_partitions();
+    let target_partitions = benchmarking_context
+        .options()
+        .data_fusion_config
+        .target_partitions();
     let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
     let (runtime, benchmark_context, store) =
@@ -55,7 +58,10 @@ fn bench_full_execution(c: &mut Criterion) {
             encoding,
             1,
         );
-        let target_partitions = benchmarking_context.options().config.target_partitions();
+        let target_partitions = benchmarking_context
+            .options()
+            .data_fusion_config
+            .target_partitions();
         let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
         let (runtime, benchmark_context, store) =

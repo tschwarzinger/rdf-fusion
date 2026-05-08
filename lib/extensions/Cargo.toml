@@ -14,7 +14,7 @@ RDF Fusion Extensions API
 async-trait.workspace = true
 datafusion.workspace = true
 rdf-fusion-encoding.workspace = true
-rdf-fusion-model.workspace = true
+rdf-fusion-common.workspace = true
 thiserror.workspace = true
 
 [lints]

@@ -8,6 +8,7 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_common::{DFResult, Decimal};
 use rdf_fusion_compute::numeric::cast_numeric;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, NumericFamilyArray};
 use rdf_fusion_encoding::{
@@ -15,7 +16,6 @@ use rdf_fusion_encoding::{
     detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::{DFResult, Decimal};
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;

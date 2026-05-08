@@ -15,9 +15,9 @@ use datafusion::physical_plan::{
 };
 use futures::stream::try_unfold;
 use oxrdfio::{RdfParser, TokioAsyncReaderQuadParser};
+use rdf_fusion_common::{DFResult, IriParseError};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
-use rdf_fusion_model::{DFResult, IriParseError};
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};

@@ -21,8 +21,8 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, PhysicalExpr, PlanProperties,
 };
 use futures::Stream;
+use rdf_fusion_common::DFResult;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::borrow::Cow;
 use std::fmt::Formatter;
@@ -462,12 +462,12 @@ mod tests {
     use datafusion::scalar::ScalarValue;
     use deltalake::arrow::datatypes::Field;
     use insta::assert_snapshot;
+    use rdf_fusion_common::{
+        BlankNodeMatchingMode, NamedNode, TermPattern, TriplePattern, Variable,
+    };
     use rdf_fusion_encoding::QuadStorageEncodingName;
     use rdf_fusion_extensions::storage::QuadStorage;
     use rdf_fusion_logical::ActiveGraph;
-    use rdf_fusion_model::{
-        BlankNodeMatchingMode, NamedNode, TermPattern, TriplePattern, Variable,
-    };
     use std::sync::OnceLock;
 
     #[tokio::test]

@@ -1,9 +1,9 @@
 use datafusion::arrow::array::ArrayRef;
+use rdf_fusion_common::{DFResult, Numeric, ThinError, ThinResult};
 use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, FamilyDatum, TypedFamilyEncodingRef,
 };
-use rdf_fusion_model::{DFResult, Numeric, ThinError, ThinResult};
 use std::sync::Arc;
 
 /// Represents the state of a numeric aggregation for a signle group.

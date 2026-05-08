@@ -1,9 +1,9 @@
 use datafusion::logical_expr::ScalarFunctionArgs;
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingDatum, EncodingName, RdfFusionEncodings, TermEncoding,
     detect_encoding_from_types,
 };
-use rdf_fusion_model::DFResult;
 use std::sync::Arc;
 
 /// The arguments of invoking a [ScalarSparqlOp](crate::scalar::ScalarSparqlOp).

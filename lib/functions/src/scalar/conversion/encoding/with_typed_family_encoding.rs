@@ -5,11 +5,11 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
     TypeSignature, Volatility,
 };
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;

@@ -1,12 +1,12 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::arrow::array::{ArrayRef, Int64Array};
 use rand::prelude::SliceRandom;
+use rdf_fusion_common::{Literal, NamedNode, Term};
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_encoding::object_id::ObjectIdMapping;
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use rdf_fusion_encoding::typed_family::{TypedFamilyEncoding, TypedFamilyEncodingRef};
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_model::{Literal, NamedNode, Term};
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
 use std::hint::black_box;
 use std::sync::Arc;

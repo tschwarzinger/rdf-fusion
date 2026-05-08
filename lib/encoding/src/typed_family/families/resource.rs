@@ -11,7 +11,7 @@ use datafusion::arrow::array::{
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::iter::repeat_n;
@@ -364,13 +364,13 @@ impl FamilyArray for ResourceFamilyArray {
                 let offset = self.union_array().value_offset(i);
                 if type_id == ResourceFamily::NAMED_NODES_TYPE_ID {
                     builder.append_named_node(
-                        rdf_fusion_model::NamedNodeRef::new_unchecked(
+                        rdf_fusion_common::NamedNodeRef::new_unchecked(
                             self.iris().value(offset),
                         ),
                     );
                 } else {
                     builder.append_blank_node(
-                        rdf_fusion_model::BlankNodeRef::new_unchecked(
+                        rdf_fusion_common::BlankNodeRef::new_unchecked(
                             self.blank_nodes().value(offset),
                         ),
                     );

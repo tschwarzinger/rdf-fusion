@@ -1,9 +1,9 @@
 use crate::storage::{QuadStorageSnapshot, QuadStorageTransaction};
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
+use rdf_fusion_common::StorageError;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::object_id::ObjectIdMapping;
-use rdf_fusion_model::StorageError;
 use std::sync::Arc;
 
 #[async_trait]

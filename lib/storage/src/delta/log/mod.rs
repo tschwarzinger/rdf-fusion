@@ -46,8 +46,8 @@ use deltalake::table::state::DeltaTableState;
 use deltalake::{
     DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField, TableProperty,
 };
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -547,12 +547,12 @@ mod tests {
     use deltalake::arrow::util::pretty::pretty_format_batches;
     use deltalake::delta_datafusion::DeltaTableProvider;
     use insta::assert_snapshot;
+    use rdf_fusion_common::NamedNodeRef;
     use rdf_fusion_encoding::plain_term::{
         PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
     };
     use rdf_fusion_encoding::{EncodingArray, QuadStorageEncodingName, TermEncoding};
     use rdf_fusion_extensions::storage::QuadStorage;
-    use rdf_fusion_model::NamedNodeRef;
     use std::sync::Arc;
 
     #[tokio::test]

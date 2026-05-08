@@ -32,7 +32,7 @@ pub trait DeltaQuadStorageLogChangeset: Send + Sync {
 
     /// Returns the list of cleared graphs.
     ///
-    /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_model::quads::COL_GRAPH).
+    /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_common::quads::COL_GRAPH).
     async fn cleared_graphs(
         &self,
         state: &SessionState,
@@ -52,7 +52,7 @@ pub trait DeltaQuadStorageLogChangeset: Send + Sync {
 
     /// Returns a list of (explicitly or implicitly) added named graphs.
     ///
-    /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_model::quads::COL_GRAPH).
+    /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_common::quads::COL_GRAPH).
     async fn added_named_graphs(
         &self,
         state: &SessionState,
@@ -60,7 +60,7 @@ pub trait DeltaQuadStorageLogChangeset: Send + Sync {
 
     /// Returns a list of dropped named graphs.
     ///
-    /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_model::quads::COL_GRAPH).
+    /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_common::quads::COL_GRAPH).
     async fn dropped_named_graphs(
         &self,
         state: &SessionState,

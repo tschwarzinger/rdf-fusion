@@ -8,8 +8,8 @@ use crate::{TermDecoder, TermEncoder};
 use datafusion::arrow::array::{Array, AsArray};
 use datafusion::arrow::datatypes::Int8Type;
 use datafusion::common::{DataFusionError, ScalarValue, exec_err};
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::{
     BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, NamedOrBlankNodeRef, Term,
     TermRef, ThinError, ThinResult,
 };

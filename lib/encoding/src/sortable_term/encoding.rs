@@ -4,8 +4,8 @@ use crate::sortable_term::{SortableTermArray, SortableTermScalar};
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
 use datafusion::common::{ScalarValue, not_impl_err};
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{TermRef, ThinResult};
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::{TermRef, ThinResult};
 use std::clone::Clone;
 use std::sync::{Arc, LazyLock};
 

@@ -17,7 +17,7 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
 use datafusion::logical_expr::ColumnarValue;
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 use std::iter::repeat_n;
 use std::sync::Arc;
 

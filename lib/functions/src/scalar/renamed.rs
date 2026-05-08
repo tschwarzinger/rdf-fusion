@@ -7,7 +7,7 @@ use datafusion::logical_expr::{
     ColumnarValue, Documentation, Expr, ReturnFieldArgs, ScalarFunctionArgs,
     ScalarUDFImpl, Signature,
 };
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 use std::any::Any;
 use std::hash::{Hash, Hasher};
 

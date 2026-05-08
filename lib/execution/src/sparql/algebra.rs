@@ -2,8 +2,8 @@
 //!
 //! The root type for SPARQL queries is [`RdfFusionQuery`] and the root type for updates is [`Update`].
 
-use rdf_fusion_model::sparql::{GraphUpdateOperation, Query, SparqlSyntaxError, Update};
-use rdf_fusion_model::{GraphName, NamedOrBlankNode};
+use rdf_fusion_common::sparql::{GraphUpdateOperation, Query, SparqlSyntaxError, Update};
+use rdf_fusion_common::{GraphName, NamedOrBlankNode};
 use std::fmt;
 use std::str::FromStr;
 
@@ -11,7 +11,7 @@ use std::str::FromStr;
 ///
 /// ```
 /// use rdf_fusion_execution::sparql::RdfFusionQuery;
-/// use rdf_fusion_model::NamedNode;
+/// use rdf_fusion_common::NamedNode;
 ///
 /// let query_str = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }";
 /// let mut query = RdfFusionQuery::parse(query_str, None)?;
@@ -103,7 +103,7 @@ impl From<Query> for RdfFusionQuery {
 /// A parsed [SPARQL update](https://www.w3.org/TR/sparql11-update/).
 ///
 /// ```
-/// use rdf_fusion_model::sparql::SparqlSyntaxError;
+/// use rdf_fusion_common::sparql::SparqlSyntaxError;
 /// use rdf_fusion_execution::sparql::RdfFusionUpdate;
 ///
 /// let update_str = "CLEAR ALL ;";
@@ -198,7 +198,7 @@ pub struct QueryDataset {
 
 impl QueryDataset {
     fn from_algebra(
-        inner: &Option<rdf_fusion_model::sparql::algebra::QueryDataset>,
+        inner: &Option<rdf_fusion_common::sparql::algebra::QueryDataset>,
     ) -> Self {
         if let Some(inner) = inner {
             Self {
@@ -257,7 +257,7 @@ impl QueryDataset {
     /// By default only the store default graph is considered.
     /// ```
     /// use rdf_fusion_execution::sparql::RdfFusionQuery;
-    /// use rdf_fusion_model::NamedNode;
+    /// use rdf_fusion_common::NamedNode;
     ///
     /// let mut query = RdfFusionQuery::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
     /// let default = vec![NamedNode::new("http://example.com")?.into()];
@@ -282,7 +282,7 @@ impl QueryDataset {
     ///
     /// ```
     /// use rdf_fusion_execution::sparql::RdfFusionQuery;
-    /// use rdf_fusion_model::NamedNode;
+    /// use rdf_fusion_common::NamedNode;
     ///
     /// let mut query = RdfFusionQuery::parse("SELECT ?s ?p ?o WHERE { ?s ?p ?o . }", None)?;
     /// let named = vec![NamedNode::new("http://example.com")?.into()];

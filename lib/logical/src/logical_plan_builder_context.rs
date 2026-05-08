@@ -11,6 +11,12 @@ use datafusion::logical_expr::{
     Expr, Extension, LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode, Values,
     col, lit,
 };
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::{DFResult, NamedOrBlankNode};
+use rdf_fusion_common::{
+    GroundTerm, NamedNode, NamedNodePattern, PropertyPathExpression, Term, TermPattern,
+    TermRef, ThinError, TriplePattern, Variable,
+};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::plain_term::encoders::DefaultPlainTermEncoder;
 use rdf_fusion_encoding::{
@@ -18,12 +24,6 @@ use rdf_fusion_encoding::{
 };
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::functions::RdfFusionFunctionRegistryRef;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{DFResult, NamedOrBlankNode};
-use rdf_fusion_model::{
-    GroundTerm, NamedNode, NamedNodePattern, PropertyPathExpression, Term, TermPattern,
-    TermRef, ThinError, TriplePattern, Variable,
-};
 use std::collections::HashMap;
 use std::sync::Arc;
 

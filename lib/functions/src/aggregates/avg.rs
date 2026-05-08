@@ -8,13 +8,13 @@ use datafusion::logical_expr::{
 };
 use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
+use rdf_fusion_common::DFResult;
 use rdf_fusion_compute::numeric::{NumericBinaryOp, apply_typed_family_binary};
 use rdf_fusion_encoding::typed_family::{
     NumericFamily, NumericFamilyArray, TypedFamilyArgs, TypedFamilyEncodingRef,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingDatum, EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::sync::Arc;
 

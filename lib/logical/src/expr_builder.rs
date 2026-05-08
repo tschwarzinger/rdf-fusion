@@ -3,13 +3,13 @@ use crate::expr_builder_context::decide_input_encoding;
 use datafusion::common::{ScalarValue, plan_datafusion_err, plan_err};
 use datafusion::functions_aggregate::first_last::first_value;
 use datafusion::logical_expr::{Expr, ExprSchemable, lit};
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::{Iri, LiteralRef, TermRef, ThinError};
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder, PlainTermScalar,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingName, EncodingScalar};
 use rdf_fusion_extensions::functions::{BuiltinName, FunctionName};
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{Iri, LiteralRef, TermRef, ThinError};
 use std::ops::Not;
 
 /// A builder for expressions that make use of RDF Fusion built-ins.

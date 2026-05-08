@@ -1,8 +1,8 @@
 use datafusion::arrow::array::{Array, ArrayRef, Int32Array};
 use datafusion::arrow::compute::{cast, interleave, take};
 use datafusion::arrow::datatypes::DataType;
+use rdf_fusion_common::AResult;
 use rdf_fusion_encoding::typed_family::{FamilyDatum, NumericFamilyArray};
-use rdf_fusion_model::AResult;
 
 /// Tries to cast a given numeric family array to the given target data type.
 pub fn cast_numeric(

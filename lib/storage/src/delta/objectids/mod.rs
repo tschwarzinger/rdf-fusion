@@ -12,10 +12,10 @@ mod tests {
     use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
     use insta::assert_snapshot;
     use object_store::memory::InMemory;
+    use rdf_fusion_common::NamedNodeRef;
     use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_encoding::object_id::ObjectIdMapping;
     use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
-    use rdf_fusion_model::NamedNodeRef;
     use std::sync::Arc;
     use tokio::runtime::Handle;
     use url::Url;

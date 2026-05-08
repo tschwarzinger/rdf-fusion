@@ -43,11 +43,11 @@ use datafusion::functions::core::coalesce::CoalesceFunc;
 use datafusion::logical_expr::{
     AggregateUDF, ScalarUDF, ScalarUDFImpl, Signature, TypeSignature, Volatility,
 };
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{EncodingName, RdfFusionEncodings};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
 };
-use rdf_fusion_model::DFResult;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};

@@ -3,12 +3,12 @@ use datafusion::arrow::array::{Array, Datum, Scalar};
 use datafusion::arrow::compute::kernels::numeric::{add, div, mul, sub};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
+use rdf_fusion_common::{AResult, Decimal, Numeric, ThinResult};
 use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyDatum, FamilyArray, FamilyDatum, FamilyDatumExt, NumericFamily,
     NumericFamilyArray, NumericFamilyArrayElementBuilder, TypedFamilyArgs,
     TypedFamilyArray,
 };
-use rdf_fusion_model::{AResult, Decimal, Numeric, ThinResult};
 use std::cmp::max;
 
 /// An operation that can be executed by [`apply_numeric_binary`].
@@ -230,7 +230,7 @@ mod tests {
     use datafusion::arrow::array::{Float32Array, Int32Array, Int64Array};
     use datafusion::arrow::util::pretty::pretty_format_columns;
     use insta::assert_snapshot;
-    use rdf_fusion_model::Numeric;
+    use rdf_fusion_common::Numeric;
 
     #[test]
     fn test_add_fast_path_homogenous() {

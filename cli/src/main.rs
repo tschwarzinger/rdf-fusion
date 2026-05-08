@@ -17,6 +17,7 @@ use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
 use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::io::RdfFormat;
+use rdf_fusion::model::config::RdfFusionOptions;
 use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
 use rdf_fusion::store::Store;
 use rdf_fusion_web::ServerConfig;
@@ -111,14 +112,22 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
     )
     .expect("Failed to create log store");
 
-    let session_config = SessionConfig::from_env()?;
+    let mut session_config = SessionConfig::from_env()?;
+    let rdf_fusion_options = RdfFusionOptions::from_env()?;
+    session_config
+        .options_mut()
+        .extensions
+        .insert(rdf_fusion_options.clone());
+
     let loading_state = SessionStateBuilder::new()
         .with_runtime_env(Arc::clone(&runtime_env))
         .with_config(session_config.clone())
         .build();
+
     let storage = DeltaQuadStorageBuilder::new()
         .with_log_store(log_store)
         .with_load_mode(LoadMode::Load(Box::new(loading_state)))
+        .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
         .build()
         .await?;
 

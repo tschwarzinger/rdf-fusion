@@ -10,13 +10,13 @@ use datafusion::logical_expr::{
 };
 use datafusion::scalar::ScalarValue;
 use datafusion::{error::Result, physical_plan::Accumulator};
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, StringFamily, StringFamilyArray, TypedFamilyEncodingRef,
     TypedFamilyScalar,
 };
 use rdf_fusion_encoding::{EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::sync::Arc;
 

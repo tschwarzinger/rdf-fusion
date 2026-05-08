@@ -15,7 +15,7 @@ datafusion.workspace = true
 futures.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
-rdf-fusion-model.workspace = true
+rdf-fusion-common.workspace = true
 rdf-fusion-logical.workspace = true
 itertools.workspace = true
 

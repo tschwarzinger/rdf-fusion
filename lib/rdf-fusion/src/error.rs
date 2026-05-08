@@ -1,7 +1,7 @@
 use oxrdfio::{RdfFormat, RdfParseError};
+use rdf_fusion_common::IriParseError;
+use rdf_fusion_common::StorageError;
 use rdf_fusion_execution::sparql::error::QueryEvaluationError;
-use rdf_fusion_model::IriParseError;
-use rdf_fusion_model::StorageError;
 use std::io;
 
 /// An error raised while loading a file into a [`Store`](crate::store::Store).

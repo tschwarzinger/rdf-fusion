@@ -1,10 +1,10 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::arrow::array::Int32Array;
+use rdf_fusion_common::Numeric;
 use rdf_fusion_compute::numeric::{NumericBinaryOp, apply_numeric_binary};
 use rdf_fusion_encoding::typed_family::{
     NumericFamilyArray, NumericFamilyArrayElementBuilder,
 };
-use rdf_fusion_model::Numeric;
 use std::hint::black_box;
 
 /// Helper to generate a 10,000 row homogenous array (all Int32)

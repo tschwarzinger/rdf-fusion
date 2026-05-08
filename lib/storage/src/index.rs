@@ -1,6 +1,6 @@
 //! General-purpose types for quad indexes
 
-use rdf_fusion_model::QuadComponent;
+use rdf_fusion_common::QuadComponent;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;

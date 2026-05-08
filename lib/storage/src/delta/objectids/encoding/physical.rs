@@ -8,7 +8,7 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties,
     SendableRecordBatchStream,
 };
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 use std::any::Any;
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;

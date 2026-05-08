@@ -10,14 +10,14 @@ use datafusion::logical_expr::{
 };
 use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
 use datafusion::prelude::{not, or};
-use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_extensions::RdfFusionContextView;
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::{
     NamedNode, NamedNodePattern, PropertyPathExpression, TermPattern, TermRef,
     TriplePattern, Variable,
 };
+use rdf_fusion_encoding::QuadStorageEncoding;
+use rdf_fusion_extensions::RdfFusionContextView;
 use std::sync::Arc;
 
 #[derive(Debug)]

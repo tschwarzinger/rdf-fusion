@@ -40,6 +40,12 @@ use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use futures::StreamExt;
 use oxrdfio::RdfSerializer;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::{CorruptionError, StorageError};
+use rdf_fusion_common::{
+    GraphNameRef, Iri, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
+    QuadRef, TermRef, Variable,
+};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
@@ -53,12 +59,6 @@ use rdf_fusion_execution::sparql::{
 };
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{CorruptionError, StorageError};
-use rdf_fusion_model::{
-    GraphNameRef, Iri, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
-    QuadRef, TermRef, Variable,
-};
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
@@ -980,7 +980,7 @@ impl Store {
 #[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
-    use rdf_fusion_model::{
+    use rdf_fusion_common::{
         BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Term,
     };
     use std::collections::HashSet;

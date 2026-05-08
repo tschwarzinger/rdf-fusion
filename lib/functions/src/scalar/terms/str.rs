@@ -7,12 +7,12 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use itertools::repeat_n;
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_encoding::plain_term::PlainTermArray;
 use rdf_fusion_encoding::typed_family::StringFamilyArray;
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::vocab::xsd;
 use std::any::Any;
 
 /// Implementation of the SPARQL `STR` function.

@@ -8,7 +8,7 @@ use object_store::{
     Attributes, CopyOptions, GetOptions, GetRange, GetResult, GetResultPayload,
     ListResult, MultipartUpload, ObjectMeta, PutMultipartOptions, RenameOptions,
 };
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 use std::ops::Range;
 use std::sync::Arc;
 use url::Url;

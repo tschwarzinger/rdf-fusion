@@ -6,7 +6,7 @@ use crate::typed_family::{
 use datafusion::arrow::array::{ArrayRef, UnionArray, new_null_array};
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 use std::sync::Arc;
 
 /// A builder for creating a [`TypedFamilyArray`].

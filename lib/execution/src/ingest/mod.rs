@@ -1,7 +1,7 @@
 mod rdf_parser_table_provider;
 
 use oxrdfio::RdfFormat;
-use rdf_fusion_model::{GraphName, Iri, IriParseError};
+use rdf_fusion_common::{GraphName, Iri, IriParseError};
 pub use rdf_parser_table_provider::RdfParserTableProvider;
 
 /// Options for the RDF parser.

@@ -5,8 +5,8 @@ mod scalar;
 pub use array::*;
 use datafusion::common::{DataFusionError, exec_err};
 pub use encoding::*;
-use rdf_fusion_model::vocab::xsd;
-use rdf_fusion_model::{BlankNode, DFResult, Literal, NamedNode, Term};
+use rdf_fusion_common::vocab::xsd;
+use rdf_fusion_common::{BlankNode, DFResult, Literal, NamedNode, Term};
 pub use scalar::*;
 
 pub(crate) fn parse_turtle_term(s: &str) -> DFResult<Term> {

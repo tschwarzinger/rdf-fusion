@@ -20,8 +20,8 @@ use datafusion::prelude::SessionContext;
 use deltalake::arrow::compute::take_record_batch;
 use deltalake::arrow::datatypes::Int8Type;
 use futures::StreamExt;
-use rdf_fusion_model::AResult;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::AResult;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::sync::Arc;
 
 /// Represents a changeset between two versions of the [`DeltaStorageLog`].
@@ -512,12 +512,12 @@ mod tests {
     use datafusion::arrow::datatypes::{DataType, Field};
     use datafusion::physical_plan::collect;
     use deltalake::arrow::util::pretty::pretty_format_batches;
+    use rdf_fusion_common::NamedNodeRef;
+    use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
     use rdf_fusion_encoding::plain_term::{
         PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
     };
     use rdf_fusion_encoding::{EncodingArray, TermEncoding};
-    use rdf_fusion_model::NamedNodeRef;
-    use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 
     #[tokio::test]
     async fn test_extend_eager_changeset() {

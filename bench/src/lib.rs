@@ -29,7 +29,7 @@ pub enum Operation {
 }
 
 /// Provides options for the benchmarking process.
-pub struct BenchmarkingOptions {
+pub struct BenchmarkingConfig {
     /// Indicates whether the benchmarking results should be verbose.
     ///
     /// For example, while non-verbose results could show an aggregated version of multiple runs,
@@ -42,7 +42,7 @@ pub struct BenchmarkingOptions {
     /// The storage encoding to use for the benchmark.
     pub storage_encoding: QuadStorageEncodingName,
     /// The DataFusion config.
-    pub config: SessionConfig,
+    pub data_fusion_config: SessionConfig,
 }
 
 /// Represents the possible storage backends a benchmark.
@@ -59,7 +59,7 @@ pub enum BenchmarkStorageBackend {
 /// - [Operation::Execute] executes the given benchmark. The runner verifies the requirements before
 ///   executing the benchmark (e.g., whether a file exists).
 pub async fn execute_benchmark_operation(
-    options: BenchmarkingOptions,
+    options: BenchmarkingConfig,
     operation: Operation,
     benchmark: BenchmarkName,
 ) -> anyhow::Result<()> {

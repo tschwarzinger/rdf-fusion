@@ -1,4 +1,4 @@
-use rdf_fusion_model::GraphName;
+use rdf_fusion_common::GraphName;
 use std::fmt::Display;
 
 /// The active graph defines which graphs can partake in the pattern matching process.

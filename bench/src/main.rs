@@ -3,9 +3,10 @@ use clap::{Parser, ValueEnum};
 use datafusion::common::runtime::SpawnedTask;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::model::config::RdfFusionOptions;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::{
-    BenchmarkStorageBackend, BenchmarkingOptions, Operation, execute_benchmark_operation,
+    BenchmarkStorageBackend, BenchmarkingConfig, Operation, execute_benchmark_operation,
 };
 
 #[global_allocator]
@@ -25,12 +26,20 @@ async fn main() -> anyhow::Result<()> {
         .storage_encoding
         .map(Into::into)
         .unwrap_or(QuadStorageEncodingName::ObjectId);
-    let options = BenchmarkingOptions {
+
+    let mut config =
+        SessionConfig::from_env().context("Failed to obtain session config")?;
+    config
+        .options_mut()
+        .extensions
+        .insert(RdfFusionOptions::from_env()?);
+
+    let options = BenchmarkingConfig {
         verbose_results: args.verbose_results,
         memory_size: args.memory_limit.map(|val| 1024 * 1024 * val),
         storage_backend,
         storage_encoding,
-        config: SessionConfig::from_env().context("Failed to obtain session config")?,
+        data_fusion_config: config,
     };
 
     let task = SpawnedTask::spawn(async move {

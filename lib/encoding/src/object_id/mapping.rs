@@ -6,7 +6,7 @@ use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
 use datafusion::error::DataFusionError;
-use rdf_fusion_model::{CorruptionError, GraphNameRef, StorageError, ThinError};
+use rdf_fusion_common::{CorruptionError, GraphNameRef, StorageError, ThinError};
 use std::error::Error;
 use std::fmt::Debug;
 use std::ops::Deref;

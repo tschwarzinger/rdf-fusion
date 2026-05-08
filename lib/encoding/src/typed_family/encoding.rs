@@ -15,7 +15,7 @@ use datafusion::arrow::compute::{filter, is_not_null, is_null, take};
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::{ScalarValue, exec_datafusion_err};
-use rdf_fusion_model::{AResult, DFResult};
+use rdf_fusion_common::{AResult, DFResult};
 use std::clone::Clone;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -545,8 +545,8 @@ mod tests {
     use datafusion::arrow::array::Int32Array;
     use datafusion::arrow::util::pretty::pretty_format_columns;
     use insta::assert_snapshot;
-    use rdf_fusion_model::LiteralRef;
-    use rdf_fusion_model::vocab::xsd;
+    use rdf_fusion_common::LiteralRef;
+    use rdf_fusion_common::vocab::xsd;
 
     #[test]
     fn test_create_array_with_single_family_with_nulls() {

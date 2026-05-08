@@ -2,6 +2,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::arrow::datatypes::Field;
 use datafusion::config::ConfigOptions;
 use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs, ScalarUDF};
+use rdf_fusion_common::{BlankNode, Float, Integer, Literal, NamedNodeRef, TermRef};
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
@@ -13,7 +14,6 @@ use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
 };
 use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
-use rdf_fusion_model::{BlankNode, Float, Integer, Literal, NamedNodeRef, TermRef};
 use std::collections::HashMap;
 use std::sync::Arc;
 

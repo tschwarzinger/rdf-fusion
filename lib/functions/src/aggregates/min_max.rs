@@ -3,12 +3,12 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::logical_expr::{AggregateUDF, Volatility, create_udaf};
 use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::typed_family::{
     FamilyComparator, TypedFamilyArray, TypedFamilyEncodingRef, TypedFamilyId,
     TypedFamilyScalar,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingScalar, TermEncoding};
-use rdf_fusion_model::DFResult;
 use std::cmp::Ordering;
 use std::sync::Arc;
 

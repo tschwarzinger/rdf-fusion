@@ -1,7 +1,7 @@
 use crate::results::QuerySolutionStream;
 use crate::sparql::error::QueryEvaluationError;
 use futures::{Stream, StreamExt};
-use rdf_fusion_model::{BlankNode, Graph, Term, TermPattern, Triple, TriplePattern};
+use rdf_fusion_common::{BlankNode, Graph, Term, TermPattern, Triple, TriplePattern};
 use sparesults::QuerySolution;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;

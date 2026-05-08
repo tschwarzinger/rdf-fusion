@@ -12,8 +12,8 @@ use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::{and, is_null};
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::vocab::xsd;
-use rdf_fusion_model::{
+use rdf_fusion_common::vocab::xsd;
+use rdf_fusion_common::{
     AResult, Decimal, Duration, LiteralRef, NamedNodeRef, TypedValueRef,
 };
 use std::collections::BTreeSet;

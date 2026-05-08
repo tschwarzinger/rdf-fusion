@@ -21,7 +21,10 @@ fn bench_bsbm_store_prepare(c: &mut Criterion) {
         let benchmark =
             BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
 
-        let target_partitions = benchmarking_context.options().config.target_partitions();
+        let target_partitions = benchmarking_context
+            .options()
+            .data_fusion_config
+            .target_partitions();
         let runtime = create_runtime(target_partitions);
 
         let benchmark_name = benchmark.name();
@@ -49,7 +52,10 @@ fn bench_windfarm_store_prepare(c: &mut Criterion) {
         );
         let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
-        let target_partitions = benchmarking_context.options().config.target_partitions();
+        let target_partitions = benchmarking_context
+            .options()
+            .data_fusion_config
+            .target_partitions();
         let runtime = create_runtime(target_partitions);
 
         let benchmark_name = benchmark.name();

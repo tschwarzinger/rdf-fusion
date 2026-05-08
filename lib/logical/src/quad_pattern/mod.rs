@@ -6,12 +6,12 @@ use crate::active_graph::ActiveGraph;
 use crate::patterns::compute_schema_for_triple_pattern;
 use datafusion::common::DFSchemaRef;
 use datafusion::logical_expr::{Expr, col, lit};
-use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::{
     BlankNodeMatchingMode, DFResult, GraphNameRef, NamedNodePattern, QuadComponent,
     TermPattern, TriplePattern, Variable,
 };
+use rdf_fusion_encoding::QuadStorageEncoding;
 use std::collections::{HashMap, HashSet};
 
 /// A pattern that matches quads in a storage layer.

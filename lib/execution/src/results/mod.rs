@@ -5,7 +5,7 @@ use datafusion::error::DataFusionError;
 use datafusion::physical_plan::memory::MemoryStream;
 use futures::StreamExt;
 use oxrdfio::{RdfFormat, RdfSerializer};
-use rdf_fusion_model::{Variable, VariableRef};
+use rdf_fusion_common::{Variable, VariableRef};
 use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;

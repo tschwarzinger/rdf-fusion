@@ -26,7 +26,7 @@ use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use deltalake::logstore::ObjectStoreRef;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::mem::size_of;
 use std::sync::Arc;
 
@@ -229,10 +229,10 @@ mod tests {
     use super::*;
     use crate::delta::DeltaQuadStorageBuilder;
     use datafusion::physical_plan::collect;
+    use rdf_fusion_common::{GraphName, NamedNode, Quad};
     use rdf_fusion_encoding::quads_to_plain_term_dataframe;
     use rdf_fusion_execution::RdfFusionContextBuilder;
     use rdf_fusion_extensions::storage::QuadStorage;
-    use rdf_fusion_model::{GraphName, NamedNode, Quad};
     use std::sync::Arc;
 
     #[tokio::test]

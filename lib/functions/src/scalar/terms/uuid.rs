@@ -5,10 +5,10 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::typed_family::{ResourceFamily, TypedFamilyEncodingRef};
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;

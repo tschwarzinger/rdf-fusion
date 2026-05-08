@@ -8,9 +8,9 @@ use datafusion::logical_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
     Signature, Volatility,
 };
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{RdfFusionEncodings, detect_encoding_from_types};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
@@ -115,9 +115,9 @@ mod tests {
     use datafusion::dataframe::DataFrame;
     use datafusion::logical_expr::col;
     use insta::assert_snapshot;
+    use rdf_fusion_common::NamedNodeRef;
     use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
-    use rdf_fusion_model::NamedNodeRef;
 
     #[tokio::test]
     async fn test_is_compatible_mixed() {

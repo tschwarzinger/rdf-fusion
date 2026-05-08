@@ -11,9 +11,9 @@ use datafusion::logical_expr::{
     Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort, SortExpr,
     UserDefinedLogicalNode, col,
 };
+use rdf_fusion_common::Variable;
+use rdf_fusion_common::{DFResult, TermPattern};
 use rdf_fusion_encoding::{EncodingName, QuadStorageEncoding};
-use rdf_fusion_model::Variable;
-use rdf_fusion_model::{DFResult, TermPattern};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ use std::sync::Arc;
 /// # use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 /// # use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 /// # use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
-/// # use rdf_fusion_model::{NamedNodePattern, TermPattern, TriplePattern, Variable};
+/// # use rdf_fusion_common::{NamedNodePattern, TermPattern, TriplePattern, Variable};
 /// # use rdf_fusion_logical::ActiveGraph;
 /// # let encodings = RdfFusionEncodings::new(
 /// #     Arc::clone(&PLAIN_TERM_ENCODING),

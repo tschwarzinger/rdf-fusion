@@ -1,12 +1,12 @@
 [package]
-name = "rdf-fusion-model"
+name = "rdf-fusion-common"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = """
-RDF Fusion Model
+RDF Fusion Common
 """
 
 [dependencies]

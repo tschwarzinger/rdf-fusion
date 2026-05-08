@@ -3,8 +3,8 @@ use datafusion::common::{Column, DFSchema, DFSchemaRef, plan_err};
 use datafusion::logical_expr::{
     Expr, ExprSchemable, LogicalPlan, UserDefinedLogicalNodeCore,
 };
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::Variable;
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::Variable;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;

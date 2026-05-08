@@ -3,7 +3,7 @@ use crate::plain_term::PlainTermArray;
 use crate::string::{STRING_ENCODING, StringEncoding, StringEncodingRef};
 use crate::{EncodingArray, EncodingDatum};
 use datafusion::arrow::array::{ArrayRef, StringArray};
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]

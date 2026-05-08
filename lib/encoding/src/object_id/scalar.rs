@@ -3,7 +3,7 @@ use crate::encoding::EncodingScalar;
 use crate::object_id::{ObjectIdEncoding, ObjectIdEncodingRef};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::{ScalarValue, exec_err};
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 use std::sync::Arc;
 
 /// Represents an Arrow scalar with a [ObjectIdEncoding].

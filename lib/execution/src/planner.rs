@@ -7,9 +7,9 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{
     DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner,
 };
+use rdf_fusion_common::{DFResult, StorageError};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::{QuadStorage, QuadStorageSnapshot};
-use rdf_fusion_model::{DFResult, StorageError};
 use rdf_fusion_physical::paths::KleenePlusPathPlanner;
 use std::fmt::Debug;
 use std::sync::Arc;

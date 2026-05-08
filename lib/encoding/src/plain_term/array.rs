@@ -10,7 +10,7 @@ use datafusion::arrow::array::{
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::common::{ScalarValue, exec_err};
 use datafusion::error::DataFusionError;
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 use std::sync::Arc;
 
 /// Represents an Arrow array with a [`PlainTermEncoding`].

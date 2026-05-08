@@ -6,9 +6,9 @@ use datafusion::arrow::array::{Array, ArrayRef, Int8Array, StringArray, StructAr
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::datatypes::{Field, Fields};
 use datafusion::common::ScalarValue;
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::vocab::xsd;
-use rdf_fusion_model::{TermRef, ThinResult};
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::vocab::xsd;
+use rdf_fusion_common::{TermRef, ThinResult};
 use std::clone::Clone;
 use std::fmt::Display;
 use std::sync::{Arc, LazyLock};

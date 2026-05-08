@@ -1,9 +1,10 @@
 use crate::RdfFusionContext;
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::prelude::SessionConfig;
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::config::RdfFusionOptions;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_model::DFResult;
 use std::sync::Arc;
 use url::Url;
 
@@ -74,10 +75,23 @@ impl RdfFusionContextBuilder {
     /// Consumes the builder to create the Store
     pub fn build(self) -> DFResult<RdfFusionContext> {
         let typed_family_encoding = Arc::new(TypedFamilyEncoding::default());
-        let session_config = match self.session_config {
+        let mut session_config = match self.session_config {
             None => SessionConfig::from_env()?,
             Some(session_config) => session_config,
         };
+
+        // Ensure RdfFusionConfig is registered
+        if session_config
+            .options()
+            .extensions
+            .get::<RdfFusionOptions>()
+            .is_none()
+        {
+            session_config
+                .options_mut()
+                .extensions
+                .insert(RdfFusionOptions::from_env()?);
+        }
         let runtime_env = self.query_runtime.unwrap_or_else(|| {
             RuntimeEnvBuilder::default()
                 .build_arc()

@@ -66,8 +66,8 @@ pub use encoding::*;
 pub use encoding_name::*;
 pub use encodings::*;
 pub use quad_storage_encoding::*;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{DFResult, Quad};
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::{DFResult, Quad};
 pub use scalar_encoder::ScalarEncoder;
 use std::sync::Arc;
 

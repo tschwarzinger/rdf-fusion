@@ -20,12 +20,12 @@ use deltalake::kernel::transaction::CommitBuilder;
 use deltalake::protocol::{DeltaOperation, SaveMode};
 use deltalake::writer::{DeltaWriter, RecordBatchWriter};
 use futures::StreamExt;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::{NamedOrBlankNodeRef, StorageError};
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageGraphTarget, QuadStorageSnapshot, QuadStorageTransaction,
 };
 use rdf_fusion_logical::encoding::change::ChangeEncodingNode;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_model::{NamedOrBlankNodeRef, StorageError};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

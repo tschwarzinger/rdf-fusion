@@ -29,9 +29,9 @@ use datafusion::physical_plan::union::UnionExec;
 use deltalake::arrow::datatypes::{Field, Schema};
 use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
 use deltalake::kernel::Add;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::sync::Arc;
 
 pub struct QuadPatternScanPlanningResult {

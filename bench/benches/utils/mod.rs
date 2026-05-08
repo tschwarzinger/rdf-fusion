@@ -42,7 +42,10 @@ pub fn setup_benchmark_env<'ctx, B: Benchmark>(
     benchmarking_context: &'ctx RdfFusionBenchContext,
     benchmark: &B,
 ) -> (Runtime, BenchmarkContext<'ctx>, Store) {
-    let target_partitions = benchmarking_context.options().config.target_partitions();
+    let target_partitions = benchmarking_context
+        .options()
+        .data_fusion_config
+        .target_partitions();
     let runtime = create_runtime(target_partitions);
 
     let benchmark_name = benchmark.name();

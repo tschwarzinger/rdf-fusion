@@ -8,7 +8,7 @@ use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::ScalarValue;
-use rdf_fusion_model::DFResult;
+use rdf_fusion_common::DFResult;
 use std::clone::Clone;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;

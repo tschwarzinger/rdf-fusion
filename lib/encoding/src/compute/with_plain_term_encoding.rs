@@ -2,7 +2,7 @@ use crate::EncodingDatum;
 use crate::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use crate::string::StringEncoding;
 use datafusion::arrow::array::{Array, AsArray};
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 
 /// Changes the encoding from the [`StringEncoding`] to the
 /// [`PlainTermEncoding`](rdf_fusion_encoding::string::StringEncoding).

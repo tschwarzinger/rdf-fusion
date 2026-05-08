@@ -1,8 +1,8 @@
 use crate::patterns::compute_schema_for_pattern;
 use datafusion::common::{DFSchemaRef, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
-use rdf_fusion_model::TermPattern;
-use rdf_fusion_model::{BlankNodeMatchingMode, DFResult};
+use rdf_fusion_common::TermPattern;
+use rdf_fusion_common::{BlankNodeMatchingMode, DFResult};
 use std::cmp::Ordering;
 use std::fmt;
 

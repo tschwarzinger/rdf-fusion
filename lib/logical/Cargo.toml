@@ -14,7 +14,7 @@ datafusion.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-functions.workspace = true
-rdf-fusion-model.workspace = true
+rdf-fusion-common.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

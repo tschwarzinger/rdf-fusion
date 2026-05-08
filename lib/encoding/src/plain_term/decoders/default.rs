@@ -7,7 +7,7 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::datatypes::Int8Type;
 use datafusion::common::ScalarValue;
-use rdf_fusion_model::{
+use rdf_fusion_common::{
     BlankNodeRef, LiteralRef, NamedNodeRef, TermRef, ThinError, ThinResult,
 };
 

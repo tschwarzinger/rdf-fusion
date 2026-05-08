@@ -11,7 +11,7 @@ RDF Fusion Compute
 
 [dependencies]
 rdf-fusion-encoding.workspace = true
-rdf-fusion-model.workspace = true
+rdf-fusion-common.workspace = true
 datafusion.workspace = true
 thiserror.workspace = true
 

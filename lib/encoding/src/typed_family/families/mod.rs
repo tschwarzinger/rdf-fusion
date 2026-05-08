@@ -4,7 +4,7 @@ use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::is_not_null;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::{AResult, NamedNode};
+use rdf_fusion_common::{AResult, NamedNode};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::Debug;

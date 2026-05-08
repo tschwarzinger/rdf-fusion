@@ -43,6 +43,7 @@ mod test_utils {
     };
     use datafusion::logical_expr::{Expr, ScalarUDF, col};
     use datafusion::prelude::DataFrame;
+    use rdf_fusion_common::Decimal;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
@@ -53,7 +54,6 @@ mod test_utils {
         TypedFamilyId,
     };
     use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings};
-    use rdf_fusion_model::Decimal;
     use std::sync::Arc;
 
     /// Creates a default instance of [`RdfFusionEncodings`] used in tests.

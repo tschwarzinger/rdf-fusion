@@ -4652,12 +4652,12 @@ dependencies = [
  "object_store",
  "oxrdfio",
  "rand 0.10.0",
+ "rdf-fusion-common",
  "rdf-fusion-encoding",
  "rdf-fusion-execution",
  "rdf-fusion-extensions",
  "rdf-fusion-functions",
  "rdf-fusion-logical",
- "rdf-fusion-model",
  "rdf-fusion-storage",
  "thiserror 2.0.18",
  "tokio",
@@ -4684,6 +4684,7 @@ dependencies = [
  "rand 0.10.0",
  "rand_distr",
  "rdf-fusion",
+ "rdf-fusion-extensions",
  "reqwest 0.13.2",
  "serde_json",
  "snmalloc-rs",
@@ -4704,6 +4705,7 @@ dependencies = [
  "deltalake",
  "object_store",
  "rdf-fusion",
+ "rdf-fusion-extensions",
  "rdf-fusion-web",
  "snmalloc-rs",
  "tokio",
@@ -4713,14 +4715,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdf-fusion-common"
+version = "0.1.0"
+dependencies = [
+ "datafusion",
+ "oxiri",
+ "oxrdf",
+ "oxsdatatypes",
+ "spargebra",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "rdf-fusion-compute"
 version = "0.1.0"
 dependencies = [
  "criterion",
  "datafusion",
  "insta",
+ "rdf-fusion-common",
  "rdf-fusion-encoding",
- "rdf-fusion-model",
  "thiserror 2.0.18",
 ]
 
@@ -4732,7 +4746,7 @@ dependencies = [
  "criterion",
  "datafusion",
  "insta",
- "rdf-fusion-model",
+ "rdf-fusion-common",
  "thiserror 2.0.18",
 ]
 
@@ -4762,11 +4776,11 @@ dependencies = [
  "moka",
  "object_store",
  "oxrdfio",
+ "rdf-fusion-common",
  "rdf-fusion-encoding",
  "rdf-fusion-extensions",
  "rdf-fusion-functions",
  "rdf-fusion-logical",
- "rdf-fusion-model",
  "rdf-fusion-physical",
  "reqwest 0.13.2",
  "sparesults",
@@ -4783,8 +4797,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "datafusion",
+ "rdf-fusion-common",
  "rdf-fusion-encoding",
- "rdf-fusion-model",
  "thiserror 2.0.18",
 ]
 
@@ -4800,10 +4814,10 @@ dependencies = [
  "itertools 0.14.0",
  "md-5 0.11.0",
  "rand 0.10.0",
+ "rdf-fusion-common",
  "rdf-fusion-compute",
  "rdf-fusion-encoding",
  "rdf-fusion-extensions",
- "rdf-fusion-model",
  "regex",
  "sha1 0.11.0",
  "sha2 0.11.0",
@@ -4818,22 +4832,10 @@ version = "0.1.0"
 dependencies = [
  "datafusion",
  "insta",
+ "rdf-fusion-common",
  "rdf-fusion-encoding",
  "rdf-fusion-extensions",
  "rdf-fusion-functions",
- "rdf-fusion-model",
-]
-
-[[package]]
-name = "rdf-fusion-model"
-version = "0.1.0"
-dependencies = [
- "datafusion",
- "oxiri",
- "oxrdf",
- "oxsdatatypes",
- "spargebra",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4845,10 +4847,10 @@ dependencies = [
  "futures",
  "insta",
  "itertools 0.14.0",
+ "rdf-fusion-common",
  "rdf-fusion-encoding",
  "rdf-fusion-extensions",
  "rdf-fusion-logical",
- "rdf-fusion-model",
  "tokio",
 ]
 
@@ -4867,11 +4869,11 @@ dependencies = [
  "moka",
  "object_store",
  "rand 0.10.0",
+ "rdf-fusion-common",
  "rdf-fusion-encoding",
  "rdf-fusion-execution",
  "rdf-fusion-extensions",
  "rdf-fusion-logical",
- "rdf-fusion-model",
  "serde_json",
  "thiserror 2.0.18",
  "tokio",

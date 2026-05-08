@@ -6,13 +6,13 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, NumericFamilyArray};
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, RdfFusionEncodings, TermEncoding, detect_encoding_from_types,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingName};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::DFResult;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 

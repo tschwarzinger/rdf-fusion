@@ -9,14 +9,14 @@ use datafusion::logical_expr::{
 };
 use datafusion::scalar::ScalarValue;
 use datafusion::{error::Result, physical_plan::Accumulator};
+use rdf_fusion_common::Decimal;
+use rdf_fusion_common::{DFResult, Numeric};
 use rdf_fusion_encoding::typed_family::{
     FamilyArray, NumericFamily, NumericFamilyArray, NumericFamilyArrayElementBuilder,
     NumericFamilyArrayParts, TypedFamilyEncodingRef, TypedFamilyId, TypedFamilyScalar,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use rdf_fusion_model::Decimal;
-use rdf_fusion_model::{DFResult, Numeric};
 use std::any::Any;
 use std::sync::Arc;
 
@@ -356,12 +356,12 @@ mod tests {
     use datafusion::arrow::util::pretty::pretty_format_columns;
     use datafusion::logical_expr::col;
     use insta::assert_snapshot;
+    use rdf_fusion_common::Numeric;
     use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_encoding::typed_family::{
         NumericFamilyArray, NumericFamilyArrayElementBuilder, TypedFamilyArray,
         TypedFamilyEncoding,
     };
-    use rdf_fusion_model::Numeric;
     use std::sync::Arc;
 
     #[tokio::test]

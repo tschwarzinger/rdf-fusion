@@ -2,18 +2,18 @@ use crate::sparql::QueryDataset;
 use crate::sparql::rewriting::expression_rewriter::ExpressionRewriter;
 use datafusion::common::{Column, DFSchema, not_impl_err, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, SortExpr};
+use rdf_fusion_common::Iri;
+use rdf_fusion_common::sparql::algebra::{
+    AggregateExpression, AggregateFunction, Expression, GraphPattern, OrderExpression,
+};
+use rdf_fusion_common::{DFResult, NamedNodePattern, NamedOrBlankNode};
+use rdf_fusion_common::{GraphName, Variable};
 use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_functions::aggregates::sparql_sum;
 use rdf_fusion_logical::join::SparqlJoinType;
 use rdf_fusion_logical::{
     ActiveGraph, RdfFusionLogicalPlanBuilder, RdfFusionLogicalPlanBuilderContext,
 };
-use rdf_fusion_model::Iri;
-use rdf_fusion_model::sparql::algebra::{
-    AggregateExpression, AggregateFunction, Expression, GraphPattern, OrderExpression,
-};
-use rdf_fusion_model::{DFResult, NamedNodePattern, NamedOrBlankNode};
-use rdf_fusion_model::{GraphName, Variable};
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -311,7 +311,7 @@ impl GraphPatternRewriter {
             AggregateExpression::CountSolutions { distinct } => match distinct {
                 false => {
                     let lit = expr_builder
-                        .literal(&rdf_fusion_model::Literal::from(1))?
+                        .literal(&rdf_fusion_common::Literal::from(1))?
                         .build()?;
                     expr_builder.try_create_builder(lit)?.count(false)?.build()
                 }

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::ExtensionPlanner;
-use rdf_fusion_model::StorageError;
+use rdf_fusion_common::StorageError;
 use std::sync::Arc;
 
 /// Represents a snapshot of a [`QuadStorage`](crate::storage::QuadStorage).

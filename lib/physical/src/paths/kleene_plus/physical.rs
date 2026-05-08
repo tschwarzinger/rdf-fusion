@@ -12,6 +12,8 @@ use datafusion::physical_plan::{
 };
 use futures::{Stream, StreamExt};
 use itertools::izip;
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::{GraphName, Term};
 use rdf_fusion_encoding::plain_term::decoders::{
     DefaultPlainTermDecoder, GraphNameRefPlainTermDecoder,
 };
@@ -20,8 +22,6 @@ use rdf_fusion_encoding::plain_term::{
 };
 use rdf_fusion_encoding::{EncodingArray, TermDecoder, TermEncoding};
 use rdf_fusion_logical::paths::PATH_TABLE_SCHEMA;
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::{GraphName, Term};
 use std::any::Any;
 use std::clone::Clone;
 use std::collections::{HashMap, HashSet};

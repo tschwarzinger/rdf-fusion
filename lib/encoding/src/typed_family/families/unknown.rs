@@ -7,7 +7,7 @@ use datafusion::arrow::array::{
 };
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, LazyLock};
@@ -258,9 +258,9 @@ impl FamilyArray for UnknownFamilyArray {
             if self.array.is_null(i) {
                 builder.append_null();
             } else {
-                builder.append_literal(rdf_fusion_model::LiteralRef::new_typed_literal(
+                builder.append_literal(rdf_fusion_common::LiteralRef::new_typed_literal(
                     self.values().value(i),
-                    rdf_fusion_model::NamedNodeRef::new_unchecked(
+                    rdf_fusion_common::NamedNodeRef::new_unchecked(
                         self.data_types().value(i),
                     ),
                 ));

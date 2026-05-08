@@ -2,9 +2,9 @@ use crate::delta::index::{is_named_node_bound, is_term_bound};
 use crate::index::IndexComponents;
 use deltalake::kernel::{Add, EagerSnapshot};
 use deltalake::logstore::LogStoreRef;
+use rdf_fusion_common::{BlankNodeMatchingMode, QuadComponent, TriplePattern};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::ActiveGraph;
-use rdf_fusion_model::{BlankNodeMatchingMode, QuadComponent, TriplePattern};
 use std::sync::Arc;
 
 /// Represents an immutable snapshot of the index at a specific Delta commit version.
@@ -126,12 +126,12 @@ mod tests {
     use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
     use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
     use object_store::memory::InMemory;
-    use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
-    use rdf_fusion_extensions::storage::QuadStorage;
-    use rdf_fusion_model::{
+    use rdf_fusion_common::{
         GraphName, NamedNode, NamedNodePattern, Quad, TermPattern, TriplePattern,
         Variable,
     };
+    use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
+    use rdf_fusion_extensions::storage::QuadStorage;
     use tokio::runtime::Handle;
     use url::Url;
 

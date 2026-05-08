@@ -3,7 +3,7 @@ use crate::plain_term::decoders::DefaultPlainTermDecoder;
 use crate::string::{STRING_ENCODING, StringEncodingArray};
 use crate::{EncodingDatum, EncodingScalar, TermDecoder, TermEncoder};
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 
 /// Changes the encoding from the [`PlainTermEncoding`] to the
 /// [`StringEncoding`](rdf_fusion_encoding::string::StringEncoding).
@@ -34,7 +34,7 @@ mod tests {
     use crate::{EncodingArray, TermEncoding};
     use datafusion::arrow::util::pretty::pretty_format_columns;
     use insta::assert_snapshot;
-    use rdf_fusion_model::{Literal, NamedNode, Term};
+    use rdf_fusion_common::{Literal, NamedNode, Term};
 
     #[test]
     fn test_with_string_encoding_from_plain_term_array() {

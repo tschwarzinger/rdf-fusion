@@ -10,9 +10,9 @@ use datafusion::execution::SessionState;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
+use rdf_fusion_common::DFResult;
 use rdf_fusion_logical::encoding::object_id::EncodeAsObjectIdNode;
 use rdf_fusion_logical::quad_pattern::QuadPatternNode;
-use rdf_fusion_model::DFResult;
 use std::sync::Arc;
 
 /// A planner for converting logical quad scans into physical plans that are realized with the
@@ -148,11 +148,11 @@ mod tests {
     use datafusion::physical_planner::DefaultPhysicalPlanner;
     use datafusion::prelude::{SessionConfig, SessionContext};
     use insta::{Settings, assert_snapshot};
+    use rdf_fusion_common::{NamedNode, Quad, TermPattern, TriplePattern};
     use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
     use rdf_fusion_execution::RdfFusionContextBuilder;
     use rdf_fusion_extensions::storage::QuadStorage;
     use rdf_fusion_logical::ActiveGraph;
-    use rdf_fusion_model::{NamedNode, Quad, TermPattern, TriplePattern};
 
     #[tokio::test]
     async fn test_planner_skips_apply_changeset_when_versions_match() {
@@ -441,8 +441,8 @@ mod tests {
                 subject: TermPattern::NamedNode(NamedNode::new_unchecked(
                     "https://my.at/",
                 )),
-                predicate: rdf_fusion_model::Variable::new_unchecked("p").into(),
-                object: rdf_fusion_model::Variable::new_unchecked("o").into(),
+                predicate: rdf_fusion_common::Variable::new_unchecked("p").into(),
+                object: rdf_fusion_common::Variable::new_unchecked("o").into(),
             },
         );
 

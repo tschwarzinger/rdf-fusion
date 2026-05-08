@@ -7,10 +7,8 @@ use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::path::Path;
 use rdf_fusion_encoding::QuadStorageEncodingName;
-use std::env::VarError;
 use std::sync::Arc;
 use std::time::Duration;
-use thiserror::Error;
 use tokio::runtime::Handle;
 use tracing::info;
 
@@ -49,36 +47,11 @@ impl DeltaQuadStorageBuilder {
         }
     }
 
-    /// Creates a new quad [`DeltaQuadStorageBuilder`] using the environment variables.
-    pub fn from_env() -> Result<Self, DeltaQuadStorageBuilderCreationError> {
-        const LOG_MAX_AGE: &str = "RDF_FUSION_DELTA_LOG_MAX_AGE";
-
-        let max_age = match std::env::var(LOG_MAX_AGE) {
-            Ok(value) => {
-                if value.to_lowercase() == "inf" {
-                    None
-                } else {
-                    let parsed = value.parse::<u64>().map_err(|err| {
-                        DeltaQuadStorageBuilderCreationError::InvalidField(
-                            LOG_MAX_AGE.to_owned(),
-                            err.to_string(),
-                        )
-                    })?;
-                    Some(parsed)
-                }
-            }
-            Err(VarError::NotPresent) => None,
-            Err(other) => {
-                return Err(DeltaQuadStorageBuilderCreationError::EnvironmentVar(other));
-            }
-        }
-        .map(Duration::from_millis);
-
-        Ok(Self::new().with_log_max_age(max_age))
+    /// Sets the load mode.
+    pub fn with_load_mode(mut self, load_mode: LoadMode) -> Self {
+        self.load_mode = load_mode;
+        self
     }
-
-    /// Sets the location of the delta storage.
-    /// TODO: With location (ObjecStore + Url).
     pub fn with_log_store(mut self, log_store: LogStoreRef) -> Self {
         self.log_store = Some(log_store);
         self
@@ -93,12 +66,6 @@ impl DeltaQuadStorageBuilder {
     /// Sets which indexes the delta storage should use.
     pub fn with_indexes(mut self, indexes: Vec<IndexComponents>) -> Self {
         self.indexes = indexes;
-        self
-    }
-
-    /// Defines whether an existing database should be loaded.
-    pub fn with_load_mode(mut self, load_mode: LoadMode) -> Self {
-        self.load_mode = load_mode;
         self
     }
 
@@ -163,12 +130,4 @@ impl Default for DeltaQuadStorageBuilder {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug, Error)]
-pub enum DeltaQuadStorageBuilderCreationError {
-    #[error("Invalid configuration for field '{0}': {1}")]
-    InvalidField(String, String),
-    #[error(transparent)]
-    EnvironmentVar(#[from] VarError),
 }

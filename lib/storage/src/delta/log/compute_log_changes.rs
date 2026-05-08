@@ -24,8 +24,8 @@ use datafusion::physical_plan::{
 };
 use deltalake::arrow::array::Int8Array;
 use futures::{Stream, StreamExt, ready};
-use rdf_fusion_model::DFResult;
-use rdf_fusion_model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::DFResult;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
@@ -445,11 +445,11 @@ mod tests {
     use datafusion::prelude::SessionContext;
     use deltalake::arrow::util::pretty::pretty_format_batches;
     use insta::assert_snapshot;
+    use rdf_fusion_common::NamedNodeRef;
     use rdf_fusion_encoding::plain_term::{
         PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
     };
     use rdf_fusion_encoding::{EncodingArray, TermEncoding};
-    use rdf_fusion_model::NamedNodeRef;
 
     #[tokio::test]
     async fn test_compute_change_log_adding_and_removing() {

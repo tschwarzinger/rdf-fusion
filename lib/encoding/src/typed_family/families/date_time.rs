@@ -12,7 +12,7 @@ use datafusion::arrow::array::{
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
 use datafusion::arrow::error::ArrowError;
-use rdf_fusion_model::{
+use rdf_fusion_common::{
     AResult, Date, DateTime, DayTimeDuration, Decimal, LiteralRef, NamedNodeRef, Time,
     Timestamp, TimezoneOffset, TypedValueRef, vocab::xsd,
 };

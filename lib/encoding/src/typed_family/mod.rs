@@ -20,7 +20,7 @@ use datafusion::logical_expr::ColumnarValue;
 pub use encoding::*;
 pub use families::*;
 pub use id::*;
-use rdf_fusion_model::AResult;
+use rdf_fusion_common::AResult;
 pub use scalar::*;
 use std::cmp::Ordering;
 use std::collections::HashMap;
