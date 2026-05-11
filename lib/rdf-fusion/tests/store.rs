@@ -2,12 +2,12 @@
 #![allow(clippy::panic_in_result_fn)]
 
 use futures::StreamExt;
-use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::vocab::{rdf, xsd};
 use rdf_fusion::model::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::store::Store;
+use rdf_fusion_storage::rdf_files::RdfParserOptions;
 use std::error::Error;
 
 #[allow(clippy::non_ascii_literal)]

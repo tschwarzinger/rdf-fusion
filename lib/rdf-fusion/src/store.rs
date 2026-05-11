@@ -51,7 +51,6 @@ use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
     QuadStorageEncoding, TermEncoding, quads_to_plain_term_dataframe,
 };
-use rdf_fusion_execution::ingest::{RdfParserOptions, RdfParserTableProvider};
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
 use rdf_fusion_execution::sparql::error::QueryEvaluationError;
 use rdf_fusion_execution::sparql::{
@@ -60,6 +59,7 @@ use rdf_fusion_execution::sparql::{
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion_storage::rdf_files::{RdfParserOptions, RdfParserTableProvider};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
 use tokio::runtime::Handle;
@@ -475,7 +475,7 @@ impl Store {
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::io::RdfFormat;
-    /// use rdf_fusion_execution::ingest::RdfParserOptions;
+    /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
@@ -652,7 +652,7 @@ impl Store {
     /// ```
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion::io::RdfFormat;
-    /// use rdf_fusion_execution::ingest::RdfParserOptions;
+    /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
     ///
     /// let file =
     ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
@@ -692,7 +692,7 @@ impl Store {
     /// use rdf_fusion::io::{RdfFormat};
     /// use rdf_fusion::model::*;
     /// use rdf_fusion::store::Store;
-    /// use rdf_fusion_execution::ingest::RdfParserOptions;
+    /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///

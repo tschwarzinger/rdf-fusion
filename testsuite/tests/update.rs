@@ -5,6 +5,8 @@ use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion::store::Store;
+use rdf_fusion_testsuite::w3c::files::W3CTestRuntime;
+use rdf_fusion_testsuite::w3c::utils::W3CTestUtils;
 use rdf_fusion_testsuite::w3c::{StoreFactory, W3CSparqlTestSuiteBuilder};
 use std::sync::Arc;
 
@@ -58,20 +60,34 @@ async fn w3c_sparql11_update_testsuite_string() -> Result<()> {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn plain_term_store_factory() -> StoreFactory {
-    Arc::new(|runtime_env| {
+    Arc::new(|store_config| {
         Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
                 .build()
-                .await
-                .unwrap();
+                .await?;
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                .with_runtime_env(Some(runtime_env))
+                .with_runtime_env(Some(store_config.runtime_env))
                 .with_single_partition_session_config()
-                .build()
-                .unwrap();
-            Store::new(context)
+                .build()?;
+            let store = Store::new(context);
+
+            let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(
+                &store.context().runtime_env,
+            )));
+            for (name, source) in store_config.default_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+            for (name, source) in store_config.named_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+
+            Ok(store)
         })
     })
 }
@@ -79,20 +95,34 @@ fn plain_term_store_factory() -> StoreFactory {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn string_store_factory() -> StoreFactory {
-    Arc::new(|runtime_env| {
+    Arc::new(|store_config| {
         Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::String)
                 .build()
-                .await
-                .unwrap();
+                .await?;
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                .with_runtime_env(Some(runtime_env))
+                .with_runtime_env(Some(store_config.runtime_env))
                 .with_single_partition_session_config()
-                .build()
-                .unwrap();
-            Store::new(context)
+                .build()?;
+            let store = Store::new(context);
+
+            let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(
+                &store.context().runtime_env,
+            )));
+            for (name, source) in store_config.default_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+            for (name, source) in store_config.named_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+
+            Ok(store)
         })
     })
 }

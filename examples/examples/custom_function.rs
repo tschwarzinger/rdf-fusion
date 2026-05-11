@@ -11,12 +11,12 @@ use rdf_fusion::encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
     detect_encoding_from_types,
 };
-use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::functions::scalar::args::ScalarSparqlFunctionArgs;
 use rdf_fusion::functions::scalar::signature::SparqlOpTypeSignatureBuilder;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::{DFResult, NamedNode};
+use rdf_fusion::storage::rdf_files::RdfParserOptions;
 use rdf_fusion::store::Store;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -184,7 +184,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_contains_spiderman() -> anyhow::Result<()> {
-        let store = Store::default();
+        let store = Store::new_in_memory().await;
         let context = store.context();
 
         let udf = ContainsSpiderUDF::new(context.encodings().clone());
@@ -196,8 +196,9 @@ mod tests {
         let file = File::open(file_path)
             .with_context(|| format!("Failed to open test data at {}", file_path))?;
 
-        let reader = RdfParser::from_format(RdfFormat::Turtle);
-        store.load_from_reader(reader, &file).await?;
+        store
+            .load_from_reader(&file, RdfParserOptions::with_format(RdfFormat::Turtle))
+            .await?;
 
         let query = "
             BASE <http://example.org/>

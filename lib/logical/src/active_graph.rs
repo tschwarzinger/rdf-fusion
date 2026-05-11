@@ -18,6 +18,16 @@ pub enum ActiveGraph {
 }
 
 impl ActiveGraph {
+    /// Returns whether the active graph matches the given graph name.
+    pub fn matches(&self, graph_name: &GraphName) -> bool {
+        match self {
+            ActiveGraph::DefaultGraph => graph_name == &GraphName::DefaultGraph,
+            ActiveGraph::AllGraphs => true,
+            ActiveGraph::Union(graphs) => graphs.contains(graph_name),
+            ActiveGraph::AnyNamedGraph => graph_name != &GraphName::DefaultGraph,
+        }
+    }
+
     /// Returns whether the active graph is bound to a single graph.
     pub fn is_bound_to_single_graph(&self) -> bool {
         match self {

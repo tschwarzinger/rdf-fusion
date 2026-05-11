@@ -23,7 +23,7 @@ anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 datafusion.workspace = true
 deltalake = { workspace = true, features = ["s3"] }
-object_store = { workspace = true, features = ["aws"] }
+object_store = { workspace = true, features = ["aws", "http"] }
 rdf-fusion.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-web.workspace = true
@@ -40,3 +40,7 @@ clap_mangen.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+insta.workspace = true

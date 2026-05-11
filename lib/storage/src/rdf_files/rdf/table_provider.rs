@@ -1,28 +1,22 @@
-use crate::ingest::RdfParserOptions;
+use crate::rdf_files::RdfParserOptions;
+use crate::rdf_files::rdf::exec::RdfParserExec;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::catalog::{Session, TableProvider};
-use datafusion::common::{DataFusionError, exec_datafusion_err};
+use datafusion::common::exec_datafusion_err;
 use datafusion::datasource::TableType;
-use datafusion::error::Result as DFCoreResult;
-use datafusion::execution::TaskContext;
 use datafusion::logical_expr::Expr;
-use datafusion::physical_expr::EquivalenceProperties;
 use datafusion::physical_plan::ExecutionPlan;
-use datafusion::physical_plan::execution_plan::{Boundedness, EmissionType};
-use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
-use datafusion::physical_plan::{
-    DisplayAs, DisplayFormatType, Partitioning, PlanProperties, SendableRecordBatchStream,
-};
-use futures::stream::try_unfold;
+use futures::StreamExt;
+use object_store::ObjectStoreExt;
 use oxrdfio::{RdfParser, TokioAsyncReaderQuadParser};
 use rdf_fusion_common::{DFResult, IriParseError};
 use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use tokio::io::AsyncRead;
-use tracing::info;
+use tokio_util::bytes::Bytes;
+use url::Url;
 
 /// Creates a [`TableProvider`] that reads RDF data from an [`AsyncRead`] stream.
 pub struct RdfParserTableProvider<R: AsyncRead + Unpin + Send + 'static> {
@@ -97,9 +91,9 @@ impl<R: AsyncRead + Unpin + Send + 'static> TableProvider for RdfParserTableProv
     async fn scan(
         &self,
         _state: &dyn Session,
-        projection: Option<&Vec<usize>>,
+        _projection: Option<&Vec<usize>>,
         _filters: &[Expr],
-        limit: Option<usize>,
+        _limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         // Extract the parser. If it's already gone, the stream was consumed.
         let mut guard = self.quad_parser.lock().unwrap();
@@ -111,72 +105,65 @@ impl<R: AsyncRead + Unpin + Send + 'static> TableProvider for RdfParserTableProv
         Ok(Arc::new(RdfParserExec::new(
             parser,
             Arc::clone(&self.schema),
-            projection.cloned(),
-            limit,
             self.track_progress,
         )))
     }
 }
 
-/// The execution plan for reading RDF data from an [`AsyncRead`] stream.
-struct RdfParserExec<R: AsyncRead + Unpin + Send + 'static> {
+/// Creates a [`TableProvider`] that reads RDF data from a URL.
+pub struct UrlRdfParserTableProvider {
+    /// The URL of the RDF data.
+    url: String,
+    /// The options for the RDF parser.
+    options: RdfParserOptions,
     /// The quad schema.
     schema: SchemaRef,
-    /// The parser that reads the RDF data. The Mutex allows us to move the parser out of it once
-    /// the stream has been created.
-    parser: Mutex<Option<TokioAsyncReaderQuadParser<R>>>,
-    /// The properties of the execution plan.
-    properties: Arc<PlanProperties>,
-    /// Whether to track and log the progress of the execution
+    /// Whether to track the progress of the stream.
     track_progress: bool,
 }
 
-impl<R: AsyncRead + Unpin + Send + 'static> RdfParserExec<R> {
-    /// Creates a new [`RdfParserExec`].
-    pub fn new(
-        parser: TokioAsyncReaderQuadParser<R>,
-        schema: SchemaRef,
-        _projection: Option<Vec<usize>>,
-        _limit: Option<usize>,
-        track_progress: bool,
-    ) -> Self {
-        let properties = PlanProperties::new(
-            EquivalenceProperties::new(Arc::clone(&schema)),
-            Partitioning::UnknownPartitioning(1),
-            EmissionType::Incremental,
-            Boundedness::Bounded,
-        );
+impl UrlRdfParserTableProvider {
+    /// Creates a new [`UrlRdfParserTableProvider`].
+    pub fn try_new(url: String, options: RdfParserOptions) -> DFResult<Self> {
+        let schema = QuadStorageEncoding::PlainTerm.quad_schema();
+        Ok(Self {
+            url,
+            options,
+            schema: Arc::clone(schema.inner()),
+            track_progress: false,
+        })
+    }
 
+    /// Returns the URL of the RDF data.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// Returns the options for the RDF parser.
+    pub fn options(&self) -> &RdfParserOptions {
+        &self.options
+    }
+
+    /// Enables progress tracking for this table provider.
+    pub fn with_track_progress(self, track_progress: bool) -> Self {
         Self {
-            parser: Mutex::new(Some(parser)),
-            schema,
-            properties: Arc::new(properties),
             track_progress,
+            ..self
         }
     }
 }
 
-impl<R: AsyncRead + Unpin + Send + 'static> Debug for RdfParserExec<R> {
+impl Debug for UrlRdfParserTableProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RdfParserExec")
+        f.debug_struct("UrlRdfParserTableProvider")
+            .field("url", &self.url)
+            .field("options", &self.options)
+            .finish()
     }
 }
 
-impl<R: AsyncRead + Unpin + Send + 'static> DisplayAs for RdfParserExec<R> {
-    fn fmt_as(
-        &self,
-        _t: DisplayFormatType,
-        f: &mut std::fmt::Formatter,
-    ) -> std::fmt::Result {
-        write!(f, "RdfParserExec:")
-    }
-}
-
-impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
-    fn name(&self) -> &str {
-        "RdfParserExec"
-    }
-
+#[async_trait::async_trait]
+impl TableProvider for UrlRdfParserTableProvider {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -185,122 +172,62 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
         Arc::clone(&self.schema)
     }
 
-    fn properties(&self) -> &Arc<PlanProperties> {
-        &self.properties
+    fn table_type(&self) -> TableType {
+        TableType::Temporary
     }
 
-    fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
-        vec![]
-    }
-
-    fn with_new_children(
-        self: Arc<Self>,
-        _children: Vec<Arc<dyn ExecutionPlan>>,
-    ) -> DFCoreResult<Arc<dyn ExecutionPlan>> {
-        Ok(self)
-    }
-
-    fn execute(
+    async fn scan(
         &self,
-        _partition: usize,
-        context: Arc<TaskContext>,
-    ) -> DFCoreResult<SendableRecordBatchStream> {
-        let parser = self.parser.lock().unwrap().take().ok_or_else(|| {
-            exec_datafusion_err!("ExecutionPlan has already been executed")
+        state: &dyn Session,
+        _projection: Option<&Vec<usize>>,
+        _filters: &[Expr],
+        _limit: Option<usize>,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let runtime = state.runtime_env();
+        let parsed_url = Url::parse(&self.url)
+            .map_err(|e| exec_datafusion_err!("Invalid URL {}: {e}", self.url))?;
+        let object_store = runtime
+            .object_store_registry
+            .get_store(&parsed_url)
+            .map_err(|e| exec_datafusion_err!("Failed to get object store: {e}"))?;
+        let path = object_store::path::Path::from(parsed_url.path());
+        let get_result = object_store.get(&path).await.map_err(|e| {
+            exec_datafusion_err!("Failed to get object {}: {e}", self.url)
         })?;
+        let stream = get_result
+            .into_stream()
+            .map(|res: object_store::Result<Bytes>| res.map_err(std::io::Error::other));
+        let read = tokio_util::io::StreamReader::new(stream);
 
-        let schema = Arc::clone(&self.schema);
-        let target_batch_size = context.session_config().batch_size();
+        let mut reader = RdfParser::from_format(self.options.format);
 
-        struct ParserStreamState<R: AsyncRead + Unpin + Send + 'static> {
-            parser: TokioAsyncReaderQuadParser<R>,
-            builder: PlainTermQuadsBuilder,
-            target_batch_size: usize,
-            progress: ProgressState,
-            track_progress: bool,
+        if let Some(base_iri) = &self.options.base_iri {
+            reader = reader
+                .with_base_iri(base_iri.to_string())
+                .map_err(|e| exec_datafusion_err!("Invalid base IRI: {e}"))?;
         }
 
-        let initial_state = ParserStreamState {
+        if self.options.rename_blank_nodes {
+            reader = reader.rename_blank_nodes();
+        }
+
+        if self.options.without_named_graphs {
+            reader = reader.without_named_graphs();
+        }
+
+        if let Some(default_graph) = &self.options.default_graph {
+            reader = reader.with_default_graph(default_graph.clone());
+        }
+
+        let parser = reader.for_tokio_async_reader(read);
+
+        // Create and return the custom physical plan, passing the track_progress flag
+        Ok(Arc::new(RdfParserExec::new(
             parser,
-            builder: PlainTermQuadsBuilder::with_capacity(target_batch_size),
-            target_batch_size,
-            progress: ProgressState {
-                pending_batch: 0,
-                total_processed: 0,
-            },
-            track_progress: self.track_progress,
-        };
-
-        let stream = try_unfold(initial_state, |mut state| async move {
-            loop {
-                match state.parser.next().await {
-                    Some(Ok(quad)) => {
-                        state.builder.append_quad(quad.as_ref());
-                        state.progress.pending_batch += 1;
-                        state.progress.total_processed += 1;
-
-                        // Periodically log progress if enabled (every 100k rows)
-                        if state.track_progress
-                            && state.progress.total_processed % 100_000 == 0
-                        {
-                            info!(
-                                "RDF Scan Progress: {} quads processed",
-                                state.progress.total_processed
-                            );
-                        }
-
-                        // Yield a batch when we hit the configured batch size. Otherwise, keep parsing.
-                        if state.progress.pending_batch >= state.target_batch_size {
-                            let batch = state.builder.finish().into_record_batch();
-                            state.progress.pending_batch = 0;
-                            state.builder = PlainTermQuadsBuilder::with_capacity(
-                                state.target_batch_size,
-                            );
-
-                            return Ok(Some((batch, state)));
-                        }
-                    }
-                    Some(Err(e)) => {
-                        return Err(DataFusionError::External(Box::new(e)));
-                    }
-                    None => {
-                        // Stream exhausted. Log final completion and yield any remaining data.
-                        if state.track_progress {
-                            info!(
-                                "RDF Scan Complete: Total of {} quads processed",
-                                state.progress.total_processed
-                            );
-                        }
-
-                        return if state.progress.pending_batch > 0 {
-                            let batch = state.builder.finish().into_record_batch();
-                            state.progress.pending_batch = 0;
-                            state.builder = PlainTermQuadsBuilder::with_capacity(0);
-
-                            Ok(Some((batch, state)))
-                        } else {
-                            Ok(None)
-                        };
-                    }
-                }
-            }
-        });
-
-        // 4. Return the RecordBatchStreamAdapter
-        Ok(Box::pin(RecordBatchStreamAdapter::new(
-            schema,
-            Box::pin(stream),
+            Arc::clone(&self.schema),
+            self.track_progress,
         )))
     }
-}
-
-/// The state that tracks the progress of the parser.
-#[derive(Debug, Clone, Default)]
-struct ProgressState {
-    /// The number of rows in the pending batch.
-    pending_batch: usize,
-    /// The total number of processed rows.
-    total_processed: usize,
 }
 
 #[cfg(test)]

@@ -9,8 +9,8 @@ use axum_extra::TypedHeader;
 use futures::TryStreamExt;
 use headers::ContentType;
 use rdf_fusion::error::LoaderError;
-use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::io::RdfFormat;
+use rdf_fusion::storage::rdf_files::RdfParserOptions;
 use tokio_util::io::StreamReader;
 
 /// Inserts the RDF data into the store and optimizes it.
@@ -19,6 +19,10 @@ pub async fn handle_data_post(
     State(state): State<AppState>,
     body: Body,
 ) -> Result<Response, RdfFusionServerError> {
+    if state.read_only {
+        return Err(RdfFusionServerError::ReadOnly);
+    }
+
     let format =
         RdfFormat::from_media_type(&content_type.0.to_string()).ok_or_else(|| {
             RdfFusionServerError::BadRequest("Invalid content type.".to_owned())

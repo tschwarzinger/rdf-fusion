@@ -4,7 +4,10 @@ use anyhow::Result;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion::storage::rdf_files::RdfFileQuadStorage;
 use rdf_fusion::store::Store;
+use rdf_fusion_testsuite::w3c::files::W3CTestRuntime;
+use rdf_fusion_testsuite::w3c::utils::W3CTestUtils;
 use rdf_fusion_testsuite::w3c::{StoreFactory, W3CSparqlTestSuiteBuilder};
 use std::sync::Arc;
 
@@ -139,6 +142,23 @@ async fn w3c_sparql10_query_evaluation_string_with_optimize() -> Result<()> {
     .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
     .with_store_factory(string_store_factory())
     .with_optimize_after_load(true)
+    .build()
+    .await?
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn w3c_sparql10_query_evaluation_data_dumps() -> Result<()> {
+    W3CSparqlTestSuiteBuilder::load_manifest(
+        "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
+    )
+    .await?
+    .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
+    .with_store_factory(data_dump_store_factory())
     .build()
     .await?
     .run()
@@ -284,7 +304,7 @@ async fn w3c_sparql11_tsv_evaluation() -> Result<()> {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn plain_term_store_factory() -> StoreFactory {
-    Arc::new(|runtime_env| {
+    Arc::new(|config| {
         Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
@@ -293,11 +313,25 @@ fn plain_term_store_factory() -> StoreFactory {
                 .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                .with_runtime_env(Some(runtime_env))
+                .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
                 .with_single_partition_session_config()
                 .build()
                 .unwrap();
-            Store::new(context)
+            let store = Store::new(context);
+
+            let utils = W3CTestUtils::new(W3CTestRuntime::new(config.runtime_env));
+            for (name, source) in config.default_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+            for (name, source) in config.named_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+
+            Ok(store)
         })
     })
 }
@@ -305,7 +339,7 @@ fn plain_term_store_factory() -> StoreFactory {
 /// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
 /// tests.
 fn string_store_factory() -> StoreFactory {
-    Arc::new(|runtime_env| {
+    Arc::new(|config| {
         Box::pin(async move {
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::String)
@@ -314,11 +348,47 @@ fn string_store_factory() -> StoreFactory {
                 .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                .with_runtime_env(Some(runtime_env))
+                .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
                 .with_single_partition_session_config()
                 .build()
                 .unwrap();
-            Store::new(context)
+            let store = Store::new(context);
+
+            let utils = W3CTestUtils::new(W3CTestRuntime::new(config.runtime_env));
+            for (name, source) in config.default_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+            for (name, source) in config.named_graphs {
+                utils
+                    .load_to_store_from_source(&source, &store, name)
+                    .await?;
+            }
+
+            Ok(store)
+        })
+    })
+}
+
+/// Creates the [`Store`] using the data dump storage.
+fn data_dump_store_factory() -> StoreFactory {
+    Arc::new(|config| {
+        Box::pin(async move {
+            let storage = RdfFileQuadStorage::new(vec![]);
+            for (name, source) in config.default_graphs {
+                storage.add_source(name, source);
+            }
+            for (name, source) in config.named_graphs {
+                storage.add_source(name.into(), source);
+            }
+
+            let context = RdfFusionContextBuilder::new(Arc::new(storage))
+                .with_runtime_env(Some(config.runtime_env))
+                .with_single_partition_session_config()
+                .build()
+                .unwrap();
+            Ok(Store::new(context))
         })
     })
 }

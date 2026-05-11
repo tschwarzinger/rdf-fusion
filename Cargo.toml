@@ -84,6 +84,7 @@ serde_urlencoded = "0.7"
 
 # Testing / Benchmarking dependencies
 
+assert_cmd = "2.2"
 criterion = "0.8"
 insta = { version = "1.47", features = ["filters"] }
 prettytable-rs = "0.10"

@@ -15,13 +15,20 @@ use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
-use rdf_fusion::execution::ingest::RdfParserOptions;
+use rdf_fusion::execution::results::QueryResultsFormat;
+use rdf_fusion::execution::sparql::RdfFusionQuery;
 use rdf_fusion::io::RdfFormat;
+use rdf_fusion::model::GraphName;
 use rdf_fusion::model::config::RdfFusionOptions;
 use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
+use rdf_fusion::storage::rdf_files::{
+    RdfFileQuadStorage, RdfFileSourceConfig, RdfParserOptions,
+};
 use rdf_fusion::store::Store;
+use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_web::ServerConfig;
 use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
@@ -43,7 +50,7 @@ pub async fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info".into()),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     let args = Args::parse();
@@ -92,52 +99,125 @@ pub async fn main() -> anyhow::Result<()> {
             info!("Database built.");
             Ok(())
         }
+        Command::Query { query } => {
+            let parsed_query = RdfFusionQuery::parse(&query, None)
+                .context("Failed to parse SPARQL query")?;
+
+            let results = store.query(parsed_query).await?;
+            results
+                .write(std::io::stdout(), QueryResultsFormat::Tsv)
+                .await?;
+
+            Ok(())
+        }
     }
 }
 
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
     let runtime_env = build_runtime_env(args)?;
-    let location = args.runtime.location.as_deref().unwrap_or("memory://");
-    let url = Url::parse(location).context("Invalid object store URL")?;
-    let object_store_url = url.as_object_store_url();
 
-    let object_store = runtime_env
-        .object_store(&object_store_url)
-        .expect("Failed to get object store");
-    let log_store = logstore_with(
-        Arc::clone(&object_store),
-        &url,
-        StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
-    )
-    .expect("Failed to create log store");
+    let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
+        cli::QuadStorageType::DeltaLake => {
+            let location = args
+                .storage
+                .location
+                .as_ref()
+                .and_then(|l| l.first())
+                .context("Location is required for DeltaLake storage")?;
+            let url = Url::parse(&resolve_location(location)?)
+                .context("Invalid object store URL")?;
+            let object_store_url = url.as_object_store_url();
 
-    let mut session_config = SessionConfig::from_env()?;
-    let rdf_fusion_options = RdfFusionOptions::from_env()?;
-    session_config
-        .options_mut()
-        .extensions
-        .insert(rdf_fusion_options.clone());
+            let object_store = runtime_env
+                .object_store(&object_store_url)
+                .expect("Failed to get object store");
+            let log_store = logstore_with(
+                Arc::clone(&object_store),
+                &url,
+                StorageConfig::default()
+                    .with_io_runtime(IORuntime::RT(Handle::current())),
+            )
+            .expect("Failed to create log store");
 
-    let loading_state = SessionStateBuilder::new()
-        .with_runtime_env(Arc::clone(&runtime_env))
-        .with_config(session_config.clone())
-        .build();
+            let mut session_config = SessionConfig::from_env()?;
+            let rdf_fusion_options = RdfFusionOptions::from_env()?;
+            session_config
+                .options_mut()
+                .extensions
+                .insert(rdf_fusion_options.clone());
 
-    let storage = DeltaQuadStorageBuilder::new()
-        .with_log_store(log_store)
-        .with_load_mode(LoadMode::Load(Box::new(loading_state)))
-        .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
-        .build()
-        .await?;
+            let loading_state = SessionStateBuilder::new()
+                .with_runtime_env(Arc::clone(&runtime_env))
+                .with_config(session_config.clone())
+                .build();
 
-    let context = RdfFusionContextBuilder::new(Arc::new(storage))
-        .with_session_config(Some(session_config))
+            Arc::new(
+                DeltaQuadStorageBuilder::new()
+                    .with_log_store(log_store)
+                    .with_load_mode(LoadMode::Load(Box::new(loading_state)))
+                    .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
+                    .build()
+                    .await?,
+            )
+        }
+        cli::QuadStorageType::RdfFiles => {
+            let locations = args
+                .storage
+                .location
+                .as_ref()
+                .context("Location is required for RdfFiles storage")?;
+            let mut sources = Vec::new();
+            for location in locations {
+                let path = PathBuf::from(location);
+                let extension = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or_default();
+                let format = match extension {
+                    "ttl" => RdfFormat::Turtle,
+                    "nt" => RdfFormat::NTriples,
+                    "nq" => RdfFormat::NQuads,
+                    "rdf" | "xml" => RdfFormat::RdfXml,
+                    "trig" => RdfFormat::TriG,
+                    _ => bail!("Could not guess RDF format for {location}"),
+                };
+
+                let url = resolve_location(location)?;
+
+                sources
+                    .push((GraphName::DefaultGraph, RdfFileSourceConfig { url, format }));
+            }
+            Arc::new(RdfFileQuadStorage::new(sources))
+        }
+    };
+
+    let context = RdfFusionContextBuilder::new(storage)
         .with_runtime_env(Some(runtime_env))
         .build()
         .context("Failed to create RDF Fusion Context")?;
-    let store = Store::new(context);
-    Ok(store)
+    Ok(Store::new(context))
+}
+
+/// Resolves a location string to a uniform absolute URL string.
+///
+/// If the location is a URL (other than `file://`), it is returned as is.
+/// If the location is a local file path or a `file://` URL, it is resolved to an absolute `file://` URL.
+fn resolve_location(location: &str) -> anyhow::Result<String> {
+    let stripped = location.strip_prefix("file://").unwrap_or(location);
+    if location.contains("://") && !location.starts_with("file://") {
+        Ok(location.to_owned())
+    } else {
+        let path = PathBuf::from(stripped);
+        let absolute_path = if path.is_absolute() {
+            path
+        } else {
+            env::current_dir()?.join(path)
+        };
+        Ok(Url::from_file_path(absolute_path)
+            .map_err(|_| anyhow::anyhow!("Failed to convert path to URL: {location}"))?
+            .to_string())
+    }
 }
 
 /// Builds the runtime environment from the given arguments.
@@ -154,12 +234,19 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     ));
 
     // Register s3-compatible object store if its in the arguments
-    match args.runtime.location {
-        Some(ref location) if location.starts_with("s3a://") => {
-            register_s3_store(&registry, location)?;
+    let location = args
+        .storage
+        .location
+        .as_ref()
+        .and_then(|l| l.first())
+        .map(|l| resolve_location(l))
+        .transpose()?;
+    match location {
+        Some(location) if location.starts_with("s3a://") => {
+            register_s3_store(&registry, &location)?;
         }
-        Some(ref location) if location.starts_with("file://") => {
-            // Store is already registered by `create_store`
+        Some(location) if location.starts_with("file://") => {
+            // Store is already registered by `create_store` or it's a local file
         }
         Some(_) => {
             warn!(

@@ -1,10 +1,10 @@
 use anyhow::Context;
-use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::logical::{ActiveGraph, RdfFusionLogicalPlanBuilderContext};
 use rdf_fusion::model::{
     NamedNode, NamedNodePattern, TermPattern, TriplePattern, Variable,
 };
+use rdf_fusion::storage::rdf_files::RdfParserOptions;
 use rdf_fusion::store::Store;
 
 /// This example shows how to use RDF Fusion's query builder for programmatically creating SPARQL

@@ -11,3 +11,4 @@
 pub mod delta;
 mod exec;
 pub mod index;
+pub mod rdf_files;

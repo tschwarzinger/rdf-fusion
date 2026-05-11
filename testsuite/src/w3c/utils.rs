@@ -3,11 +3,11 @@ use crate::w3c::files::{W3CTestRuntime, guess_rdf_format};
 use crate::w3c::report::{dataset_diff, format_diff};
 use anyhow::{Result, bail};
 use futures::StreamExt;
-use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::model::dataset::CanonicalizationAlgorithm;
 use rdf_fusion::model::vocab::*;
 use rdf_fusion::model::*;
+use rdf_fusion::storage::rdf_files::{RdfFileSourceConfig, RdfParserOptions};
 use rdf_fusion::store::Store;
 use sparesults::QueryResultsFormat;
 use std::collections::HashMap;
@@ -53,14 +53,31 @@ impl W3CTestUtils {
         store: &Store,
         to_graph_name: impl Into<GraphName>,
     ) -> Result<()> {
+        self.load_to_store_from_source(
+            &RdfFileSourceConfig {
+                url: url.to_string(),
+                format: guess_rdf_format(url)?,
+            },
+            store,
+            to_graph_name,
+        )
+        .await
+    }
+
+    pub async fn load_to_store_from_source(
+        &self,
+        source: &RdfFileSourceConfig,
+        store: &Store,
+        to_graph_name: impl Into<GraphName>,
+    ) -> Result<()> {
         let to_graph_name = to_graph_name.into();
-        let reader = self.runtime.read_file(url).await?;
+        let reader = self.runtime.read_file(&source.url).await?;
         store
             .load_from_reader(
                 reader,
                 RdfParserOptions {
-                    format: guess_rdf_format(url)?,
-                    base_iri: Some(url.parse()?),
+                    format: source.format,
+                    base_iri: Some(source.url.parse()?),
                     rename_blank_nodes: false,
                     default_graph: Some(to_graph_name),
                     without_named_graphs: false,

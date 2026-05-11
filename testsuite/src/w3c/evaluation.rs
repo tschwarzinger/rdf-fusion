@@ -1,12 +1,14 @@
 use crate::test::{Test, TestOutcome};
-use crate::w3c::StoreFactory;
-use crate::w3c::files::W3CTestRuntime;
+use crate::w3c::files::{W3CTestRuntime, guess_rdf_format};
 use crate::w3c::utils::{W3CTestUtils, are_query_results_isomorphic, results_diff};
+use crate::w3c::{StoreConfig, StoreFactory};
 use anyhow::{Context, bail, ensure};
 use datafusion::physical_plan::displayable;
 use futures::StreamExt;
 use rdf_fusion::execution::sparql::{QueryOptions, RdfFusionQuery};
 use rdf_fusion::model::{GraphName, NamedOrBlankNode};
+use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub struct W3CSparqlEvaluationTest {
@@ -39,22 +41,6 @@ impl Test for W3CSparqlEvaluationTest {
 
 impl W3CSparqlEvaluationTest {
     async fn execute(&self) -> anyhow::Result<()> {
-        let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(&self.runtime.env)));
-        let store = (self.store_factory)(self.runtime.fresh_env()).await;
-        if let Some(data) = &self.test_data.data {
-            utils
-                .load_to_store(data, &store, GraphName::DefaultGraph)
-                .await?;
-        }
-        for (name, value) in &self.test_data.graph_data {
-            utils.load_to_store(value, &store, name.clone()).await?;
-        }
-
-        if self.optimize_after_load {
-            store.optimize().await?;
-        }
-        store.validate().await?;
-
         let query_file = self.test_data.query.as_deref().context("No action found")?;
         let options = QueryOptions::default();
         let query = RdfFusionQuery::parse(
@@ -63,26 +49,81 @@ impl W3CSparqlEvaluationTest {
         )
         .context("Failure to parse query")?;
 
-        // FROM and FROM NAMED support. We make sure the data is in the store
+        let mut default_graphs = Vec::new();
+        let mut seen_graphs = HashSet::new();
+        if let Some(data) = &self.test_data.data {
+            default_graphs.push((
+                GraphName::DefaultGraph,
+                RdfFileSourceConfig {
+                    url: data.clone(),
+                    format: guess_rdf_format(data)?,
+                },
+            ));
+            seen_graphs.insert((GraphName::DefaultGraph, data.clone()));
+        }
+
+        let mut named_graphs = Vec::new();
+        let mut seen_named_graphs = HashSet::new();
+        for (name, value) in &self.test_data.graph_data {
+            named_graphs.push((
+                name.clone(),
+                RdfFileSourceConfig {
+                    url: value.clone(),
+                    format: guess_rdf_format(value)?,
+                },
+            ));
+            seen_named_graphs.insert((name.clone(), value.clone()));
+        }
+
+        // FROM and FROM NAMED support.
         if !query.dataset().is_default_dataset() {
             for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
-                let GraphName::NamedNode(graph_name) = graph_name else {
+                let GraphName::NamedNode(graph_node) = graph_name else {
                     bail!("Invalid FROM in query {query}");
                 };
-                utils
-                    .load_to_store(graph_name.as_str(), &store, graph_name.as_ref())
-                    .await?;
+                let url = graph_node.as_str().to_string();
+                if !seen_graphs.contains(&(graph_name.clone(), url.clone())) {
+                    default_graphs.push((
+                        graph_name.clone(),
+                        RdfFileSourceConfig {
+                            url: url.clone(),
+                            format: guess_rdf_format(&url)?,
+                        },
+                    ));
+                    seen_graphs.insert((graph_name.clone(), url));
+                }
             }
             for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
-                let NamedOrBlankNode::NamedNode(graph_name) = graph_name else {
+                let NamedOrBlankNode::NamedNode(graph_node) = graph_name else {
                     bail!("Invalid FROM NAMED in query {query}");
                 };
-                utils
-                    .load_to_store(graph_name.as_str(), &store, graph_name.as_ref())
-                    .await?;
+                let url = graph_node.as_str().to_string();
+                if !seen_named_graphs.contains(&(graph_node.clone(), url.clone())) {
+                    named_graphs.push((
+                        graph_node.clone(),
+                        RdfFileSourceConfig {
+                            url: url.clone(),
+                            format: guess_rdf_format(&url)?,
+                        },
+                    ));
+                    seen_named_graphs.insert((graph_node.clone(), url));
+                }
             }
         }
 
+        let store = (self.store_factory)(StoreConfig {
+            runtime_env: self.runtime.fresh_env(),
+            default_graphs,
+            named_graphs,
+        })
+        .await?;
+
+        if self.optimize_after_load {
+            store.optimize().await?;
+        }
+        store.validate().await?;
+
+        let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(&self.runtime.env)));
         let expected_results = utils
             .load_sparql_query_result(self.test_data.result.as_ref().unwrap())
             .await

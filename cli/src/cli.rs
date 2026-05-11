@@ -5,26 +5,56 @@ use std::path::PathBuf;
 #[command(about, version, name = "rdf-fusion")]
 /// RDF Fusion command line toolkit and SPARQL HTTP server
 pub struct Args {
-    /// Runtime configuration options
     #[command(flatten)]
     pub runtime: RuntimeConfig,
+    #[command(flatten)]
+    pub storage: StorageConfigArgs,
     #[command(subcommand)]
     pub command: Command,
 }
 
-#[derive(Parser, Debug, Clone)]
 /// Runtime configuration options
+///
+/// TODO: Environment variable
+#[derive(Parser, Debug, Clone)]
 pub struct RuntimeConfig {
     /// Memory limit for the process in MiB. Note that this limit only applies to the query engine.
     /// For example, an in-memory storage will not be included in this limit.
     #[arg(long)]
     pub memory_limit: Option<usize>,
-    /// The location of the database. If [`None`], an in-memory database is used.
-    ///
-    /// Supported locations: in-memory database [`memory://`], file store [`file://`], S3-compatible object store [`s3a://[bucket].[endpoint]/path`].
-    /// S3 credentials are set via the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+}
+
+/// Configuration regarding RDF Fusion's storage.
+#[derive(Parser, Debug, Clone)]
+pub struct StorageConfigArgs {
+    /// Whether the storage should be read-only or read-write.
     #[arg(long)]
-    pub location: Option<String>,
+    pub storage_type: QuadStorageType,
+    /// The location of the storage.
+    ///
+    /// The semantics of this setting differ depending on the chosen storage type. For example,
+    /// a `delta-lake` storage requires a single location to directory, while a `rdf-file` storage
+    /// requires a list of locations that point to individual RDF files.
+    ///
+    /// Supported locations:
+    /// - in-memory database [`memory://`]
+    /// - file store [`file://`]
+    /// - S3-compatible object store [`s3a://[bucket].[endpoint]/path`]. S3 credentials are set via
+    ///   the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+    #[arg(long, action = clap::ArgAction::Append)]
+    pub location: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+pub enum QuadStorageType {
+    /// Stores RDF quads in various [Delta Lake](https://delta.io) tables.
+    ///
+    /// Only supports a single location.
+    DeltaLake,
+    /// Directly queries a set of RDF files.
+    ///
+    ///
+    RdfFiles,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -43,6 +73,11 @@ pub enum Command {
         /// This is equivalent as setting the union-default-graph option in all SPARQL queries
         #[arg(long)]
         union_default_graph: bool,
+    },
+    /// Execute a SPARQL query against the database
+    Query {
+        /// The SPARQL query string to execute
+        query: String,
     },
     /// Build a database at the configured location.
     BuildDatabase {

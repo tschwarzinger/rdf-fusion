@@ -15,6 +15,7 @@ async-trait.workspace = true
 hashbrown.workspace = true
 futures.workspace = true
 object_store.workspace = true
+oxrdfio.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-common.workspace = true
 datafusion.workspace = true

@@ -24,6 +24,7 @@ fn bench_bsbm_store_prepare(c: &mut Criterion) {
         let target_partitions = benchmarking_context
             .options()
             .data_fusion_config
+            .config
             .target_partitions();
         let runtime = create_runtime(target_partitions);
 
@@ -55,6 +56,7 @@ fn bench_windfarm_store_prepare(c: &mut Criterion) {
         let target_partitions = benchmarking_context
             .options()
             .data_fusion_config
+            .config
             .target_partitions();
         let runtime = create_runtime(target_partitions);
 

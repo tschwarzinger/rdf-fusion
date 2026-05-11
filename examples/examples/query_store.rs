@@ -1,7 +1,7 @@
 use anyhow::Context;
-use rdf_fusion::execution::ingest::RdfParserOptions;
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::io::RdfFormat;
+use rdf_fusion::storage::rdf_files::RdfParserOptions;
 use rdf_fusion::store::Store;
 
 /// This example shows how to query RDF Fusion with SPARQL.

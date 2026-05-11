@@ -1,11 +1,24 @@
-mod rdf_parser_table_provider;
+mod exec;
+mod format;
+mod table_provider;
 
-use oxrdfio::RdfFormat;
+pub use format::*;
+pub use table_provider::*;
+
+pub use oxrdfio::RdfFormat;
 use rdf_fusion_common::{GraphName, Iri, IriParseError};
-pub use rdf_parser_table_provider::RdfParserTableProvider;
+
+/// A source for RDF data.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RdfFileSourceConfig {
+    /// The URL of the RDF data.
+    pub url: String,
+    /// The format of the RDF data.
+    pub format: RdfFormat,
+}
 
 /// Options for the RDF parser.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RdfParserOptions {
     /// The rdf format.
     pub format: RdfFormat,

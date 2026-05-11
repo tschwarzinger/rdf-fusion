@@ -4,7 +4,7 @@ pub mod manifest;
 pub mod report;
 mod syntax;
 mod update;
-mod utils;
+pub mod utils;
 
 use crate::test::UnsupportedTest;
 use crate::testsuite::{TestSuite, TestSuiteBuilder};
@@ -18,12 +18,20 @@ use futures::future::BoxFuture;
 use manifest::TestManifests;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
+use rdf_fusion::model::{GraphName, NamedNode};
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 use rdf_fusion::store::Store;
 use std::sync::Arc;
 
+pub struct StoreConfig {
+    pub runtime_env: Arc<RuntimeEnv>,
+    pub default_graphs: Vec<(GraphName, RdfFileSourceConfig)>,
+    pub named_graphs: Vec<(NamedNode, RdfFileSourceConfig)>,
+}
+
 pub type StoreFactory =
-    Arc<dyn Fn(Arc<RuntimeEnv>) -> BoxFuture<'static, Store> + Send + Sync>;
+    Arc<dyn Fn(StoreConfig) -> BoxFuture<'static, Result<Store>> + Send + Sync>;
 
 pub struct W3CSparqlTestSuiteBuilder {
     builder: TestSuiteBuilder,
@@ -100,8 +108,8 @@ impl W3CSparqlTestSuiteBuilder {
         }
 
         let store_factory = self.store_factory.unwrap_or_else(|| {
-            Arc::new(|runtime_env| {
-                Box::pin(async {
+            Arc::new(|config| {
+                Box::pin(async move {
                     let delta_storage = DeltaQuadStorageBuilder::new()
                         .with_encoding(QuadStorageEncodingName::ObjectId)
                         .build()
@@ -109,11 +117,26 @@ impl W3CSparqlTestSuiteBuilder {
                         .unwrap();
 
                     let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                        .with_runtime_env(Some(runtime_env))
+                        .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
                         .with_single_partition_session_config()
                         .build()
                         .unwrap();
-                    Store::new(context)
+                    let store = Store::new(context);
+
+                    let utils =
+                        utils::W3CTestUtils::new(W3CTestRuntime::new(config.runtime_env));
+                    for (name, source) in config.default_graphs {
+                        utils
+                            .load_to_store_from_source(&source, &store, name)
+                            .await?;
+                    }
+                    for (name, source) in config.named_graphs {
+                        utils
+                            .load_to_store_from_source(&source, &store, name)
+                            .await?;
+                    }
+
+                    Ok(store)
                 })
             })
         });

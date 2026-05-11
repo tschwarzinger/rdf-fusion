@@ -1,14 +1,13 @@
 use crate::test::{Test, TestOutcome};
-use crate::w3c::StoreFactory;
-use crate::w3c::files::W3CTestRuntime;
+use crate::w3c::files::{W3CTestRuntime, guess_rdf_format};
 use crate::w3c::report::dataset_diff;
-use crate::w3c::utils::W3CTestUtils;
+use crate::w3c::{StoreConfig, StoreFactory};
 use anyhow::{Context, ensure};
 use futures::StreamExt;
 use rdf_fusion::execution::sparql::RdfFusionUpdate;
 use rdf_fusion::model::dataset::CanonicalizationAlgorithm;
 use rdf_fusion::model::{Dataset, GraphName};
-use std::sync::Arc;
+use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 
 pub struct W3CSparqlUpdateEvaluationTest {
     pub id: String,
@@ -40,28 +39,61 @@ impl Test for W3CSparqlUpdateEvaluationTest {
 
 impl W3CSparqlUpdateEvaluationTest {
     async fn execute(&self) -> anyhow::Result<()> {
-        let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(&self.runtime.env)));
-        let store = (self.store_factory)(self.runtime.fresh_env()).await;
+        let mut default_graphs = Vec::new();
         if let Some(data) = &self.test_data.data {
-            utils
-                .load_to_store(data, &store, GraphName::DefaultGraph)
-                .await?;
+            default_graphs.push((
+                GraphName::DefaultGraph,
+                RdfFileSourceConfig {
+                    url: data.clone(),
+                    format: guess_rdf_format(data)?,
+                },
+            ));
         }
+        let mut named_graphs = Vec::new();
         for (name, value) in &self.test_data.graph_data {
-            utils.load_to_store(value, &store, name.clone()).await?;
+            named_graphs.push((
+                name.clone(),
+                RdfFileSourceConfig {
+                    url: value.clone(),
+                    format: guess_rdf_format(value)?,
+                },
+            ));
         }
 
-        let result_store = (self.store_factory)(self.runtime.fresh_env()).await;
+        let store = (self.store_factory)(StoreConfig {
+            runtime_env: self.runtime.fresh_env(),
+            default_graphs,
+            named_graphs,
+        })
+        .await?;
+
+        let mut result_default_graphs = Vec::new();
         if let Some(data) = &self.test_data.result {
-            utils
-                .load_to_store(data, &result_store, GraphName::DefaultGraph)
-                .await?;
+            result_default_graphs.push((
+                GraphName::DefaultGraph,
+                RdfFileSourceConfig {
+                    url: data.clone(),
+                    format: guess_rdf_format(data)?,
+                },
+            ));
         }
+        let mut result_named_graphs = Vec::new();
         for (name, value) in &self.test_data.result_graph_data {
-            utils
-                .load_to_store(value, &result_store, name.clone())
-                .await?;
+            result_named_graphs.push((
+                name.clone(),
+                RdfFileSourceConfig {
+                    url: value.clone(),
+                    format: guess_rdf_format(value)?,
+                },
+            ));
         }
+
+        let result_store = (self.store_factory)(StoreConfig {
+            runtime_env: self.runtime.fresh_env(),
+            default_graphs: result_default_graphs,
+            named_graphs: result_named_graphs,
+        })
+        .await?;
 
         if self.optimize_after_load {
             store.optimize().await?;
