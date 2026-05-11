@@ -7,6 +7,7 @@ use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::vocab::{rdf, xsd};
 use rdf_fusion::model::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::store::Store;
+use rdf_fusion_common::{BlankNode, GraphName, NamedNode, Quad};
 use rdf_fusion_storage::rdf_files::RdfParserOptions;
 use std::error::Error;
 
@@ -197,6 +198,45 @@ async fn test_query_empty_store() -> Result<(), Box<dyn Error>> {
     let stream = result.into_record_batch_stream()?;
     let collected = stream.collect::<Vec<_>>().await;
     assert_eq!(collected.len(), 0);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_construct_with_duplicate_triples() -> Result<(), Box<dyn Error>> {
+    let store = Store::new_in_memory().await;
+
+    let quads = (0..5000).map(|_| {
+        Quad::new(
+            BlankNode::default(),
+            NamedNode::new("http://example.com/iri#x").expect("IRI should be valid"),
+            NamedNode::new("http://example.com/iri#y").expect("IRI should be valid"),
+            GraphName::DefaultGraph,
+        )
+    });
+
+    store.extend(quads).await?;
+    let QueryResults::Graph(mut result) = store
+        .query(
+            r#"
+                PREFIX : <http://example.com/iri#>
+                CONSTRUCT {
+                    :a :b :c
+                }
+                WHERE {
+                    ?x ?y ?z
+                }"#,
+        )
+        .await?
+    else {
+        panic!("Wrong query result failed");
+    };
+
+    let mut res = Vec::new();
+    while let Some(quad) = result.next().await {
+        res.push(quad);
+    }
+    assert_eq!(res.len(), 1);
 
     Ok(())
 }
