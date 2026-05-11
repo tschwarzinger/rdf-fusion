@@ -22,7 +22,7 @@ use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::sync::Arc;
 
-/// A snapshot of a [`DeltaQuadStorage`].
+/// A snapshot of a [`DeltaQuadStorage`](crate::delta::DeltaQuadStorage).
 #[derive(Clone)]
 pub struct DeltaQuadStorageSnapshot {
     log: Arc<DeltaQuadStorageLog>,

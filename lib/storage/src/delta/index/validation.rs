@@ -8,7 +8,7 @@ use datafusion::prelude::SessionContext;
 use deltalake::delta_datafusion::DeltaTableProvider;
 use std::sync::Arc;
 
-/// Implements [`DeltaStorageQuadIndex::validate`](crate::delta::DeltaStorageQuadIndex::validate).
+/// Implements validation of a single [`DeltaQuadStorageIndexSnapshot`].
 pub async fn validate_index(
     state: &SessionState,
     snapshot: &DeltaQuadStorageIndexSnapshot,

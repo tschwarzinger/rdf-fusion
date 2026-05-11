@@ -11,7 +11,7 @@ use rdf_fusion_logical::quad_pattern::QuadPatternNode;
 use std::sync::Arc;
 
 /// A planner for converting logical quad scans into physical plans that are realized with the
-/// [`DataDumpQuadStorage`].
+/// [`RdfFileQuadStorage`](crate::rdf_files::RdfFileQuadStorage).
 pub struct RdfFileQuadStoragePlanner {
     manager: RdfFileManager,
     sources: Vec<(GraphName, RdfFileSourceConfig)>,

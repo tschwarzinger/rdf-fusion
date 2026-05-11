@@ -5,8 +5,7 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 
-/// Defines the arity of a SPARQL operation. In other words, the number of arguments that the
-/// [ScalarSparqlOp] has.
+/// Defines the arity of a SPARQL operation and provides helper methods for creating signatures.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum SparqlOpArity {
     /// No arguments.
@@ -53,8 +52,36 @@ impl SparqlOpArity {
 pub struct NoEncodings;
 pub struct HasEncodings;
 
-/// A helper for building [`Signature`] tailored for SPARQL operations.
-/// We use a generic `State` to track if the builder is ready to compile.
+/// A helper for building [`TypeSignature`] tailored for SPARQL operations.
+///
+/// We use a `State` argument to track the builder state.
+///
+/// # Example
+///
+/// ```
+/// #[derive(Clone, PartialEq, Eq, Hash)]
+/// struct MySparqlOp {
+///     name: String,
+///     signature: Signature,
+/// }
+///
+/// impl MySparqlOp {
+///     fn new(encodings: RdfFusionEncodings) -> Self {
+///         // Convenient builder for the type signature
+///         let type_signature = SparqlOpTypeSignatureBuilder::new()
+///             .with_supported_encoding(encodings.typed_family().as_ref())
+///             .with_unary_arity()
+///             .with_binary_arity()
+///             .build();
+///         Self {
+///             name: "MyOp".to_owned(),
+///             signature: Signature::new(type_signature, Volatility::Immutable),
+///         }
+///     }
+/// }
+///
+/// // ... Implement the rest of the operation
+/// ```
 pub struct SparqlOpTypeSignatureBuilder<State = NoEncodings> {
     supported_data_types: Vec<DataType>,
     supported_arities: BTreeSet<SparqlOpArity>,

@@ -278,7 +278,7 @@ impl SparqlJoinLoweringRule {
     /// * `requires_coalesce` - Whether coalescing is required for overlapping columns
     ///
     /// # Additional Resources
-    /// - SPARQL Filter Evaluation: https://www.w3.org/TR/sparql11-query/#expressions
+    /// - SPARQL Filter Evaluation: <https://www.w3.org/TR/sparql11-query/#expressions>
     fn rewrite_filter_for_join(
         &self,
         node: &SparqlJoinNode,

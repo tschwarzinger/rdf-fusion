@@ -70,17 +70,19 @@ pub trait EncodingScalar: Clone {
 /// wrapper [Self::Array] and [Self::Scalar] for Arrow arrays and scalars.
 ///
 /// Different term encodings usually have different purposes and may only be valid for certain
-/// operations. For example, the [TypedValueEncoding](crate::typed_value::TypedValueEncoding) cannot
-/// be used to perform arbitrary join operations as it does not retain the lexical value of the RDF
-/// literals. On the other hand, the [TypedValueEncoding](crate::typed_value::TypedValueEncoding)
-/// will outperform the [PlainTermEncoding](crate::plain_term::PlainTermEncoding) for nested
-/// numerical operations as the parsing and validation of numeric literals is only done once.
-/// It is up to the user to ensure the correct use.
+/// operations. For example, the [`TypedFamilyEncoding`] cannot be used to perform arbitrary join
+/// operations as it does not retain the lexical value of the RDF literals. On the other hand,
+/// the [`TypedFamilyEncoding`] will outperform the [`PlainTermEncoding`] for nested numerical
+/// operations as the parsing and validation of numeric literals is only done once. It is up to the
+/// user to ensure the correct use.
 ///
 /// # Invariants
 ///
 /// RDF Fusion assumes some invariants on any encoding:
 /// - Regular equality (with null being equal to nothing) implements [sameTerm](https://www.w3.org/TR/sparql11-query/#func-sameTerm).
+///
+/// [`TypedFamilyEncoding`]: crate::typed_family::TypedFamilyEncoding
+/// [`PlainTermEncoding`]: crate::plain_term::PlainTermEncoding
 pub trait TermEncoding: Debug + Send + Sync {
     /// Represents a wrapper for Arrow arrays of this encoding. This can be used in
     /// conjunction with [TermDecoder] to obtain the values from an Arrow array.
@@ -209,11 +211,6 @@ pub trait TermEncoder<TEncoding: TermEncoding + ?Sized>: Debug + Sync + Send {
 }
 
 /// Represents either an array or a scalar for a given encoding.
-///
-/// As the scalar variant also stores length information, one can obtain an iterator
-/// ([Self::term_iter]) independently on whether the underlying data is an array or a scalar. This
-/// is useful for scenarios in which distinguishing between array/scalar is not necessary or too
-/// complex.
 #[derive(Clone)]
 pub enum EncodingDatum<TEncoding: TermEncoding + ?Sized> {
     /// An array underlies this datum.

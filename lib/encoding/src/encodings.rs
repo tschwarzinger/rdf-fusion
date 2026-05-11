@@ -21,11 +21,11 @@ use std::sync::Arc;
 pub struct RdfFusionEncodings {
     /// The [`PlainTermEncoding`] configuration.
     plain_term: PlainTermEncodingRef,
-    /// The [`TypedFamilyEncoding`] configuration.
+    /// The [`TypedFamilyEncoding`](crate::typed_family::TypedFamilyEncoding) configuration.
     typed_family: TypedFamilyEncodingRef,
-    /// The [`ObjectIdEncoding`] configuration.
+    /// The [`ObjectIdEncoding`](crate::object_id::ObjectIdEncoding) configuration.
     object_id: Option<ObjectIdEncodingRef>,
-    /// The [`SortableTermEncoding`] configuration.
+    /// The [`SortableTermEncoding`](crate::sortable_term::SortableTermEncoding) configuration.
     sortable_term: SortableTermEncodingRef,
     /// The [`StringEncoding`] configuration.
     string_encoding: StringEncodingRef,

@@ -6,7 +6,7 @@ use rdf_fusion_encoding::{
 };
 use std::sync::Arc;
 
-/// The arguments of invoking a [ScalarSparqlOp](crate::scalar::ScalarSparqlOp).
+/// The arguments to a SPARQL function. All arguments share the same encoding.
 pub struct ScalarSparqlOpArgs<TEncoding: TermEncoding> {
     /// A reference to the encoding of the arguments.
     pub encoding: Arc<TEncoding>,

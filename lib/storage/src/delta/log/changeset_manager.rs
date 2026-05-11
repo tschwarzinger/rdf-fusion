@@ -2,7 +2,7 @@ use crate::delta::log::DeltaQuadStorageLogChangesetRef;
 use crate::delta::log::DeltaStorageLogVersionRange;
 use moka::future::Cache;
 
-/// Manages changesets for the [`DeltaQuadStorageLog`].
+/// Manages changesets for the [`DeltaQuadStorageLog`](crate::delta::log::DeltaQuadStorageLog).
 pub(crate) struct ChangesetManager {
     cache: Cache<DeltaStorageLogVersionRange, DeltaQuadStorageLogChangesetRef>,
 }

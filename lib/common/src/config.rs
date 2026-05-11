@@ -131,7 +131,10 @@ mod tests {
             std::env::set_var("RDF_FUSION_DELTA_LOG_MAX_AGE", "12345");
         }
         let config = RdfFusionOptions::from_env().unwrap();
-        assert_eq!(config.storage.delta.log_max_age, Some(12345));
+        assert_eq!(
+            config.storage.delta.log_max_age,
+            Some(Duration::from_millis(12345))
+        );
 
         unsafe {
             std::env::set_var("RDF_FUSION_DELTA_LOG_MAX_AGE", "inf");
@@ -150,7 +153,10 @@ mod tests {
     fn test_config_extension_options() {
         let mut config = RdfFusionOptions::default();
         config.set("storage.delta.log_max_age", "100").unwrap();
-        assert_eq!(config.storage.delta.log_max_age, Some(100));
+        assert_eq!(
+            config.storage.delta.log_max_age,
+            Some(Duration::from_millis(100))
+        );
 
         let entries = config.entries();
         assert_eq!(entries.len(), 1);

@@ -11,12 +11,6 @@
 //! While all SPARQL functions are implemented as DataFusion user-defined functions (UDFs),
 //! we also provide additional support to simplify SPARQL function implementation.
 //!
-//! # Scalar Functions
-//!
-//! To implement a scalar function, implement the [`ScalarSparqlOp`](scalar::ScalarSparqlOp) trait.
-//! Then, use the [`ScalarSparqlOpAdapter`](scalar::ScalarSparqlOpAdapter) to make the SPARQL operation
-//! compatible with DataFusion’s UDF system.
-//!
 //! # Aggregate Functions
 //!
 //! Aggregate functions currently have limited support.

@@ -15,7 +15,7 @@ use rdf_fusion_extensions::functions::{
 use std::sync::Arc;
 
 /// Optimizer rule that rewrites [`ChangeEncodingNode`] to either an [`EncodeAsObjectIdNode`] or a
-/// [`Projection`] node using built-in encoding UDFs.
+/// projection that uses built-in encoding UDFs.
 #[derive(Debug)]
 pub struct LowerChangeEncodingRule {
     registry: RdfFusionFunctionRegistryRef,

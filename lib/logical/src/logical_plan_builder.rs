@@ -409,7 +409,7 @@ impl RdfFusionLogicalPlanBuilder {
 
 /// Creates new [Expr] that ensures that the encodings of the `join_column` align. If a join column
 /// does not align, both columns in the left and right side are converted into the
-/// [PlainTermEncoding].
+/// [`PlainTermEncoding`](rdf_fusion_encoding::plain_term::PlainTermEncoding).
 fn build_projections_for_encoding_alignment(
     expr_builder_root: RdfFusionExprBuilderContext<'_>,
     join_columns: &HashMap<String, HashSet<EncodingName>>,

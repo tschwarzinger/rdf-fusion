@@ -35,7 +35,7 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 ///
 /// The mapping implementation depends on the storage layer that is being used. For example, an
 /// in-memory RDF store will use a different implementation as an on-disk RDF store. The
-/// [`ObjectIdMapping`](crate::object_id::ObjectIdMapping) trait defines the contract.
+/// [`ObjectIdMapping`] trait defines the contract.
 ///
 /// # Default Graph
 ///
@@ -59,8 +59,8 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 /// For queries that spend little time on join operations, the cost of decoding the object ids can
 /// outweigh the benefits of using the object id encoding.
 ///
-/// Furthermore, the encoding introduces the necessity of maintaining the
-/// [`ObjectIdMapping`](crate::object_id::ObjectIdMapping), which can be non-trivial.
+/// Furthermore, the encoding introduces the necessity of maintaining the [`ObjectIdMapping`], which
+/// can be non-trivial.
 ///
 /// # Equality
 ///

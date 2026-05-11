@@ -207,7 +207,7 @@ impl RdfFusionContext {
         .await
     }
 
-    /// Evaluates a SPARQL [`Update`] over the instance.
+    /// Evaluates a SPARQL [`RdfFusionUpdate`] over the instance.
     pub async fn execute_update(
         &self,
         query: &RdfFusionUpdate,

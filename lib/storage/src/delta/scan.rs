@@ -30,7 +30,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-/// A physical execution plan for scanning a [`DeltaQuadStorage`].
+/// A physical execution plan for scanning a [`DeltaQuadStorage`](crate::delta::DeltaQuadStorage).
 ///
 /// For now, this is mostly a marker in the query plan that helps with debugging, and most of its
 /// methods simply delegate to the inner plan.

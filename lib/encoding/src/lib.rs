@@ -19,9 +19,10 @@
 //!
 //! |                                                             | **Suitable For**           | **Requirements**  | **Term Identity** | **Comment**                   |
 //! |-------------------------------------------------------------|----------------------------|-------------------|-------------------|-------------------------------|
-//! | [**Plain Term Encoding**](plain_term::PlainTermEncoding)    | Processing literal terms   | -                 | Yes               | Result visible to users       |
-//! | [**Object ID Encoding**](object_id::ObjectIdEncoding)       | Joining solution sets      | Object ID Mapping | Yes               | Must be decoded at some point |
-//! | [**Typed Value Encoding**](typed_value::TypedValueEncoding) | Arithmetic and comparisons | -                 | No                |                               |
+//! | [**String Encoding**](string::StringEncoding)               | Simplicity                 | -                 | Yes               |                               |
+//! | [**Plain Term**](plain_term::PlainTermEncoding)             | Processing literal terms   | -                 | Yes               | Result visible to users       |
+//! | [**Object ID**](object_id::ObjectIdEncoding)                | Joining solution sets      | Object ID Mapping | Yes               | Must be decoded at some point |
+//! | [**Typed Family**](typed_family::TypedFamilyEncoding)       | Arithmetic and comparisons | -                 | No                |                               |
 //!
 //! # Encoding Trait
 //!

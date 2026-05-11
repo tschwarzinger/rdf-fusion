@@ -5,7 +5,7 @@ use datafusion::arrow::array::{Array, AsArray};
 use rdf_fusion_common::AResult;
 
 /// Changes the encoding from the [`StringEncoding`] to the
-/// [`PlainTermEncoding`](rdf_fusion_encoding::string::StringEncoding).
+/// [`PlainTermEncoding`](crate::plain_term::PlainTermEncoding).
 pub fn with_plain_term_encoding_from_string(
     datum: &EncodingDatum<StringEncoding>,
 ) -> AResult<PlainTermArray> {

@@ -426,10 +426,6 @@ impl TypedFamilyArgs {
 }
 
 /// Represents a child array of a [`TypedFamilyArray`], associated with the respective typed family.
-///
-/// This type does not guarantee that this child contains all elements of the parent array. See
-/// [`TypedFamilyArray::non_empty_children`] and [`TypedFamilyArray::non_empty_consecutive_children`]
-/// for more information.
 #[derive(Clone)]
 pub struct TypedFamilyChild {
     /// The typed family of this child.

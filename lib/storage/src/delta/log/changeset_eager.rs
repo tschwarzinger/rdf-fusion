@@ -25,6 +25,8 @@ use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT
 use std::sync::Arc;
 
 /// Represents a changeset between two versions of the [`DeltaStorageLog`].
+///
+/// [`DeltaQuadStorageLog`]: crate::delta::log::DeltaQuadStorageLog
 #[derive(Clone)]
 pub struct EagerChangeset {
     session_context: SessionContext,
@@ -489,7 +491,7 @@ impl DeltaQuadStorageLogChangeset for EagerChangeset {
     }
 }
 
-/// Creates a [`DataFrame`] from the given batches.
+/// Creates an [`ExecutionPlan`] from the given batches.
 async fn create_result(
     session_context: &SessionContext,
     batches: &[RecordBatch],

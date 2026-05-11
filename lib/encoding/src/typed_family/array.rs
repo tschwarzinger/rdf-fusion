@@ -221,8 +221,7 @@ impl TypedFamilyArray {
 
     /// Splits the array by its type families.
     ///
-    /// It is not guaranteed that the child arrays are consecutive in the array. For this purpose
-    /// see [`Self::non_empty_consecutive_children`].
+    /// It is not guaranteed that the child arrays are consecutive in the array.
     pub fn non_empty_children(&self) -> Vec<TypedFamilyChild> {
         let union_array = self.inner.as_union();
         let len = union_array.len();
@@ -356,8 +355,6 @@ pub enum DowncastTypedFamilyDatum {
 }
 
 /// A scalar whose value is represented as an array of length one.
-///
-/// This mirrors the [`Scalar`](arrow::array::Scalar) type but is used for typed family arrays.
 pub struct FamilyScalar<TArray: FamilyArray> {
     /// A family array of length one.
     inner: TArray,
@@ -387,8 +384,7 @@ impl<TArray: FamilyArray> FamilyScalar<TArray> {
 
 /// A family array that is either a regular array or a scalar.
 ///
-/// This is inspired by the [`Scalar`](arrow::array::Scalar) trait,but is used for typed family
-/// arrays.
+/// This is inspired by the arrow-rs's `Scalar` trait but is used for typed family arrays.
 pub trait FamilyDatum<TArray: FamilyArray> {
     /// Returns the inner array and an indicator whether the array is a scalar or not.
     fn get(&self) -> (bool, &TArray);
@@ -413,8 +409,8 @@ pub trait FamilyDatumExt<TArray: FamilyArray> {
     fn to_array(&self, number_rows: usize) -> AResult<TArray>;
 
     /// Returns a list of indices that can be used for indexing `number_rows` elements of this
-    /// datum. Errors if the number of rows does not match the array length for
-    /// [`FamilyDatum::Array`].
+    /// datum. Errors if the number of rows does not match the array length, and this is not a
+    /// scalar.
     fn indices_of_length(&self, number_rows: usize) -> AResult<Vec<usize>>;
 }
 

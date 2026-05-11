@@ -24,11 +24,10 @@ use std::sync::Arc;
 /// A cheaply clonable reference to a [`TypedFamilyEncoding`].
 pub type TypedFamilyEncodingRef = Arc<TypedFamilyEncoding>;
 
-/// The [`TypedFamilyEncoding`] stores the *value* of RDF terms within so-called
-/// [`TypedFamilies`](crate::typed_family::TypedFamily). Each family is responsible for a set or RDF
-/// terms. For example, the [`NumericFamily`] stores the RDF literals `xsd:integer`, `xsd:float`,
-/// and so on. For more details, see the [`TypedFamily`](crate::typed_family::TypedFamily)
-/// documentation.
+/// The [`TypedFamilyEncoding`] stores the *value* of RDF terms within a so-called [`TypedFamily`].
+/// Each family is responsible for a set or RDF terms. For example, the [`NumericFamily`] stores
+/// the RDF literals `xsd:integer`, `xsd:float`, and so on. For more details, see the
+/// [`TypedFamily`] documentation.
 ///
 /// # Value Spaces
 ///

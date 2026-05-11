@@ -6,7 +6,7 @@ use datafusion::arrow::error::ArrowError;
 use rdf_fusion_common::AResult;
 
 /// Changes the encoding from the [`PlainTermEncoding`] to the
-/// [`StringEncoding`](rdf_fusion_encoding::string::StringEncoding).
+/// [`StringEncoding`](crate::string::StringEncoding).
 pub fn with_string_encoding_from_plain_term(
     datum: &EncodingDatum<PlainTermEncoding>,
 ) -> AResult<StringEncodingArray> {

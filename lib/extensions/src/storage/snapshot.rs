@@ -24,7 +24,7 @@ pub trait QuadStorageSnapshot: Send + Sync {
 
     /// Returns the list of named graphs in the storage.
     ///
-    /// The resulting [`SendableRecordBatchStream`] must have a single column for the graphs.
+    /// The resulting [`ExecutionPlan`]'s schema must have a single column for the graphs.
     async fn named_graphs(
         &self,
         state: &SessionState,

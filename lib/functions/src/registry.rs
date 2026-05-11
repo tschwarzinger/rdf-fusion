@@ -63,8 +63,10 @@ use std::sync::{Arc, RwLock};
 pub struct DefaultRdfFusionFunctionRegistry {
     /// The registered encodings.
     encodings: RdfFusionEncodings,
-    /// A DataFusion [MemoryFunctionRegistry] that is used for actually storing the functions. Note
-    /// that this registry is *not* connected to the [SessionContext] of the RDF Fusion engine.
+    /// A DataFusion [`MemoryFunctionRegistry`] that is used for actually storing the functions.
+    ///
+    /// Note that this registry is currently *not* connected to the
+    /// [`SessionContext`](::datafusion::prelude::SessionContext) of the DataFusion engine.
     inner: Arc<RwLock<RegistryContent>>,
 }
 

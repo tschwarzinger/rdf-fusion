@@ -115,20 +115,20 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
         Ok(scalar_value)
     }
 
-    /// Decodes the entire `array` as a [PlainTermArray].
+    /// Decodes the entire `array` as a [`PlainTermArray`].
     fn decode_array(
         &self,
         array: &ArrayRef,
     ) -> Result<PlainTermArray, ObjectIdMappingError>;
 
-    /// Decodes the entire `array` as a [TypedValueArray].
+    /// Decodes the entire `array` as a [`TypedFamilyArray`].
     fn decode_array_to_typed_family(
         &self,
         encoding: &TypedFamilyEncodingRef,
         array: &ArrayRef,
     ) -> Result<TypedFamilyArray, ObjectIdMappingError>;
 
-    /// Decodes a single `scalar` as a [PlainTermScalar].
+    /// Decodes a single `scalar` as a [`PlainTermScalar`].
     fn decode_scalar(
         &self,
         scalar: &ScalarValue,
@@ -147,7 +147,7 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
         Ok(encoded.try_as_scalar(0).expect("Row 0 always exists"))
     }
 
-    /// Decodes a single `scalar` as a [TypedValueScalar].
+    /// Decodes a single `scalar` as a [`TypedFamilyScalar`].
     fn decode_scalar_to_typed_family(
         &self,
         encoding: &TypedFamilyEncodingRef,

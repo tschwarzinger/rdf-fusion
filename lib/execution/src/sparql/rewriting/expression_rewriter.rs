@@ -298,7 +298,7 @@ impl<'rewriter> ExpressionRewriter<'rewriter> {
     /// We cannot use the default DataFusion [Expr::InList] (without additional canonicalization) as
     /// the `=` is used.
     ///
-    /// https://www.w3.org/TR/sparql11-query/#func-in
+    /// <https://www.w3.org/TR/sparql11-query/#func-in>
     fn rewrite_in(
         &self,
         lhs: &Expression,

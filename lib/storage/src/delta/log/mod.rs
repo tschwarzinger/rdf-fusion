@@ -176,10 +176,12 @@ impl DeltaStorageLogOperation {
 /// updates to the log. A single version in the log table therefore represents a single transaction.
 ///
 /// The log has the following columns:
+/// ```text
 /// | operation | graph      | subject    | predicate    | object    |
 /// |-----------|------------|------------|--------------|-----------|
 /// | 21        |            | <subject1> | <predicate1> | <object1> |
 /// | 21        | <my-graph> | <subject1> | <predicate1> | <object1> |
+/// ```
 ///
 /// For further information on the supported operations and the constraints applied to the other
 /// columns, see the [`DeltaStorageLogOperation`] enum.
@@ -198,7 +200,7 @@ impl DeltaStorageLogOperation {
 ///
 /// As a result of this approach, operations that mutate the database usually do not know how many
 /// quads (or graphs) are affected by the operation. For methods on the [`QuadStorage`] trait that
-/// can return this information (e.g., [`QuadStorage::extend`]), this storage implementation must
+/// can return this information (e.g., inserting a list of quads), this storage implementation must
 /// return [`None`].
 ///
 /// [`QuadStorage`]: rdf_fusion_extensions::storage::QuadStorage

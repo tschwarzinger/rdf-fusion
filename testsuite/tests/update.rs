@@ -73,9 +73,9 @@ fn plain_term_store_factory() -> StoreFactory {
                 .build()?;
             let store = Store::new(context);
 
-            let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(
-                &store.context().runtime_env,
-            )));
+            let utils = W3CTestUtils::new(W3CTestRuntime::new(
+                store.context().session_context().runtime_env(),
+            ));
             for (name, source) in store_config.default_graphs {
                 utils
                     .load_to_store_from_source(&source, &store, name)
@@ -108,9 +108,9 @@ fn string_store_factory() -> StoreFactory {
                 .build()?;
             let store = Store::new(context);
 
-            let utils = W3CTestUtils::new(W3CTestRuntime::new(Arc::clone(
-                &store.context().runtime_env,
-            )));
+            let utils = W3CTestUtils::new(W3CTestRuntime::new(
+                store.context().session_context().runtime_env(),
+            ));
             for (name, source) in store_config.default_graphs {
                 utils
                     .load_to_store_from_source(&source, &store, name)

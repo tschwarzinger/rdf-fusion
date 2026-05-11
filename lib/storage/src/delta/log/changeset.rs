@@ -8,14 +8,14 @@ use std::sync::Arc;
 /// A reference to a [`DeltaQuadStorageLogChangeset`].
 pub type DeltaQuadStorageLogChangesetRef = Arc<dyn DeltaQuadStorageLogChangeset>;
 
-/// Trait for a changeset between two versions of the [`DeltaStorageLog`].
+/// Trait for a changeset between two versions of the [`DeltaQuadStorageLog`].
 ///
 /// This behavior is encapsulated in a trait to allow for two implementations:
 /// - [`EagerChangeset`]: An eagerly compute changeset that is held in-memory and can be shared by
 ///   multiple requests.
-/// - [`LazyInsertionOnlyChangeset`](crate::delta::log::LazyInsertionOnlyChangeset): A lazily
-///   computed changeset that is computed on-demand and is always recomputed. This changeset
-///   only supports transactions that only insert quads (e.g., bulk insertions).
+/// - [`LazyInsertionOnlyChangeset`]: A lazily computed changeset that is computed on-demand and is
+/// always recomputed. This changeset only supports transactions that only insert
+/// quads (e.g., bulk insertions).
 ///
 /// The first implementation is used for "small" changesets. For such changesets, we want to
 /// amortize the cost of pre-computing the changeset by sharing it for multiple consumers (e.g.,
@@ -25,6 +25,9 @@ pub type DeltaQuadStorageLogChangesetRef = Arc<dyn DeltaQuadStorageLogChangeset>
 ///
 /// All functions return the *effective change* between two versions. For example, adding a quad and
 /// removing the same quad only contains an entry in the removed quads list.
+///
+/// [`DeltaQuadStorageLog`]: crate::delta::log::DeltaQuadStorageLog
+/// [`LazyInsertionOnlyChangeset`]: crate::delta::log::LazyInsertionOnlyChangeset
 #[async_trait]
 pub trait DeltaQuadStorageLogChangeset: Send + Sync {
     /// Returns the version range that this changeset reflects.

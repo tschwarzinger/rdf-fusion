@@ -66,7 +66,7 @@ impl Display for ObjectIdDataType {
 #[error("Invalid object id size.")]
 pub struct ObjectIdCreationError;
 
-/// Represents a non-empty list of [`PlainTermArray`]s of the same length. The arrays share the same
+/// Represents a non-empty list of [`ObjectIdArray`]s of the same length. The arrays share the same
 /// encoding.
 pub struct ObjectIdArgs {
     arrays: Vec<ObjectIdArray>,

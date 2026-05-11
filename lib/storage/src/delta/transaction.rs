@@ -32,7 +32,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use tracing::info;
 
-/// A transaction on a [`DeltaStorageLog`].
+/// A transaction on a [`DeltaQuadStorage`].
 pub struct DeltaQuadStorageTransaction {
     /// The storage
     storage: Arc<DeltaQuadStorage>,

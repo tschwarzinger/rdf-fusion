@@ -39,6 +39,8 @@ pub use unknown::*;
 /// context, family arrays are allowed to contain null values. As a result, many operations on the
 /// [`FamilyArray`]s may return null values. The encoding is then responsible for representing these
 /// null values in the global null column.
+///
+/// [`TypedFamilyArray`]: crate::typed_family::TypedFamilyArray
 pub trait FamilyArray: Sized + Send + Sync + Clone + Debug {
     /// A reference to the type family.
     type Family: TypedFamily<Array = Self>;
@@ -76,6 +78,8 @@ pub trait FamilyArray: Sized + Send + Sync + Clone + Debug {
     ///
     /// If the family does not support comparison, it returns `None`. Most operations (e.g., sort)
     /// will then try to select an arbitrary element from within the family as a representative.
+    ///
+    /// [`TypedFamilyArray`]: crate::typed_family::TypedFamilyArray
     fn comparator(&self, _other: &Self) -> Option<FamilyComparator> {
         None
     }
@@ -154,7 +158,7 @@ impl TypeClaim {
 }
 
 /// A type family groups together values of related types. Each family defines the encoding
-/// of its types within the [`TypedFamilyEncoding`](crate::encoding::TypedFamilyEncoding).
+/// of its types within the [`TypedFamilyEncoding`].
 ///
 /// Each type family "claims" the types that it is responsible for. See [`TypeClaim`].
 pub trait TypedFamily: Debug + Send + Sync + 'static {
@@ -170,7 +174,7 @@ pub trait TypedFamily: Debug + Send + Sync + 'static {
     /// Returns the set of claims of this type family.
     fn claim() -> &'static TypeClaim;
 
-    /// Returns a [`NullBuffer`] and a dense family array from the given [`PlainTermArray`](PlainTermArray).
+    /// Returns a [`NullBuffer`] and a dense family array from the given [`PlainTermArray`].
     ///
     /// If an element cannot be encoded in this family (e.g., wrong data type), the function should error.
     /// If the string representation is invalid, the resulting element should be null.
@@ -282,7 +286,7 @@ trait TypedFamilyErased: Send + Sync + 'static {
     fn clone_box(&self) -> Box<dyn TypedFamilyErased>;
 }
 
-/// A helper struct that implements the [`TypedFamilyErased`] trait for a given [`TFamily`].
+/// A helper struct that implements the [`TypedFamilyErased`] trait for a given family.
 struct TypedFamilyRefInternal<TFamily: TypedFamily>(PhantomData<TFamily>);
 
 impl<TFamily: TypedFamily> TypedFamilyErased for TypedFamilyRefInternal<TFamily> {
