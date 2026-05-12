@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_explore.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(title) AS title, ENC_PT(text) AS text, ENC_PT(reviewDate) AS reviewDate, ENC_PT(reviewer) AS reviewer, ENC_PT(reviewerName) AS reviewerName, ENC_PT(rating1) AS rating1, ENC_PT(rating2) AS rating2, ENC_PT(rating3) AS rating3, ENC_PT(rating4) AS rating4
-  Sort: ENC_SORT(ENC_TF(ENC_PT(reviewDate))) DESC NULLS FIRST, fetch=20
+  Sort: AS_SORTABLE_BYTES(ENC_TF(reviewDate)) DESC NULLS FIRST, fetch=20
     Projection: lhs.title AS title, lhs.text AS text, lhs.reviewDate AS reviewDate, lhs.reviewer AS reviewer, lhs.reviewerName AS reviewerName, lhs.rating1 AS rating1, lhs.rating2 AS rating2, lhs.rating3 AS rating3, rhs.rating4 AS rating4
       Left Join: lhs.review = rhs.review
         SubqueryAlias: lhs

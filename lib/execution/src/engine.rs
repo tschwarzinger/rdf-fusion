@@ -8,8 +8,8 @@ use crate::sparql::{
 };
 use datafusion::dataframe::DataFrame;
 use datafusion::error::DataFusionError;
+use datafusion::execution::SessionStateBuilder;
 use datafusion::execution::runtime_env::RuntimeEnv;
-use datafusion::execution::{SendableRecordBatchStream, SessionStateBuilder};
 use datafusion::functions_aggregate::first_last::FirstValue;
 use datafusion::logical_expr::AggregateUDF;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -17,7 +17,6 @@ use rdf_fusion_common::{DFResult, NamedOrBlankNodeRef};
 use rdf_fusion_common::{GraphName, GraphNameRef, NamedNodeRef, QuadRef, TermRef};
 use rdf_fusion_encoding::RdfFusionEncodings;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
 use rdf_fusion_extensions::RdfFusionContextView;
@@ -60,7 +59,6 @@ impl RdfFusionContext {
             Arc::clone(&PLAIN_TERM_ENCODING),
             typed_family_encoding,
             object_id_encoding,
-            Arc::clone(&SORTABLE_TERM_ENCODING),
             Arc::clone(&STRING_ENCODING),
         );
 
@@ -174,7 +172,7 @@ impl RdfFusionContext {
         subject: Option<NamedOrBlankNodeRef<'_>>,
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
-    ) -> DFResult<SendableRecordBatchStream> {
+    ) -> DFResult<DataFrame> {
         let active_graph_info = graph_name_to_active_graph(graph_name);
         let pattern_plan = self
             .plan_builder_context()
@@ -186,10 +184,7 @@ impl RdfFusionContext {
             )
             .with_plain_terms()?;
 
-        let result = DataFrame::new(self.ctx.state(), pattern_plan.build()?)
-            .execute_stream()
-            .await?;
-        Ok(result)
+        Ok(DataFrame::new(self.ctx.state(), pattern_plan.build()?))
     }
 
     /// Evaluates a SPARQL [RdfFusionQuery] over the instance.

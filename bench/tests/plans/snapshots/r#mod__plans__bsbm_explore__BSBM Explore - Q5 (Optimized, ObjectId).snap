@@ -2,11 +2,11 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
-Projection: ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST]) AS product, ENC_PT(first_value(productLabel) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST]) AS productLabel
-  Sort: ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST, fetch=5
-    Aggregate: groupBy=[[__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(productLabel))), product]], aggr=[[first_value(product) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(productLabel) ORDER BY [__common_expr_1 AS ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(productLabel) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST, product ASC NULLS FIRST]]]
-      Projection: ENC_SORT(ENC_TF(ENC_PT(productLabel))) AS __common_expr_1, product, productLabel
-        Sort: ENC_SORT(ENC_TF(ENC_PT(productLabel))) ASC NULLS FIRST
+Projection: ENC_PT(first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST]) AS product, ENC_PT(first_value(productLabel) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST]) AS productLabel
+  Sort: AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST, fetch=5
+    Aggregate: groupBy=[[__common_expr_1 AS AS_SORTABLE_BYTES(ENC_TF(productLabel)), product]], aggr=[[first_value(product) ORDER BY [__common_expr_1 AS AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(productLabel) ORDER BY [__common_expr_1 AS AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(productLabel) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST]]]
+      Projection: AS_SORTABLE_BYTES(ENC_TF(productLabel)) AS __common_expr_1, product, productLabel
+        Sort: AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST
           Projection: lhs.product AS product, lhs.productLabel AS productLabel
             Inner Join: lhs.product = rhs.product Filter: EBV(LT(ENC_TF(rhs.simProperty2), ADD(ENC_TF(lhs.origProperty2), Union 4:4:170))) AND EBV(GT(ENC_TF(rhs.simProperty2), SUB(ENC_TF(lhs.origProperty2), Union 4:4:170)))
               SubqueryAlias: lhs

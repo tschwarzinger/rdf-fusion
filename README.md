@@ -1,17 +1,13 @@
 # RDF Fusion
 
+> **Warning:** RDF Fusion is currently **experimental**. Everything, including the APIs, encodings, and storage formats
+> are subject to breaking changes. It is not yet recommended for production use. 
+
 <p align="center">
   <img src="misc/logo/logo.png" width="128" alt="RDF Fusion Logo" align="right">
 </p>
 
-RDF Fusion is an experimental columnar [SPARQL](https://www.w3.org/TR/sparql11-overview/) engine.
-It is based on [Apache DataFusion](https://datafusion.apache.org/), an extensible query engine that
-uses [Apache Arrow](https://arrow.apache.org/) as its in-memory data format.
-
-This project aims to provide a platform for experimenting with SPARQL and domain-specific dialects.
-By building on top of DataFusion, users can interact with other efforts within the Arrow and DataFusion community.
-While currently RDF Fusion is still in an early stage, we hope that at some point RDF Fusion can be used as a
-standalone SPARQL engine in production.
+RDF Fusion is an embeddable [SPARQL](https://www.w3.org/TR/sparql11-overview/) engine based on [Apache DataFusion](https://datafusion.apache.org/).
 
 A primary goal of RDF Fusion is to preserve the strengths of DataFusion and make them available to the Semantic Web
 community.
@@ -21,13 +17,17 @@ These strengths include:
   We expose these extension points to RDF Fusion users for experimenting with SPARQL and domain-specific dialects.
   In the future, we would like to provide further extension points that are tailored towards SPARQL.
 - Performance: DataFusion features a vectorized execution engine that can leverage the capabilities of modern CPUs.
-  We track RDF Fusion's performance on [CodSpeed](https://codspeed.io/tobixdev/rdf-fusion) and will provide comparisons
-  to other query engines soon in a [separate repository](https://github.com/tobixdev/sparql-bencher/).
+  We will provide comparisons to other query engines soon in a
+  [separate repository](https://codeberg.org/tschwarzinger/sparql-bencher/).
 - Boring Architecture: DataFusion implements an "industry-proven" architecture for query planning and query execution.
   If logical plans and execution plans are familiar to you, you will feel right at home.
   There is no need to learn a fundamentally different architecture for working SPARQL.
   We refer to [DataFusion's documentation](https://datafusion.apache.org/contributor-guide/architecture.html) for this
   purpose.
+- Ecosystem: One can integrate RDF Fusion directly with other projects revolving around DataFusion.
+  This includes, for example, projects related to spatial data, streaming, and storage.
+  For example, we employ the [`delta-rs`](https://github.com/delta-io/delta-rs) crate to store RDF datasets directly in
+  cloud object stores.
 
 ## Getting Started
 
@@ -35,7 +35,7 @@ You can use `cargo` to interact with the codebase or use [Just](https://github.c
 commands, also used for continuous integration builds.
 
 ```bash
-git clone --recursive https://github.com/tobixdev/graphfusion.git # Clone Repository
+git clone --recursive https://codeberg.org/tschwarzinger/rdf-fusion.git # Clone Repository
 git submodule update --init # Initialize submodules
 just test # Run tests 
 ```
@@ -48,48 +48,32 @@ Use `cargo` to install the CLI.
 cargo install rdf-fusion-cli
 ```
 
-Once installed, you can use the CLI to run a SPARQL engine. See `rdf-fusion-cli --help` for more information.
+Once installed, you can use the CLI to run a SPARQL engine. See `rdf-fusion --help` for more information.
+
+#### Examples
+
+**Serve a SPARQL HTTP server from RDF files:**
+
+```bash
+rdf-fusion --storage-type rdf-files --location file://examples/data/spiderman.ttl serve
+```
+
+**Build a Delta Lake database from RDF files:**
+
+```bash
+rdf-fusion --storage-type delta-lake --location file:///tmp/my-db build-database --inputs file://examples/data/spiderman.ttl
+```
+
+**Dump a store into a sorted N-Quads file:**
+
+```bash
+rdf-fusion --storage-type rdf-files --location file://examples/data/spiderman.ttl dump --output ./dump.nq --format nq --sort-by GSPO
+```
 
 ### Using RDF Fusion in your Project
 
 Documentation for using RDF Fusion from another Rust project can be found in the main crate's [documentation](https://docs.rs/rdf-fusion).
 Examples of using RDF Fusion can be found in the [examples](./examples) directory.
-
-## Comparison with Some Other SPARQL Engines
-
-Considering RDF Fusion for a project of yours?
-Great!
-This section is intended to give you an idea if RDF Fusion is a good fit for your project.
-
-We believe the combination of the following aspects makes RDF Fusion stand out from other open-source SPARQL engines:
-
-- Integration with the larger Arrow and DataFusion communities
-- Extensibility is a primary goal, both based on DataFusion's infrastructure and SPARQL-specific extension points
-- A columnar query engine based on DataFusion
-- If you come from Arrow / DataFusion, a query engine architecture that you're already familiar with :)
-
-Here is a short comparison with other open-source SPARQL engines.
-
-- [Apache Jena ARQ](https://jena.apache.org/) is a well-known SPARQL engine written in Java.
-  It also has a rich set of extension points which have been leveraged in multiple research prototypes.
-  Supporting a similar set of SPARQL extension points for columnar query execution is one goal of RDF Fusion.
-  We believe that while Jena may remain the go-to platform for experimenting with SPARQL, RDF Fusion has aspects that
-  Jena cannot easily provide. Most notably, the integration with the Arrow and DataFusion communities and a columnar
-  execution model. We believe that similar arguments hold for other well-known SPARQL engines, such
-  as [RDF4J](https://rdf4j.org/) and will thus not repeat them here.
-- [Oxigraph](https://github.com/oxigraph/oxigraph) is a relatively new SPARQL engine written in Rust.
-  It was a major inspiration for this project, as RDF Fusion started as a fork from it.
-  Oxigraph uses a custom row-based query engine that has very low overhead and is thus fast for simple
-  data retrieval queries.
-  However, the extension system is not as extensive as DataFusion's approach, and RDF Fusion tends to perform better on
-  queries that involve processing large amounts of data.
-- [QLever](https://github.com/ad-freiburg/qlever) is a SPARQL engine written in C++ that is designed to perform well,
-  especially on large datasets.
-  It is based on a custom-built query engine tailored for SPARQL workloads.
-  While their "from-scratch approach" certainly has benefits, it cannot easily interact with the Arrow and DataFusion
-  ecosystem.
-  Furthermore, RDF Fusion has a stronger focus on extensibility, especially if you want to interact with non-graph data
-  in your queries.
 
 ## Missing Feature?
 
@@ -99,7 +83,7 @@ graphical user interface, and many other features that have been developed in ot
 Even though Arrow and DataFusion helps us in building these features (A LOT!), this is still a non-trivial task that
 requires sustained effort.
 If you are looking to implement some of these features, please create or comment on
-an [issue](https://github.com/tobixdev/rdf-fusion/issues) to get in touch with us.
+an [issue](https://codeberg.org/tschwarzinger/rdf-fusion/issues) to get in touch with us.
 We are more than happy to help you with your first steps and welcome all kinds of contributions!
 
 ## Project Structure
@@ -123,9 +107,7 @@ In addition to the Rust code, this repository also contains the following folder
 
 ## Help
 
-Feel free to use [GitHub discussions](https://github.com/tobixdev/graphfusion/discussions) to ask questions or talk
-about RdfFusion.
-[Bug reports](https://github.com/tobixdev/graphfusion/issues) are also very welcome.
+Feel free to open an issue to ask questions or talk about RDF Fusion!
 
 ## License
 
@@ -147,5 +129,6 @@ Our policy is to adopt the Minimum Supported Rust Version (MSRV) of DataFusion.
 
 The project started as a fork from [Oxigraph](https://github.com/oxigraph/oxigraph), a graph database written in Rust
 with a custom SPARQL query engine.
+RDF Fusion would likely not exist today if it were not for Oxigraph.
 While large portions of the codebase have been written from scratch, there is still code from Oxigraph in this
 repository.

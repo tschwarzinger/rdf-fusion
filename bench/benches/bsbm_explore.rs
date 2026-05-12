@@ -25,7 +25,6 @@ fn bench_planning(c: &mut Criterion) {
     let target_partitions = benchmarking_context
         .options()
         .data_fusion_config
-        .config
         .target_partitions();
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
@@ -68,7 +67,6 @@ fn bench_full_execution(c: &mut Criterion) {
         let target_partitions = benchmarking_context
             .options()
             .data_fusion_config
-            .config
             .target_partitions();
         let benchmark =
             BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();

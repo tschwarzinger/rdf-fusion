@@ -49,7 +49,6 @@ pub mod object_id;
 pub mod plain_term;
 mod quad_storage_encoding;
 mod scalar_encoder;
-pub mod sortable_term;
 pub mod string;
 pub mod typed_family;
 
@@ -59,7 +58,7 @@ use crate::string::StringArgs;
 use crate::typed_family::TypedFamilyArgs;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::DataType;
-use datafusion::common::{exec_err, plan_datafusion_err, plan_err};
+use datafusion::common::{plan_datafusion_err, plan_err};
 use datafusion::dataframe::DataFrame;
 use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs};
 use datafusion::prelude::{SessionContext, col};
@@ -132,11 +131,6 @@ impl DowncastEncodingArgs {
                         .map(|d| d.to_array(args.number_rows))
                         .collect::<Vec<_>>();
                 DowncastEncodingArgs::String(StringArgs::new_unchecked(arrays))
-            }
-            EncodingName::Sortable => {
-                return exec_err!(
-                    "Sortable encoding is not supported in DowncastEncodingArrays."
-                );
             }
         };
         return Ok(Some(result));

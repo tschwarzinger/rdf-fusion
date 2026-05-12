@@ -24,6 +24,7 @@ clap = { workspace = true, features = ["derive"] }
 datafusion.workspace = true
 deltalake = { workspace = true, features = ["s3"] }
 object_store = { workspace = true, features = ["aws", "http"] }
+futures.workspace = true
 rdf-fusion.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-web.workspace = true

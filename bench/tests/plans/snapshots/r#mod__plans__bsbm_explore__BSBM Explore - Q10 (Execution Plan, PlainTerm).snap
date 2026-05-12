@@ -2,11 +2,11 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-ProjectionExec: expr=[first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@3 as offer, first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@4 as price]
-  SortExec: TopK(fetch=10), expr=[ENC_SORT(xsd:double(ENC_TF(STR(price))))@0 ASC, offer@1 ASC, price@2 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(xsd:double(ENC_TF(STR(price))))@0 ASC]
-    AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(xsd:double(ENC_TF(STR(price)))), offer@1 as offer, price@2 as price], aggr=[first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
-      ProjectionExec: expr=[ENC_SORT(xsd:double(ENC_TF(STR(price@1)))) as __common_expr_1, offer@0 as offer, price@1 as price]
-        SortExec: expr=[ENC_SORT(xsd:double(ENC_TF(STR(price@1)))) ASC], preserve_partitioning=[false]
+ProjectionExec: expr=[first_value(offer) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@3 as offer, first_value(price) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]@4 as price]
+  SortExec: TopK(fetch=10), expr=[AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price))))@0 ASC, offer@1 ASC, price@2 ASC], preserve_partitioning=[false], sort_prefix=[AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price))))@0 ASC]
+    AggregateExec: mode=Single, gby=[__common_expr_1@0 as AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price)))), offer@1 as offer, price@2 as price], aggr=[first_value(offer) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price)))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
+      ProjectionExec: expr=[AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price@1)))) as __common_expr_1, offer@0 as offer, price@1 as price]
+        SortExec: expr=[AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price@1)))) ASC], preserve_partitioning=[false]
           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@1]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, price@2]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0]

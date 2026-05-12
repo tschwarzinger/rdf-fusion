@@ -24,7 +24,7 @@ use rdf_fusion_common::AResult;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::sync::Arc;
 
-/// Represents a changeset between two versions of the [`DeltaStorageLog`].
+/// Represents a changeset between two versions of the [`DeltaQuadStorageLog`].
 ///
 /// [`DeltaQuadStorageLog`]: crate::delta::log::DeltaQuadStorageLog
 #[derive(Clone)]

@@ -4763,6 +4763,7 @@ dependencies = [
  "clap_mangen",
  "datafusion",
  "deltalake",
+ "futures",
  "insta",
  "object_store",
  "rdf-fusion",

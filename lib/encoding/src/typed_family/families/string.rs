@@ -1,13 +1,13 @@
 use crate::plain_term::{PlainTermArray, PlainTermType};
-use crate::sortable_term::{SortableTermArray, SortableTermArrayBuilder};
 use crate::typed_family::families::{
     FamilyArray, FamilyComparator, TypeClaim, TypedFamily,
 };
 use crate::typed_family::{TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, BooleanBuilder, StringArray, StringBuilder,
-    StructArray,
+    Array, ArrayRef, AsArray, BinaryArray, BooleanArray, BooleanBuilder,
+    GenericBinaryBuilder, StringArray, StringBuilder, StructArray,
 };
+
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::kernels::cmp::eq;
 use datafusion::arrow::compute::{
@@ -576,17 +576,20 @@ impl FamilyArray for StringFamilyArray {
         )
     }
 
-    fn cast_to_sortable_array(&self) -> Result<SortableTermArray, ArrowError> {
-        let mut builder = SortableTermArrayBuilder::new(self.inner_ref().len());
+    fn cast_to_sortable_bytes(&self) -> Result<BinaryArray, ArrowError> {
+        let mut builder = GenericBinaryBuilder::<i32>::with_capacity(
+            self.inner_ref().len(),
+            self.inner_ref().len() * 10,
+        );
         let is_null = self.null_buffer();
         for i in 0..self.inner_ref().len() {
             if is_null.is_null(i) {
                 builder.append_null();
             } else {
-                builder.append_string(self.value_array().value(i));
+                builder.append_value(self.value_array().value(i).as_bytes());
             }
         }
-        Ok(builder.finish().try_into().unwrap())
+        Ok(builder.finish())
     }
 }
 

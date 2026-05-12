@@ -1,13 +1,13 @@
 use crate::plain_term::{PlainTermArray, PlainTermType};
-use crate::sortable_term::SortableTermArray;
 use crate::typed_family::families::{
     FamilyArray, FamilyComparator, TypeClaim, TypedFamily,
 };
 use crate::typed_family::{TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, Decimal128Array, Decimal128Builder, Int64Array,
-    Int64Builder, StringArray, StructArray,
+    Array, ArrayRef, AsArray, BinaryArray, Decimal128Array, Decimal128Builder,
+    GenericBinaryBuilder, Int64Array, Int64Builder, StringArray, StructArray,
 };
+
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::compute::{and, is_null};
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
@@ -304,9 +304,11 @@ impl FamilyArray for DurationFamilyArray {
         )
     }
 
-    fn cast_to_sortable_array(&self) -> Result<SortableTermArray, ArrowError> {
-        let mut builder =
-            crate::sortable_term::SortableTermArrayBuilder::new(self.inner_ref().len());
+    fn cast_to_sortable_bytes(&self) -> Result<BinaryArray, ArrowError> {
+        let mut builder = GenericBinaryBuilder::<i32>::with_capacity(
+            self.inner_ref().len(),
+            self.inner_ref().len() * 24,
+        );
         for i in 0..self.inner_ref().len() {
             if self.array.is_null(i) {
                 builder.append_null();
@@ -316,9 +318,9 @@ impl FamilyArray for DurationFamilyArray {
                     Decimal::from_be_bytes(self.seconds().value(i).to_be_bytes()),
                 )
                 .unwrap();
-                builder.append_duration(val);
+                builder.append_value(val.to_be_bytes());
             }
         }
-        Ok(builder.finish().try_into().unwrap())
+        Ok(builder.finish())
     }
 }

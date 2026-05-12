@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[country@0 as country, ENC_PT(product@1) as product, ENC_PT(nrOfReviews@3) as nrOfReviews, ENC_PT(avgPrice@2) as avgPrice]
-  SortExec: expr=[ENC_SORT(nrOfReviews@3) DESC, ENC_SORT(ENC_TF(country@0)) ASC, ENC_SORT(ENC_TF(ENC_PT(product@1))) ASC], preserve_partitioning=[false]
+  SortExec: expr=[AS_SORTABLE_BYTES(nrOfReviews@3) DESC, AS_SORTABLE_BYTES(ENC_TF(country@0)) ASC, AS_SORTABLE_BYTES(ENC_TF(ENC_PT(product@1))) ASC], preserve_partitioning=[false]
     HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(country@0, country@0), (product@2, product@1)], filter=EBV(EQ(nrOfReviews@1, maxReviews@0)), projection=[country@0, product@2, avgPrice@3, nrOfReviews@6]
       NestedLoopJoinExec: join_type=Inner, filter=IS_COMPATIBLE(country@0, country@1), projection=[country@0, maxReviews@1, product@3, avgPrice@4]
         ProjectionExec: expr=[ENC_PT(country@0) as country, <uuid>@1 as maxReviews]

@@ -4,7 +4,7 @@ use datafusion::logical_expr::{Expr, Operator, lit, or};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::Iri;
 use rdf_fusion_common::sparql::algebra::{Expression, Function, GraphPattern};
-use rdf_fusion_common::vocab::xsd;
+use rdf_fusion_common::vocab::{rdf_fusion_vocab, xsd};
 use rdf_fusion_common::{DateTime, TermRef};
 use rdf_fusion_common::{Literal, NamedNode};
 use rdf_fusion_extensions::functions::FunctionName;
@@ -256,6 +256,10 @@ impl<'rewriter> ExpressionRewriter<'rewriter> {
         function: &NamedNode,
         args: Vec<Expr>,
     ) -> DFResult<RdfFusionExprBuilder<'rewriter>> {
+        if function == &rdf_fusion_vocab::ZORDER {
+            return plan_err!("ZORDER is currently not supported in SPARQL queries.");
+        }
+
         if function == &xsd::BOOLEAN {
             return self.unary_args(args)?.cast_boolean();
         }

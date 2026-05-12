@@ -8,8 +8,8 @@ use crate::typed_family::{
 };
 use crate::{EncodingDatum, TermEncoding};
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, Int32Array, StringArray, UInt32Array,
-    new_empty_array,
+    Array, ArrayRef, AsArray, BinaryArray, BooleanArray, GenericBinaryBuilder,
+    Int32Array, StringArray, UInt32Array, new_empty_array,
 };
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::compute::take;
@@ -217,6 +217,32 @@ impl TypedFamilyArray {
             PLAIN_TERM_ENCODING.data_type(),
         );
         array.map(PlainTermArray::new_unchecked)
+    }
+
+    /// Returns a [`BinaryArray`] containing the sortable bytes for each entry.
+    pub fn as_sortable_bytes(&self) -> Result<BinaryArray, ArrowError> {
+        let array = self.map_unary(
+            |child| {
+                let family_id = child.family().family_id();
+                let type_id = self
+                    .encoding
+                    .find_typed_family_type_id(family_id)
+                    .expect("Family should exist");
+                let sortable_bytes =
+                    child.family().cast_to_sortable_array(child.to_array())?;
+
+                let mut builder = GenericBinaryBuilder::<i32>::new();
+                for i in 0..sortable_bytes.len() {
+                    let mut row = Vec::with_capacity(1 + sortable_bytes.value(i).len());
+                    row.push(type_id as u8);
+                    row.extend_from_slice(sortable_bytes.value(i));
+                    builder.append_value(&row);
+                }
+                Ok(Arc::new(builder.finish()) as ArrayRef)
+            },
+            &DataType::Binary,
+        );
+        Ok(array?.as_binary::<i32>().clone())
     }
 
     /// Splits the array by its type families.

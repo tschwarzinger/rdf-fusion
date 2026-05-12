@@ -29,7 +29,6 @@ use std::sync::Arc;
 /// # use rdf_fusion_extensions::RdfFusionContextView;
 /// # use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 /// # use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings};
-/// # use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
 /// # use rdf_fusion_encoding::string::STRING_ENCODING;
 /// # use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 /// # use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
@@ -40,7 +39,6 @@ use std::sync::Arc;
 /// #     Arc::clone(&PLAIN_TERM_ENCODING),
 /// #     Arc::new(TypedFamilyEncoding::default()),
 /// #     None,
-/// #     Arc::clone(&SORTABLE_TERM_ENCODING),
 /// #     Arc::clone(&STRING_ENCODING)
 /// # );
 /// # let rdf_fusion_context = RdfFusionContextView::new(
@@ -188,16 +186,11 @@ impl RdfFusionLogicalPlanBuilder {
     }
 
     /// Sorts the current plan by a given set of expressions.
-    pub fn order_by(self, exprs: &[SortExpr]) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let exprs = exprs
-            .iter()
-            .map(|sort| self.ensure_sortable(sort))
-            .collect::<DFResult<Vec<_>>>()?;
-
+    pub fn order_by(self, expr: Vec<SortExpr>) -> DFResult<RdfFusionLogicalPlanBuilder> {
         let context = self.context.clone();
         let plan = LogicalPlan::Sort(Sort {
             input: Arc::new(self.build()?),
-            expr: exprs,
+            expr,
             fetch: None,
         });
 
@@ -205,15 +198,6 @@ impl RdfFusionLogicalPlanBuilder {
             context,
             plan_builder: LogicalPlanBuilder::new(plan),
         })
-    }
-
-    /// Ensure that the [EncodingName::Sortable] is used.
-    fn ensure_sortable(&self, e: &SortExpr) -> DFResult<SortExpr> {
-        let expr = self
-            .expr_builder(e.expr.clone())?
-            .with_encoding(EncodingName::Sortable)?
-            .build()?;
-        Ok(SortExpr::new(expr, e.asc, e.nulls_first))
     }
 
     /// Creates a union of the current plan and another plan.
@@ -457,8 +441,7 @@ fn create_distinct_on_expressions(
         let expr = col(column.clone());
         let sortable_expr = expr_builder_root
             .try_create_builder(expr.clone())?
-            .with_encoding(EncodingName::Sortable)?
-            .build()?;
+            .build_as_sortable_bytes()?;
 
         // If, initially, the sortable expression is already part of on_expr we don't re-add it.
         if !on_expr.contains(&sortable_expr) {

@@ -1,4 +1,5 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
+use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::{ScalarValue, exec_err};
@@ -7,20 +8,20 @@ use datafusion::logical_expr::{
     TypeSignature, Volatility,
 };
 use rdf_fusion_common::DFResult;
-use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::any::Any;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
-pub fn with_sortable_term_encoding(encodings: RdfFusionEncodings) -> ScalarUDF {
+pub fn with_sortable_bytes_encoding(encodings: RdfFusionEncodings) -> ScalarUDF {
     let udf_impl = WithSortableEncoding::new(encodings);
     ScalarUDF::new_from_impl(udf_impl)
 }
 
-/// Transforms RDF Terms into the [SortableTermEncoding](rdf_fusion_encoding::sortable_term::SortableTermEncoding).
+/// Transforms RDF Terms into sortable bytes (Binary).
 #[derive(Debug, PartialEq, Eq)]
 struct WithSortableEncoding {
     /// The name of this function
@@ -61,7 +62,7 @@ impl ScalarUDFImpl for WithSortableEncoding {
     }
 
     fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
-        Ok(SORTABLE_TERM_ENCODING.data_type().clone())
+        Ok(DataType::Binary)
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
@@ -83,9 +84,9 @@ impl ScalarUDFImpl for WithSortableEncoding {
                     child
                         .family()
                         .cast_to_sortable_array(child.to_array())
-                        .map(|arr| arr.into_array_ref())
+                        .map(|arr| Arc::new(arr) as ArrayRef)
                 },
-                self.encodings.sortable_term().data_type(),
+                &DataType::Binary,
             )?,
             _ => {
                 return exec_err!(

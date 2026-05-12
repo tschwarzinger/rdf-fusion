@@ -277,7 +277,7 @@ pub async fn optimize_empty(storage: Arc<dyn QuadStorage>) -> Result<()> {
     Ok(())
 }
 
-/// Tries to provoke a failure by calling [`QuadStorage::insert`] with an empty [`DataFrame`].
+/// Tries to provoke a failure by calling inserting quads with an empty input.
 pub async fn empty_insert(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
     let transaction = storage.begin_transaction(&ctx.state()).await?;
@@ -291,7 +291,7 @@ pub async fn empty_insert(storage: Arc<dyn QuadStorage>) -> Result<()> {
     Ok(())
 }
 
-/// Tries to provoke a failure by calling [`QuadStorage::remove`] with an empty [`DataFrame`].
+/// Tries to provoke a failure by removing quads with an empty input.
 pub async fn empty_remove(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let ctx = create_session_context(&storage).await;
     let transaction = storage.begin_transaction(&ctx.state()).await?;

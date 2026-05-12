@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: product, ENC_PT(ratio) AS ratio
-  Sort: ENC_SORT(DIV(xsd:float(monthCount), monthBeforeCount)) DESC NULLS FIRST, ENC_SORT(ENC_TF(product)) ASC NULLS FIRST, fetch=10
+  Sort: AS_SORTABLE_BYTES(DIV(xsd:float(monthCount), monthBeforeCount)) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(product)) ASC NULLS FIRST, fetch=10
     Projection: lhs.product AS product, lhs.monthCount AS monthCount, rhs.monthBeforeCount AS monthBeforeCount, DIV(xsd:float(lhs.monthCount), rhs.monthBeforeCount) AS ratio
       Inner Join: lhs.product = rhs.product
         SubqueryAlias: lhs

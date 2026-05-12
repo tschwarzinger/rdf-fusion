@@ -50,6 +50,16 @@ impl TypedFamilyArgs {
         self.args[0].encoding()
     }
 
+    /// Returns the number of rows.
+    pub fn number_rows(&self) -> usize {
+        self.number_rows
+    }
+
+    /// Returns the arguments.
+    pub fn args(&self) -> &[EncodingDatum<TypedFamilyEncoding>] {
+        &self.args
+    }
+
     /// Returns the number of arrays.
     pub fn number_of_args(&self) -> usize {
         self.args.len()

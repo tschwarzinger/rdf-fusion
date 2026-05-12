@@ -8,8 +8,7 @@ use crate::scalar::comparison::{
     less_or_equal_udf, less_than_udf,
 };
 use crate::scalar::conversion::encoding::{
-    with_plain_term_encoding, with_sortable_term_encoding, with_string_encoding,
-    with_typed_family_encoding,
+    with_plain_term_encoding, with_string_encoding, with_typed_family_encoding,
 };
 use crate::scalar::conversion::native::{
     effective_boolean_value_udf, native_boolean_as_term, native_int64_as_term,
@@ -36,6 +35,7 @@ use crate::scalar::terms::{
     bnode_udf, datatype_udf, iri_udf, is_blank_udf, is_iri_udf, is_literal_udf,
     is_numeric_udf, lang_udf, str_udf, strdt_udf, strlang_udf, struuid_udf, uuid_udf,
 };
+use crate::scalar::{as_sortable_bytes_udf, zorder_udf};
 use datafusion::common::plan_datafusion_err;
 use datafusion::execution::FunctionRegistry;
 use datafusion::execution::registry::MemoryFunctionRegistry;
@@ -244,6 +244,8 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
         is_numeric_udf(registry.encodings.clone())?,
         regex_udf(registry.encodings.clone())?,
         bound_udf(registry.encodings.clone())?,
+        as_sortable_bytes_udf(registry.encodings.clone()),
+        zorder_udf(registry.encodings.clone()),
         renamed(
             &FunctionName::Builtin(BuiltinName::Coalesce),
             CoalesceFunc::new(),
@@ -251,7 +253,6 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
                 registry.encodings.get_data_types(&[
                     EncodingName::PlainTerm,
                     EncodingName::ObjectId,
-                    EncodingName::Sortable,
                     EncodingName::TypedFamily,
                     EncodingName::String,
                 ]),
@@ -279,7 +280,6 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
         cast_datetime_udf(registry.encodings.clone())?,
         cast_boolean_udf(registry.encodings.clone())?,
         iri_udf(registry.encodings.clone())?,
-        with_sortable_term_encoding(registry.encodings.clone()),
         with_plain_term_encoding(registry.encodings.clone()),
         with_typed_family_encoding(registry.encodings.clone()),
         with_string_encoding(registry.encodings.clone()),

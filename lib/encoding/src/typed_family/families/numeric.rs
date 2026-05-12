@@ -1,21 +1,22 @@
 use crate::plain_term::{PlainTermArray, PlainTermType};
-use crate::sortable_term::{SortableTermArray, SortableTermArrayBuilder};
 use crate::typed_family::families::{
     FamilyArray, FamilyComparator, TypeClaim, TypedFamily,
 };
 use crate::typed_family::{FamilyScalar, TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
-    Array, ArrayBuilder, ArrayRef, AsArray, BooleanArray, BooleanBuilder,
+    Array, ArrayBuilder, ArrayRef, AsArray, BinaryArray, BooleanArray, BooleanBuilder,
     Decimal128Array, Decimal128Builder, Float32Array, Float32Builder, Float64Array,
-    Float64Builder, Int32Array, Int32Builder, Int64Array, Int64Builder, StringArray,
-    UnionArray,
+    Float64Builder, GenericBinaryBuilder, Int32Array, Int32Builder, Int64Array,
+    Int64Builder, StringArray, UnionArray,
 };
+
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
 use datafusion::arrow::error::ArrowError;
 use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_common::{
-    AResult, Decimal, LiteralRef, NamedNodeRef, Numeric, ThinResult, TypedValueRef,
+    AResult, Decimal, Double, LiteralRef, NamedNodeRef, Numeric, ThinResult,
+    TypedValueRef,
 };
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
@@ -612,18 +613,22 @@ impl FamilyArray for NumericFamilyArray {
         )
     }
 
-    fn cast_to_sortable_array(&self) -> Result<SortableTermArray, ArrowError> {
-        let mut builder = SortableTermArrayBuilder::new(self.inner_ref().len());
+    fn cast_to_sortable_bytes(&self) -> Result<BinaryArray, ArrowError> {
+        let mut builder = GenericBinaryBuilder::<i32>::with_capacity(
+            self.inner_ref().len(),
+            self.inner_ref().len() * 8,
+        );
         let is_null = self.null_buffer();
         for i in 0..self.inner_ref().len() {
             if is_null.is_null(i) {
                 builder.append_null();
             } else {
                 let n = self.get_numeric(i);
-                builder.append_numeric(n, n.to_string().as_bytes());
+                let d = Double::from(n);
+                builder.append_value(d.to_be_bytes());
             }
         }
-        Ok(builder.finish().try_into().unwrap())
+        Ok(builder.finish())
     }
 }
 

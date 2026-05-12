@@ -2,11 +2,11 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]@2) as product, ENC_PT(first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]@3) as label]
-  SortExec: TopK(fetch=10), expr=[ENC_SORT(ENC_TF(ENC_PT(label)))@0 ASC, product@1 ASC], preserve_partitioning=[false], sort_prefix=[ENC_SORT(ENC_TF(ENC_PT(label)))@0 ASC]
-    AggregateExec: mode=Single, gby=[__common_expr_1@0 as ENC_SORT(ENC_TF(ENC_PT(label))), product@1 as product], aggr=[first_value(product) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(label) ORDER BY [ENC_SORT(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
-      ProjectionExec: expr=[ENC_SORT(ENC_TF(ENC_PT(label@1))) as __common_expr_1, product@0 as product, label@1 as label]
-        SortExec: expr=[ENC_SORT(ENC_TF(ENC_PT(label@1))) ASC], preserve_partitioning=[false]
+ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]@2) as product, ENC_PT(first_value(label) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]@3) as label]
+  SortExec: TopK(fetch=10), expr=[AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label)))@0 ASC, product@1 ASC], preserve_partitioning=[false], sort_prefix=[AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label)))@0 ASC]
+    AggregateExec: mode=Single, gby=[__common_expr_1@0 as AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label))), product@1 as product], aggr=[first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(label) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label))) ASC NULLS FIRST, product ASC NULLS FIRST]], ordering_mode=PartiallySorted([0])
+      ProjectionExec: expr=[AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label@1))) as __common_expr_1, product@0 as product, label@1 as label]
+        SortExec: expr=[AS_SORTABLE_BYTES(ENC_TF(ENC_PT(label@1))) ASC], preserve_partitioning=[false]
           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, label@1]

@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[productType@0 as productType, ENC_PT(reviewCount@1) as reviewCount]
-  SortExec: TopK(fetch=10), expr=[ENC_SORT(reviewCount@1) DESC, ENC_SORT(ENC_TF(productType@0)) ASC], preserve_partitioning=[false]
+  SortExec: TopK(fetch=10), expr=[AS_SORTABLE_BYTES(reviewCount@1) DESC, AS_SORTABLE_BYTES(ENC_TF(productType@0)) ASC], preserve_partitioning=[false]
     ProjectionExec: expr=[productType@0 as productType, <uuid>@1 as reviewCount]
       AggregateExec: mode=Single, gby=[productType@0 as productType], aggr=[<uuid>]
         HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(reviewer@2, reviewer@0)], projection=[productType@0, review@1]

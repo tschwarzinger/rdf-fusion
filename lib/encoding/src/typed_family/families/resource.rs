@@ -1,12 +1,11 @@
 use crate::plain_term::PlainTermType;
-use crate::sortable_term::{SortableTermArray, SortableTermArrayBuilder};
 use crate::typed_family::families::{
     FamilyArray, FamilyComparator, TypeClaim, TypedFamily,
 };
 use crate::typed_family::{TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, Int8Array, StringArray, StringBuilder,
-    UnionArray,
+    Array, ArrayRef, AsArray, BinaryArray, BooleanArray, GenericBinaryBuilder, Int8Array,
+    StringArray, StringBuilder, UnionArray,
 };
 use datafusion::arrow::buffer::ScalarBuffer;
 use datafusion::arrow::datatypes::{DataType, Field, UnionFields, UnionMode};
@@ -353,8 +352,11 @@ impl FamilyArray for ResourceFamilyArray {
         .unwrap())
     }
 
-    fn cast_to_sortable_array(&self) -> Result<SortableTermArray, ArrowError> {
-        let mut builder = SortableTermArrayBuilder::new(self.inner_ref().len());
+    fn cast_to_sortable_bytes(&self) -> Result<BinaryArray, ArrowError> {
+        let mut builder = GenericBinaryBuilder::<i32>::with_capacity(
+            self.inner_ref().len(),
+            self.inner_ref().len() * 20,
+        );
         let is_null = self.null_buffer();
         for i in 0..self.inner_ref().len() {
             if is_null.is_null(i) {
@@ -363,21 +365,13 @@ impl FamilyArray for ResourceFamilyArray {
                 let type_id = self.union_array().type_id(i);
                 let offset = self.union_array().value_offset(i);
                 if type_id == ResourceFamily::NAMED_NODES_TYPE_ID {
-                    builder.append_named_node(
-                        rdf_fusion_common::NamedNodeRef::new_unchecked(
-                            self.iris().value(offset),
-                        ),
-                    );
+                    builder.append_value(self.iris().value(offset).as_bytes());
                 } else {
-                    builder.append_blank_node(
-                        rdf_fusion_common::BlankNodeRef::new_unchecked(
-                            self.blank_nodes().value(offset),
-                        ),
-                    );
+                    builder.append_value(self.blank_nodes().value(offset).as_bytes());
                 }
             }
         }
-        Ok(builder.finish().try_into().unwrap())
+        Ok(builder.finish())
     }
 }
 

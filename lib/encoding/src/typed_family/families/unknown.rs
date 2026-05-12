@@ -1,9 +1,9 @@
 use crate::plain_term::{PlainTermArray, PlainTermType};
-use crate::sortable_term::{SortableTermArray, SortableTermArrayBuilder};
 use crate::typed_family::families::{FamilyArray, TypeClaim, TypedFamily};
 use crate::typed_family::{FamilyComparator, TypedFamilyId, make_null_aware_comparator};
 use datafusion::arrow::array::{
-    Array, ArrayRef, AsArray, BooleanArray, StringArray, StructArray,
+    Array, ArrayRef, AsArray, BinaryArray, BooleanArray, GenericBinaryBuilder,
+    StringArray, StructArray,
 };
 use datafusion::arrow::datatypes::{DataType, Field, Fields};
 use datafusion::arrow::error::ArrowError;
@@ -252,21 +252,19 @@ impl FamilyArray for UnknownFamilyArray {
         )
     }
 
-    fn cast_to_sortable_array(&self) -> Result<SortableTermArray, ArrowError> {
-        let mut builder = SortableTermArrayBuilder::new(self.inner_ref().len());
+    fn cast_to_sortable_bytes(&self) -> Result<BinaryArray, ArrowError> {
+        let mut builder = GenericBinaryBuilder::<i32>::with_capacity(
+            self.inner_ref().len(),
+            self.inner_ref().len() * 10,
+        );
         for i in 0..self.inner_ref().len() {
             if self.array.is_null(i) {
                 builder.append_null();
             } else {
-                builder.append_literal(rdf_fusion_common::LiteralRef::new_typed_literal(
-                    self.values().value(i),
-                    rdf_fusion_common::NamedNodeRef::new_unchecked(
-                        self.data_types().value(i),
-                    ),
-                ));
+                builder.append_value(self.values().value(i).as_bytes());
             }
         }
-        Ok(builder.finish().try_into().unwrap())
+        Ok(builder.finish())
     }
 }
 

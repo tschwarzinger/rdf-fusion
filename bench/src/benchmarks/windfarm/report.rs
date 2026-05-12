@@ -120,7 +120,7 @@ Planning Compute: {}
         })
     }
 
-    /// Dumps a [LogicalPLan].
+    /// Dumps a [`LogicalPlan`].
     fn dump_logical_plan(
         &self,
         output_file: &Path,

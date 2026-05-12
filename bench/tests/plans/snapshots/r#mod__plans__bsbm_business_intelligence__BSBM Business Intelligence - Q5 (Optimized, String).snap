@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: country, ENC_PT(product) AS product, ENC_PT(nrOfReviews) AS nrOfReviews, ENC_PT(avgPrice) AS avgPrice
-  Sort: ENC_SORT(nrOfReviews) DESC NULLS FIRST, ENC_SORT(ENC_TF(country)) ASC NULLS FIRST, ENC_SORT(ENC_TF(ENC_PT(product))) ASC NULLS FIRST
+  Sort: AS_SORTABLE_BYTES(nrOfReviews) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(country)) ASC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(ENC_PT(product))) ASC NULLS FIRST
     Projection: lhs.country AS country, lhs.product AS product, lhs.avgPrice AS avgPrice, rhs.nrOfReviews AS nrOfReviews
       Inner Join: lhs.country = rhs.country, lhs.product = rhs.product Filter: EBV(EQ(rhs.nrOfReviews, lhs.maxReviews))
         SubqueryAlias: lhs

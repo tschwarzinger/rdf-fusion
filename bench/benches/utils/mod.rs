@@ -9,8 +9,11 @@ use tokio::runtime::{Builder, Runtime};
 
 pub mod verbose;
 
-pub const ENCODINGS_TO_BENCHMARK: [QuadStorageEncodingName; 1] =
-    [QuadStorageEncodingName::String];
+pub const ENCODINGS_TO_BENCHMARK: [QuadStorageEncodingName; 3] = [
+    QuadStorageEncodingName::ObjectId,
+    QuadStorageEncodingName::String,
+    QuadStorageEncodingName::PlainTerm,
+];
 
 pub async fn consume_results(result: QueryResults) -> anyhow::Result<usize> {
     match result {

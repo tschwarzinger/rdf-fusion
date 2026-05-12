@@ -5,7 +5,7 @@ expression: "&explanation.optimized_logical_plan.to_string()"
 Projection: ENC_PT(product) AS product
   LeftAnti Join: product = __correlated_sq_1.__inner__product
     Projection: product
-      Sort: ENC_SORT(offerCount) DESC NULLS FIRST, fetch=1000
+      Sort: AS_SORTABLE_BYTES(offerCount) DESC NULLS FIRST, fetch=1000
         Projection: product, <uuid> AS offerCount
           Aggregate: groupBy=[[product AS product]], aggr=[[COUNT(offer) AS <uuid>]]
             Projection: lhs.product AS product, rhs.offer AS offer

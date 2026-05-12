@@ -1,4 +1,4 @@
-use crate::vocab::*;
+use crate::vocab::rs;
 use crate::w3c::files::{W3CTestRuntime, guess_rdf_format};
 use crate::w3c::report::{dataset_diff, format_diff};
 use anyhow::{Result, bail};

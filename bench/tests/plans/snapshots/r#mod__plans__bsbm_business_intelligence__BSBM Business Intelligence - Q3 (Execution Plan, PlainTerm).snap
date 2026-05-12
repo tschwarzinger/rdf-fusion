@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[product@0 as product, ENC_PT(ratio@3) as ratio]
-  SortExec: TopK(fetch=10), expr=[ENC_SORT(DIV(xsd:float(monthCount@1), monthBeforeCount@2)) DESC, ENC_SORT(ENC_TF(product@0)) ASC], preserve_partitioning=[false]
+  SortExec: TopK(fetch=10), expr=[AS_SORTABLE_BYTES(DIV(xsd:float(monthCount@1), monthBeforeCount@2)) DESC, AS_SORTABLE_BYTES(ENC_TF(product@0)) ASC], preserve_partitioning=[false]
     ProjectionExec: expr=[product@0 as product, monthCount@1 as monthCount, monthBeforeCount@2 as monthBeforeCount, DIV(xsd:float(monthCount@1), monthBeforeCount@2) as ratio]
       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, monthCount@1, monthBeforeCount@3]
         ProjectionExec: expr=[product@0 as product, <uuid>@1 as monthCount]

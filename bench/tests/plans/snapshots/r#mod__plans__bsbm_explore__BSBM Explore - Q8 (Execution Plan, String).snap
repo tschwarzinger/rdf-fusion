@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[ENC_PT(title@0) as title, ENC_PT(text@1) as text, ENC_PT(reviewDate@2) as reviewDate, ENC_PT(reviewer@3) as reviewer, ENC_PT(reviewerName@4) as reviewerName, ENC_PT(rating1@5) as rating1, ENC_PT(rating2@6) as rating2, ENC_PT(rating3@7) as rating3, ENC_PT(rating4@8) as rating4]
-  SortExec: TopK(fetch=20), expr=[ENC_SORT(ENC_TF(ENC_PT(reviewDate@2))) DESC], preserve_partitioning=[false]
+  SortExec: TopK(fetch=20), expr=[AS_SORTABLE_BYTES(ENC_TF(ENC_PT(reviewDate@2))) DESC], preserve_partitioning=[false]
     HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@7, rating3@8, rating4@10]
       HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@7, rating3@9]
         HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@8]

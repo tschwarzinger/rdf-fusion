@@ -2,7 +2,7 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-SortExec: TopK(fetch=20), expr=[ENC_SORT(ENC_TF(reviewDate@2)) DESC], preserve_partitioning=[false]
+SortExec: TopK(fetch=20), expr=[AS_SORTABLE_BYTES(ENC_TF(reviewDate@2)) DESC], preserve_partitioning=[false]
   HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@7, rating3@8, rating4@10]
     HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@7, rating3@9]
       HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@8]

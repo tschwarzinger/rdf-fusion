@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[vendor@0 as vendor, ENC_PT(cheapExpensiveRatio@3) as cheapExpensiveRatio]
-  SortExec: TopK(fetch=10), expr=[ENC_SORT(DIV(xsd:float(belowAvg@1), offerCount@2)) DESC, ENC_SORT(ENC_TF(vendor@0)) ASC], preserve_partitioning=[false]
+  SortExec: TopK(fetch=10), expr=[AS_SORTABLE_BYTES(DIV(xsd:float(belowAvg@1), offerCount@2)) DESC, AS_SORTABLE_BYTES(ENC_TF(vendor@0)) ASC], preserve_partitioning=[false]
     ProjectionExec: expr=[vendor@0 as vendor, belowAvg@1 as belowAvg, offerCount@2 as offerCount, DIV(xsd:float(belowAvg@1), offerCount@2) as cheapExpensiveRatio]
       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(vendor@0, vendor@0)], projection=[vendor@0, belowAvg@1, offerCount@3]
         ProjectionExec: expr=[vendor@0 as vendor, <uuid>@1 as belowAvg]

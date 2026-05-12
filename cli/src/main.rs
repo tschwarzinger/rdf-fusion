@@ -1,8 +1,7 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
 use crate::cli::{Args, Command};
-use anyhow::{Context, bail};
+use anyhow::Context;
 use clap::Parser;
-use datafusion::common::runtime::SpawnedTask;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::execution::cache::cache_manager::CacheManagerConfig;
@@ -15,30 +14,25 @@ use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
-use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::execution::sparql::RdfFusionQuery;
 use rdf_fusion::io::RdfFormat;
 use rdf_fusion::model::GraphName;
 use rdf_fusion::model::config::RdfFusionOptions;
 use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
-use rdf_fusion::storage::rdf_files::{
-    RdfFileQuadStorage, RdfFileSourceConfig, RdfParserOptions,
-};
+use rdf_fusion::storage::rdf_files::{RdfFileQuadStorage, RdfFileSourceConfig};
 use rdf_fusion::store::Store;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_web::ServerConfig;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
-use tracing::info;
 use tracing::warn;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use url::Url;
 
 mod cli;
+mod commands;
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
@@ -61,54 +55,19 @@ pub async fn main() -> anyhow::Result<()> {
             bind,
             cors,
             union_default_graph,
-        } => {
-            SpawnedTask::spawn(async move {
-                serve(store, &bind, false, cors, union_default_graph).await
-            })
-            .await
-            .context("Failed to join Web Server")?
-            .context("Error from Web Server")?;
-
-            Ok(())
-        }
+        } => commands::serve::serve(store, &bind, false, cors, union_default_graph).await,
         Command::BuildDatabase { inputs } => {
-            if inputs.is_empty() {
-                bail!("No input file given");
-            }
-
-            for input in &inputs {
-                info!("Loading file {} ...", input.display());
-
-                let file = tokio::fs::File::open(input)
-                    .await
-                    .context("Cannot open file.")?;
-                store
-                    .load_from_reader(
-                        file,
-                        RdfParserOptions::with_format(RdfFormat::NTriples),
-                    )
-                    .await
-                    .context("Error while loading data file")?;
-            }
-
-            info!("All files loaded.");
-
-            info!("Optimizing store ...");
-            store.optimize().await?;
-
-            info!("Database built.");
-            Ok(())
+            commands::build_database::build_database(store, inputs).await
         }
-        Command::Query { query } => {
-            let parsed_query = RdfFusionQuery::parse(&query, None)
-                .context("Failed to parse SPARQL query")?;
-
-            let results = store.query(parsed_query).await?;
-            results
-                .write(std::io::stdout(), QueryResultsFormat::Tsv)
-                .await?;
-
-            Ok(())
+        Command::Query { query } => commands::query::query(store, query).await,
+        Command::Dump {
+            output,
+            format,
+            graph,
+            sort_by,
+        } => {
+            let output_url = resolve_location(&output)?;
+            commands::dump::dump(store, output_url, format, graph, sort_by).await
         }
     }
 }
@@ -174,14 +133,8 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
                     .extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or_default();
-                let format = match extension {
-                    "ttl" => RdfFormat::Turtle,
-                    "nt" => RdfFormat::NTriples,
-                    "nq" => RdfFormat::NQuads,
-                    "rdf" | "xml" => RdfFormat::RdfXml,
-                    "trig" => RdfFormat::TriG,
-                    _ => bail!("Could not guess RDF format for {location}"),
-                };
+                let format = RdfFormat::from_extension(extension)
+                    .context(format!("Could not guess RDF format for {location}"))?;
 
                 let url = resolve_location(location)?;
 
@@ -234,32 +187,37 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     ));
 
     // Register s3-compatible object store if its in the arguments
-    let location = args
-        .storage
-        .location
-        .as_ref()
-        .and_then(|l| l.first())
-        .map(|l| resolve_location(l))
-        .transpose()?;
-    match location {
-        Some(location) if location.starts_with("s3a://") => {
-            register_s3_store(&registry, &location)?;
+    let mut locations = Vec::new();
+    if let Some(storage_locations) = &args.storage.location {
+        for loc in storage_locations {
+            locations.push(resolve_location(loc)?);
         }
-        Some(location) if location.starts_with("file://") => {
+    }
+
+    if let Command::Dump { output, .. } = &args.command {
+        locations.push(resolve_location(output)?);
+    }
+
+    for location in &locations {
+        if location.starts_with("s3a://") {
+            register_s3_store(&registry, location)?;
+        } else if location.starts_with("file://") {
             // Store is already registered by `create_store` or it's a local file
-        }
-        Some(_) => {
+        } else {
             warn!(
-                "Unknown location type. Check usage information for supported storage locations"
+                "Unknown location type: {}. Check usage information for supported storage locations",
+                location
             )
         }
-        // If location is none use in-memory database
-        None => {
-            registry.register_store(
-                &Url::parse("memory:///").unwrap(),
-                Arc::new(InMemory::new()),
-            );
-        }
+    }
+
+    // If no locations are provided, register memory store.
+    // Note: This matches the old behavior but might be redundant if datafusion already does it.
+    if locations.is_empty() {
+        registry.register_store(
+            &Url::parse("memory:///").unwrap(),
+            Arc::new(InMemory::new()),
+        );
     }
 
     builder = builder.with_object_store_registry(registry);
@@ -313,22 +271,4 @@ fn register_s3_store(
     }
 
     Ok(())
-}
-
-/// Starts a Web Server that serves RDF Fusion's Web API.
-async fn serve(
-    store: Store,
-    bind: &str,
-    read_only: bool,
-    cors: bool,
-    union_default_graph: bool,
-) -> anyhow::Result<()> {
-    let server_config = ServerConfig {
-        store,
-        bind: bind.to_owned(),
-        read_only,
-        cors,
-        union_default_graph,
-    };
-    rdf_fusion_web::serve(server_config).await
 }

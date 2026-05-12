@@ -84,4 +84,26 @@ pub enum Command {
         #[arg(long)]
         inputs: Vec<PathBuf>,
     },
+    /// Export the database to an RDF data dump.
+    Dump {
+        /// The location where the dump should be written.
+        #[arg(long)]
+        output: String,
+        /// The format of the output RDF data dump. If not provided, RDF Fusion tries to guess it
+        /// from the extension.
+        #[arg(long)]
+        format: Option<String>,
+        /// Dump a specific graph. If not provided, dumps all graphs.
+        #[arg(long)]
+        graph: Option<String>,
+        /// Sort the output by the given columns.
+        ///
+        /// Supports the following sort specifications:
+        /// - *Regular*: regular sorting as defined in SPARQL's ORDER BY (e.g., `GSPO`, `SP`)
+        /// - [*ZOrder*]: Interleave bits of the components (e.g., `ZOrder(PS)`)
+        ///
+        /// [*ZOrder*]: https://en.wikipedia.org/wiki/Z-order_curve
+        #[arg(long)]
+        sort_by: Option<String>,
+    },
 }

@@ -2,6 +2,7 @@ use crate::sparql::error::QueryEvaluationError;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::exec_err;
 use datafusion::execution::SendableRecordBatchStream;
+use datafusion::prelude::DataFrame;
 use futures::{Stream, StreamExt};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::Variable;
@@ -49,6 +50,19 @@ impl QuerySolutionStream {
             inner: Some(inner),
             current: None,
         })
+    }
+
+    pub async fn try_from_dataframe(dataframe: DataFrame) -> DFResult<Self> {
+        let variables: Arc<[Variable]> = dataframe
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| Variable::new_unchecked(f.name()))
+            .collect::<Vec<_>>()
+            .into();
+
+        let stream = dataframe.execute_stream().await?;
+        Self::try_new(variables, stream)
     }
 
     /// The variables used in the solutions.

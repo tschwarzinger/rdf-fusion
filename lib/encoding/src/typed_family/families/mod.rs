@@ -21,8 +21,8 @@ mod string;
 mod unknown;
 
 use crate::plain_term::PlainTermArray;
-use crate::sortable_term::SortableTermArray;
 pub use boolean::*;
+use datafusion::arrow::array::BinaryArray;
 pub use date_time::*;
 pub use duration::*;
 pub use null::*;
@@ -96,8 +96,8 @@ pub trait FamilyArray: Sized + Send + Sync + Clone + Debug {
     /// Returns the [`PlainTermArray`] for the given array.
     fn cast_to_plain_term_array(&self) -> Result<PlainTermArray, ArrowError>;
 
-    /// Returns a [`SortableTermArray`] for the given array.
-    fn cast_to_sortable_array(&self) -> Result<SortableTermArray, ArrowError>;
+    /// Returns a [`BinaryArray`] for the given array.
+    fn cast_to_sortable_bytes(&self) -> Result<BinaryArray, ArrowError>;
 }
 
 /// A helper function to make a comparator null-aware.
@@ -158,7 +158,7 @@ impl TypeClaim {
 }
 
 /// A type family groups together values of related types. Each family defines the encoding
-/// of its types within the [`TypedFamilyEncoding`].
+/// of its types within the [`TypedFamilyEncoding`](crate::typed_family::TypedFamilyEncoding).
 ///
 /// Each type family "claims" the types that it is responsible for. See [`TypeClaim`].
 pub trait TypedFamily: Debug + Send + Sync + 'static {
@@ -241,7 +241,7 @@ impl TypedFamilyRef {
     pub fn cast_to_sortable_array(
         &self,
         array: ArrayRef,
-    ) -> Result<SortableTermArray, ArrowError> {
+    ) -> Result<BinaryArray, ArrowError> {
         self.0.cast_to_sortable_array(array)
     }
 }
@@ -281,7 +281,7 @@ trait TypedFamilyErased: Send + Sync + 'static {
     fn literal_data_types(&self, array: ArrayRef) -> AResult<StringArray>;
     fn is_null(&self, array: ArrayRef) -> NullBuffer;
     fn cast_to_plain_term_array(&self, array: ArrayRef) -> AResult<PlainTermArray>;
-    fn cast_to_sortable_array(&self, array: ArrayRef) -> AResult<SortableTermArray>;
+    fn cast_to_sortable_array(&self, array: ArrayRef) -> AResult<BinaryArray>;
 
     fn clone_box(&self) -> Box<dyn TypedFamilyErased>;
 }
@@ -346,12 +346,9 @@ impl<TFamily: TypedFamily> TypedFamilyErased for TypedFamilyRefInternal<TFamily>
         array.cast_to_plain_term_array()
     }
 
-    fn cast_to_sortable_array(
-        &self,
-        array: ArrayRef,
-    ) -> Result<SortableTermArray, ArrowError> {
+    fn cast_to_sortable_array(&self, array: ArrayRef) -> Result<BinaryArray, ArrowError> {
         let array = TFamily::Array::from_array_unchecked(array);
-        array.cast_to_sortable_array()
+        array.cast_to_sortable_bytes()
     }
 
     fn clone_box(&self) -> Box<dyn TypedFamilyErased> {

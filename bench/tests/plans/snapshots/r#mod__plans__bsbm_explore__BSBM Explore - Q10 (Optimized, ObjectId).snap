@@ -2,11 +2,11 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
-Projection: ENC_PT(first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]) AS offer, ENC_PT(first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]) AS price
-  Sort: ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST, fetch=10
-    Aggregate: groupBy=[[__common_expr_1 AS ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))), offer, price]], aggr=[[first_value(offer) ORDER BY [__common_expr_1 AS ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST] AS first_value(offer) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [__common_expr_1 AS ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST] AS first_value(price) ORDER BY [ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]]]
-      Projection: ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) AS __common_expr_1, offer, price
-        Sort: ENC_SORT(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST
+Projection: ENC_PT(first_value(offer) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]) AS offer, ENC_PT(first_value(price) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]) AS price
+  Sort: AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST, fetch=10
+    Aggregate: groupBy=[[__common_expr_1 AS AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))), offer, price]], aggr=[[first_value(offer) ORDER BY [__common_expr_1 AS AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST] AS first_value(offer) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST], first_value(price) ORDER BY [__common_expr_1 AS AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST] AS first_value(price) ORDER BY [AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST, offer ASC NULLS FIRST, price ASC NULLS FIRST]]]
+      Projection: AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) AS __common_expr_1, offer, price
+        Sort: AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(ENC_PT(price))))) ASC NULLS FIRST
           Projection: lhs.offer AS offer, lhs.price AS price
             Inner Join: lhs.offer = rhs.offer
               SubqueryAlias: lhs

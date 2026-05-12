@@ -1,8 +1,10 @@
 use crate::plain_term::PlainTermArray;
-use crate::sortable_term::SortableTermArray;
 use crate::typed_family::TypedFamilyId;
 use crate::typed_family::families::{FamilyArray, TypeClaim, TypedFamily};
-use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, NullArray, StringArray};
+use datafusion::arrow::array::{
+    Array, ArrayRef, BinaryArray, BooleanArray, GenericBinaryBuilder, NullArray,
+    StringArray,
+};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::error::ArrowError;
 use std::fmt::{Debug, Formatter};
@@ -92,9 +94,13 @@ impl FamilyArray for NullFamilyArray {
         Ok(PlainTermArray::new_null(len))
     }
 
-    fn cast_to_sortable_array(&self) -> Result<SortableTermArray, ArrowError> {
+    fn cast_to_sortable_bytes(&self) -> Result<BinaryArray, ArrowError> {
         let len = self.inner_ref().len();
-        Ok(SortableTermArray::new_null(len))
+        let mut builder = GenericBinaryBuilder::<i32>::with_capacity(len, 0);
+        for _ in 0..len {
+            builder.append_value([]);
+        }
+        Ok(builder.finish())
     }
 }
 

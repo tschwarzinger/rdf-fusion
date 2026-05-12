@@ -173,7 +173,7 @@ impl GraphPatternRewriter {
                     .iter()
                     .map(|e| self.rewrite_order_expression(inner.schema(), e))
                     .collect::<Result<Vec<_>, _>>()?;
-                inner.order_by(&sort_exprs)
+                inner.order_by(sort_exprs)
             }
             GraphPattern::Union { left, right } => {
                 let lhs = self.rewrite_graph_pattern(left)?;
@@ -291,8 +291,7 @@ impl GraphPatternRewriter {
         };
         Ok(expr_builder
             .try_create_builder(expression)?
-            .with_encoding(EncodingName::Sortable)?
-            .build()?
+            .build_as_sortable_bytes()?
             .sort(asc, true))
     }
 

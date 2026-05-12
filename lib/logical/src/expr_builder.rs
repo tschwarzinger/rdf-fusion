@@ -879,25 +879,6 @@ impl<'root> RdfFusionExprBuilder<'root> {
                     BuiltinName::WithPlainTermEncoding,
                     BuiltinName::WithStringEncoding,
                 ],
-                (EncodingName::PlainTerm, EncodingName::Sortable) => {
-                    vec![
-                        BuiltinName::WithTypedFamilyEncoding,
-                        BuiltinName::WithSortableEncoding,
-                    ]
-                }
-                (EncodingName::TypedFamily, EncodingName::Sortable) => {
-                    vec![BuiltinName::WithSortableEncoding]
-                }
-                (EncodingName::ObjectId, EncodingName::Sortable) => vec![
-                    BuiltinName::WithPlainTermEncoding,
-                    BuiltinName::WithTypedFamilyEncoding,
-                    BuiltinName::WithSortableEncoding,
-                ],
-                (EncodingName::String, EncodingName::Sortable) => vec![
-                    BuiltinName::WithPlainTermEncoding,
-                    BuiltinName::WithTypedFamilyEncoding,
-                    BuiltinName::WithSortableEncoding,
-                ],
                 _ => continue,
             };
             return Ok(functions_to_apply);
@@ -1034,9 +1015,6 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 let arg = tf_array.try_as_scalar(0)?;
                 arg.into_scalar_value()
             }
-            EncodingName::Sortable => {
-                return plan_err!("Filtering not supported for Sortable encoding.");
-            }
             EncodingName::ObjectId => match self.context.encodings().object_id() {
                 None => {
                     return plan_err!("The context has not ObjectID encoding registered");
@@ -1051,5 +1029,17 @@ impl<'root> RdfFusionExprBuilder<'root> {
             }
         };
         self.build_same_term(lit(literal))
+    }
+
+    /// Builds an expression that returns a byte array that can be used to sort on the inner
+    /// expression.
+    pub fn build_as_sortable_bytes(self) -> DFResult<Expr> {
+        let typed_family = self.with_encoding(EncodingName::TypedFamily)?;
+        let udf = typed_family
+            .context
+            .rdf_fusion_context()
+            .functions()
+            .udf(&FunctionName::Builtin(BuiltinName::AsSortableBytes))?;
+        Ok(udf.call(vec![typed_family.expr]))
     }
 }

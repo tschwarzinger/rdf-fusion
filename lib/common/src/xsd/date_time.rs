@@ -1901,7 +1901,7 @@ impl Timestamp {
 
     #[inline]
     #[must_use]
-    fn to_be_bytes(self) -> [u8; 18] {
+    pub fn to_be_bytes(self) -> [u8; 18] {
         let mut bytes = [0; 18];
         bytes[0..16].copy_from_slice(&self.value.to_be_bytes());
         bytes[16..18].copy_from_slice(&match &self.timezone_offset {

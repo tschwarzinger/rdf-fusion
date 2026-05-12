@@ -227,9 +227,6 @@ fn replace_equality_with_same_term(
         EncodingName::TypedFamily => {
             unreachable!("Handled in caller")
         }
-        EncodingName::Sortable => {
-            unreachable!("Sortable encoding should not be encountered.")
-        }
     };
 
     let boolean_as_term =
@@ -280,7 +277,6 @@ mod tests {
     use insta::assert_snapshot;
     use rdf_fusion_common::{BlankNodeRef, Literal, NamedNodeRef, TermRef, VariableRef};
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-    use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
     use rdf_fusion_encoding::{
@@ -444,7 +440,6 @@ mod tests {
             Arc::clone(&PLAIN_TERM_ENCODING),
             Arc::new(TypedFamilyEncoding::default()),
             None,
-            Arc::clone(&SORTABLE_TERM_ENCODING),
             Arc::clone(&STRING_ENCODING),
         );
         let registry = Arc::new(DefaultRdfFusionFunctionRegistry::new(encodings.clone()));

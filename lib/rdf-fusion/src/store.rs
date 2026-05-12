@@ -301,6 +301,8 @@ impl Store {
         let record_batch_stream = self
             .context
             .quads_for_pattern(graph_name, subject, predicate, object)
+            .await?
+            .execute_stream()
             .await?;
         let solution_stream =
             QuerySolutionStream::try_new(QUAD_VARIABLES.clone(), record_batch_stream)?;

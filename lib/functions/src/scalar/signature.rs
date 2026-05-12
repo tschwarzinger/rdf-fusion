@@ -59,13 +59,19 @@ pub struct HasEncodings;
 /// # Example
 ///
 /// ```
+/// use datafusion::logical_expr_common::signature::{Signature, Volatility};
+/// use rdf_fusion_functions::scalar::SparqlOpTypeSignatureBuilder;
+/// use rdf_fusion_encoding::RdfFusionEncodings;
+///
 /// #[derive(Clone, PartialEq, Eq, Hash)]
+/// # #[allow(dead_code)]
 /// struct MySparqlOp {
 ///     name: String,
 ///     signature: Signature,
 /// }
 ///
 /// impl MySparqlOp {
+///     # #[allow(dead_code)]
 ///     fn new(encodings: RdfFusionEncodings) -> Self {
 ///         // Convenient builder for the type signature
 ///         let type_signature = SparqlOpTypeSignatureBuilder::new()
@@ -74,7 +80,7 @@ pub struct HasEncodings;
 ///             .with_binary_arity()
 ///             .build();
 ///         Self {
-///             name: "MyOp".to_owned(),
+///             name: "<http://www.example.com/sparql/MyOp>".to_owned(),
 ///             signature: Signature::new(type_signature, Volatility::Immutable),
 ///         }
 ///     }

@@ -42,6 +42,9 @@ jobs:
       - name: Tests
         run: just test
 
+      - name: Test Examples
+        run: just test-examples
+
       - name: Lints
         run: just lint
 

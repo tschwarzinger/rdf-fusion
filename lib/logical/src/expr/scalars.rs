@@ -42,9 +42,6 @@ pub fn try_extract_scalar_term(
                     let term = pt_scalar.as_term().ok()?;
                     Some(term.into())
                 }
-                EncodingName::Sortable => {
-                    unreachable!("Sortable encoding shoudl never create a literal")
-                }
                 EncodingName::String => {
                     // Currently, string encoding is not supported from this function.
                     None
@@ -63,7 +60,6 @@ mod tests {
     use rdf_fusion_common::NamedNode;
     use rdf_fusion_encoding::EncodingScalar;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-    use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
     use rdf_fusion_extensions::functions::{
@@ -166,7 +162,6 @@ mod tests {
             Arc::clone(&PLAIN_TERM_ENCODING),
             Arc::new(TypedFamilyEncoding::default()),
             None,
-            Arc::clone(&SORTABLE_TERM_ENCODING),
             Arc::clone(&STRING_ENCODING),
         )
     }

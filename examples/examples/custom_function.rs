@@ -178,9 +178,9 @@ mod tests {
     use super::*;
     use insta::assert_snapshot;
     use rdf_fusion::execution::results::QueryResultsFormat;
-    use rdf_fusion::io::{RdfFormat, RdfParser};
+    use rdf_fusion::io::RdfFormat;
     use rdf_fusion::store::Store;
-    use std::fs::File;
+    use tokio::fs::File;
 
     #[tokio::test]
     async fn test_contains_spiderman() -> anyhow::Result<()> {
@@ -194,10 +194,11 @@ mod tests {
 
         let file_path = "./data/spiderman.ttl";
         let file = File::open(file_path)
+            .await
             .with_context(|| format!("Failed to open test data at {}", file_path))?;
 
         store
-            .load_from_reader(&file, RdfParserOptions::with_format(RdfFormat::Turtle))
+            .load_from_reader(file, RdfParserOptions::with_format(RdfFormat::Turtle))
             .await?;
 
         let query = "
