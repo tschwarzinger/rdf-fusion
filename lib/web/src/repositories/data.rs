@@ -8,8 +8,8 @@ use axum::response::Response;
 use axum_extra::TypedHeader;
 use futures::TryStreamExt;
 use headers::ContentType;
+use rdf_fusion::common::RdfFormat;
 use rdf_fusion::error::LoaderError;
-use rdf_fusion::io::RdfFormat;
 use rdf_fusion::storage::rdf_files::RdfParserOptions;
 use tokio_util::io::StreamReader;
 
@@ -50,6 +50,9 @@ pub async fn handle_data_post(
             LoaderError::InvalidBaseIri { .. } => {
                 RdfFusionServerError::BadRequest("Invalid base IRI.".to_owned())
             }
+            LoaderError::UnsupportedRdfFormat(_) => RdfFusionServerError::Internal(
+                anyhow!("Unsupported RDF format should be caught before this point."),
+            ),
         })?;
 
     state.store.optimize().await.map_err(|error| {

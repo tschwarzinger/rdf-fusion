@@ -12,7 +12,7 @@ use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use anyhow::Context;
 use async_trait::async_trait;
-use rdf_fusion::io::RdfFormat;
+use rdf_fusion::common::RdfFormat;
 use rdf_fusion::storage::rdf_files::RdfParserOptions;
 use rdf_fusion::store::Store;
 use reqwest::Url;

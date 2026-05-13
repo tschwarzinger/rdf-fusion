@@ -1,6 +1,6 @@
 use axum_test::TestServer;
 use criterion::{Criterion, criterion_group, criterion_main};
-use rdf_fusion::model::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
+use rdf_fusion::common::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
 use rdf_fusion::store::Store;
 use rdf_fusion_web::{AppState, create_router};
 use std::sync::Arc;

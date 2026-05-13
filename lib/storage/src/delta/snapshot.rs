@@ -122,7 +122,7 @@ impl QuadStorageSnapshot for DeltaQuadStorageSnapshot {
     async fn len(&self, state: &SessionState) -> Result<usize, StorageError> {
         let mut builder = DeltaQuadStorageScanPlanBuilder::new(
             state.clone(),
-            QuadPattern::for_all_quads(),
+            QuadPattern::all_quads(),
             self.encoding.clone(),
         )
         .with_best_index(&self.indexes)

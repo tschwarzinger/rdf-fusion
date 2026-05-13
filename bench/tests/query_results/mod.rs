@@ -2,7 +2,6 @@ use futures::StreamExt;
 use rdf_fusion::execution::results::{
     QueryResults, QueryResultsFormat, QueryResultsSerializer,
 };
-use rdf_fusion::io::{RdfFormat, RdfSerializer};
 use rdf_fusion::store::Store;
 use serde_json::Value;
 
@@ -37,8 +36,8 @@ async fn run_graph_result_query(store: &Store, query: &str) -> String {
     };
 
     let mut buffer = Vec::new();
-    let mut serializer =
-        RdfSerializer::from_format(RdfFormat::Turtle).for_writer(&mut buffer);
+    let mut serializer = oxrdfio::RdfSerializer::from_format(oxrdfio::RdfFormat::Turtle)
+        .for_writer(&mut buffer);
     while let Some(solution) = solutions.next().await {
         let solution = solution.unwrap();
         serializer.serialize_triple(solution.as_ref()).unwrap();

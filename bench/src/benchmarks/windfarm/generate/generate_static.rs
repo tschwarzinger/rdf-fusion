@@ -1,6 +1,6 @@
 use crate::benchmarks::windfarm::generate::write_prefixes;
 use anyhow::Context;
-use rdf_fusion::model::NamedNode;
+use rdf_fusion::common::NamedNode;
 use std::io::Write;
 
 /// Generates the static part of the data for the windfarm (Chrontext) benchmark.

@@ -4,7 +4,7 @@
 //!
 //! Usage example:
 //! ```
-//! use rdf_fusion::model::*;
+//! use rdf_fusion::common::*;
 //! use rdf_fusion::store::Store;
 //! use rdf_fusion::execution::results::QueryResults;
 //! use futures::StreamExt;
@@ -30,7 +30,12 @@
 //! # }).unwrap();
 //! ```
 
+mod dump;
+
+pub use dump::{DumpOptions, DumpSortOrder, TripleFallbackStrategy};
+
 use crate::error::{LoaderError, SerializerError};
+use crate::store::dump::dump_store;
 use datafusion::logical_expr::{col, lit};
 use datafusion::optimizer::OptimizerConfig;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
@@ -39,9 +44,8 @@ use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use futures::StreamExt;
-use oxrdfio::RdfSerializer;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_common::{CorruptionError, StorageError};
+use rdf_fusion_common::{CorruptionError, RdfFormat, StorageError};
 use rdf_fusion_common::{
     GraphNameRef, Iri, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
     QuadRef, TermRef, Variable,
@@ -59,7 +63,9 @@ use rdf_fusion_execution::sparql::{
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
-use rdf_fusion_storage::rdf_files::{RdfParserOptions, RdfParserTableProvider};
+use rdf_fusion_storage::rdf_files::{
+    RdfParserOptions, RdfParserTableProvider, RdfParserTableProviderError,
+};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
 use tokio::runtime::Handle;
@@ -80,7 +86,7 @@ static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
 ///
 /// Usage example:
 /// ```
-/// use rdf_fusion::model::*;
+/// use rdf_fusion::common::*;
 /// use rdf_fusion::execution::results::QueryResults;
 /// use rdf_fusion::store::Store;
 /// use futures::StreamExt;
@@ -106,6 +112,7 @@ static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
 /// Result::<_, Box<dyn std::error::Error>>::Ok(())
 /// # }).unwrap();
 /// ```
+/// The format for dumping a store.
 #[derive(Clone)]
 pub struct Store {
     context: RdfFusionContext,
@@ -155,7 +162,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::execution::results::QueryResults;
     /// use rdf_fusion::store::Store;
     /// use futures::StreamExt;
@@ -192,7 +199,7 @@ impl Store {
     ///
     /// Usage example with a custom function serializing terms to N-Triples:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::execution::results::QueryResults;
     /// use rdf_fusion::execution::sparql::QueryOptions;
     /// use rdf_fusion::store::Store;
@@ -271,7 +278,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -313,7 +320,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -339,7 +346,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -372,7 +379,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -393,7 +400,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -475,8 +482,7 @@ impl Store {
     /// Usage example:
     /// ```
     /// use rdf_fusion::store::Store;
-    /// use rdf_fusion::model::*;
-    /// use rdf_fusion::io::RdfFormat;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -512,11 +518,18 @@ impl Store {
         let iri = options.base_iri.clone();
         let table_provider =
             RdfParserTableProvider::new(reader, options.with_rename_blank_nodes(true))
-                .map_err(|e| LoaderError::InvalidBaseIri {
-                    iri: iri
-                        .map(|i: Iri<String>| i.to_string())
-                        .expect("Iri Parser Errors requires base iri"),
-                    error: e,
+                .map_err(|e| match e {
+                    RdfParserTableProviderError::IriParseError(e) => {
+                        LoaderError::InvalidBaseIri {
+                            iri: iri
+                                .map(|i: Iri<String>| i.to_string())
+                                .expect("Iri Parser Errors requires base iri"),
+                            error: e,
+                        }
+                    }
+                    RdfParserTableProviderError::UnsupportedRdfFormat(format) => {
+                        LoaderError::UnsupportedRdfFormat(format)
+                    }
                 })?
                 .with_track_progress(true);
         let quads = self
@@ -548,7 +561,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -612,7 +625,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -649,51 +662,16 @@ impl Store {
         Ok(result)
     }
 
-    /// Dumps the store into a file.
+    /// Dumps the store into a file at the given URL.
+    ///
+    /// This method supports both RDF formats and Parquet.
+    ///
+    ///
+    /// ### Example
     ///
     /// ```
-    /// use rdf_fusion::store::Store;
-    /// use rdf_fusion::io::RdfFormat;
-    /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
-    ///
-    /// let file =
-    ///     "<http://example.com> <http://example.com> <http://example.com> <http://example.com> .\n"
-    ///         .as_bytes();
-    ///
-    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
-    /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
-    /// store.load_from_reader(file, RdfParserOptions::with_format(RdfFormat::NQuads)).await?;
-    ///
-    /// let buffer = store.dump_to_writer(RdfFormat::NQuads, Vec::new()).await?;
-    /// assert_eq!(file, buffer.as_slice());
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
-    /// # }).unwrap();
-    /// ```
-    pub async fn dump_to_writer<W: tokio::io::AsyncWrite + Unpin + Send>(
-        &self,
-        serializer: impl Into<RdfSerializer>,
-        writer: W,
-    ) -> Result<W, SerializerError> {
-        let serializer = serializer.into();
-        if !serializer.format().supports_datasets() {
-            return Err(SerializerError::DatasetFormatExpected(serializer.format()));
-        }
-        let mut serializer = serializer.for_tokio_async_writer(writer);
-        let mut stream = self.stream().await?;
-        while let Some(quad) = stream.next().await {
-            serializer.serialize_quad(&quad?).await?;
-        }
-        Ok(serializer.finish().await?)
-    }
-
-    /// Dumps a store graph into a file.
-    ///
-    /// Usage example:
-    /// ```
-    /// use rdf_fusion::io::{RdfFormat};
-    /// use rdf_fusion::model::*;
-    /// use rdf_fusion::store::Store;
+    /// use rdf_fusion::common::*;
+    /// use rdf_fusion::r#mod::{DumpOptions, Store};
     /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
@@ -703,33 +681,24 @@ impl Store {
     /// let store = Store::new_in_memory().await;
     /// store.load_from_reader(file.as_ref(), RdfParserOptions::with_format(RdfFormat::NTriples)).await?;
     ///
-    /// let mut buffer = Vec::new();
-    /// store.dump_graph_to_writer(GraphNameRef::DefaultGraph, RdfFormat::NTriples, &mut buffer).await?;
-    /// assert_eq!(file, buffer.as_slice());
+    /// store.dump("memory:///my-target.ttl", RdfFormat::Turtle, DumpOptions::default()).await?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    pub async fn dump_graph_to_writer<'a, W: tokio::io::AsyncWrite + Unpin + Send>(
+    pub async fn dump(
         &self,
-        from_graph_name: impl Into<GraphNameRef<'a>>,
-        serializer: impl Into<RdfSerializer>,
-        writer: W,
-    ) -> Result<W, SerializerError> {
-        let mut serializer = serializer.into().for_tokio_async_writer(writer);
-        let mut stream = self
-            .quads_for_pattern(None, None, None, Some(from_graph_name.into()))
-            .await?;
-        while let Some(quad) = stream.next().await {
-            serializer.serialize_triple(quad?.as_ref()).await?;
-        }
-        Ok(serializer.finish().await?)
+        output_url: String,
+        format: RdfFormat,
+        options: DumpOptions,
+    ) -> Result<(), SerializerError> {
+        dump_store(self, output_url, format, options).await
     }
 
     /// Returns all the store named graphs.
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::*;
+    /// use rdf_fusion::common::*;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -808,7 +777,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::{NamedNode, QuadRef};
+    /// use rdf_fusion::common::{NamedNode, QuadRef};
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -856,7 +825,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::NamedNodeRef;
+    /// use rdf_fusion::common::NamedNodeRef;
     /// use rdf_fusion::store::Store;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
@@ -890,7 +859,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::{NamedNode, QuadRef};
+    /// use rdf_fusion::common::{NamedNode, QuadRef};
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
     ///
@@ -927,7 +896,7 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// use rdf_fusion::model::{NamedNode, QuadRef};
+    /// use rdf_fusion::common::{NamedNode, QuadRef};
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
     ///

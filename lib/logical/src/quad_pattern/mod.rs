@@ -50,7 +50,7 @@ impl QuadPattern {
     /// ```sparql
     /// GRAPH ?graph { ?subject ?predicate ?object }
     /// ```
-    pub fn for_all_quads() -> Self {
+    pub fn all_quads() -> Self {
         Self::new(
             ActiveGraph::AllGraphs,
             Some(Variable::new_unchecked(COL_GRAPH)),

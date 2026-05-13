@@ -6,7 +6,8 @@ use crate::sparql::{
 };
 use futures::{StreamExt, TryStreamExt};
 use itertools::izip;
-use oxrdfio::{RdfFormat, RdfParser};
+use oxrdfio::RdfParser;
+use rdf_fusion_common::RdfFormat;
 use rdf_fusion_common::sparql::algebra::GraphTarget;
 use rdf_fusion_common::sparql::term::{
     GraphNamePattern, GroundQuadPattern, GroundTermPattern, QuadPattern,
@@ -175,7 +176,12 @@ pub async fn evaluate_update(
 
                     let stream = response.bytes_stream().map_err(io::Error::other);
                     let reader = StreamReader::new(stream);
-                    let mut parser = RdfParser::from_format(format)
+                    let oxigraph_format = format.to_oxigraph().ok_or_else(|| {
+                        QueryEvaluationError::InternalError(
+                            "Unsupported RDF format".to_string(),
+                        )
+                    })?;
+                    let mut parser = RdfParser::from_format(oxigraph_format)
                         .with_base_iri(source.as_str())
                         .map_err(|err| {
                             QueryEvaluationError::InternalError(format!(

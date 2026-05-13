@@ -408,11 +408,7 @@ pub mod functions {
     pub use rdf_fusion_functions::*;
 }
 
-pub mod io {
-    pub use oxrdfio::*;
-}
-
-pub mod model {
+pub mod common {
     pub use rdf_fusion_common::*;
 }
 

@@ -31,6 +31,7 @@ pub use typed_value::*;
 pub use xsd::*;
 
 // Re-export some oxrdf types.
+pub use crate::rdf::RdfFormat;
 pub use oxiri::Iri;
 pub use oxrdf::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, IriParseError,

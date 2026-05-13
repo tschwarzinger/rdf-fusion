@@ -3,9 +3,9 @@ use datafusion::physical_plan::{collect, execute_stream};
 use datafusion::prelude::SessionContext;
 use futures::StreamExt;
 use rdf_fusion::api::storage::{QuadStorage, QuadStorageGraphTarget};
+use rdf_fusion::common::{GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use rdf_fusion::encoding::quads_to_plain_term_dataframe;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::model::{GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use std::slice;
 use std::sync::Arc;
 

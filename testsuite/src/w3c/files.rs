@@ -5,8 +5,7 @@ use object_store::local::LocalFileSystem;
 use object_store::{GetOptions, GetResult, ObjectMeta, ObjectStore, ObjectStoreExt};
 use oxttl::N3Parser;
 use oxttl::n3::N3Quad;
-use rdf_fusion::io::{RdfFormat, RdfParser};
-use rdf_fusion::model::{Dataset, Graph};
+use rdf_fusion::common::{Dataset, Graph, RdfFormat, Triple};
 use std::ops::Range;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
@@ -222,17 +221,19 @@ impl W3CTestRuntime {
         base_iri: Option<&str>,
         ignore_errors: bool,
     ) -> Result<()> {
-        let parser =
-            RdfParser::from_format(format).with_base_iri(base_iri.unwrap_or(url))?;
+        let format = format.to_oxigraph().context("Invalid RDF format")?;
+
+        let parser = oxrdfio::RdfParser::from_format(format)
+            .with_base_iri(base_iri.unwrap_or(url))?;
         let mut stream = parser.for_tokio_async_reader(self.read_file(url).await?);
         while let Some(t) = stream.next().await {
             match t {
                 Ok(t) => {
-                    graph.insert(&t.into());
+                    graph.insert(Triple::from(t).as_ref());
                 }
                 Err(e) => {
                     if !ignore_errors {
-                        return Err(e.into());
+                        return Err(anyhow::Error::from(e));
                     }
                 }
             }
@@ -256,11 +257,11 @@ impl W3CTestRuntime {
         &self,
         url: &str,
         dataset: &mut Dataset,
-        format: RdfFormat,
+        format: oxrdfio::RdfFormat,
         ignore_errors: bool,
         unchecked: bool,
     ) -> Result<()> {
-        let mut parser = RdfParser::from_format(format).with_base_iri(url)?;
+        let mut parser = oxrdfio::RdfParser::from_format(format).with_base_iri(url)?;
         if unchecked {
             parser = parser.lenient();
         }
@@ -272,7 +273,7 @@ impl W3CTestRuntime {
                 }
                 Err(e) => {
                     if !ignore_errors {
-                        return Err(e.into());
+                        return Err(anyhow::Error::from(e));
                     }
                 }
             }
@@ -283,7 +284,7 @@ impl W3CTestRuntime {
     pub async fn load_dataset(
         &self,
         url: &str,
-        format: RdfFormat,
+        format: oxrdfio::RdfFormat,
         ignore_errors: bool,
         unchecked: bool,
     ) -> Result<Dataset> {
@@ -304,7 +305,7 @@ impl W3CTestRuntime {
                 Ok(q) => quads.push(q),
                 Err(e) => {
                     if !ignore_errors {
-                        return Err(e.into());
+                        return Err(anyhow::Error::from(e));
                     }
                 }
             }

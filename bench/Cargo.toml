@@ -26,11 +26,12 @@ csv.workspace = true
 datafusion.workspace = true
 deltalake.workspace = true
 futures.workspace = true
+object_store.workspace = true
+oxrdfio.workspace = true
 prettytable-rs.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 rdf-fusion.workspace = true
-rdf-fusion-extensions.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
 snmalloc-rs.workspace = true
@@ -41,6 +42,7 @@ zip.workspace = true
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }
 insta.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
@@ -59,4 +61,8 @@ harness = false
 
 [[bench]]
 name = "store_preparation"
+harness = false
+
+[[bench]]
+name = "dump"
 harness = false

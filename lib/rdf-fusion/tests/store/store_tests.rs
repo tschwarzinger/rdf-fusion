@@ -1,13 +1,13 @@
 #![cfg(test)]
 #![allow(clippy::panic_in_result_fn)]
 
+use crate::store::create_store_for_result;
 use futures::StreamExt;
+use rdf_fusion::common::vocab::{rdf, xsd};
+use rdf_fusion::common::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::execution::results::QueryResults;
-use rdf_fusion::io::RdfFormat;
-use rdf_fusion::model::vocab::{rdf, xsd};
-use rdf_fusion::model::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
-use rdf_fusion::store::Store;
-use rdf_fusion_common::{BlankNode, GraphName, NamedNode, Quad};
+use rdf_fusion::store::{DumpOptions, Store};
+use rdf_fusion_common::{BlankNode, GraphName, NamedNode, Quad, RdfFormat};
 use rdf_fusion_storage::rdf_files::RdfParserOptions;
 use std::error::Error;
 
@@ -150,39 +150,80 @@ async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_dump_graph() -> Result<(), Box<dyn Error>> {
+async fn test_dump_graph_and_then_load_dump() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q).await?;
     }
 
-    let mut buffer = Vec::new();
     store
-        .dump_graph_to_writer(
-            GraphNameRef::DefaultGraph,
-            RdfFormat::NTriples,
-            &mut buffer,
+        .dump(
+            "memory:///test".to_owned(),
+            RdfFormat::NQuads,
+            DumpOptions::default(),
         )
         .await?;
-    assert_eq!(
-        buffer.into_iter().filter(|c| *c == b'\n').count(),
-        NUMBER_OF_TRIPLES
+
+    let store = create_store_for_result(
+        store.context().session_context().runtime_env(),
+        "memory:///test",
+        RdfFormat::NQuads,
     );
+    assert_eq!(store.len().await?, NUMBER_OF_TRIPLES);
+
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_dump_dataset() -> Result<(), Box<dyn Error>> {
+async fn test_dump_named_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
-    for q in quads(GraphNameRef::DefaultGraph) {
+    for q in quads(NamedNodeRef::new_unchecked("http://example.com/g1")) {
         store.insert(q).await?;
     }
 
-    let buffer = store.dump_to_writer(RdfFormat::NQuads, Vec::new()).await?;
-    assert_eq!(
-        buffer.into_iter().filter(|c| *c == b'\n').count(),
-        NUMBER_OF_TRIPLES
+    store
+        .dump(
+            "memory:///test.nq".to_owned(),
+            RdfFormat::NQuads,
+            DumpOptions::default().with_graph(Some(
+                NamedNode::new_unchecked("http://example.com/g1".to_string()).into(),
+            )),
+        )
+        .await?;
+
+    let store = create_store_for_result(
+        store.context().session_context().runtime_env(),
+        "memory:///test.nq",
+        RdfFormat::NQuads,
     );
+    assert_eq!(store.len().await?, NUMBER_OF_TRIPLES);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_dump_graph_with_no_quad_in_graph() -> Result<(), Box<dyn Error>> {
+    let store = Store::new_in_memory().await;
+    for q in quads(NamedNodeRef::new_unchecked("http://example.com/g1")) {
+        store.insert(q).await?;
+        store.insert(q).await?;
+    }
+
+    store
+        .dump(
+            "memory:///test".to_owned(),
+            RdfFormat::NQuads,
+            DumpOptions::default().with_graph(Some(GraphName::DefaultGraph)),
+        )
+        .await?;
+
+    let store = create_store_for_result(
+        store.context().session_context().runtime_env(),
+        "memory:///test",
+        RdfFormat::NQuads,
+    );
+    assert_eq!(store.len().await?, 0);
+
     Ok(())
 }
 

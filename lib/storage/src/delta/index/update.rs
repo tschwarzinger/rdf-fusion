@@ -68,7 +68,7 @@ impl DeltaStorageQuadIndexUpdater {
     async fn full_rewrite(&mut self) -> Result<(DeltaTable, u64), DeltaQuadStorageError> {
         let plan_result = DeltaQuadStorageScanPlanBuilder::new(
             self.state.clone(),
-            QuadPattern::for_all_quads(),
+            QuadPattern::all_quads(),
             self.index.encoding(),
         )
         .with_index(self.index.clone())

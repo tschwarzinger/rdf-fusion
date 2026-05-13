@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rdf_fusion::model::{Dataset, NamedNode};
+use rdf_fusion::common::{Dataset, NamedNode};
 use std::fmt::Write;
 use text_diff::{Difference, diff};
 use time::OffsetDateTime;

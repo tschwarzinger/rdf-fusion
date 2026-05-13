@@ -1,8 +1,8 @@
 use crate::vocab::*;
 use crate::w3c::files::{W3CTestRuntime, guess_rdf_format};
 use anyhow::{Context, Result, bail};
-use rdf_fusion::model::vocab::{rdf, rdfs};
-use rdf_fusion::model::{
+use rdf_fusion::common::vocab::{rdf, rdfs};
+use rdf_fusion::common::{
     Graph, NamedNode, NamedOrBlankNodeRef, Term, TermRef, TripleRef,
 };
 use std::collections::VecDeque;

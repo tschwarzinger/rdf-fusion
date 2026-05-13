@@ -1,6 +1,7 @@
 use anyhow::Context;
 use datafusion::arrow::array::RecordBatch;
 use futures::StreamExt;
+use rdf_fusion::common::{TermRef, ThinResult, Variable};
 use rdf_fusion::encoding::plain_term::decoders::DefaultPlainTermDecoder;
 use rdf_fusion::encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray};
 use rdf_fusion::encoding::{TermDecoder, TermEncoding};
@@ -9,7 +10,6 @@ use rdf_fusion::execution::results::{
     WriterSolutionsSerializer,
 };
 use rdf_fusion::execution::sparql::error::QueryEvaluationError;
-use rdf_fusion::model::{TermRef, ThinResult, Variable};
 use std::sync::Arc;
 
 /// Serializes `solutions` according to `format`.

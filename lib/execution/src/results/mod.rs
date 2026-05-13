@@ -4,8 +4,8 @@ use datafusion::arrow::error::ArrowError;
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::memory::MemoryStream;
 use futures::StreamExt;
-use oxrdfio::{RdfFormat, RdfSerializer};
-use rdf_fusion_common::{Variable, VariableRef};
+use oxrdfio::RdfSerializer;
+use rdf_fusion_common::{RdfFormat, Variable, VariableRef};
 use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
@@ -114,8 +114,13 @@ impl QueryResults {
         format: impl Into<RdfFormat>,
     ) -> Result<W, QueryEvaluationError> {
         if let Self::Graph(mut triples) = self {
+            let rdf_format = format.into();
+            let oxigraph_format = rdf_format.to_oxigraph().ok_or_else(|| {
+                QueryEvaluationError::NotImplemented("Unsupported RDF format".to_string())
+            })?;
+
             let mut serializer =
-                RdfSerializer::from_format(format.into()).for_writer(writer);
+                RdfSerializer::from_format(oxigraph_format).for_writer(writer);
 
             while let Some(triple) = triples.next().await {
                 serializer

@@ -1,16 +1,20 @@
 use crate::rdf_files::RdfParserOptions;
+use crate::rdf_files::rdf::RdfDataSink;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::catalog::Session;
-use datafusion::common::Statistics;
+use datafusion::common::{DataFusionError, Statistics};
 use datafusion::datasource::file_format::FileFormat;
 use datafusion::datasource::file_format::file_compression_type::FileCompressionType;
 use datafusion::datasource::listing::PartitionedFile;
-use datafusion::datasource::physical_plan::{FileOpener, FileScanConfig, FileSource};
+use datafusion::datasource::physical_plan::{
+    FileOpener, FileScanConfig, FileSinkConfig, FileSource,
+};
+use datafusion::datasource::sink::DataSinkExec;
 use datafusion::datasource::source::DataSourceExec;
 use datafusion::datasource::table_schema::TableSchema;
-use datafusion::error::DataFusionError;
+use datafusion::physical_expr::LexRequirement;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::metrics::ExecutionPlanMetricsSet;
 use futures::Stream;
@@ -82,6 +86,33 @@ impl FileFormat for RdfFileFormat {
         conf: FileScanConfig,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(DataSourceExec::new(Arc::new(conf))))
+    }
+
+    async fn create_writer_physical_plan(
+        &self,
+        input: Arc<dyn ExecutionPlan>,
+        state: &dyn Session,
+        conf: FileSinkConfig,
+        order_requirements: Option<LexRequirement>,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        if conf.table_paths.len() != 1 {
+            return Err(DataFusionError::Internal(
+                "RdfDataSink only supports single file output".to_string(),
+            ));
+        }
+        let sink_path = conf.table_paths[0].prefix().clone();
+        let store = state
+            .runtime_env()
+            .object_store(conf.object_store_url.clone())?;
+
+        let sink = Arc::new(RdfDataSink::new_rdf(
+            store,
+            sink_path,
+            self.options.format,
+            Arc::clone(&conf.output_schema),
+        ));
+
+        Ok(Arc::new(DataSinkExec::new(input, sink, order_requirements)))
     }
 
     fn file_source(&self, schema: TableSchema) -> Arc<dyn FileSource> {
@@ -164,7 +195,13 @@ impl FileOpener for RdfFileOpener {
                     .map(|res| res.map_err(std::io::Error::other)),
             );
 
-            let mut parser_builder = RdfParser::from_format(options.format);
+            let oxigraph_format = options.format.to_oxigraph().ok_or_else(|| {
+                DataFusionError::Internal(
+                    "Parquet is not supported by RdfFileFormat".to_string(),
+                )
+            })?;
+
+            let mut parser_builder = RdfParser::from_format(oxigraph_format);
             if let Some(base_iri) = options.base_iri {
                 parser_builder = parser_builder
                     .with_base_iri(base_iri.to_string())

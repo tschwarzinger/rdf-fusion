@@ -8,8 +8,8 @@ use mediatype::names::{
     APPLICATION, CSV, JSON, N_QUADS, N_TRIPLES, N3, PLAIN, TEXT, TRIG, TURTLE, XML,
 };
 use mediatype::{MediaType, Name};
+use oxrdfio::RdfFormat;
 use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::io::RdfFormat;
 
 /// Handles the content-negotiation for requests that return RDF data.
 impl FromRequestParts<AppState> for RdfFormat {

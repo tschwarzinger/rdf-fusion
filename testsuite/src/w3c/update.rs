@@ -4,9 +4,9 @@ use crate::w3c::report::dataset_diff;
 use crate::w3c::{StoreConfig, StoreFactory};
 use anyhow::{Context, ensure};
 use futures::StreamExt;
+use rdf_fusion::common::dataset::CanonicalizationAlgorithm;
+use rdf_fusion::common::{Dataset, GraphName};
 use rdf_fusion::execution::sparql::RdfFusionUpdate;
-use rdf_fusion::model::dataset::CanonicalizationAlgorithm;
-use rdf_fusion::model::{Dataset, GraphName};
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 
 pub struct W3CSparqlUpdateEvaluationTest {

@@ -15,6 +15,8 @@ use rdf_fusion::api::RdfFusionContextView;
 use rdf_fusion::api::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
+use rdf_fusion::common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion::common::{GraphName, NamedNode, Quad, StorageError, TermPattern};
 use rdf_fusion::encoding::object_id::ObjectIdMapping;
 use rdf_fusion::encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
@@ -24,8 +26,6 @@ use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::logical::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion::logical::patterns::PatternLoweringRule;
 use rdf_fusion::logical::quad_pattern::QuadPatternNode;
-use rdf_fusion::model::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion::model::{GraphName, NamedNode, Quad, StorageError, TermPattern};
 use rdf_fusion::store::Store;
 use std::sync::Arc;
 

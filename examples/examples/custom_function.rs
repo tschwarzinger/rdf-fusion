@@ -6,6 +6,7 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion::api::functions::FunctionName;
+use rdf_fusion::common::{DFResult, NamedNode, RdfFormat};
 use rdf_fusion::encoding::typed_family::{BooleanFamilyArray, DowncastTypedFamilyArray};
 use rdf_fusion::encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
@@ -14,8 +15,6 @@ use rdf_fusion::encoding::{
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::functions::scalar::args::ScalarSparqlFunctionArgs;
 use rdf_fusion::functions::scalar::signature::SparqlOpTypeSignatureBuilder;
-use rdf_fusion::io::RdfFormat;
-use rdf_fusion::model::{DFResult, NamedNode};
 use rdf_fusion::storage::rdf_files::RdfParserOptions;
 use rdf_fusion::store::Store;
 use std::any::Any;
@@ -177,8 +176,8 @@ impl ScalarUDFImpl for ContainsSpiderUDF {
 mod tests {
     use super::*;
     use insta::assert_snapshot;
+    use rdf_fusion::common::RdfFormat;
     use rdf_fusion::execution::results::QueryResultsFormat;
-    use rdf_fusion::io::RdfFormat;
     use rdf_fusion::store::Store;
     use tokio::fs::File;
 

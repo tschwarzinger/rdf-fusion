@@ -3,10 +3,10 @@ use crate::repositories::query::HandleQueryResponse;
 use crate::repositories::query::results::serialize_query_result;
 use crate::repositories::sparql_query_params::SparqlQueryParams;
 use anyhow::anyhow;
+use oxrdfio::RdfFormat;
+use rdf_fusion::common::{GraphName, IriParseError, NamedNode, NamedOrBlankNode};
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::execution::sparql::RdfFusionQuery;
-use rdf_fusion::io::RdfFormat;
-use rdf_fusion::model::{GraphName, IriParseError, NamedNode, NamedOrBlankNode};
 use rdf_fusion::store::Store;
 
 /// Evaluates a SPARQL query and turns it into a result.

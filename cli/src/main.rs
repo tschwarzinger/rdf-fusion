@@ -12,11 +12,10 @@ use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
+use rdf_fusion::common::config::RdfFusionOptions;
+use rdf_fusion::common::{GraphName, RdfFormat};
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
-use rdf_fusion::io::RdfFormat;
-use rdf_fusion::model::GraphName;
-use rdf_fusion::model::config::RdfFusionOptions;
 use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
 use rdf_fusion::storage::rdf_files::{RdfFileQuadStorage, RdfFileSourceConfig};
 use rdf_fusion::store::Store;
@@ -65,9 +64,18 @@ pub async fn main() -> anyhow::Result<()> {
             format,
             graph,
             sort_by,
+            triple_fallback,
         } => {
             let output_url = resolve_location(&output)?;
-            commands::dump::dump(store, output_url, format, graph, sort_by).await
+            commands::dump::dump(
+                store,
+                output_url,
+                format,
+                graph,
+                sort_by,
+                triple_fallback,
+            )
+            .await
         }
     }
 }

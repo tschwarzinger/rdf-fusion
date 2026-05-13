@@ -4,7 +4,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use futures::StreamExt;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, SmallRng};
-use rdf_fusion::model::{NamedOrBlankNode, Term};
+use rdf_fusion::common::{NamedOrBlankNode, Term};
 use rdf_fusion::store::Store;
 use rdf_fusion_common::{GraphName, NamedNode, Quad};
 use rdf_fusion_execution::results::QueryResults;

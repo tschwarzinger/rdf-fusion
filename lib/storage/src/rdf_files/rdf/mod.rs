@@ -1,11 +1,13 @@
 mod exec;
 mod format;
+mod sink;
 mod table_provider;
 
 pub use format::*;
+pub use sink::*;
 pub use table_provider::*;
 
-pub use oxrdfio::RdfFormat;
+pub use rdf_fusion_common::RdfFormat;
 use rdf_fusion_common::{GraphName, Iri, IriParseError};
 
 /// A source for RDF data.

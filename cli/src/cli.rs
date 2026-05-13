@@ -101,9 +101,18 @@ pub enum Command {
         /// Supports the following sort specifications:
         /// - *Regular*: regular sorting as defined in SPARQL's ORDER BY (e.g., `GSPO`, `SP`)
         /// - [*ZOrder*]: Interleave bits of the components (e.g., `ZOrder(PS)`)
+        /// - [*Native*]: Use DataFusion's native order for the respective encoding (e.g., `NATIVE(GSPO)`)
         ///
         /// [*ZOrder*]: https://en.wikipedia.org/wiki/Z-order_curve
+        /// [*Native*]: https://datafusion.apache.org/
         #[arg(long)]
         sort_by: Option<String>,
+        /// The strategy to use when exporting quads to a triple-only format.
+        ///
+        /// Supported strategies:
+        /// - *error*: returns an error if a non-default graph is encountered.
+        /// - *ignore*: ignores the graph column and deduplicates the triples.
+        #[arg(long)]
+        triple_fallback: Option<String>,
     },
 }

@@ -17,6 +17,7 @@ futures.workspace = true
 rdf-fusion.workspace = true
 object_store.workspace = true
 oxttl.workspace = true
+oxrdfio.workspace = true
 sparesults.workspace = true
 text-diff.workspace = true
 time = { workspace = true, features = ["formatting"] }

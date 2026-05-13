@@ -15,6 +15,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 datafusion.workspace = true
 deltalake.workspace = true
 rdf-fusion-extensions.workspace = true
@@ -26,7 +27,6 @@ object_store.workspace = true
 rdf-fusion-execution.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-storage.workspace = true
-oxrdfio.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
@@ -34,7 +34,9 @@ url.workspace = true
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }
 rand.workspace = true
+tempfile.workspace = true
 tokio-test.workspace = true
+insta.workspace = true
 
 [lints]
 workspace = true

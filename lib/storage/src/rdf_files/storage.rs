@@ -6,23 +6,29 @@ use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::catalog::TableProvider;
 use datafusion::execution::{SessionState, SessionStateBuilder};
 use datafusion::logical_expr::utils::conjunction;
+use datafusion::physical_expr::expressions::Column;
 use datafusion::physical_expr::{EquivalenceProperties, Partitioning};
+use datafusion::physical_plan::aggregates::{
+    AggregateExec, AggregateMode, PhysicalGroupBy,
+};
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::execution_plan::{Boundedness, EmissionType};
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::{
-    DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties,
+    DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, execute_stream,
 };
-use futures::TryStreamExt;
-use rdf_fusion_common::StorageError;
-use rdf_fusion_common::{DFResult, GraphName};
+use futures::{StreamExt, TryStreamExt};
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::{BlankNodeMatchingMode, DFResult, GraphName, NamedNodePattern};
+use rdf_fusion_common::{StorageError, TermPattern, TriplePattern, Variable};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::object_id::ObjectIdMapping;
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
+use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::any::Any;
 use std::fmt::Debug;
@@ -48,12 +54,6 @@ impl RdfFileQuadStorage {
     /// Adds a source to the storage.
     pub fn add_source(&self, graph_name: GraphName, source: RdfFileSourceConfig) {
         self.sources.write().unwrap().push((graph_name, source));
-    }
-
-    /// Adds a table to the storage.
-    #[deprecated(note = "Use add_source instead")]
-    pub fn add_table(&self, _table: Arc<dyn TableProvider>) {
-        // No-op, as we are moving to GraphSources
     }
 }
 
@@ -111,17 +111,63 @@ impl QuadStorageSnapshot for RdfFileQuadStorageSnapshot {
         &self,
         _session: &SessionState,
     ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
-        // For now, we don't support listing named graphs from data dumps easily
-        // without scanning everything.
-        // We return an empty scan for the graph column
-        use datafusion::physical_plan::empty::EmptyExec;
-        Ok(Arc::new(EmptyExec::new(Arc::clone(
-            QuadStorageEncoding::PlainTerm.quad_schema().inner(),
-        ))))
+        let pattern = QuadPattern::new(
+            ActiveGraph::AnyNamedGraph,
+            Some(Variable::new_unchecked(COL_GRAPH)),
+            TriplePattern {
+                subject: TermPattern::Variable(Variable::new_unchecked(COL_SUBJECT)),
+                predicate: NamedNodePattern::Variable(Variable::new_unchecked(
+                    COL_PREDICATE,
+                )),
+                object: TermPattern::Variable(Variable::new_unchecked(COL_OBJECT)),
+            },
+            BlankNodeMatchingMode::Filter,
+        );
+        let schema = pattern.compute_schema(&QuadStorageEncoding::PlainTerm);
+        let all_quads = Arc::new(RdfFileQuadPatternScanExec::new(
+            pattern,
+            self.manager.clone(),
+            self.sources.clone(),
+            Arc::clone(schema.inner()),
+        ));
+
+        const COL_GRAPH_IDX: usize = 0;
+        let group_by = PhysicalGroupBy::new_single(vec![(
+            Arc::new(Column::new(COL_GRAPH, COL_GRAPH_IDX)),
+            COL_GRAPH.to_string(),
+        )]);
+
+        let dedup_plan = Arc::new(AggregateExec::try_new(
+            AggregateMode::Single,
+            group_by,
+            vec![],
+            vec![],
+            all_quads,
+            Arc::clone(schema.inner()),
+        )?);
+
+        Ok(dedup_plan)
     }
 
     async fn len(&self, _session: &SessionState) -> Result<usize, StorageError> {
-        Ok(0) // TODO: Implement if possible
+        let pattern = QuadPattern::all_quads();
+        let schema = Arc::clone(QuadStorageEncoding::PlainTerm.quad_schema().inner());
+
+        let all_quads = Arc::new(RdfFileQuadPatternScanExec::new(
+            pattern,
+            self.manager.clone(),
+            self.sources.clone(),
+            schema,
+        )) as Arc<dyn ExecutionPlan>;
+
+        let mut total_count = 0;
+        let mut stream = execute_stream(all_quads, _session.task_ctx())?;
+        while let Some(batch_result) = stream.next().await {
+            let batch = batch_result.map_err(StorageError::from)?;
+            total_count += batch.num_rows();
+        }
+
+        Ok(total_count)
     }
 }
 
@@ -353,7 +399,7 @@ mod tests {
     async fn test_data_dump_quad_pattern_scan_exec_inner() {
         let manager = RdfFileManager::new();
         let sources = vec![];
-        let quad_pattern = QuadPattern::for_all_quads();
+        let quad_pattern = QuadPattern::all_quads();
         let schema = QuadStorageEncoding::PlainTerm.quad_schema().inner().clone();
 
         let exec =

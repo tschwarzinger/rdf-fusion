@@ -2,8 +2,8 @@ use anyhow::Context;
 use clap::{Parser, ValueEnum};
 use datafusion::common::runtime::SpawnedTask;
 use datafusion::prelude::SessionConfig;
+use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::model::config::RdfFusionOptions;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::{
     BenchmarkStorageBackend, BenchmarkingConfig, Operation, execute_benchmark_operation,

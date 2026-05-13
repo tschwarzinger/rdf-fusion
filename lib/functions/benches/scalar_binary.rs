@@ -76,7 +76,6 @@ fn bench_all_binary(c: &mut Criterion) {
         Arc::clone(&PLAIN_TERM_ENCODING),
         Arc::new(TypedFamilyEncoding::default()),
         None,
-        Arc::clone(&SORTABLE_TERM_ENCODING),
         Arc::clone(&STRING_ENCODING),
     );
     let registry = DefaultRdfFusionFunctionRegistry::new(encodings.clone());

@@ -55,4 +55,15 @@ impl QuadComponent {
             QuadComponent::Object => COL_OBJECT,
         }
     }
+
+    /// Returns the component for the given character (G, S, P, O).
+    pub fn from_char(c: char) -> Option<Self> {
+        match c.to_ascii_uppercase() {
+            'G' => Some(QuadComponent::GraphName),
+            'S' => Some(QuadComponent::Subject),
+            'P' => Some(QuadComponent::Predicate),
+            'O' => Some(QuadComponent::Object),
+            _ => None,
+        }
+    }
 }

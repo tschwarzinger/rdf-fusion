@@ -1,4 +1,5 @@
 use crate::rdf_files::RdfParserOptions;
+use crate::rdf_files::RdfParserTableProviderError::UnsupportedRdfFormat;
 use crate::rdf_files::rdf::exec::RdfParserExec;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::catalog::{Session, TableProvider};
@@ -9,11 +10,12 @@ use datafusion::physical_plan::ExecutionPlan;
 use futures::StreamExt;
 use object_store::ObjectStoreExt;
 use oxrdfio::{RdfParser, TokioAsyncReaderQuadParser};
-use rdf_fusion_common::{DFResult, IriParseError};
+use rdf_fusion_common::{DFResult, IriParseError, RdfFormat};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
+use thiserror::Error;
 use tokio::io::AsyncRead;
 use tokio_util::bytes::Bytes;
 use url::Url;
@@ -29,10 +31,25 @@ pub struct RdfParserTableProvider<R: AsyncRead + Unpin + Send + 'static> {
     track_progress: bool,
 }
 
+#[derive(Debug, Error)]
+pub enum RdfParserTableProviderError {
+    #[error(transparent)]
+    IriParseError(#[from] IriParseError),
+    #[error("Unsupported RDF format: {0}")]
+    UnsupportedRdfFormat(RdfFormat),
+}
+
 impl<R: AsyncRead + Unpin + Send + 'static> RdfParserTableProvider<R> {
     /// Creates a new [`RdfParserTableProvider`].
-    pub fn new(read: R, options: RdfParserOptions) -> Result<Self, IriParseError> {
-        let mut reader = RdfParser::from_format(options.format);
+    pub fn new(
+        read: R,
+        options: RdfParserOptions,
+    ) -> Result<Self, RdfParserTableProviderError> {
+        let oxigraph_format = options
+            .format
+            .to_oxigraph()
+            .ok_or(UnsupportedRdfFormat(options.format))?;
+        let mut reader = RdfParser::from_format(oxigraph_format);
 
         if let Some(base_iri) = options.base_iri {
             reader = reader.with_base_iri(base_iri.to_string())?;
@@ -199,7 +216,11 @@ impl TableProvider for UrlRdfParserTableProvider {
             .map(|res: object_store::Result<Bytes>| res.map_err(std::io::Error::other));
         let read = tokio_util::io::StreamReader::new(stream);
 
-        let mut reader = RdfParser::from_format(self.options.format);
+        let oxigraph_format = self.options.format.to_oxigraph().ok_or_else(|| {
+            exec_datafusion_err!("Parquet is not supported by UrlRdfParserTableProvider")
+        })?;
+
+        let mut reader = RdfParser::from_format(oxigraph_format);
 
         if let Some(base_iri) = &self.options.base_iri {
             reader = reader
@@ -235,7 +256,6 @@ mod tests {
     use super::*;
     use datafusion::prelude::SessionContext;
     use insta::assert_snapshot;
-    use oxrdfio::RdfFormat;
     use std::io::Cursor;
 
     #[tokio::test]

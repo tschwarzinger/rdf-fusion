@@ -15,6 +15,7 @@ RDF Fusion Common
 oxsdatatypes.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
+oxrdfio.workspace = true
 spargebra.workspace = true
 
 # Regular Dependencies

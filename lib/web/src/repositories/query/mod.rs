@@ -11,8 +11,8 @@ use crate::repositories::service_description::{
 use crate::repositories::sparql_query_params::{SparqlQueryParams, SparqlQueryParamsRaw};
 use axum::extract::{Query, State};
 use axum::http::header::CONTENT_TYPE;
+use oxrdfio::RdfFormat;
 use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::io::RdfFormat;
 
 /// Implements the query GET API.
 pub async fn handle_query_get(

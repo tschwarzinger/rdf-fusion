@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use rdf_fusion::model::{GraphName, NamedNode, Quad};
+use rdf_fusion::common::{GraphName, NamedNode, Quad};
 use rdf_fusion::store::Store;
 
 /// This example shows how to use RDF Fusion as an RDF Store. While this example only shows the

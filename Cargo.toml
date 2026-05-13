@@ -89,6 +89,7 @@ criterion = "0.8"
 insta = { version = "1.47", features = ["filters"] }
 prettytable-rs = "0.10"
 text-diff = "0.4"
+tempfile = "3.10"
 tokio-test = "0.4"
 
 # Upstream Oxigraph dependencies
