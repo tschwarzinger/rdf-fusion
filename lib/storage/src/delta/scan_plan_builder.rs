@@ -3,8 +3,6 @@ use crate::delta::index::DeltaQuadStorageIndexSnapshot;
 use crate::delta::log::{
     DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
-use std::collections::HashSet;
-
 use crate::index::IndexComponents;
 use datafusion::catalog::Session;
 use datafusion::common::{DFSchema, JoinType, NullEquality};
@@ -492,7 +490,6 @@ impl DeltaQuadStorageScanPlanBuilder {
         &self,
         plan: Arc<dyn ExecutionPlan>,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
-        let mut seen = HashSet::new();
         let mut exprs = Vec::new();
         let schema = plan.schema();
 
@@ -500,11 +497,6 @@ impl DeltaQuadStorageScanPlanBuilder {
         let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
 
         for (logical_expr, name) in self.pattern.compute_projection() {
-            if seen.contains(&name) {
-                continue;
-            }
-            seen.insert(name.clone());
-
             let phys_expr = create_physical_expr(
                 &logical_expr,
                 &df_schema,

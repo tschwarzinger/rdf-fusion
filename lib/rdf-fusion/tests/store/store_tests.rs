@@ -8,7 +8,7 @@ use rdf_fusion::common::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::store::{DumpOptions, Store};
 use rdf_fusion_common::{BlankNode, GraphName, NamedNode, Quad, RdfFormat};
-use rdf_fusion_storage::rdf_files::RdfParserOptions;
+use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::error::Error;
 
 #[allow(clippy::non_ascii_literal)]
@@ -106,7 +106,7 @@ async fn test_load_graph() -> Result<(), Box<dyn Error>> {
     store
         .load_from_reader(
             DATA.as_bytes(),
-            RdfParserOptions::with_format(RdfFormat::Turtle),
+            RdfFileScanOptions::with_format(RdfFormat::Turtle),
         )
         .await?;
     for q in quads(GraphNameRef::DefaultGraph) {
@@ -122,7 +122,7 @@ async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     store
         .load_from_reader(
             GRAPH_DATA.as_bytes(),
-            RdfParserOptions::with_format(RdfFormat::TriG),
+            RdfFileScanOptions::with_format(RdfFormat::TriG),
         )
         .await?;
     for q in quads(NamedNodeRef::new_unchecked(
@@ -141,7 +141,7 @@ async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error
         store
             .load_from_reader(
                 "_:a <http://example.com/p> <http://example.com/p> .".as_bytes(),
-                RdfParserOptions::with_format(RdfFormat::NTriples),
+                RdfFileScanOptions::with_format(RdfFormat::NTriples),
             )
             .await?;
     }

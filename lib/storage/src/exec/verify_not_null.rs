@@ -2,12 +2,12 @@ use datafusion::arrow::array::Array;
 use datafusion::arrow::datatypes::{Schema, SchemaRef};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::common::DataFusionError;
-use datafusion::error::Result as DFResult;
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
 use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, RecordBatchStream,
 };
 use futures::{Stream, StreamExt};
+use rdf_fusion_common::DFResult;
 use std::any::Any;
 use std::fmt::Formatter;
 use std::pin::Pin;
@@ -127,7 +127,7 @@ impl Stream for VerifyNotNullStream {
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         self.inner.poll_next_unpin(cx).map(|opt| {
-            opt.map(|batch_result| {
+            opt.map(|batch_result: DFResult<RecordBatch>| {
                 batch_result.and_then(|batch| {
                     for &col_idx in &self.columns_to_verify {
                         let array = batch.column(col_idx);

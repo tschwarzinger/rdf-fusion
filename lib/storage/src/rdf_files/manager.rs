@@ -1,4 +1,4 @@
-use crate::rdf_files::RdfParserOptions;
+use crate::rdf_files::RdfFileScanOptions;
 use crate::rdf_files::UrlRdfParserTableProvider;
 use datafusion::catalog::TableProvider;
 use datafusion::datasource::memory::MemTable;
@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
 
 /// The URL and options for a single RDF file.
-type RdfFileKey = (String, RdfParserOptions);
+type RdfFileKey = (String, RdfFileScanOptions);
 
 /// The cached value for a single RDF file.
 type RdfFileValue = Arc<OnceCell<Arc<MemTable>>>;
@@ -28,11 +28,11 @@ impl RdfFileManager {
         Self::default()
     }
 
-    /// Gets or parses the given URL with the given options.
-    pub async fn get_or_parse(
+    /// Gets the scan plan (as a [`MemTable`]) for the given URL and options.
+    pub async fn get_scan_plan(
         &self,
         url: String,
-        options: RdfParserOptions,
+        options: RdfFileScanOptions,
         state: &SessionState,
     ) -> Result<Arc<MemTable>, DataFusionError> {
         let key = (url.clone(), options.clone());
@@ -49,9 +49,10 @@ impl RdfFileManager {
             let provider = UrlRdfParserTableProvider::try_new(url, options)?;
             let plan = provider.scan(state, None, &[], None).await?;
             let batches =
-                datafusion::physical_plan::collect(plan, state.task_ctx()).await?;
+                datafusion::physical_plan::collect(Arc::clone(&plan), state.task_ctx())
+                    .await?;
 
-            let schema = provider.schema();
+            let schema = plan.schema();
             let mem_table = Arc::new(MemTable::try_new(schema, vec![batches])?);
             Ok(mem_table)
         })

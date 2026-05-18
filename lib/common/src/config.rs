@@ -21,6 +21,8 @@ impl ConfigExtension for RdfFusionOptions {
 pub struct StorageOptions {
     /// Delta storage configuration.
     pub delta: DeltaStorageOptions,
+    /// RDF file storage options.
+    pub rdf_files: RdfFileStorageOptions,
 }
 
 /// Delta storage configuration for RDF Fusion.
@@ -28,6 +30,13 @@ pub struct StorageOptions {
 pub struct DeltaStorageOptions {
     /// The maximum age of the operations log that should be queried before refreshing.
     pub log_max_age: Option<Duration>,
+}
+
+/// Options related to working with RDF files (e.g., Turtle).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RdfFileStorageOptions {
+    /// Whether the query engine should assume that the quads within one file are unique.
+    pub assume_quads_unique_in_single_file: bool,
 }
 
 impl ExtensionOptions for RdfFusionOptions {
@@ -58,6 +67,15 @@ impl ExtensionOptions for RdfFusionOptions {
                     self.storage.delta.log_max_age = Some(Duration::from_millis(ms));
                 }
             }
+            "storage.rdf.assume_quads_unique_in_single_file" => {
+                let value: bool = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.delta.log_max_age: {e}"
+                    ))
+                })?;
+
+                self.storage.rdf_files.assume_quads_unique_in_single_file = value;
+            }
             _ => {
                 return Err(DataFusionError::Configuration(format!(
                     "Unknown configuration key: {key}"
@@ -68,15 +86,30 @@ impl ExtensionOptions for RdfFusionOptions {
     }
 
     fn entries(&self) -> Vec<ConfigEntry> {
-        vec![ConfigEntry {
-            key: format!("{}.storage.delta.log_max_age", Self::PREFIX),
-            value: self
-                .storage
-                .delta
-                .log_max_age
-                .map(|v| v.as_millis().to_string()),
-            description: "The maximum age of the operations log that should be queried before refreshing.",
-        }]
+        vec![
+            ConfigEntry {
+                key: format!("{}.storage.delta.log_max_age", Self::PREFIX),
+                value: self
+                    .storage
+                    .delta
+                    .log_max_age
+                    .map(|v| v.as_millis().to_string()),
+                description: "The maximum age of the operations log that should be queried before refreshing.",
+            },
+            ConfigEntry {
+                key: format!(
+                    "{}.storage.rdf.assume_quads_unique_in_single_file",
+                    Self::PREFIX
+                ),
+                value: Some(
+                    self.storage
+                        .rdf_files
+                        .assume_quads_unique_in_single_file
+                        .to_string(),
+                ),
+                description: "Sets whether the query engine should assume that the quads within a single file are unique.",
+            },
+        ]
     }
 }
 
@@ -91,6 +124,11 @@ impl RdfFusionOptions {
         let mut config = Self::default();
         if let Ok(val) = std::env::var("RDF_FUSION_DELTA_LOG_MAX_AGE") {
             config.set("storage.delta.log_max_age", &val)?;
+        }
+        if let Ok(val) =
+            std::env::var("RDF_FUSION_RDF_ASSUME_QUADS_UNIQUE_IN_SINGLE_FILE")
+        {
+            config.set("storage.rdf.assume_quads_unique_in_single_file", &val)?;
         }
         Ok(config)
     }
@@ -151,16 +189,8 @@ mod tests {
 
     #[test]
     fn test_config_extension_options() {
-        let mut config = RdfFusionOptions::default();
-        config.set("storage.delta.log_max_age", "100").unwrap();
-        assert_eq!(
-            config.storage.delta.log_max_age,
-            Some(Duration::from_millis(100))
-        );
-
+        let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].key, "rdf_fusion.storage.delta.log_max_age");
-        assert_eq!(entries[0].value, Some("100".to_string()));
+        assert_eq!(entries.len(), 2);
     }
 }

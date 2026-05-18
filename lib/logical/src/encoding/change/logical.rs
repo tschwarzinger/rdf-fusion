@@ -50,7 +50,7 @@ impl ChangeEncodingNode {
 
 impl UserDefinedLogicalNodeCore for ChangeEncodingNode {
     fn name(&self) -> &str {
-        "ChangeEncodingForStorage"
+        "ChangeEncoding"
     }
 
     fn inputs(&self) -> Vec<&LogicalPlan> {
@@ -66,7 +66,11 @@ impl UserDefinedLogicalNodeCore for ChangeEncodingNode {
     }
 
     fn fmt_for_explain(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ChangeEncodingForStorage:")
+        write!(
+            f,
+            "ChangeEncoding: target_encoding={}",
+            self.target_encoding
+        )
     }
 
     fn with_exprs_and_inputs(
@@ -75,7 +79,7 @@ impl UserDefinedLogicalNodeCore for ChangeEncodingNode {
         inputs: Vec<LogicalPlan>,
     ) -> DFResult<Self> {
         if !exprs.is_empty() || inputs.len() != 1 {
-            return plan_err!("ChangeEncodingForStorage takes a single input plan");
+            return plan_err!("ChangeEncoding takes a single input plan");
         }
 
         Self::try_new(inputs[0].clone(), self.target_encoding.clone())

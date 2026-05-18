@@ -3,7 +3,7 @@ use rdf_fusion::common::{
     NamedNode, NamedNodePattern, RdfFormat, TermPattern, TriplePattern, Variable,
 };
 use rdf_fusion::logical::{ActiveGraph, RdfFusionLogicalPlanBuilderContext};
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 
 /// This example shows how to use RDF Fusion's query builder for programmatically creating SPARQL
@@ -19,7 +19,7 @@ pub async fn main() -> anyhow::Result<()> {
         .await
         .context("Could not find spiderman.ttl")?;
     store
-        .load_from_reader(file, RdfParserOptions::with_format(RdfFormat::Turtle))
+        .load_from_reader(file, RdfFileScanOptions::with_format(RdfFormat::Turtle))
         .await?;
     assert_eq!(engine.len().await?, 7);
 

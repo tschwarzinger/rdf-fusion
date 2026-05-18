@@ -1,6 +1,6 @@
 use crate::plain_term::PlainTermEncoding;
 use crate::plain_term::decoders::DefaultPlainTermDecoder;
-use crate::string::{STRING_ENCODING, StringEncodingArray};
+use crate::string::{STRING_ENCODING, StringTermArray};
 use crate::{EncodingDatum, EncodingScalar, TermDecoder, TermEncoder};
 use datafusion::arrow::error::ArrowError;
 use rdf_fusion_common::AResult;
@@ -9,7 +9,7 @@ use rdf_fusion_common::AResult;
 /// [`StringEncoding`](crate::string::StringEncoding).
 pub fn with_string_encoding_from_plain_term(
     datum: &EncodingDatum<PlainTermEncoding>,
-) -> AResult<StringEncodingArray> {
+) -> AResult<StringTermArray> {
     match datum {
         EncodingDatum::Array(array) => {
             let terms = DefaultPlainTermDecoder::decode_terms(array);

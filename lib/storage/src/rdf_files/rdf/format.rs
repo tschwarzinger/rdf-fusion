@@ -1,4 +1,4 @@
-use crate::rdf_files::RdfParserOptions;
+use crate::rdf_files::RdfFileScanOptions;
 use crate::rdf_files::rdf::RdfDataSink;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::SchemaRef;
@@ -29,12 +29,12 @@ use std::sync::Arc;
 /// A [`FileFormat`] implementation for RDF files.
 #[derive(Debug)]
 pub struct RdfFileFormat {
-    options: RdfParserOptions,
+    options: RdfFileScanOptions,
 }
 
 impl RdfFileFormat {
     /// Creates a new [`RdfFileFormat`] with the given options.
-    pub fn new(options: RdfParserOptions) -> Self {
+    pub fn new(options: RdfFileScanOptions) -> Self {
         Self { options }
     }
 }
@@ -64,7 +64,7 @@ impl FileFormat for RdfFileFormat {
         _objects: &[object_store::ObjectMeta],
     ) -> DFResult<SchemaRef> {
         Ok(Arc::clone(
-            QuadStorageEncoding::PlainTerm.quad_schema().inner(),
+            QuadStorageEncoding::String.quad_schema().inner(),
         ))
     }
 
@@ -76,7 +76,7 @@ impl FileFormat for RdfFileFormat {
         _object: &object_store::ObjectMeta,
     ) -> DFResult<Statistics> {
         Ok(Statistics::new_unknown(
-            QuadStorageEncoding::PlainTerm.quad_schema().inner(),
+            QuadStorageEncoding::String.quad_schema().inner(),
         ))
     }
 
@@ -126,7 +126,7 @@ impl FileFormat for RdfFileFormat {
 
 #[derive(Debug)]
 struct RdfFileSource {
-    options: RdfParserOptions,
+    options: RdfFileScanOptions,
     table_schema: TableSchema,
     metrics: ExecutionPlanMetricsSet,
 }
@@ -168,12 +168,12 @@ impl FileSource for RdfFileSource {
 
 /// A [`FileOpener`] for RDF files.
 struct RdfFileOpener {
-    options: RdfParserOptions,
+    options: RdfFileScanOptions,
     store: Arc<dyn ObjectStore>,
 }
 
 impl RdfFileOpener {
-    fn new(options: RdfParserOptions, store: Arc<dyn ObjectStore>) -> Self {
+    fn new(options: RdfFileScanOptions, store: Arc<dyn ObjectStore>) -> Self {
         Self { options, store }
     }
 }
@@ -184,7 +184,7 @@ impl FileOpener for RdfFileOpener {
         file: PartitionedFile,
     ) -> DFResult<datafusion::datasource::physical_plan::FileOpenFuture> {
         let options = self.options.clone();
-        let schema = Arc::clone(QuadStorageEncoding::PlainTerm.quad_schema().inner());
+        let schema = Arc::clone(QuadStorageEncoding::String.quad_schema().inner());
         let store = Arc::clone(&self.store);
 
         Ok(Box::pin(async move {
@@ -203,6 +203,7 @@ impl FileOpener for RdfFileOpener {
 
             let mut parser_builder = RdfParser::from_format(oxigraph_format);
             if let Some(base_iri) = options.base_iri {
+                let base_iri: rdf_fusion_common::Iri<String> = base_iri;
                 parser_builder = parser_builder
                     .with_base_iri(base_iri.to_string())
                     .map_err(|e| DataFusionError::External(Box::new(e)))?;

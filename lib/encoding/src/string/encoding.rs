@@ -1,5 +1,5 @@
 use crate::encoding::TermEncoding;
-use crate::string::{StringEncodingArray, StringEncodingScalar};
+use crate::string::{StringEncodingScalar, StringTermArray};
 use crate::{EncodingName, TermEncoder};
 use datafusion::arrow::array::{Array, ArrayRef, StringBuilder};
 use datafusion::arrow::datatypes::DataType;
@@ -39,7 +39,7 @@ impl StringEncoding {
 }
 
 impl TermEncoding for StringEncoding {
-    type Array = StringEncodingArray;
+    type Array = StringTermArray;
     type Scalar = StringEncodingScalar;
 
     fn name(&self) -> EncodingName {
@@ -58,7 +58,7 @@ impl TermEncoding for StringEncoding {
                 array.data_type()
             );
         }
-        Ok(StringEncodingArray::new_unchecked(array))
+        Ok(StringTermArray::new_unchecked(array))
     }
 
     fn try_new_scalar(self: &Arc<Self>, scalar: ScalarValue) -> DFResult<Self::Scalar> {
@@ -78,7 +78,7 @@ impl TermEncoder<StringEncoding> for StringEncoding {
     fn encode_terms<'data>(
         &self,
         terms: impl IntoIterator<Item = ThinResult<Self::Term<'data>>>,
-    ) -> DFResult<StringEncodingArray> {
+    ) -> DFResult<StringTermArray> {
         let mut builder = StringBuilder::new();
         for term in terms {
             match term {
@@ -86,9 +86,7 @@ impl TermEncoder<StringEncoding> for StringEncoding {
                 Err(_) => builder.append_null(),
             }
         }
-        Ok(StringEncodingArray::new_unchecked(Arc::new(
-            builder.finish(),
-        )))
+        Ok(StringTermArray::new_unchecked(Arc::new(builder.finish())))
     }
 
     fn encode_term(
@@ -102,17 +100,17 @@ impl TermEncoder<StringEncoding> for StringEncoding {
 /// A list of arrays with the [StringEncoding].
 #[derive(Debug, Clone)]
 pub struct StringArgs {
-    arrays: Vec<StringEncodingArray>,
+    arrays: Vec<StringTermArray>,
 }
 
 impl StringArgs {
     /// Creates a new [StringArgs] from a list of arrays.
-    pub fn new_unchecked(arrays: Vec<StringEncodingArray>) -> Self {
+    pub fn new_unchecked(arrays: Vec<StringTermArray>) -> Self {
         Self { arrays }
     }
 
     /// Returns the array at `index`.
-    pub fn get(&self, index: usize) -> &StringEncodingArray {
+    pub fn get(&self, index: usize) -> &StringTermArray {
         &self.arrays[index]
     }
 }

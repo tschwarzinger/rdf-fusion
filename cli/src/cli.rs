@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand, ValueHint};
-use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
 #[command(about, version, name = "rdf-fusion")]
@@ -78,11 +77,18 @@ pub enum Command {
     Query {
         /// The SPARQL query string to execute
         query: String,
-    },
-    /// Build a database at the configured location.
-    BuildDatabase {
+        /// Print the query execution plan.
         #[arg(long)]
-        inputs: Vec<PathBuf>,
+        explain: bool,
+        /// If provided, the query is executed and the plan includes execution metrics.
+        /// Only works in combination with --explain.
+        #[arg(long, requires = "explain")]
+        analyze: bool,
+    },
+    /// Build a database from the source files.
+    BuildDatabase {
+        /// The location where the database should be built.
+        output: String,
     },
     /// Export the database to an RDF data dump.
     Dump {

@@ -7,15 +7,15 @@ use rdf_fusion_common::AResult;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub struct StringEncodingArray {
+pub struct StringTermArray {
     /// The inner array.
     inner: ArrayRef,
     /// The encoding of the array.
     encoding: StringEncodingRef,
 }
 
-impl StringEncodingArray {
-    /// Creates a new [`StringEncodingArray`] without validating the invariants.
+impl StringTermArray {
+    /// Creates a new [`StringTermArray`] without validating the invariants.
     pub fn new_unchecked(inner: ArrayRef) -> Self {
         Self {
             inner,
@@ -23,7 +23,7 @@ impl StringEncodingArray {
         }
     }
 
-    /// Creates a new [StringEncodingArray] with `number_rows` null values.
+    /// Creates a new [StringTermArray] with `number_rows` null values.
     pub fn new_null(number_rows: usize) -> Self {
         Self::new_unchecked(Arc::new(StringArray::new_null(number_rows)))
     }
@@ -41,7 +41,7 @@ impl StringEncodingArray {
     }
 }
 
-impl EncodingArray for StringEncodingArray {
+impl EncodingArray for StringTermArray {
     type Encoding = StringEncoding;
 
     fn encoding(&self) -> &Arc<Self::Encoding> {

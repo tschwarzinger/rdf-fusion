@@ -140,20 +140,27 @@ impl QuadPattern {
             Some(self.triple_pattern.object.clone()),
         ];
 
+        let mut seen = HashSet::new();
         patterns
             .into_iter()
             .zip(QuadComponent::all())
             .filter_map(|(pattern, component)| pattern.map(|p| (p, component)))
-            .filter_map(|(pattern, component)| match pattern {
-                TermPattern::BlankNode(blank_node)
-                    if self.blank_node_mode == BlankNodeMatchingMode::Variable =>
-                {
-                    Some((component, blank_node.as_str().to_string()))
+            .filter_map(|(pattern, component)| {
+                let name = match pattern {
+                    TermPattern::BlankNode(blank_node)
+                        if self.blank_node_mode == BlankNodeMatchingMode::Variable =>
+                    {
+                        blank_node.as_str().to_string()
+                    }
+                    TermPattern::Variable(variable) => variable.as_str().to_string(),
+                    _ => return None,
+                };
+
+                if seen.contains(&name) {
+                    return None;
                 }
-                TermPattern::Variable(variable) => {
-                    Some((component, variable.as_str().to_string()))
-                }
-                _ => None,
+                seen.insert(name.clone());
+                Some((component, name))
             })
             .collect()
     }

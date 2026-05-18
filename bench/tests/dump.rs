@@ -1,7 +1,7 @@
 use datafusion::prelude::SessionContext;
 use rdf_fusion::common::RdfFormat;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::{DumpOptions, Store};
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
@@ -86,7 +86,7 @@ async fn assert_count(path: &Path, format: RdfFormat) {
     let file = File::open(&path).await.unwrap();
     let result_store = Store::new_in_memory().await;
     result_store
-        .load_from_reader(file, RdfParserOptions::with_format(format))
+        .load_from_reader(file, RdfFileScanOptions::with_format(format))
         .await
         .unwrap();
 

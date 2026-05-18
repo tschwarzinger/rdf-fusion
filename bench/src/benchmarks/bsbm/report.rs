@@ -148,7 +148,7 @@ impl<TUseCase: BsbmUseCase> BsbmReport<TUseCase> {
 Query Type: {:?}
 Total Time: {:?}
 Planning Latency: {:?}
-Planning Compute: {}
+Planning Compute: {:?}
 ",
             details.query_type,
             details.total_time,

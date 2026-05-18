@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use anyhow::Result;
+use rdf_fusion::common::config::RdfFileStorageOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
@@ -375,7 +376,8 @@ fn string_store_factory() -> StoreFactory {
 fn data_dump_store_factory() -> StoreFactory {
     Arc::new(|config| {
         Box::pin(async move {
-            let storage = RdfFileQuadStorage::new(vec![]);
+            let storage =
+                RdfFileQuadStorage::new(vec![], RdfFileStorageOptions::default());
             for (name, source) in config.default_graphs {
                 storage.add_source(name, source);
             }

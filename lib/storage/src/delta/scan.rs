@@ -1,4 +1,5 @@
 use crate::delta::log::{DeltaQuadStorageLog, DeltaStorageLogVersionRange};
+use crate::exec::{extract_and_alias_inner_metrics, is_cooperative_on_all_paths};
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::common::{Statistics, plan_err};
@@ -7,15 +8,16 @@ use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskCo
 use datafusion::physical_expr::{ScalarFunctionExpr, conjunction};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
+use datafusion::physical_optimizer::limit_pushdown::LimitPushdown;
 use datafusion::physical_plan::execution_plan::{CardinalityEffect, SchedulingType};
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::filter_pushdown::{
     ChildPushdownResult, FilterPushdownPhase, FilterPushdownPropagation, PushedDown,
 };
+use datafusion::physical_plan::limit::GlobalLimitExec;
 use datafusion::physical_plan::metrics::{
     BaselineMetrics, ExecutionPlanMetricsSet, MetricsSet,
 };
-use datafusion::physical_plan::metrics::{Metric, MetricValue};
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, PhysicalExpr, PlanProperties,
@@ -24,7 +26,6 @@ use futures::Stream;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::any::Any;
-use std::borrow::Cow;
 use std::fmt::Formatter;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -34,7 +35,7 @@ use std::task::{Context, Poll};
 ///
 /// For now, this is mostly a marker in the query plan that helps with debugging, and most of its
 /// methods simply delegate to the inner plan.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeltaQuadStorageScanExec {
     log: Arc<DeltaQuadStorageLog>,
     quad_pattern: QuadPattern,
@@ -44,6 +45,7 @@ pub struct DeltaQuadStorageScanExec {
     properties: Arc<PlanProperties>,
     metrics: ExecutionPlanMetricsSet,
     pushed_down_filters: Vec<Arc<dyn PhysicalExpr>>,
+    fetch: Option<usize>,
 }
 
 impl DeltaQuadStorageScanExec {
@@ -55,12 +57,17 @@ impl DeltaQuadStorageScanExec {
         inner: Arc<dyn ExecutionPlan>,
         index_name: Option<String>,
     ) -> DFResult<Self> {
-        // TODO: Ensure that all plans are cooperative (Parquet Scan is but maybe)
+        let scheduling = if is_cooperative_on_all_paths(&inner) {
+            SchedulingType::Cooperative
+        } else {
+            SchedulingType::NonCooperative
+        };
+
         let properties = inner
             .properties()
             .as_ref()
             .clone()
-            .with_scheduling_type(SchedulingType::Cooperative);
+            .with_scheduling_type(scheduling);
 
         Ok(Self {
             log: Arc::clone(&log),
@@ -71,11 +78,12 @@ impl DeltaQuadStorageScanExec {
             properties: Arc::new(properties),
             metrics: ExecutionPlanMetricsSet::new(),
             pushed_down_filters: vec![],
+            fetch: None,
         })
     }
 
     /// Builder method to easily clone and attach new pushed filters
-    pub fn with_pushed_filters(mut self, filters: Vec<Arc<dyn PhysicalExpr>>) -> Self {
+    fn with_pushed_filters(mut self, filters: Vec<Arc<dyn PhysicalExpr>>) -> Self {
         self.pushed_down_filters = filters;
         self
     }
@@ -138,79 +146,9 @@ impl ExecutionPlan for DeltaQuadStorageScanExec {
     fn metrics(&self) -> Option<MetricsSet> {
         let mut set = self.metrics.clone_inner();
 
-        extract_inner_metrics(&self.inner, &mut set);
+        extract_and_alias_inner_metrics(&self.inner, &mut set);
 
-        return Some(set);
-
-        /// Recursively find and alias target metrics
-        fn extract_inner_metrics(plan: &Arc<dyn ExecutionPlan>, set: &mut MetricsSet) {
-            if let Some(metrics) = plan.metrics() {
-                for metric in metrics.iter() {
-                    let name_opt = match metric.value() {
-                        MetricValue::Count { name, .. } => Some(name.as_ref()),
-                        MetricValue::Time { name, .. } => Some(name.as_ref()),
-                        MetricValue::Gauge { name, .. } => Some(name.as_ref()),
-                        MetricValue::PruningMetrics { name, .. } => Some(name.as_ref()),
-                        _ => None,
-                    };
-
-                    if let Some(name) = name_opt {
-                        // Using `starts_with` handles DataFusion's implicit `_matched`
-                        // and `_total` suffixes for pruning metrics transparently.
-                        let target_prefixes = [
-                            "time_elapsed_processing",
-                            "time_elapsed_opening",
-                            "files_pruned",
-                            "files_scanned",
-                            "row_groups_pruned_statistics",
-                            "page_index_rows_pruned",
-                        ];
-
-                        if target_prefixes
-                            .iter()
-                            .any(|prefix| name.starts_with(prefix))
-                        {
-                            let new_name: Cow<'static, str> =
-                                format!("index_{name}").into();
-
-                            // Clone the underlying atomic references so the new metric updates automatically
-                            let new_value = match metric.value() {
-                                MetricValue::Count { count, .. } => MetricValue::Count {
-                                    name: new_name,
-                                    count: count.clone(),
-                                },
-                                MetricValue::Time { time, .. } => MetricValue::Time {
-                                    name: new_name,
-                                    time: time.clone(),
-                                },
-                                MetricValue::Gauge { gauge, .. } => MetricValue::Gauge {
-                                    name: new_name,
-                                    gauge: gauge.clone(),
-                                },
-                                MetricValue::PruningMetrics {
-                                    pruning_metrics, ..
-                                } => MetricValue::PruningMetrics {
-                                    name: new_name,
-                                    pruning_metrics: pruning_metrics.clone(),
-                                },
-                                _ => unreachable!(),
-                            };
-
-                            // Push the newly aliased metric
-                            set.push(Arc::new(Metric::new(
-                                new_value,
-                                metric.partition(),
-                            )));
-                        }
-                    }
-                }
-            }
-
-            // Recurse down the execution plan tree
-            for child in plan.children() {
-                extract_inner_metrics(child, set);
-            }
-        }
+        Some(set)
     }
 
     fn partition_statistics(&self, partition: Option<usize>) -> DFResult<Statistics> {
@@ -218,25 +156,38 @@ impl ExecutionPlan for DeltaQuadStorageScanExec {
     }
 
     fn supports_limit_pushdown(&self) -> bool {
-        self.inner.supports_limit_pushdown()
+        false
     }
 
     fn with_fetch(&self, limit: Option<usize>) -> Option<Arc<dyn ExecutionPlan>> {
-        let new_scan = self.inner.with_fetch(limit)?;
-        Some(Arc::new(Self {
+        let fetch = limit?;
+
+        let limited = Arc::new(GlobalLimitExec::new(
+            Arc::clone(&self.inner),
+            0,
+            Some(fetch),
+        ));
+        let optimized = LimitPushdown::new()
+            .optimize(limited, &ConfigOptions::default())
+            .ok()?;
+
+        let pushed = Arc::new(Self {
             log: Arc::clone(&self.log),
             quad_pattern: self.quad_pattern.clone(),
             changeset_version: self.changeset_version,
-            inner: new_scan,
+            inner: optimized,
             index_name: self.index_name.clone(),
             properties: Arc::clone(&self.properties),
             metrics: ExecutionPlanMetricsSet::new(),
             pushed_down_filters: self.pushed_down_filters.clone(),
-        }))
+            fetch: Some(fetch),
+        });
+
+        Some(pushed)
     }
 
     fn fetch(&self) -> Option<usize> {
-        self.inner.fetch()
+        self.fetch
     }
 
     fn cardinality_effect(&self) -> CardinalityEffect {
@@ -361,6 +312,11 @@ impl DisplayAs for DeltaQuadStorageScanExec {
         write!(f, "DeltaQuadStorageScanExec:")?;
         write!(f, " index={}", self.index_name.as_deref().unwrap_or("None"))?;
         write!(f, ", active_graph={}", self.quad_pattern.active_graph)?;
+
+        if let Some(var) = &self.quad_pattern.graph_variable {
+            write!(f, ", graph_variable={var}")?;
+        }
+
         write!(
             f,
             ", triple_pattern=[{} {} {}]",
@@ -393,7 +349,7 @@ impl DisplayAs for DeltaQuadStorageScanExec {
             write!(f, ", pushed_filters=[{}]", filter_strings.join(", "))?;
         }
 
-        if let Some(fetch) = self.inner.fetch() {
+        if let Some(fetch) = self.fetch() {
             write!(f, ", fetch={fetch}")?;
         }
 
@@ -502,7 +458,7 @@ mod tests {
 
         // Assert the inner scan that the filter exists (see `predicate@2 = 123`)
         assert_snapshot!(
-            displayable(optimized_scan.inner_scan().as_ref()).indent(false),
+            displayable(optimized_scan.inner.as_ref()).indent(false),
             @r"
         ProjectionExec: expr=[predicate@0 as p]
           DeltaScan
@@ -515,7 +471,7 @@ mod tests {
     async fn test_index_scan_without_parquet_pushdown_enabled() {
         let (_, scan) = setup_quad_scan(false).await;
         assert_snapshot!(
-            displayable(scan.inner_scan().as_ref()).indent(false),
+            displayable(scan.inner.as_ref()).indent(false),
             @"
         ProjectionExec: expr=[predicate@0 as p]
           ProjectionExec: expr=[predicate@2 as predicate]
@@ -603,6 +559,83 @@ mod tests {
           DeltaScan
             DataSourceExec: file_groups={1 group: [[]]}, projection=[subject, predicate, object], file_type=parquet, predicate=graph@3 IS NULL, pruning_predicate=graph_null_count@0 > 0, required_guarantees=[]
         "
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fetch_pushdown() {
+        let (_session, scan) = setup_quad_scan(true).await;
+
+        let limit = 10;
+        let pushed_scan_arc = scan
+            .with_fetch(Some(limit))
+            .expect("Should return Some plan");
+        let pushed_scan = pushed_scan_arc
+            .as_any()
+            .downcast_ref::<DeltaQuadStorageScanExec>()
+            .expect("top-level node should be a DeltaQuadStorageScanExec");
+
+        assert_eq!(pushed_scan_arc.fetch(), Some(10));
+        assert_snapshot!(
+            displayable(pushed_scan_arc.as_ref()).indent(false),
+            @"DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p <https://my.at/>], blank_node_mode=Variable, fetch=10"
+        );
+
+        // Verify that it reached the DataSourceExec (via DeltaScan)
+        assert_snapshot!(
+            displayable(pushed_scan.inner_scan().as_ref()).indent(false),
+            @r"
+        ProjectionExec: expr=[predicate@0 as p]
+          GlobalLimitExec: skip=0, fetch=10
+            DeltaScan
+              DataSourceExec: file_groups={1 group: [[]]}, projection=[predicate], file_type=parquet, predicate=graph@1 IS NULL AND subject@3 = 0 AND object@2 = 0, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 0 AND 0 <= subject_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 0 AND 0 <= object_max@6, required_guarantees=[object in (0), subject in (0)]
+        "
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delta_scan_limit_pushdown_full_optimizer() {
+        let (session, scan) = setup_quad_scan(true).await;
+
+        let filter_expr = Arc::new(BinaryExpr::new(
+            Arc::new(Column::new("p", 0)),
+            Operator::Eq,
+            Arc::new(Literal::new(ScalarValue::Int64(Some(123)))),
+        ));
+
+        let filter_exec =
+            Arc::new(FilterExec::try_new(filter_expr, scan.clone()).unwrap());
+
+        // Construct GlobalLimitExec -> FilterExec -> DeltaQuadStorageScanExec
+        let limit_exec = Arc::new(GlobalLimitExec::new(filter_exec, 0, Some(10)));
+
+        // Run all physical optimizer rules
+        let state = session.state();
+        let mut optimized: Arc<dyn ExecutionPlan> = limit_exec;
+        for rule in state.physical_optimizers() {
+            optimized = rule.optimize(optimized, state.config_options()).unwrap();
+        }
+
+        // The outer plan should be the DeltaQuadStorageScanExec (with fetch=10 and pushed filters)
+        assert_snapshot!(
+            displayable(optimized.as_ref()).indent(false),
+            @"DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p <https://my.at/>], blank_node_mode=Variable, pushed_filters=[p@0 = 123], fetch=10"
+        );
+
+        let pushed_scan = optimized
+            .as_any()
+            .downcast_ref::<DeltaQuadStorageScanExec>()
+            .unwrap();
+
+        // The inner plan should have both limit and filter pushed down
+        assert_snapshot!(
+            displayable(pushed_scan.inner_scan().as_ref()).indent(false),
+            @r"
+            ProjectionExec: expr=[predicate@0 as p]
+              GlobalLimitExec: skip=0, fetch=10
+                DeltaScan
+                  DataSourceExec: file_groups={1 group: [[]]}, projection=[predicate], file_type=parquet, predicate=graph@1 IS NULL AND subject@3 = 0 AND object@2 = 0 AND predicate@2 = 123, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 0 AND 0 <= subject_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 0 AND 0 <= object_max@6 AND predicate_null_count@10 != row_count@4 AND predicate_min@8 <= 123 AND 123 <= predicate_max@9, required_guarantees=[object in (0), predicate in (123), subject in (0)]
+            "
         );
     }
 

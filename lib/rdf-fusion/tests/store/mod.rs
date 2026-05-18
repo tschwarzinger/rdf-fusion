@@ -6,6 +6,7 @@ use object_store::path::Path;
 use rdf_fusion::common::GraphName;
 use rdf_fusion::store::Store;
 use rdf_fusion_common::RdfFormat;
+use rdf_fusion_common::config::RdfFileStorageOptions;
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_storage::rdf_files::{RdfFileQuadStorage, RdfFileSourceConfig};
 use std::sync::Arc;
@@ -19,13 +20,16 @@ fn create_store_for_result(
     path: &str,
     format: RdfFormat,
 ) -> Store {
-    let storage = RdfFileQuadStorage::new(vec![(
-        GraphName::DefaultGraph,
-        RdfFileSourceConfig {
-            url: path.to_string(),
-            format: format,
-        },
-    )]);
+    let storage = RdfFileQuadStorage::new(
+        vec![(
+            GraphName::DefaultGraph,
+            RdfFileSourceConfig {
+                url: path.to_string(),
+                format,
+            },
+        )],
+        RdfFileStorageOptions::default(),
+    );
 
     let context = RdfFusionContextBuilder::new(Arc::new(storage))
         .with_runtime_env(Some(runtime_env))

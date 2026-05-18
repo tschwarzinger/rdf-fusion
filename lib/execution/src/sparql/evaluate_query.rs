@@ -22,6 +22,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 /// Evaluates a SPARQL query and returns the results along with execution information.
 ///
@@ -212,9 +213,11 @@ async fn create_execution_plan(
     }
     .await?;
 
+    let planning_compute_nanos =
+        u64::try_from(planning_compute.value()).unwrap_or(u64::MAX);
     let explanation = QueryExplanation {
         planning_latency: planning_time_start.elapsed(),
-        planning_compute,
+        planning_compute: Duration::from_nanos(planning_compute_nanos),
         initial_logical_plan: logical_plan,
         optimized_logical_plan: optimized_plan,
         execution_plan: Arc::clone(&physical_plan),

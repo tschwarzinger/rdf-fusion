@@ -18,10 +18,9 @@ fn test_cli_build_database_delta_lake() {
         "--storage-type",
         "delta-lake",
         "--location",
-        &db_path,
-        "build-database",
-        "--inputs",
         "../examples/data/spiderman.ttl",
+        "build-database",
+        &db_path,
     ]);
     cmd.assert().success();
 

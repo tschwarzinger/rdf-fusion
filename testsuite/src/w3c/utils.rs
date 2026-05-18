@@ -7,7 +7,7 @@ use rdf_fusion::common::dataset::CanonicalizationAlgorithm;
 use rdf_fusion::common::vocab::*;
 use rdf_fusion::common::*;
 use rdf_fusion::execution::results::QueryResults;
-use rdf_fusion::storage::rdf_files::{RdfFileSourceConfig, RdfParserOptions};
+use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
 use rdf_fusion::store::Store;
 use sparesults::QueryResultsFormat;
 use std::collections::HashMap;
@@ -75,7 +75,7 @@ impl W3CTestUtils {
         store
             .load_from_reader(
                 reader,
-                RdfParserOptions {
+                RdfFileScanOptions {
                     format: source.format,
                     base_iri: Some(source.url.parse()?),
                     rename_blank_nodes: false,

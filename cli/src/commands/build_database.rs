@@ -1,6 +1,6 @@
 use anyhow::{Context, bail};
 use rdf_fusion::common::RdfFormat;
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 use std::path::PathBuf;
 use tracing::info;
@@ -24,7 +24,7 @@ pub async fn build_database(store: Store, inputs: Vec<PathBuf>) -> anyhow::Resul
             .await
             .context("Cannot open file.")?;
         store
-            .load_from_reader(file, RdfParserOptions::with_format(format))
+            .load_from_reader(file, RdfFileScanOptions::with_format(format))
             .await
             .context("Error while loading data file")?;
     }

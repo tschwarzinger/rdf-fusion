@@ -13,7 +13,7 @@ use crate::utils::print_store_stats;
 use anyhow::Context;
 use async_trait::async_trait;
 use rdf_fusion::common::RdfFormat;
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 use reqwest::Url;
 use std::fs;
@@ -125,7 +125,7 @@ impl Benchmark for WindFarmBenchmark {
         }
         let data = tokio::fs::File::open(&dataset_path.wind_farm_data).await?;
         memory_store
-            .load_from_reader(data, RdfParserOptions::with_format(RdfFormat::N3))
+            .load_from_reader(data, RdfFileScanOptions::with_format(RdfFormat::N3))
             .await?;
 
         if print_info {
@@ -133,7 +133,7 @@ impl Benchmark for WindFarmBenchmark {
         }
         let data = tokio::fs::File::open(&dataset_path.time_series_data).await?;
         memory_store
-            .load_from_reader(data, RdfParserOptions::with_format(RdfFormat::N3))
+            .load_from_reader(data, RdfFileScanOptions::with_format(RdfFormat::N3))
             .await?;
 
         if print_info {

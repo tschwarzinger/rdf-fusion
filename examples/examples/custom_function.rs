@@ -15,7 +15,7 @@ use rdf_fusion::encoding::{
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::functions::scalar::args::ScalarSparqlFunctionArgs;
 use rdf_fusion::functions::scalar::signature::SparqlOpTypeSignatureBuilder;
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -29,7 +29,7 @@ pub async fn main() -> anyhow::Result<()> {
         .await
         .context("Could not find spiderman.ttl")?;
     store
-        .load_from_reader(file, RdfParserOptions::with_format(RdfFormat::Turtle))
+        .load_from_reader(file, RdfFileScanOptions::with_format(RdfFormat::Turtle))
         .await?;
 
     // Register custom function.
@@ -197,7 +197,7 @@ mod tests {
             .with_context(|| format!("Failed to open test data at {}", file_path))?;
 
         store
-            .load_from_reader(file, RdfParserOptions::with_format(RdfFormat::Turtle))
+            .load_from_reader(file, RdfFileScanOptions::with_format(RdfFormat::Turtle))
             .await?;
 
         let query = "

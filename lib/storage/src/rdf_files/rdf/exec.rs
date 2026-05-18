@@ -1,3 +1,4 @@
+use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::{DataFusionError, exec_datafusion_err};
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
@@ -9,13 +10,17 @@ use datafusion::physical_plan::{
 };
 use futures::stream::try_unfold;
 use oxrdfio::TokioAsyncReaderQuadParser;
-use rdf_fusion_common::DFResult;
+use rdf_fusion_common::{DFResult, QuadRef};
+use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
+use rdf_fusion_encoding::string::StringQuadsBuilder;
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use tokio::io::AsyncRead;
 use tracing::info;
+
+use crate::rdf_files::detect_encoding_from_schema;
 
 /// The execution plan for reading RDF data from an [`AsyncRead`] stream.
 pub struct RdfParserExec<R: AsyncRead + Unpin + Send + 'static> {
@@ -108,11 +113,46 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
         })?;
 
         let schema = Arc::clone(&self.schema);
+        let encoding = detect_encoding_from_schema(&schema)?;
         let target_batch_size = context.session_config().batch_size();
+
+        enum QuadsBuilder {
+            PlainTerm(Box<PlainTermQuadsBuilder>),
+            String(Box<StringQuadsBuilder>),
+        }
+
+        impl QuadsBuilder {
+            fn new(encoding: &QuadStorageEncoding, capacity: usize) -> Self {
+                match encoding {
+                    QuadStorageEncoding::PlainTerm => Self::PlainTerm(Box::new(
+                        PlainTermQuadsBuilder::with_capacity(capacity),
+                    )),
+                    QuadStorageEncoding::String => Self::String(Box::new(
+                        StringQuadsBuilder::with_capacity(capacity),
+                    )),
+                    _ => unreachable!("Unsupported encoding for RDF parser"),
+                }
+            }
+
+            fn append_quad(&mut self, quad: QuadRef<'_>) {
+                match self {
+                    Self::PlainTerm(b) => b.append_quad(quad),
+                    Self::String(b) => b.append_quad(quad),
+                }
+            }
+
+            fn finish(self) -> RecordBatch {
+                match self {
+                    Self::PlainTerm(b) => b.finish().into_record_batch(),
+                    Self::String(b) => b.finish().into_record_batch(),
+                }
+            }
+        }
 
         struct ParserStreamState<R: AsyncRead + Unpin + Send + 'static> {
             parser: TokioAsyncReaderQuadParser<R>,
-            builder: PlainTermQuadsBuilder,
+            builder: QuadsBuilder,
+            encoding: QuadStorageEncoding,
             target_batch_size: usize,
             progress: ProgressState,
             track_progress: bool,
@@ -120,7 +160,8 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
 
         let initial_state = ParserStreamState {
             parser,
-            builder: PlainTermQuadsBuilder::with_capacity(target_batch_size),
+            builder: QuadsBuilder::new(&encoding, target_batch_size),
+            encoding,
             target_batch_size,
             progress: ProgressState {
                 pending_batch: 0,
@@ -149,9 +190,10 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
 
                         // Yield a batch when we hit the configured batch size. Otherwise, keep parsing.
                         if state.progress.pending_batch >= state.target_batch_size {
-                            let batch = state.builder.finish().into_record_batch();
+                            let batch = state.builder.finish();
                             state.progress.pending_batch = 0;
-                            state.builder = PlainTermQuadsBuilder::with_capacity(
+                            state.builder = QuadsBuilder::new(
+                                &state.encoding,
                                 state.target_batch_size,
                             );
 
@@ -171,9 +213,9 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
                         }
 
                         return if state.progress.pending_batch > 0 {
-                            let batch = state.builder.finish().into_record_batch();
+                            let batch = state.builder.finish();
                             state.progress.pending_batch = 0;
-                            state.builder = PlainTermQuadsBuilder::with_capacity(0);
+                            state.builder = QuadsBuilder::new(&state.encoding, 0);
 
                             Ok(Some((batch, state)))
                         } else {

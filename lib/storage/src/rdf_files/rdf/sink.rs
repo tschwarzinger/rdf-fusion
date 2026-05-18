@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::array::{Array, RecordBatch, StringArray};
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::DataFusionError;
 use datafusion::datasource::sink::DataSink;
@@ -11,17 +11,18 @@ use object_store::path::Path;
 use oxrdfio::{RdfSerializer, TokioAsyncWriterQuadSerializer};
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{
-    GraphNameRef, NamedNode, NamedOrBlankNode, Quad, TermRef, Triple,
+    GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, Quad, Term, TermRef, Triple,
 };
 use rdf_fusion_encoding::plain_term::decoders::{
     DefaultPlainTermDecoder, GraphNameRefPlainTermDecoder,
 };
 use rdf_fusion_encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermEncoding};
-use rdf_fusion_encoding::{TermDecoder, TermEncoding};
+use rdf_fusion_encoding::{QuadStorageEncoding, TermDecoder, TermEncoding};
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use crate::rdf_files::detect_encoding_from_schema;
 use crate::rdf_files::rdf::RdfFormat;
 use datafusion::datasource::file_format::parquet::ParquetSink;
 
@@ -267,27 +268,103 @@ impl OxigraphRdfDataSink {
         batch: &RecordBatch,
         serializer: &mut TokioAsyncWriterQuadSerializer<W>,
     ) -> datafusion::common::Result<()> {
-        let graphs = self.decode_column(batch, COL_GRAPH)?;
-        let subjects = self.decode_column(batch, COL_SUBJECT)?;
-        let predicates = self.decode_column(batch, COL_PREDICATE)?;
-        let objects = self.decode_column(batch, COL_OBJECT)?;
+        let encoding = detect_encoding_from_schema(&batch.schema())?;
 
-        let graph_terms = GraphNameRefPlainTermDecoder::decode_terms(&graphs);
-        let subject_terms = DefaultPlainTermDecoder::decode_terms(&subjects);
-        let predicate_terms = DefaultPlainTermDecoder::decode_terms(&predicates);
-        let object_terms = DefaultPlainTermDecoder::decode_terms(&objects);
+        match encoding {
+            QuadStorageEncoding::PlainTerm => {
+                let graphs = self.decode_plain_term_column(batch, COL_GRAPH)?;
+                let subjects = self.decode_plain_term_column(batch, COL_SUBJECT)?;
+                let predicates = self.decode_plain_term_column(batch, COL_PREDICATE)?;
+                let objects = self.decode_plain_term_column(batch, COL_OBJECT)?;
 
-        for (((g, s), p), o) in graph_terms
-            .zip(subject_terms)
-            .zip(predicate_terms)
-            .zip(object_terms)
-        {
-            let g = g.map_err(|e| DataFusionError::External(Box::new(e)))?;
-            let s = s.map_err(|e| DataFusionError::External(Box::new(e)))?;
-            let p = p.map_err(|e| DataFusionError::External(Box::new(e)))?;
-            let o = o.map_err(|e| DataFusionError::External(Box::new(e)))?;
+                let graph_terms = GraphNameRefPlainTermDecoder::decode_terms(&graphs);
+                let subject_terms = DefaultPlainTermDecoder::decode_terms(&subjects);
+                let predicate_terms = DefaultPlainTermDecoder::decode_terms(&predicates);
+                let object_terms = DefaultPlainTermDecoder::decode_terms(&objects);
 
-            self.serialize_quad(serializer, g, s, p, o).await?;
+                for (((g, s), p), o) in graph_terms
+                    .zip(subject_terms)
+                    .zip(predicate_terms)
+                    .zip(object_terms)
+                {
+                    let g = g.map_err(|e| DataFusionError::External(Box::new(e)))?;
+                    let s = s.map_err(|e| DataFusionError::External(Box::new(e)))?;
+                    let p = p.map_err(|e| DataFusionError::External(Box::new(e)))?;
+                    let o = o.map_err(|e| DataFusionError::External(Box::new(e)))?;
+
+                    self.serialize_quad(serializer, g, s, p, o).await?;
+                }
+            }
+            QuadStorageEncoding::String => {
+                let graphs = self.decode_string_column(batch, COL_GRAPH)?;
+                let subjects = self.decode_string_column(batch, COL_SUBJECT)?;
+                let predicates = self.decode_string_column(batch, COL_PREDICATE)?;
+                let objects = self.decode_string_column(batch, COL_OBJECT)?;
+
+                for (((g, s), p), o) in graphs
+                    .iter()
+                    .zip(subjects.iter())
+                    .zip(predicates.iter())
+                    .zip(objects.iter())
+                {
+                    let g = match g {
+                        Some(g) => {
+                            let term = rdf_fusion_encoding::string::parse_turtle_term(g)
+                                .map_err(|e| DataFusionError::External(Box::new(e)))?;
+                            match term {
+                                Term::NamedNode(nn) => GraphName::NamedNode(nn),
+                                Term::BlankNode(bn) => GraphName::BlankNode(bn),
+                                _ => {
+                                    return Err(DataFusionError::Execution(
+                                        "Invalid graph name".to_string(),
+                                    ));
+                                }
+                            }
+                        }
+                        None => GraphName::DefaultGraph,
+                    };
+
+                    let s = match s {
+                        Some(s) => rdf_fusion_encoding::string::parse_turtle_term(s)
+                            .map_err(|e| DataFusionError::External(Box::new(e)))?,
+                        None => {
+                            return Err(DataFusionError::Execution(
+                                "Subject cannot be null".to_string(),
+                            ));
+                        }
+                    };
+
+                    let p = match p {
+                        Some(p) => rdf_fusion_encoding::string::parse_turtle_term(p)
+                            .map_err(|e| DataFusionError::External(Box::new(e)))?,
+                        None => {
+                            return Err(DataFusionError::Execution(
+                                "Predicate cannot be null".to_string(),
+                            ));
+                        }
+                    };
+
+                    let o = match o {
+                        Some(o) => rdf_fusion_encoding::string::parse_turtle_term(o)
+                            .map_err(|e| DataFusionError::External(Box::new(e)))?,
+                        None => {
+                            return Err(DataFusionError::Execution(
+                                "Object cannot be null".to_string(),
+                            ));
+                        }
+                    };
+
+                    self.serialize_quad(
+                        serializer,
+                        g.as_ref(),
+                        s.as_ref(),
+                        p.as_ref(),
+                        o.as_ref(),
+                    )
+                    .await?;
+                }
+            }
+            _ => unreachable!("Unsupported encoding for RDF sink"),
         }
         Ok(())
     }
@@ -316,20 +393,69 @@ impl OxigraphRdfDataSink {
         batch: &RecordBatch,
         serializer: &mut TokioAsyncWriterQuadSerializer<W>,
     ) -> datafusion::common::Result<()> {
-        let subjects = self.decode_column(batch, COL_SUBJECT)?;
-        let predicates = self.decode_column(batch, COL_PREDICATE)?;
-        let objects = self.decode_column(batch, COL_OBJECT)?;
+        let encoding = detect_encoding_from_schema(&batch.schema())?;
 
-        let subject_terms = DefaultPlainTermDecoder::decode_terms(&subjects);
-        let predicate_terms = DefaultPlainTermDecoder::decode_terms(&predicates);
-        let object_terms = DefaultPlainTermDecoder::decode_terms(&objects);
+        match encoding {
+            QuadStorageEncoding::PlainTerm => {
+                let subjects = self.decode_plain_term_column(batch, COL_SUBJECT)?;
+                let predicates = self.decode_plain_term_column(batch, COL_PREDICATE)?;
+                let objects = self.decode_plain_term_column(batch, COL_OBJECT)?;
 
-        for ((s, p), o) in subject_terms.zip(predicate_terms).zip(object_terms) {
-            let s = s.map_err(|e| DataFusionError::External(Box::new(e)))?;
-            let p = p.map_err(|e| DataFusionError::External(Box::new(e)))?;
-            let o = o.map_err(|e| DataFusionError::External(Box::new(e)))?;
+                let subject_terms = DefaultPlainTermDecoder::decode_terms(&subjects);
+                let predicate_terms = DefaultPlainTermDecoder::decode_terms(&predicates);
+                let object_terms = DefaultPlainTermDecoder::decode_terms(&objects);
 
-            self.serialize_triple(serializer, s, p, o).await?;
+                for ((s, p), o) in subject_terms.zip(predicate_terms).zip(object_terms) {
+                    let s = s.map_err(|e| DataFusionError::External(Box::new(e)))?;
+                    let p = p.map_err(|e| DataFusionError::External(Box::new(e)))?;
+                    let o = o.map_err(|e| DataFusionError::External(Box::new(e)))?;
+
+                    self.serialize_triple(serializer, s, p, o).await?;
+                }
+            }
+            QuadStorageEncoding::String => {
+                let subjects = self.decode_string_column(batch, COL_SUBJECT)?;
+                let predicates = self.decode_string_column(batch, COL_PREDICATE)?;
+                let objects = self.decode_string_column(batch, COL_OBJECT)?;
+
+                for ((s, p), o) in
+                    subjects.iter().zip(predicates.iter()).zip(objects.iter())
+                {
+                    let s = match s {
+                        Some(s) => rdf_fusion_encoding::string::parse_turtle_term(s)
+                            .map_err(|e| DataFusionError::External(Box::new(e)))?,
+                        None => {
+                            return Err(DataFusionError::Execution(
+                                "Subject cannot be null".to_string(),
+                            ));
+                        }
+                    };
+
+                    let p = match p {
+                        Some(p) => rdf_fusion_encoding::string::parse_turtle_term(p)
+                            .map_err(|e| DataFusionError::External(Box::new(e)))?,
+                        None => {
+                            return Err(DataFusionError::Execution(
+                                "Predicate cannot be null".to_string(),
+                            ));
+                        }
+                    };
+
+                    let o = match o {
+                        Some(o) => rdf_fusion_encoding::string::parse_turtle_term(o)
+                            .map_err(|e| DataFusionError::External(Box::new(e)))?,
+                        None => {
+                            return Err(DataFusionError::Execution(
+                                "Object cannot be null".to_string(),
+                            ));
+                        }
+                    };
+
+                    self.serialize_triple(serializer, s.as_ref(), p.as_ref(), o.as_ref())
+                        .await?;
+                }
+            }
+            _ => unreachable!("Unsupported encoding for RDF sink"),
         }
         Ok(())
     }
@@ -351,8 +477,8 @@ impl OxigraphRdfDataSink {
         Ok(())
     }
 
-    /// Decodes a column from a [`RecordBatch`] into a term array.
-    fn decode_column(
+    /// Decodes a column from a [`RecordBatch`] into a plain term array.
+    fn decode_plain_term_column(
         &self,
         batch: &RecordBatch,
         col_name: &str,
@@ -363,6 +489,26 @@ impl OxigraphRdfDataSink {
         PLAIN_TERM_ENCODING
             .try_new_array(Arc::clone(column))
             .map_err(|e| DataFusionError::External(Box::new(e)))
+    }
+
+    /// Decodes a column from a [`RecordBatch`] into a string array.
+    fn decode_string_column(
+        &self,
+        batch: &RecordBatch,
+        col_name: &str,
+    ) -> datafusion::common::Result<Arc<StringArray>> {
+        let column = batch.column_by_name(col_name).ok_or_else(|| {
+            DataFusionError::Execution(format!("Column {col_name} not found"))
+        })?;
+        let array = column
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or_else(|| {
+                DataFusionError::Execution(format!(
+                    "Column {col_name} is not a StringArray"
+                ))
+            })?;
+        Ok(Arc::new(array.clone()))
     }
 
     /// Extracts a subject from a [`TermRef`].
@@ -417,19 +563,74 @@ impl futures::Stream for StrictTripleStream {
     ) -> std::task::Poll<Option<Self::Item>> {
         match self.inner.poll_next_unpin(cx) {
             std::task::Poll::Ready(Some(Ok(batch))) => {
-                let graph_col = batch.column_by_name(COL_GRAPH).unwrap();
-                let graphs = PLAIN_TERM_ENCODING
-                    .try_new_array(Arc::clone(graph_col))
-                    .map_err(|e| DataFusionError::External(Box::new(e)))?;
-                let graph_terms = GraphNameRefPlainTermDecoder::decode_terms(&graphs);
+                let encoding = match detect_encoding_from_schema(&batch.schema()) {
+                    Ok(e) => e,
+                    Err(e) => return std::task::Poll::Ready(Some(Err(e))),
+                };
 
-                for g in graph_terms {
-                    let g = g.map_err(|e| DataFusionError::External(Box::new(e)))?;
-                    if g != GraphNameRef::DefaultGraph {
-                        return std::task::Poll::Ready(Some(Err(DataFusionError::Execution(
-                            "Encountered non-default graph while dumping to a triple-only format."
-                                .to_string(),
-                        ))));
+                let graph_col = batch.column_by_name(COL_GRAPH).unwrap();
+
+                match encoding {
+                    QuadStorageEncoding::PlainTerm => {
+                        let graphs = match PLAIN_TERM_ENCODING
+                            .try_new_array(Arc::clone(graph_col))
+                            .map_err(|e| DataFusionError::External(Box::new(e)))
+                        {
+                            Ok(g) => g,
+                            Err(e) => return std::task::Poll::Ready(Some(Err(e))),
+                        };
+                        let graph_terms =
+                            GraphNameRefPlainTermDecoder::decode_terms(&graphs);
+
+                        for g in graph_terms {
+                            let g = match g
+                                .map_err(|e| DataFusionError::External(Box::new(e)))
+                            {
+                                Ok(g) => g,
+                                Err(e) => return std::task::Poll::Ready(Some(Err(e))),
+                            };
+                            if g != GraphNameRef::DefaultGraph {
+                                return std::task::Poll::Ready(Some(Err(
+                                    DataFusionError::Execution(
+                                        "Encountered non-default graph while dumping to a triple-only format."
+                                            .to_string(),
+                                    ),
+                                )));
+                            }
+                        }
+                    }
+                    QuadStorageEncoding::String => {
+                        let graphs = graph_col
+                            .as_any()
+                            .downcast_ref::<StringArray>()
+                            .ok_or_else(|| {
+                                DataFusionError::Execution(
+                                    "Column graph is not a StringArray".to_string(),
+                                )
+                            });
+                        let graphs = match graphs {
+                            Ok(g) => g,
+                            Err(e) => return std::task::Poll::Ready(Some(Err(e))),
+                        };
+
+                        for g in graphs.iter() {
+                            if g.is_some() {
+                                return std::task::Poll::Ready(Some(Err(
+                                    DataFusionError::Execution(
+                                        "Encountered non-default graph while dumping to a triple-only format."
+                                            .to_string(),
+                                    ),
+                                )));
+                            }
+                        }
+                    }
+                    _ => {
+                        return std::task::Poll::Ready(Some(Err(
+                            DataFusionError::Execution(
+                                "Unsupported encoding for triple-only format."
+                                    .to_string(),
+                            ),
+                        )));
                     }
                 }
 
@@ -470,10 +671,11 @@ mod tests {
     async fn test_rdf_data_sink_triples() -> datafusion::common::Result<()> {
         let store = Arc::new(InMemory::new());
         let path = Path::from("test.ttl");
-        let schema = Arc::clone(QuadStorageEncoding::PlainTerm.quad_schema().inner());
+        let schema = Arc::clone(QuadStorageEncoding::String.quad_schema().inner());
 
         // Create a batch with some triples
-        let mut builder = PlainTermQuadsBuilder::with_capacity(2);
+        let mut builder =
+            rdf_fusion_encoding::string::StringQuadsBuilder::with_capacity(2);
         let s = NamedNode::new_unchecked("http://example.org/s");
         let p = NamedNode::new_unchecked("http://example.org/p");
         let o1 = NamedNode::new_unchecked("http://example.org/o1");

@@ -8,7 +8,7 @@ pub struct QueryExplanation {
     /// The latency of the query planning. This can differ from the planning time which is th.
     pub planning_latency: std::time::Duration,
     /// The compute time it took to compute the query plan.
-    pub planning_compute: datafusion::physical_expr_common::metrics::Time,
+    pub planning_compute: std::time::Duration,
     /// The initial logical plan created from the SPARQL query.
     pub initial_logical_plan: LogicalPlan,
     /// The optimized logical plan.

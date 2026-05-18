@@ -47,18 +47,39 @@ pub async fn main() -> anyhow::Result<()> {
         .init();
 
     let args = Args::parse();
-    let store = create_store(&args).await?;
 
-    match args.command {
+    match &args.command {
         Command::Serve {
             bind,
             cors,
             union_default_graph,
-        } => commands::serve::serve(store, &bind, false, cors, union_default_graph).await,
-        Command::BuildDatabase { inputs } => {
+        } => {
+            let store = create_store(&args).await?;
+            commands::serve::serve(store, bind, false, *cors, *union_default_graph).await
+        }
+        Command::BuildDatabase { output } => {
+            let mut args_with_output = args.clone();
+            args_with_output.storage.location = Some(vec![output.clone()]);
+            let store = create_store(&args_with_output).await?;
+
+            let inputs = args
+                .storage
+                .location
+                .as_ref()
+                .context("Location is required as input for BuildDatabase. Please specify the source files using the --location option.")?
+                .iter()
+                .map(PathBuf::from)
+                .collect();
             commands::build_database::build_database(store, inputs).await
         }
-        Command::Query { query } => commands::query::query(store, query).await,
+        Command::Query {
+            query,
+            explain,
+            analyze,
+        } => {
+            let store = create_store(&args).await?;
+            commands::query::query(store, query.clone(), *explain, *analyze).await
+        }
         Command::Dump {
             output,
             format,
@@ -66,14 +87,15 @@ pub async fn main() -> anyhow::Result<()> {
             sort_by,
             triple_fallback,
         } => {
-            let output_url = resolve_location(&output)?;
+            let store = create_store(&args).await?;
+            let output_url = resolve_location(output)?;
             commands::dump::dump(
                 store,
                 output_url,
-                format,
-                graph,
-                sort_by,
-                triple_fallback,
+                format.clone(),
+                graph.clone(),
+                sort_by.clone(),
+                triple_fallback.clone(),
             )
             .await
         }
@@ -83,6 +105,13 @@ pub async fn main() -> anyhow::Result<()> {
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
     let runtime_env = build_runtime_env(args)?;
+
+    let mut session_config = SessionConfig::from_env()?;
+    let rdf_fusion_options = RdfFusionOptions::from_env()?;
+    session_config
+        .options_mut()
+        .extensions
+        .insert(rdf_fusion_options.clone());
 
     let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
         cli::QuadStorageType::DeltaLake => {
@@ -107,13 +136,6 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
             )
             .expect("Failed to create log store");
 
-            let mut session_config = SessionConfig::from_env()?;
-            let rdf_fusion_options = RdfFusionOptions::from_env()?;
-            session_config
-                .options_mut()
-                .extensions
-                .insert(rdf_fusion_options.clone());
-
             let loading_state = SessionStateBuilder::new()
                 .with_runtime_env(Arc::clone(&runtime_env))
                 .with_config(session_config.clone())
@@ -136,7 +158,7 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
                 .context("Location is required for RdfFiles storage")?;
             let mut sources = Vec::new();
             for location in locations {
-                let path = PathBuf::from(location);
+                let path = PathBuf::from(&location);
                 let extension = path
                     .extension()
                     .and_then(|e| e.to_str())
@@ -149,7 +171,20 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
                 sources
                     .push((GraphName::DefaultGraph, RdfFileSourceConfig { url, format }));
             }
-            Arc::new(RdfFileQuadStorage::new(sources))
+
+            let state = SessionStateBuilder::new()
+                .with_runtime_env(Arc::clone(&runtime_env))
+                .with_config(session_config)
+                .build();
+
+            Arc::new(
+                RdfFileQuadStorage::new_with_discover_encoding(
+                    sources,
+                    rdf_fusion_options.storage.rdf_files.clone(),
+                    &state,
+                )
+                .await?,
+            )
         }
     };
 
@@ -203,6 +238,9 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     }
 
     if let Command::Dump { output, .. } = &args.command {
+        locations.push(resolve_location(output)?);
+    }
+    if let Command::BuildDatabase { output } = &args.command {
         locations.push(resolve_location(output)?);
     }
 

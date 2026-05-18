@@ -13,7 +13,7 @@ use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use async_trait::async_trait;
 use rdf_fusion::common::RdfFormat;
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -151,7 +151,7 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
 
         let memory_store = ctx.parent().create_store().await;
         memory_store
-            .load_from_reader(data, RdfParserOptions::with_format(RdfFormat::NTriples))
+            .load_from_reader(data, RdfFileScanOptions::with_format(RdfFormat::NTriples))
             .await?;
         let duration = start.elapsed();
 

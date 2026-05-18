@@ -5,7 +5,7 @@ use rdf_fusion_execution::sparql::error::QueryEvaluationError;
 use std::error::Error;
 use std::io;
 
-/// An error raised while loading a file into a [`Store`](crate::r#mod::Store).
+/// An error raised while loading a file into a [`Store`](crate::store::Store).
 #[derive(Debug, thiserror::Error)]
 pub enum LoaderError {
     /// An error raised while reading the file.
@@ -27,7 +27,7 @@ pub enum LoaderError {
     UnsupportedRdfFormat(RdfFormat),
 }
 
-/// An error raised while writing a file from a [`Store`](crate::r#mod::Store).
+/// An error raised while writing a file from a [`Store`](crate::store::Store).
 
 #[derive(Debug, thiserror::Error)]
 pub enum SerializerError {
@@ -35,7 +35,7 @@ pub enum SerializerError {
     #[error(transparent)]
     Io(#[from] io::Error),
 
-    /// An error raised during accessing the quads in the [`Store`](crate::r#mod::Store).
+    /// An error raised during accessing the quads in the [`Store`](crate::store::Store).
     #[error(transparent)]
     Evaluation(#[from] QueryEvaluationError),
 

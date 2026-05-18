@@ -106,7 +106,7 @@ impl WindFarmReport {
             "\
 Total Time: {:?}
 Planning Latency: {:?}
-Planning Compute: {}
+Planning Compute: {:?}
 ",
             details.total_time,
             details.explanation.planning_latency,

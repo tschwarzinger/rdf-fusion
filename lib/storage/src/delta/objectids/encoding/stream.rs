@@ -1,6 +1,6 @@
 use crate::delta::objectids::DeltaObjectIdMapping;
 use datafusion::arrow::array::{ArrayRef, RecordBatch};
-use datafusion::arrow::datatypes::{Fields, SchemaRef};
+use datafusion::arrow::datatypes::{DataType, Fields, SchemaRef};
 use datafusion::common::{DataFusionError, exec_datafusion_err};
 use datafusion::physical_plan::{RecordBatchStream, SendableRecordBatchStream};
 use deltalake::arrow::datatypes::Schema;
@@ -9,6 +9,7 @@ use futures::{Stream, StreamExt, ready};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::object_id::ObjectIdMapping;
 use rdf_fusion_encoding::plain_term::PlainTermArray;
+use rdf_fusion_encoding::string::StringTermArray;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
@@ -24,9 +25,9 @@ enum EncoderStreamState {
     Done,
 }
 
-/// A stream that encodes plain term arrays into object id arrays.
+/// A stream that encodes plain term or string arrays into object id arrays.
 pub struct ObjectIdEncodingStream {
-    /// The inner stream that provides the plain term arrays.
+    /// The inner stream that provides the plain term or string arrays.
     input: SendableRecordBatchStream,
     /// The mapping used for encoding.
     mapping: Arc<DeltaObjectIdMapping>,
@@ -75,16 +76,34 @@ impl Stream for ObjectIdEncodingStream {
                 EncoderStreamState::EncodeStream => {
                     match ready!(self.input.poll_next_unpin(cx)) {
                         Some(Ok(batch)) => {
-                            // Extract arrays from your PlainTerm batch.
+                            // Extract arrays from your batch and encode them.
                             // Assuming column order: [graphs, subjects, predicates, objects]
-                            // Adjust indices based on your exact schema layout.
 
                             let encoded_arrays: Result<Vec<ArrayRef>, _> = (0..4)
                                 .map(|i| {
-                                    let plain_array = PlainTermArray::try_from(
-                                        Arc::clone(batch.column(i)),
-                                    )
-                                    .unwrap();
+                                    let column = batch.column(i);
+                                    let plain_array = if column.data_type() == &DataType::Utf8
+                                    {
+                                        StringTermArray::new_unchecked(Arc::clone(
+                                            column,
+                                        ))
+                                        .as_plain_term_array()
+                                        .map_err(|e| {
+                                            exec_datafusion_err!(
+                                                "Failed to convert String to PlainTerm: {}",
+                                                e
+                                            )
+                                        })?
+                                    } else {
+                                        PlainTermArray::try_from(Arc::clone(column))
+                                            .map_err(|e| {
+                                                exec_datafusion_err!(
+                                                    "Failed to convert to PlainTerm: {}",
+                                                    e
+                                                )
+                                            })?
+                                    };
+
                                     self.mapping.encode_array(&plain_array).map_err(|e| {
                                         exec_datafusion_err!("Encoding failed: {}", e)
                                     })

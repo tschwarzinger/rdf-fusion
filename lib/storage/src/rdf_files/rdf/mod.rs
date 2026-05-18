@@ -19,9 +19,9 @@ pub struct RdfFileSourceConfig {
     pub format: RdfFormat,
 }
 
-/// Options for the RDF parser.
+/// Options for scanning RDF files.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct RdfParserOptions {
+pub struct RdfFileScanOptions {
     /// The rdf format.
     pub format: RdfFormat,
     /// The base IRI for the parser.
@@ -34,8 +34,8 @@ pub struct RdfParserOptions {
     pub without_named_graphs: bool,
 }
 
-impl RdfParserOptions {
-    /// Creates a new [`RdfParserOptions`] for the given format.
+impl RdfFileScanOptions {
+    /// Creates a new [`RdfFileScanOptions`] for the given format.
     pub fn with_format(format: RdfFormat) -> Self {
         Self {
             format,

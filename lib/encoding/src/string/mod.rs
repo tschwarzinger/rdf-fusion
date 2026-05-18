@@ -1,15 +1,17 @@
 mod array;
 mod encoding;
+mod quads;
 mod scalar;
 
 pub use array::*;
 use datafusion::common::{DataFusionError, exec_err};
 pub use encoding::*;
+pub use quads::*;
 use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_common::{BlankNode, DFResult, Literal, NamedNode, Term};
 pub use scalar::*;
 
-pub(crate) fn parse_turtle_term(s: &str) -> DFResult<Term> {
+pub fn parse_turtle_term(s: &str) -> DFResult<Term> {
     if s.is_empty() {
         return exec_err!("Empty string is not a valid RDF term");
     }

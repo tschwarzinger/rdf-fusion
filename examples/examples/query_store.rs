@@ -1,7 +1,7 @@
 use anyhow::Context;
 use rdf_fusion::common::RdfFormat;
 use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 
 /// This example shows how to query RDF Fusion with SPARQL.
@@ -13,7 +13,7 @@ pub async fn main() -> anyhow::Result<()> {
         .await
         .context("Could not find spiderman.ttl")?;
     store
-        .load_from_reader(file, RdfParserOptions::with_format(RdfFormat::Turtle))
+        .load_from_reader(file, RdfFileScanOptions::with_format(RdfFormat::Turtle))
         .await?;
 
     // Run SPARQL query.

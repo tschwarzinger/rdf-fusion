@@ -64,7 +64,7 @@ use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion_storage::rdf_files::{
-    RdfParserOptions, RdfParserTableProvider, RdfParserTableProviderError,
+    RdfFileScanOptions, RdfParserTableProvider, RdfParserTableProviderError,
 };
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
@@ -483,7 +483,7 @@ impl Store {
     /// ```
     /// use rdf_fusion::store::Store;
     /// use rdf_fusion::common::*;
-    /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
+    /// use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
@@ -491,13 +491,13 @@ impl Store {
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
-    /// store.load_from_reader(file.as_ref(), RdfParserOptions::with_format(RdfFormat::NQuads)).await?;
+    /// store.load_from_reader(file.as_ref(), RdfFileScanOptions::with_format(RdfFormat::NQuads)).await?;
     ///
     /// // insert a graph file (former load_graph method)
     /// let file = b"<> <> <> .";
     /// store.load_from_reader(
     ///     file.as_ref(),
-    ///     RdfParserOptions::with_format(RdfFormat::Turtle)
+    ///     RdfFileScanOptions::with_format(RdfFormat::Turtle)
     ///         .with_base_iri("http://example.com".to_owned())?
     ///         .without_named_graphs(false) // No named graphs allowed in the input
     ///         .with_default_graph(NamedNodeRef::new("http://example.com/g2")?), // we put the file default graph inside of a named graph
@@ -513,7 +513,7 @@ impl Store {
     pub async fn load_from_reader(
         &self,
         reader: impl AsyncRead + Unpin + Send + 'static,
-        options: RdfParserOptions,
+        options: RdfFileScanOptions,
     ) -> Result<(), LoaderError> {
         let iri = options.base_iri.clone();
         let table_provider =
@@ -671,17 +671,17 @@ impl Store {
     ///
     /// ```
     /// use rdf_fusion::common::*;
-    /// use rdf_fusion::r#mod::{DumpOptions, Store};
-    /// use rdf_fusion_storage::rdf_files::RdfParserOptions;
+    /// use rdf_fusion::store::{DumpOptions, Store};
+    /// use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
     /// let store = Store::new_in_memory().await;
-    /// store.load_from_reader(file.as_ref(), RdfParserOptions::with_format(RdfFormat::NTriples)).await?;
+    /// store.load_from_reader(file.as_ref(), RdfFileScanOptions::with_format(RdfFormat::NTriples)).await?;
     ///
-    /// store.dump("memory:///my-target.ttl", RdfFormat::Turtle, DumpOptions::default()).await?;
+    /// store.dump("memory:///my-target.ttl".to_owned(), RdfFormat::Turtle, DumpOptions::default()).await?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```

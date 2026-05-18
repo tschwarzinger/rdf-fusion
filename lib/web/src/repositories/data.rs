@@ -10,7 +10,7 @@ use futures::TryStreamExt;
 use headers::ContentType;
 use rdf_fusion::common::RdfFormat;
 use rdf_fusion::error::LoaderError;
-use rdf_fusion::storage::rdf_files::RdfParserOptions;
+use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use tokio_util::io::StreamReader;
 
 /// Inserts the RDF data into the store and optimizes it.
@@ -37,7 +37,7 @@ pub async fn handle_data_post(
         .store
         .load_from_reader(
             StreamReader::new(body_with_io_error),
-            RdfParserOptions::with_format(format),
+            RdfFileScanOptions::with_format(format),
         )
         .await
         .map_err(|error| match error {

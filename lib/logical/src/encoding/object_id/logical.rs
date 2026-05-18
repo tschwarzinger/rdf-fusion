@@ -3,6 +3,7 @@ use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_encoding::object_id::ObjectIdDataType;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::string::STRING_ENCODING;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::Hash;
@@ -29,11 +30,10 @@ impl EncodeAsObjectIdNode {
         input: LogicalPlan,
         object_id_type: ObjectIdDataType,
     ) -> DFResult<Self> {
-        let any_unexpected_data_type = input
-            .schema()
-            .fields()
-            .iter()
-            .any(|f| f.data_type() != PLAIN_TERM_ENCODING.data_type());
+        let any_unexpected_data_type = input.schema().fields().iter().any(|f| {
+            f.data_type() != PLAIN_TERM_ENCODING.data_type()
+                && f.data_type() != STRING_ENCODING.data_type()
+        });
         if any_unexpected_data_type {
             return plan_err!(
                 "EncodeAsObjectId only supports columns with a valid encoding"
