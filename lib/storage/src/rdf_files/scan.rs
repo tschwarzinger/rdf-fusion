@@ -5,7 +5,6 @@ use crate::rdf_files::detect_encoding_from_schema;
 use crate::rdf_files::manager::RdfFileManager;
 use crate::rdf_files::rdf::RdfFileSourceConfig;
 use datafusion::arrow::datatypes::SchemaRef;
-use datafusion::catalog::TableProvider;
 use datafusion::common::{Statistics, plan_err};
 use datafusion::config::ConfigOptions;
 use datafusion::execution::{SendableRecordBatchStream, SessionState};
@@ -167,10 +166,10 @@ impl RdfFileQuadPatternScanExec {
                     .with_default_graph(graph_name.clone())
                     .with_rename_blank_nodes(true);
 
-                let mem_table = manager
+                let provider = manager
                     .get_scan_plan(source.url.clone(), options, state)
                     .await?;
-                let mut plan = mem_table.scan(state, None, &[], None).await?;
+                let mut plan = provider.scan(state, None, &[], None).await?;
 
                 let source_encoding = detect_encoding_from_schema(&plan.schema())?;
                 if &source_encoding != target_encoding {
@@ -588,7 +587,7 @@ mod tests {
         ProjectionExec: expr=[subject@1 as s, predicate@2 as p, object@3 as o]
           AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[]
             FilterExec: graph@0 IS NULL
-              DataSourceExec: partitions=1, partition_sizes=[1]
+              DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND graph@0 IS NULL, pruning_predicate=graph_null_count@0 > 0 AND graph_null_count@0 > 0, required_guarantees=[]
         "
         );
 
@@ -631,7 +630,7 @@ mod tests {
           GlobalLimitExec: skip=0, fetch=1
             AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[]
               FilterExec: graph@0 IS NULL
-                DataSourceExec: partitions=1, partition_sizes=[1]
+                DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND graph@0 IS NULL, pruning_predicate=graph_null_count@0 > 0 AND graph_null_count@0 > 0, required_guarantees=[]
         "
         );
     }
@@ -665,7 +664,7 @@ mod tests {
         ProjectionExec: expr=[subject@1 as s, predicate@2 as p, object@3 as o]
           AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[], ordering_mode=PartiallySorted([1])
             FilterExec: subject@1 = <http://example.org/s1> AND graph@0 IS NULL
-              DataSourceExec: partitions=1, partition_sizes=[1]
+              DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND graph@0 IS NULL AND graph@0 IS NULL AND subject@1 = <http://example.org/s1>, pruning_predicate=graph_null_count@0 > 0 AND graph_null_count@0 > 0 AND graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <http://example.org/s1> AND <http://example.org/s1> <= subject_max@2, required_guarantees=[subject in (<http://example.org/s1>)]
         "
         );
     }
@@ -707,7 +706,7 @@ mod tests {
         ProjectionExec: expr=[subject@1 as s]
           AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[]
             FilterExec: graph@0 IS NULL
-              DataSourceExec: partitions=1, partition_sizes=[1]
+              DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND graph@0 IS NULL, pruning_predicate=graph_null_count@0 > 0 AND graph_null_count@0 > 0, required_guarantees=[]
         "
         );
     }
@@ -785,12 +784,12 @@ mod tests {
         );
         assert_snapshot!(
             displayable(scan.inner_plan().as_ref()).indent(true),
-            @r"
+            @"
         AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[]
           CoalescePartitionsExec
             UnionExec
-              DataSourceExec: partitions=1, partition_sizes=[1]
-              DataSourceExec: partitions=1, partition_sizes=[1]
+              DataSourceExec: file_groups={1 group: [[test1.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
+              DataSourceExec: file_groups={1 group: [[test2.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet
         "
         );
 
@@ -825,9 +824,7 @@ mod tests {
 
         assert_snapshot!(
             displayable(scan.inner_plan().as_ref()).indent(true),
-            @r"
-        DataSourceExec: partitions=1, partition_sizes=[1]
-        "
+            @"DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet"
         );
     }
 
@@ -860,7 +857,7 @@ mod tests {
           GlobalLimitExec: skip=0, fetch=1
             AggregateExec: mode=Single, gby=[graph@0 as graph, subject@1 as subject, predicate@2 as predicate, object@3 as object], aggr=[], ordering_mode=PartiallySorted([1])
               FilterExec: subject@1 = <http://example.org/s1> AND graph@0 IS NULL
-                DataSourceExec: partitions=1, partition_sizes=[1]
+                DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND graph@0 IS NULL AND graph@0 IS NULL AND subject@1 = <http://example.org/s1>, pruning_predicate=graph_null_count@0 > 0 AND graph_null_count@0 > 0 AND graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <http://example.org/s1> AND <http://example.org/s1> <= subject_max@2, required_guarantees=[subject in (<http://example.org/s1>)]
         "
         );
     }
@@ -905,10 +902,10 @@ mod tests {
 
         assert_snapshot!(
             displayable(pushed_scan.inner_plan().as_ref()).indent(true),
-            @r"
+            @"
         ProjectionExec: expr=[subject@0 as s, predicate@1 as p, object@2 as o]
           FilterExec: subject@1 = <http://example.org/s1> AND graph@0 IS NULL, projection=[subject@1, predicate@2, object@3], fetch=1
-            DataSourceExec: partitions=1, partition_sizes=[1]
+            DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND graph@0 IS NULL AND graph@0 IS NULL AND subject@1 = <http://example.org/s1>, pruning_predicate=graph_null_count@0 > 0 AND graph_null_count@0 > 0 AND graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <http://example.org/s1> AND <http://example.org/s1> <= subject_max@2, required_guarantees=[subject in (<http://example.org/s1>)]
         "
         );
     }

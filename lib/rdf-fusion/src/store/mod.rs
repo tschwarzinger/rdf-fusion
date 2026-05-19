@@ -32,7 +32,7 @@
 
 mod dump;
 
-pub use dump::{DumpOptions, DumpSortOrder, TripleFallbackStrategy};
+pub use dump::{DumpEncoding, DumpOptions, DumpSortOrder, TripleFallbackStrategy};
 
 use crate::error::{LoaderError, SerializerError};
 use crate::store::dump::dump_store;
@@ -50,7 +50,9 @@ use rdf_fusion_common::{
     GraphNameRef, Iri, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
     QuadRef, TermRef, Variable,
 };
+use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
     QuadStorageEncoding, TermEncoding, quads_to_plain_term_dataframe,
@@ -307,7 +309,13 @@ impl Store {
     ) -> Result<QuadStream, QueryEvaluationError> {
         let record_batch_stream = self
             .context
-            .quads_for_pattern(graph_name, subject, predicate, object)
+            .quads_for_pattern(
+                graph_name,
+                subject,
+                predicate,
+                object,
+                Some(EncodingName::PlainTerm),
+            )
             .await?
             .execute_stream()
             .await?;

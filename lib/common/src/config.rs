@@ -122,11 +122,11 @@ impl RdfFusionOptions {
     /// Create a new [`RdfFusionOptions`] by reading environment variables.
     pub fn from_env() -> DFResult<Self> {
         let mut config = Self::default();
-        if let Ok(val) = std::env::var("RDF_FUSION_DELTA_LOG_MAX_AGE") {
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE") {
             config.set("storage.delta.log_max_age", &val)?;
         }
         if let Ok(val) =
-            std::env::var("RDF_FUSION_RDF_ASSUME_QUADS_UNIQUE_IN_SINGLE_FILE")
+            std::env::var("RDF_FUSION_STORAGE_RDF_ASSUME_QUADS_UNIQUE_IN_SINGLE_FILE")
         {
             config.set("storage.rdf.assume_quads_unique_in_single_file", &val)?;
         }
@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn test_config_from_env() {
         unsafe {
-            std::env::set_var("RDF_FUSION_DELTA_LOG_MAX_AGE", "12345");
+            std::env::set_var("RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE", "12345");
         }
         let config = RdfFusionOptions::from_env().unwrap();
         assert_eq!(
@@ -175,13 +175,13 @@ mod tests {
         );
 
         unsafe {
-            std::env::set_var("RDF_FUSION_DELTA_LOG_MAX_AGE", "inf");
+            std::env::set_var("RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE", "inf");
         }
         let config = RdfFusionOptions::from_env().unwrap();
         assert_eq!(config.storage.delta.log_max_age, None);
 
         unsafe {
-            std::env::remove_var("RDF_FUSION_DELTA_LOG_MAX_AGE");
+            std::env::remove_var("RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE");
         }
         let config = RdfFusionOptions::from_env().unwrap();
         assert_eq!(config.storage.delta.log_max_age, None);

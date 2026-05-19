@@ -29,7 +29,8 @@ pub async fn wind_farm_4_test_results_string() {
 async fn run_wind_farm_4_test_results(encoding: QuadStorageEncodingName) {
     let encoding_name = encoding.to_string();
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
+            .build();
     let benchmark = WindFarmBenchmark::new(NumTurbines::N4);
     let benchmark_name = benchmark.name();
     let ctx = benchmarking_context

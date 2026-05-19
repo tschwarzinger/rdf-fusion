@@ -1,6 +1,6 @@
 use datafusion::prelude::SessionContext;
 use rdf_fusion::common::RdfFormat;
-use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::encoding::{EncodingName, QuadStorageEncodingName};
 use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::{DumpOptions, Store};
 use rdf_fusion_bench::benchmarks::Benchmark;
@@ -55,7 +55,7 @@ async fn test_dump_correctness_parquet() {
 
     let (session, _) = store
         .context()
-        .quads_for_pattern(None, None, None, None)
+        .quads_for_pattern(None, None, None, None, Some(EncodingName::PlainTerm))
         .await
         .unwrap()
         .into_parts();
@@ -71,7 +71,8 @@ async fn test_dump_correctness_parquet() {
 async fn setup_test_store() -> Store {
     let encoding = QuadStorageEncodingName::PlainTerm;
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
+            .build();
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N1_000, None).unwrap();
     let benchmark_name = benchmark.name();

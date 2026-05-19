@@ -142,7 +142,9 @@ Planning Compute: {:?}
         output_file: &Path,
         plan: &dyn ExecutionPlan,
     ) -> anyhow::Result<()> {
-        let execution_plan = DisplayableExecutionPlan::with_metrics(plan).indent(false);
+        let execution_plan = DisplayableExecutionPlan::with_metrics(plan)
+            .set_show_statistics(true)
+            .indent(false);
         fs::write(output_file, format!("Execution Plan:\n\n{execution_plan}"))
             .with_context(|| {
                 format!(

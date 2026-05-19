@@ -1,5 +1,5 @@
-use anyhow::{Context, anyhow};
-use rdf_fusion::common::{GraphName, IriParseError, NamedNode, QuadComponent, RdfFormat};
+use anyhow::Context;
+use rdf_fusion::common::{GraphName, IriParseError, NamedNode, RdfFormat};
 use rdf_fusion::store::{DumpOptions, DumpSortOrder, Store, TripleFallbackStrategy};
 use url::Url;
 
@@ -19,7 +19,7 @@ pub async fn dump(
     let dump_format = try_identify_format(format, &url)?;
 
     let sort_by = if let Some(sort_by_str) = sort_by {
-        Some(parse_sort_by(&sort_by_str)?)
+        Some(sort_by_str.parse::<DumpSortOrder>()?)
     } else {
         None
     };
@@ -51,70 +51,6 @@ pub async fn dump(
         .context("Failed to dump store")?;
 
     Ok(())
-}
-
-fn parse_sort_by(sort_by_str: &str) -> anyhow::Result<DumpSortOrder> {
-    let upper = sort_by_str.trim().to_uppercase();
-
-    if upper.starts_with("ZORDER(") && upper.ends_with(')') {
-        let inner = &upper[7..upper.len() - 1];
-        if inner.is_empty() {
-            anyhow::bail!("ZORDER() requires at least one argument (e.g., ZORDER(S))");
-        }
-
-        let mut components = Vec::new();
-        for c in inner.chars() {
-            if c == ',' || c.is_whitespace() {
-                continue;
-            }
-            let comp = QuadComponent::from_char(c)
-                .ok_or_else(|| anyhow!("Unknown ZOrder column: '{c}'"))?;
-            components.push(comp);
-        }
-
-        if components.is_empty() {
-            anyhow::bail!("ZORDER() contains no valid columns");
-        }
-
-        Ok(DumpSortOrder::ZOrder(components))
-    } else if upper.starts_with("NATIVE(") && upper.ends_with(')') {
-        let inner = &upper[7..upper.len() - 1];
-        if inner.is_empty() {
-            anyhow::bail!("NATIVE() requires at least one argument (e.g., NATIVE(GSPO))");
-        }
-
-        let mut components = Vec::new();
-        for c in inner.chars() {
-            if c == ',' || c.is_whitespace() {
-                continue;
-            }
-            let comp = QuadComponent::from_char(c)
-                .ok_or_else(|| anyhow!("Unknown native sort column: '{c}'"))?;
-            components.push(comp);
-        }
-
-        if components.is_empty() {
-            anyhow::bail!("NATIVE() contains no valid columns");
-        }
-
-        Ok(DumpSortOrder::NativeOrder(components))
-    } else {
-        let mut components = Vec::new();
-        for c in upper.chars() {
-            if c.is_whitespace() {
-                continue;
-            }
-            let comp = QuadComponent::from_char(c)
-                .ok_or_else(|| anyhow!("Unknown sort column: '{c}'"))?;
-            components.push(comp);
-        }
-
-        if components.is_empty() {
-            anyhow::bail!("Sort argument contains no valid columns");
-        }
-
-        Ok(DumpSortOrder::SparqlOrder(components))
-    }
 }
 
 /// Tries to identify the format from the given format string or URL.

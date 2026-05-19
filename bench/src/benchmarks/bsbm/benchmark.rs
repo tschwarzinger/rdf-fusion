@@ -1,3 +1,4 @@
+use crate::QuadStorageType;
 use crate::benchmarks::bsbm::operation::list_raw_operations;
 use crate::benchmarks::bsbm::report::{BsbmReport, ExploreReportBuilder, QueryDetails};
 use crate::benchmarks::bsbm::requirements::{
@@ -13,7 +14,8 @@ use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use async_trait::async_trait;
 use rdf_fusion::common::RdfFormat;
-use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
+use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
+use rdf_fusion::store::DumpSortOrder;
 use rdf_fusion::store::Store;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -99,7 +101,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
         ctx: &BenchmarkContext,
     ) -> anyhow::Result<impl Iterator<Item = SparqlRawOperation<TUseCase::QueryName>>>
     {
-        let queries_path = ctx.parent().join_data_dir(&self.paths.queries)?;
+        let queries_path = ctx.join_data_dir(&self.paths.queries)?;
         let result = list_raw_operations::<TUseCase::QueryName>(queries_path.clone())?
             .map(|q| match q {
                 SparqlRawOperation::Query(name, text) => {
@@ -141,15 +143,73 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
         ctx: &BenchmarkContext<'_>,
         print_info: bool,
     ) -> anyhow::Result<Store> {
+        match &ctx.parent().options().storage_type {
+            QuadStorageType::Delta => self.prepare_delta_store(ctx, print_info).await,
+            QuadStorageType::Parquet { sort_order } => {
+                self.prepare_parquet_store(ctx, print_info, sort_order.clone())
+                    .await
+            }
+        }
+    }
+
+    async fn execute(
+        &self,
+        bench_context: &BenchmarkContext<'_>,
+    ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
+        let operations = self.list_operations(bench_context)?;
+        let memory_store = self.prepare_store(bench_context, true).await?;
+        let report =
+            execute_benchmark::<TUseCase>(bench_context, operations, &memory_store)
+                .await?;
+
+        Ok(Box::new(report))
+    }
+}
+
+impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
+    async fn prepare_parquet_store(
+        &self,
+        ctx: &BenchmarkContext<'_>,
+        print_info: bool,
+        sort_order: Option<DumpSortOrder>,
+    ) -> anyhow::Result<Store> {
+        if print_info {
+            println!("Generating Parquet dataset ...");
+        }
+        let dataset_path = ctx.join_data_dir(&self.paths.dataset)?;
+        let url = ctx.resolve_path_to_url(&dataset_path)?;
+
+        let source = RdfFileSourceConfig {
+            url,
+            format: RdfFormat::NTriples,
+        };
+
+        ctx.dump_to_parquet(
+            vec![(rdf_fusion::common::GraphName::DefaultGraph, source)],
+            sort_order,
+        )
+        .await?;
+
+        if print_info {
+            println!("Parquet dataset generated.");
+        }
+        Ok(ctx.create_store().await)
+    }
+
+    async fn prepare_delta_store(
+        &self,
+        ctx: &BenchmarkContext<'_>,
+        print_info: bool,
+    ) -> anyhow::Result<Store> {
         let start = datafusion::common::instant::Instant::now();
         if print_info {
             println!("Creating store and loading data ...");
         }
 
-        let dataset_path = ctx.parent().join_data_dir(&self.paths.dataset)?;
+        let dataset_path = ctx.join_data_dir(&self.paths.dataset)?;
         let data = tokio::fs::File::open(&dataset_path).await?;
 
-        let memory_store = ctx.parent().create_store().await;
+        let memory_store = ctx.create_store().await;
         memory_store
             .load_from_reader(data, RdfFileScanOptions::with_format(RdfFormat::NTriples))
             .await?;
@@ -173,19 +233,6 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
 
         Ok(memory_store)
     }
-
-    async fn execute(
-        &self,
-        bench_context: &BenchmarkContext<'_>,
-    ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
-        let operations = self.list_operations(bench_context)?;
-        let memory_store = self.prepare_store(bench_context, true).await?;
-        let report =
-            execute_benchmark::<TUseCase>(bench_context, operations, &memory_store)
-                .await?;
-
-        Ok(Box::new(report))
-    }
 }
 
 async fn execute_benchmark<TUseCase: BsbmUseCase>(
@@ -195,6 +242,8 @@ async fn execute_benchmark<TUseCase: BsbmUseCase>(
 ) -> anyhow::Result<BsbmReport<TUseCase>> {
     println!("Evaluating queries ...");
 
+    let mut recorder = crate::utils::cache::CacheMetricsRecorder::new(context)?;
+
     let mut report = ExploreReportBuilder::new();
     let len = operations.len();
     for (idx, operation) in operations.iter().enumerate() {
@@ -203,8 +252,12 @@ async fn execute_benchmark<TUseCase: BsbmUseCase>(
         }
 
         run_operation(context, &mut report, memory_store, operation).await?;
+
+        recorder.record_run(context, &operation.query_name().to_string())?;
     }
     let report = report.build();
+
+    recorder.write_summary(context)?;
 
     println!("Progress: {len}/{len}");
     println!("All queries evaluated.");

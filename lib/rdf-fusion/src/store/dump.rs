@@ -5,21 +5,21 @@ use datafusion::datasource::listing::ListingTableUrl;
 use datafusion::datasource::physical_plan::{FileOutputMode, FileSinkConfig};
 use datafusion::datasource::sink::{DataSink, DataSinkExec};
 use datafusion::execution::SessionState;
-use datafusion::logical_expr::col;
 use datafusion::logical_expr::dml::InsertOp;
+use datafusion::logical_expr::{SortExpr, col};
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanProperties, collect};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::path::Path;
-use rdf_fusion_common::GraphNameRef;
 use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{GraphName, QuadComponent, RdfFormat};
+use rdf_fusion_logical::RdfFusionLogicalPlanBuilder;
 use rdf_fusion_storage::rdf_files::RdfDataSink;
 use std::sync::Arc;
 use url::Url;
 
 /// The sort order for dumping a store.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DumpSortOrder {
     /// Standard lexicographical sort as defined by SPARQL.
     SparqlOrder(Vec<QuadComponent>),
@@ -45,6 +45,98 @@ impl DumpSortOrder {
         }
         Ok(())
     }
+
+    /// Returns the components of the sort order.
+    pub fn components(&self) -> &[QuadComponent] {
+        match self {
+            DumpSortOrder::SparqlOrder(c) => c,
+            DumpSortOrder::NativeOrder(c) => c,
+            DumpSortOrder::ZOrder(c) => c,
+        }
+    }
+}
+
+impl std::str::FromStr for DumpSortOrder {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let upper = s.trim().to_uppercase();
+
+        if upper.starts_with("ZORDER(") && upper.ends_with(')') {
+            let inner = &upper[7..upper.len() - 1];
+            if inner.is_empty() {
+                anyhow::bail!(
+                    "ZORDER() requires at least one argument (e.g., ZORDER(S))"
+                );
+            }
+
+            let mut components = Vec::new();
+            for c in inner.chars() {
+                if c == ',' || c.is_whitespace() {
+                    continue;
+                }
+                let comp = QuadComponent::from_char(c)
+                    .ok_or_else(|| anyhow::anyhow!("Unknown ZOrder column: '{c}'"))?;
+                components.push(comp);
+            }
+
+            if components.is_empty() {
+                anyhow::bail!("ZORDER() contains no valid columns");
+            }
+
+            Ok(DumpSortOrder::ZOrder(components))
+        } else if upper.starts_with("NATIVE(") && upper.ends_with(')') {
+            let inner = &upper[7..upper.len() - 1];
+            if inner.is_empty() {
+                anyhow::bail!(
+                    "NATIVE() requires at least one argument (e.g., NATIVE(GSPO))"
+                );
+            }
+
+            let mut components = Vec::new();
+            for c in inner.chars() {
+                if c == ',' || c.is_whitespace() {
+                    continue;
+                }
+                let comp = QuadComponent::from_char(c).ok_or_else(|| {
+                    anyhow::anyhow!("Unknown native sort column: '{c}'")
+                })?;
+                components.push(comp);
+            }
+
+            if components.is_empty() {
+                anyhow::bail!("NATIVE() contains no valid columns");
+            }
+
+            Ok(DumpSortOrder::NativeOrder(components))
+        } else {
+            let mut components = Vec::new();
+            for c in upper.chars() {
+                if c.is_whitespace() {
+                    continue;
+                }
+                let comp = QuadComponent::from_char(c)
+                    .ok_or_else(|| anyhow::anyhow!("Unknown sort column: '{c}'"))?;
+                components.push(comp);
+            }
+
+            if components.is_empty() {
+                anyhow::bail!("Sort argument contains no valid columns");
+            }
+
+            Ok(DumpSortOrder::SparqlOrder(components))
+        }
+    }
+}
+
+/// The encoding to use for dumping.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum DumpEncoding {
+    /// Use the plain term encoding.
+    #[default]
+    PlainTerm,
+    /// Use the string encoding.
+    String,
 }
 
 /// Options for dumping a store.
@@ -53,6 +145,7 @@ pub struct DumpOptions {
     graph: Option<GraphName>,
     sort_by: Option<DumpSortOrder>,
     triple_fallback: TripleFallbackStrategy,
+    encoding: DumpEncoding,
 }
 
 impl DumpOptions {
@@ -69,6 +162,11 @@ impl DumpOptions {
     /// The strategy to use when exporting quads to a triple-only format.
     pub fn triple_fallback(&self) -> TripleFallbackStrategy {
         self.triple_fallback
+    }
+
+    /// The encoding to use.
+    pub fn encoding(&self) -> DumpEncoding {
+        self.encoding
     }
 
     /// See [`Self::graph`]
@@ -89,6 +187,12 @@ impl DumpOptions {
         triple_fallback: TripleFallbackStrategy,
     ) -> Self {
         self.triple_fallback = triple_fallback;
+        self
+    }
+
+    /// See [`Self::encoding`]
+    pub fn with_encoding(mut self, encoding: DumpEncoding) -> Self {
+        self.encoding = encoding;
         self
     }
 }
@@ -115,25 +219,37 @@ pub(crate) async fn dump_store(
 
     let url = Url::parse(&output_url).map_err(|e| anyhow::anyhow!(e))?;
 
-    let mut df = if let Some(sort_order) = &options.sort_by {
-        create_dump_query(
-            store,
-            options.graph.as_ref().map(|g| g.as_ref()),
-            sort_order,
-        )
-        .await
-        .map_err(SerializerError::Other)?
+    let mut builder = store.context().quads_for_pattern_as_builder(
+        options.graph.as_ref().map(|g| g.as_ref()),
+        None,
+        None,
+        None,
+    );
+
+    if let Some(sort_order) = &options.sort_by {
+        builder =
+            apply_dump_sort_order(builder, sort_order).map_err(SerializerError::Other)?
+    }
+
+    let builder = if format != RdfFormat::Parquet {
+        match options.encoding {
+            DumpEncoding::PlainTerm => builder
+                .with_plain_terms()
+                .map_err(|e| SerializerError::Other(e.into()))?,
+            DumpEncoding::String => builder
+                .with_encoding(rdf_fusion_encoding::EncodingName::String)
+                .map_err(|e| SerializerError::Other(e.into()))?,
+        }
     } else {
-        store
-            .context()
-            .quads_for_pattern(
-                options.graph.as_ref().map(|g| g.as_ref()),
-                None,
-                None,
-                None,
-            )
-            .await?
+        builder
     };
+
+    let mut df = datafusion::prelude::DataFrame::new(
+        store.context().session_context().state(),
+        builder
+            .build()
+            .map_err(|e| SerializerError::Other(e.into()))?,
+    );
 
     if !format.supports_datasets()
         && options.triple_fallback == TripleFallbackStrategy::IgnoreGraph
@@ -194,60 +310,33 @@ pub(crate) async fn dump_store(
     Ok(())
 }
 
-async fn create_dump_query(
-    store: &Store,
-    graph: Option<GraphNameRef<'_>>,
-    sort_order: &DumpSortOrder,
-) -> anyhow::Result<datafusion::prelude::DataFrame> {
-    let ctx_view = store.context().create_view();
-    let df = store
-        .context()
-        .quads_for_pattern(graph, None, None, None)
-        .await?;
-
-    apply_dump_sort_order(&ctx_view, df, sort_order)
-}
-
 fn apply_dump_sort_order(
-    context: &rdf_fusion_extensions::RdfFusionContextView,
-    df: datafusion::prelude::DataFrame,
+    builder: RdfFusionLogicalPlanBuilder,
     sort_order: &DumpSortOrder,
-) -> anyhow::Result<datafusion::prelude::DataFrame> {
-    use datafusion::logical_expr::SortExpr;
-    use rdf_fusion_logical::{
-        RdfFusionExprBuilderContext, RdfFusionLogicalPlanBuilderContext,
-    };
-
+) -> anyhow::Result<RdfFusionLogicalPlanBuilder> {
     match sort_order {
         DumpSortOrder::SparqlOrder(components) => {
             let sort_exprs: Vec<_> = components
                 .iter()
                 .map(|c| SortExpr::new(col(c.column_name()), true, true))
                 .collect();
-
-            let builder_ctx = RdfFusionLogicalPlanBuilderContext::new(context.clone());
-            let (session, plan) = df.into_parts();
-            let builder = builder_ctx.create(Arc::new(plan));
-            let plan = builder.order_by(sort_exprs)?.build()?;
-            Ok(datafusion::prelude::DataFrame::new(session, plan))
+            Ok(builder.order_by(sort_exprs)?)
         }
         DumpSortOrder::NativeOrder(components) => {
             let sort_exprs: Vec<_> = components
                 .iter()
                 .map(|c| SortExpr::new(col(c.column_name()), true, true))
                 .collect();
-            Ok(df.sort(sort_exprs)?)
+            let context = builder.context().clone();
+            let builder = builder.into_inner().sort(sort_exprs)?;
+            Ok(context.create(Arc::new(builder.build()?)))
         }
         DumpSortOrder::ZOrder(components) => {
             let zorder_args: Vec<_> =
                 components.iter().map(|c| col(c.column_name())).collect();
 
-            let (session, plan) = df.into_parts();
-            let expr = RdfFusionExprBuilderContext::new(context, plan.schema())
-                .zorder(zorder_args)?;
-            let df = datafusion::prelude::DataFrame::new(session, plan);
-            df.sort(vec![expr.sort(true, true)])
-                .map_err(|e| anyhow::anyhow!("Failed to apply ZOrder sort: {e}"))
+            let expr = builder.expr_builder_root().zorder(zorder_args)?;
+            Ok(builder.order_by(vec![expr.sort(true, true)])?)
         }
     }
 }

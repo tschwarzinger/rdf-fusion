@@ -1,5 +1,6 @@
 use datafusion::execution::object_store::ObjectStoreRegistry;
 use datafusion::object_store::{self, ObjectStore, PutOptions, PutPayload, PutResult};
+use datafusion::physical_plan::metrics::Count;
 use futures::StreamExt;
 use futures::stream::BoxStream;
 use moka::future::Cache;
@@ -13,6 +14,37 @@ use std::ops::Range;
 use std::sync::Arc;
 use url::Url;
 
+/// Metrics for a [`CachingObjectStore`].
+pub struct CacheMetrics {
+    pub get_opts_hits: Arc<Count>,
+    pub get_opts_misses: Arc<Count>,
+    pub get_ranges_hits: Arc<Count>,
+    pub get_ranges_misses: Arc<Count>,
+    pub eviction_count: Arc<Count>,
+    pub data_cache_size: u64,
+    pub data_cache_weight: u64,
+}
+
+impl CacheMetrics {
+    pub fn new() -> Self {
+        Self {
+            get_opts_hits: Arc::new(Count::new()),
+            get_opts_misses: Arc::new(Count::new()),
+            get_ranges_hits: Arc::new(Count::new()),
+            get_ranges_misses: Arc::new(Count::new()),
+            eviction_count: Arc::new(Count::new()),
+            data_cache_size: 0,
+            data_cache_weight: 0,
+        }
+    }
+}
+
+impl Default for CacheMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A caching decorator for an [`ObjectStore`] supporting exact range caching.
 #[derive(Debug)]
 pub struct CachingObjectStore {
@@ -21,6 +53,12 @@ pub struct CachingObjectStore {
     meta_cache: Cache<Path, (ObjectMeta, Attributes)>,
     // Caches content bytes
     data_cache: Cache<(Path, Option<Range<u64>>), bytes::Bytes>,
+
+    // Metrics
+    get_opts_hits: Arc<Count>,
+    get_opts_misses: Arc<Count>,
+    get_ranges_hits: Arc<Count>,
+    get_ranges_misses: Arc<Count>,
 }
 
 #[async_trait::async_trait]
@@ -71,6 +109,7 @@ impl ObjectStore for CachingObjectStore {
         let cached_meta = self.meta_cache.get(location).await;
 
         if let (Some(bytes), Some((meta, attributes))) = (cached_data, cached_meta) {
+            self.get_opts_hits.add(1);
             let result_range = cacheable_range.unwrap_or(0..meta.size);
             return Ok(GetResult {
                 payload: GetResultPayload::Stream(
@@ -83,6 +122,7 @@ impl ObjectStore for CachingObjectStore {
         }
 
         // Cache Miss: Fetch from inner store
+        self.get_opts_misses.add(1);
         let result = self.inner.get_opts(location, options.clone()).await?;
 
         let meta = result.meta.clone();
@@ -119,8 +159,10 @@ impl ObjectStore for CachingObjectStore {
         for (i, range) in ranges.iter().enumerate() {
             let key = (location.clone(), Some(range.clone()));
             if let Some(cached_bytes) = self.data_cache.get(&key).await {
+                self.get_ranges_hits.add(1);
                 results[i] = Some(cached_bytes);
             } else {
+                self.get_ranges_misses.add(1);
                 missing_ranges.push(range.clone());
                 missing_indices.push(i);
             }
@@ -196,11 +238,23 @@ pub struct CachingObjectStoreRegistry {
     inner: Arc<dyn ObjectStoreRegistry>,
     meta_cache: Cache<Path, (ObjectMeta, Attributes)>,
     data_cache: Cache<(Path, Option<Range<u64>>), bytes::Bytes>,
+
+    // Metrics
+    get_opts_hits: Arc<Count>,
+    get_opts_misses: Arc<Count>,
+    get_ranges_hits: Arc<Count>,
+    get_ranges_misses: Arc<Count>,
+
+    // Statistics
+    eviction_count: Arc<Count>,
 }
 
 impl CachingObjectStoreRegistry {
     pub fn new(inner: Arc<dyn ObjectStoreRegistry>, cache_size_bytes: u64) -> Self {
         let meta_cache = Cache::builder().max_capacity(10_000).build();
+
+        let eviction_count = Arc::new(Count::new());
+        let eviction_count_clone = Arc::clone(&eviction_count);
 
         let data_cache = Cache::builder()
             .max_capacity(cache_size_bytes)
@@ -209,12 +263,33 @@ impl CachingObjectStoreRegistry {
                 let len = v.len() as u64;
                 len.try_into().unwrap_or(u32::MAX)
             })
+            .eviction_listener(move |_k, _v, _cause| {
+                eviction_count_clone.add(1);
+            })
             .build();
 
         Self {
             inner,
             meta_cache,
             data_cache,
+            get_opts_hits: Arc::new(Count::new()),
+            get_opts_misses: Arc::new(Count::new()),
+            get_ranges_hits: Arc::new(Count::new()),
+            get_ranges_misses: Arc::new(Count::new()),
+            eviction_count,
+        }
+    }
+
+    /// Returns the aggregated metrics for all caching stores in this registry.
+    pub fn metrics(&self) -> CacheMetrics {
+        CacheMetrics {
+            get_opts_hits: Arc::clone(&self.get_opts_hits),
+            get_opts_misses: Arc::clone(&self.get_opts_misses),
+            get_ranges_hits: Arc::clone(&self.get_ranges_hits),
+            get_ranges_misses: Arc::clone(&self.get_ranges_misses),
+            eviction_count: Arc::clone(&self.eviction_count),
+            data_cache_size: self.data_cache.entry_count(),
+            data_cache_weight: self.data_cache.weighted_size(),
         }
     }
 }
@@ -240,6 +315,34 @@ impl ObjectStoreRegistry for CachingObjectStoreRegistry {
             inner: store,
             meta_cache: self.meta_cache.clone(),
             data_cache: self.data_cache.clone(),
+            get_opts_hits: Arc::clone(&self.get_opts_hits),
+            get_opts_misses: Arc::clone(&self.get_opts_misses),
+            get_ranges_hits: Arc::clone(&self.get_ranges_hits),
+            get_ranges_misses: Arc::clone(&self.get_ranges_misses),
         }))
+    }
+}
+
+impl CacheMetrics {
+    pub fn get_opts_hits(&self) -> u64 {
+        self.get_opts_hits.value() as u64
+    }
+    pub fn get_opts_misses(&self) -> u64 {
+        self.get_opts_misses.value() as u64
+    }
+    pub fn get_ranges_hits(&self) -> u64 {
+        self.get_ranges_hits.value() as u64
+    }
+    pub fn get_ranges_misses(&self) -> u64 {
+        self.get_ranges_misses.value() as u64
+    }
+    pub fn eviction_count(&self) -> u64 {
+        self.eviction_count.value() as u64
+    }
+    pub fn data_cache_size(&self) -> u64 {
+        self.data_cache_size
+    }
+    pub fn data_cache_weight(&self) -> u64 {
+        self.data_cache_weight
     }
 }

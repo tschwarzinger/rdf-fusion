@@ -15,17 +15,19 @@ use datafusion::logical_expr::AggregateUDF;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use rdf_fusion_common::{DFResult, NamedOrBlankNodeRef};
 use rdf_fusion_common::{GraphName, GraphNameRef, NamedNodeRef, QuadRef, TermRef};
-use rdf_fusion_encoding::RdfFusionEncodings;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
+use rdf_fusion_encoding::{EncodingName, RdfFusionEncodings};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::functions::{
     RdfFusionFunctionRegistry, RdfFusionFunctionRegistryRef,
 };
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
-use rdf_fusion_logical::{ActiveGraph, RdfFusionLogicalPlanBuilderContext};
+use rdf_fusion_logical::{
+    ActiveGraph, RdfFusionLogicalPlanBuilder, RdfFusionLogicalPlanBuilderContext,
+};
 use std::sync::Arc;
 
 /// Represents a connection to an instance of an RDF Fusion engine.
@@ -165,26 +167,42 @@ impl RdfFusionContext {
             .map_err(|err| DataFusionError::External(Box::new(err)))
     }
 
+    /// Returns a builder for obtaining all quads that match the given pattern.
+    pub fn quads_for_pattern_as_builder(
+        &self,
+        graph_name: Option<GraphNameRef<'_>>,
+        subject: Option<NamedOrBlankNodeRef<'_>>,
+        predicate: Option<NamedNodeRef<'_>>,
+        object: Option<TermRef<'_>>,
+    ) -> RdfFusionLogicalPlanBuilder {
+        let active_graph_info = graph_name_to_active_graph(graph_name);
+        self.plan_builder_context().create_matching_quads(
+            active_graph_info,
+            subject.map(NamedOrBlankNodeRef::into_owned),
+            predicate.map(NamedNodeRef::into_owned),
+            object.map(TermRef::into_owned),
+        )
+    }
+
     /// Returns a stream of all quads that match the given pattern.
+    ///
+    /// If `encoding` is [None], the quads are returned in the native storage encoding.
     pub async fn quads_for_pattern(
         &self,
         graph_name: Option<GraphNameRef<'_>>,
         subject: Option<NamedOrBlankNodeRef<'_>>,
         predicate: Option<NamedNodeRef<'_>>,
         object: Option<TermRef<'_>>,
+        encoding: Option<EncodingName>,
     ) -> DFResult<DataFrame> {
-        let active_graph_info = graph_name_to_active_graph(graph_name);
-        let pattern_plan = self
-            .plan_builder_context()
-            .create_matching_quads(
-                active_graph_info,
-                subject.map(NamedOrBlankNodeRef::into_owned),
-                predicate.map(NamedNodeRef::into_owned),
-                object.map(TermRef::into_owned),
-            )
-            .with_plain_terms()?;
+        let mut builder =
+            self.quads_for_pattern_as_builder(graph_name, subject, predicate, object);
 
-        Ok(DataFrame::new(self.ctx.state(), pattern_plan.build()?))
+        if let Some(encoding) = encoding {
+            builder = builder.with_encoding(encoding)?;
+        }
+
+        Ok(DataFrame::new(self.ctx.state(), builder.build()?))
     }
 
     /// Evaluates a SPARQL [RdfFusionQuery] over the instance.

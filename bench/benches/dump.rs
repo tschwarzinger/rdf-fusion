@@ -10,7 +10,8 @@ use std::path::PathBuf;
 fn bench_dump_formats(c: &mut Criterion) {
     let encoding = ENCODINGS_TO_BENCHMARK[0];
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
+            .build();
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
 
@@ -23,7 +24,7 @@ fn bench_dump_formats(c: &mut Criterion) {
     for format_name in ["ttl", "nq", "parquet"] {
         c.bench_function(&format!("Dump Store ({format_name})"), |b| {
             b.to_async(&runtime).iter(|| async {
-                use rdf_fusion::r#mod::DumpOptions;
+                use rdf_fusion::store::DumpOptions;
                 let output_path = temp_dir.join(format!("output.{format_name}"));
                 let output_url = format!("file://{}", output_path.to_str().unwrap());
 

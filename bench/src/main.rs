@@ -1,12 +1,14 @@
 use anyhow::Context;
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use datafusion::common::runtime::SpawnedTask;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::store::DumpSortOrder;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::{
-    BenchmarkStorageBackend, BenchmarkingConfig, Operation, execute_benchmark_operation,
+    BenchmarkingConfig, Operation, QuadStorageEncodingNameArg, QuadStorageLocationArg,
+    QuadStorageType, QuadStorageTypeArg, execute_benchmark_operation,
 };
 
 #[global_allocator]
@@ -16,16 +18,27 @@ static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 async fn main() -> anyhow::Result<()> {
     let args = RdfFusionBenchArgs::parse();
 
-    let storage_backend = match args.storage_location {
-        None | Some(StorageLocationArg::OnDisk) => {
-            BenchmarkStorageBackend::DeltaLakeOnDisk
+    let storage_encoding = QuadStorageEncodingName::from(args.storage_encoding);
+
+    // Validate invalid combinations
+    if args.storage_type == QuadStorageTypeArg::Parquet
+        && storage_encoding == QuadStorageEncodingName::ObjectId
+    {
+        anyhow::bail!("Parquet storage does not support object IDs.");
+    }
+
+    if args.storage_type == QuadStorageTypeArg::Delta && args.sort_order.is_some() {
+        anyhow::bail!("Sort order is only supported for Parquet storage.");
+    }
+
+    let storage_type = if args.storage_type == QuadStorageTypeArg::Parquet {
+        let sort_order_str = args.sort_order.as_deref().unwrap_or("ZORDER(PS)");
+        QuadStorageType::Parquet {
+            sort_order: Some(sort_order_str.parse::<DumpSortOrder>()?),
         }
-        Some(StorageLocationArg::InMemory) => BenchmarkStorageBackend::DeltaLakeInMemory,
+    } else {
+        QuadStorageType::Delta
     };
-    let storage_encoding = args
-        .storage_encoding
-        .map(Into::into)
-        .unwrap_or(QuadStorageEncodingName::ObjectId);
 
     let mut config =
         SessionConfig::from_env().context("Failed to obtain session config")?;
@@ -37,7 +50,8 @@ async fn main() -> anyhow::Result<()> {
     let options = BenchmarkingConfig {
         verbose_results: args.verbose_results,
         memory_size: args.memory_limit.map(|val| 1024 * 1024 * val),
-        storage_backend,
+        storage_location: args.storage_location,
+        storage_type,
         storage_encoding,
         data_fusion_config: config,
     };
@@ -65,40 +79,18 @@ pub struct RdfFusionBenchArgs {
     #[arg(long)]
     pub memory_limit: Option<usize>,
     /// Defines where to store the database.
-    #[arg(long)]
-    pub storage_location: Option<StorageLocationArg>,
+    #[arg(long, default_value = "on-disk")]
+    pub storage_location: QuadStorageLocationArg,
+    /// Defines how to store the database.
+    #[arg(long, default_value = "delta")]
+    pub storage_type: QuadStorageTypeArg,
     /// Defines which encoding to use for the database.
+    #[arg(long, default_value = "object-id")]
+    pub storage_encoding: QuadStorageEncodingNameArg,
+    /// The sort order to use for Parquet storage.
     #[arg(long)]
-    pub storage_encoding: Option<QuadStorageEncodingNameArg>,
+    pub sort_order: Option<String>,
     /// Indicates which benchmark should be executed.
     #[clap(subcommand)]
     pub benchmark: BenchmarkName,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
-pub enum StorageLocationArg {
-    /// The storage location is in-memory.
-    InMemory,
-    /// The storage location is on disk.
-    OnDisk,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
-pub enum QuadStorageEncodingNameArg {
-    /// The plain term encoding
-    PlainTerm,
-    /// The string encoding
-    String,
-    /// Use the object id
-    ObjectId,
-}
-
-impl From<QuadStorageEncodingNameArg> for QuadStorageEncodingName {
-    fn from(value: QuadStorageEncodingNameArg) -> Self {
-        match value {
-            QuadStorageEncodingNameArg::PlainTerm => QuadStorageEncodingName::PlainTerm,
-            QuadStorageEncodingNameArg::String => QuadStorageEncodingName::String,
-            QuadStorageEncodingNameArg::ObjectId => QuadStorageEncodingName::ObjectId,
-        }
-    }
 }

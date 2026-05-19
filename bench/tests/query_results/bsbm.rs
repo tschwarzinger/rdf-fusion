@@ -45,7 +45,8 @@ pub async fn bsbm_1000_test_results_string() {
 async fn run_bsbm_1000_test_results(encoding: QuadStorageEncodingName) {
     let encoding_name = encoding.to_string();
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
+            .build();
     let benchmark =
         BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N1_000, None).unwrap();
     let benchmark_name = benchmark.name();

@@ -6,7 +6,7 @@ use crate::minus::MinusNode;
 use crate::patterns::PatternNode;
 use crate::{RdfFusionExprBuilder, RdfFusionExprBuilderContext};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::common::{Column, DFSchemaRef};
+use datafusion::common::{Column, DFSchemaRef, plan_datafusion_err, plan_err};
 use datafusion::logical_expr::{
     Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort, SortExpr,
     UserDefinedLogicalNode, col,
@@ -306,16 +306,37 @@ impl RdfFusionLogicalPlanBuilder {
         })
     }
 
-    /// Ensures all columns are encoded as plain terms.
-    pub fn with_plain_terms(self) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let change_encoding_node = ChangeEncodingNode::try_new(
-            self.plan_builder.build()?,
-            QuadStorageEncoding::PlainTerm,
-        )?;
+    /// Ensures all columns are encoded as the given encoding.
+    pub fn with_encoding(
+        self,
+        encoding_name: EncodingName,
+    ) -> DFResult<RdfFusionLogicalPlanBuilder> {
+        let quad_encoding = match encoding_name {
+            EncodingName::PlainTerm => QuadStorageEncoding::PlainTerm,
+            EncodingName::String => QuadStorageEncoding::String,
+            EncodingName::ObjectId => {
+                let object_id_encoding =
+                    self.context.encodings().object_id().ok_or_else(|| {
+                        plan_datafusion_err!("Object ID encoding not configured")
+                    })?;
+                QuadStorageEncoding::ObjectId(Arc::clone(object_id_encoding))
+            }
+            EncodingName::TypedFamily => {
+                return plan_err!("TypedFamily encoding is not supported for quads");
+            }
+        };
+
+        let change_encoding_node =
+            ChangeEncodingNode::try_new(self.plan_builder.build()?, quad_encoding)?;
         Ok(Self {
-            context: self.context,
+            context: self.context.clone(),
             plan_builder: create_extension_plan(change_encoding_node),
         })
+    }
+
+    /// Ensures all columns are encoded as plain terms.
+    pub fn with_plain_terms(self) -> DFResult<RdfFusionLogicalPlanBuilder> {
+        self.with_encoding(EncodingName::PlainTerm)
     }
 
     /// Returns the schema of the current plan.

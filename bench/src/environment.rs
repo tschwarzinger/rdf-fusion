@@ -3,19 +3,21 @@ use crate::prepare::{
     PrepRequirement, prepare_copy_file, prepare_run_closure, prepare_run_command,
 };
 use crate::prepare::{ensure_file_download, prepare_file_download};
-use crate::{BenchmarkStorageBackend, BenchmarkingConfig};
+use crate::{BenchmarkingConfig, QuadStorageLocationArg, QuadStorageType};
 use anyhow::bail;
 use datafusion::execution::object_store::ObjectStoreUrl;
-use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
+use rdf_fusion::common::RdfFormat;
 use rdf_fusion::common::config::RdfFusionSessionConfigExt;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
+use rdf_fusion::execution::cache::{CacheMetrics, CachingObjectStoreRegistry};
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
-use rdf_fusion::store::Store;
+use rdf_fusion::storage::rdf_files::{RdfFileQuadStorage, RdfFileSourceConfig};
+use rdf_fusion::store::{DumpEncoding, DumpOptions, DumpSortOrder, Store};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Handle;
@@ -29,29 +31,82 @@ pub struct RdfFusionBenchContext {
     /// directory.
     bench_files_dir: PathBuf,
     /// The path to the data dir.
-    data_dir: Mutex<PathBuf>,
+    data_dir: PathBuf,
     /// The path to the database dir.
-    databases_dir: Mutex<PathBuf>,
+    databases_dir: PathBuf,
     /// The path to the results dir.
-    results_dir: Mutex<PathBuf>,
+    results_dir: PathBuf,
+    /// The cache registry used for this context.
+    cache_registry: Mutex<Option<Arc<CachingObjectStoreRegistry>>>,
+}
+
+/// A builder for [`RdfFusionBenchContext`].
+pub struct RdfFusionBenchContextBuilder {
+    config: BenchmarkingConfig,
+    bench_files_dir: PathBuf,
+    data_dir: PathBuf,
+    databases_dir: PathBuf,
+    results_dir: PathBuf,
+}
+
+impl RdfFusionBenchContextBuilder {
+    pub fn new(
+        config: BenchmarkingConfig,
+        bench_files_dir: PathBuf,
+        data_dir: PathBuf,
+        databases_dir: PathBuf,
+        results_dir: PathBuf,
+    ) -> Self {
+        Self {
+            config,
+            bench_files_dir,
+            data_dir,
+            databases_dir,
+            results_dir,
+        }
+    }
+
+    pub fn with_storage_type(mut self, storage_type: QuadStorageType) -> Self {
+        self.config.storage_type = storage_type;
+        self
+    }
+
+    pub fn with_storage_location(
+        mut self,
+        storage_location: QuadStorageLocationArg,
+    ) -> Self {
+        self.config.storage_location = storage_location;
+        self
+    }
+
+    pub fn build(self) -> RdfFusionBenchContext {
+        RdfFusionBenchContext {
+            config: self.config,
+            bench_files_dir: self.bench_files_dir,
+            data_dir: self.data_dir,
+            databases_dir: self.databases_dir,
+            results_dir: self.results_dir,
+            cache_registry: Mutex::new(None),
+        }
+    }
 }
 
 impl RdfFusionBenchContext {
-    /// Creates a new [RdfFusionBenchContext].
-    pub fn new(
+    /// Creates a new [RdfFusionBenchContextBuilder].
+    pub fn builder(
         options: BenchmarkingConfig,
         bench_files_dir: PathBuf,
         data_dir: PathBuf,
         database_dir: PathBuf,
         results_dir: PathBuf,
-    ) -> Self {
-        Self {
-            config: options,
+    ) -> RdfFusionBenchContextBuilder {
+        RdfFusionBenchContextBuilder::new(
+            options,
             bench_files_dir,
-            data_dir: Mutex::new(data_dir),
-            databases_dir: Mutex::new(database_dir),
-            results_dir: Mutex::new(results_dir),
-        }
+            data_dir,
+            database_dir,
+            results_dir,
+        )
     }
 
     /// Creates a new [RdfFusionBenchContext] used in the criterion benchmarks.
@@ -59,29 +114,41 @@ impl RdfFusionBenchContext {
         data_dir: PathBuf,
         storage_encoding: QuadStorageEncodingName,
         target_partitions: usize,
-    ) -> Self {
+    ) -> RdfFusionBenchContextBuilder {
         let mut config = SessionConfig::new();
         config.options_mut().execution.target_partitions = target_partitions;
         config.options_mut().execution.parquet.pushdown_filters = true;
 
-        Self {
-            config: BenchmarkingConfig {
-                verbose_results: false,
-                memory_size: None,
-                storage_backend: BenchmarkStorageBackend::DeltaLakeInMemory,
-                storage_encoding,
-                data_fusion_config: config,
-            },
-            data_dir: Mutex::new(data_dir),
-            databases_dir: Mutex::new(PathBuf::from("/tmp/database")),
-            bench_files_dir: PathBuf::from("./bench_files"),
-            results_dir: Mutex::new(PathBuf::from("/tmp/results")),
-        }
+        let options = BenchmarkingConfig {
+            verbose_results: false,
+            memory_size: None,
+            storage_location: QuadStorageLocationArg::InMemory,
+            storage_type: QuadStorageType::Delta,
+            storage_encoding,
+            data_fusion_config: config,
+        };
+
+        RdfFusionBenchContextBuilder::new(
+            options,
+            PathBuf::from("./bench_files"),
+            data_dir,
+            PathBuf::from("/tmp/database"),
+            PathBuf::from("/tmp/results"),
+        )
     }
 
     /// Returns the [BenchmarkingConfig] for this context.
     pub fn options(&self) -> &BenchmarkingConfig {
         &self.config
+    }
+
+    /// Returns the metrics for the cache registry.
+    pub fn metrics(&self) -> Option<CacheMetrics> {
+        self.cache_registry
+            .lock()
+            .expect("Poisoned")
+            .as_ref()
+            .map(|r| r.metrics())
     }
 
     /// Resolves a relative path `file` against the data directory.
@@ -90,155 +157,7 @@ impl RdfFusionBenchContext {
             bail!("Only relative paths can be resolved.")
         }
 
-        Ok(self.data_dir.lock().expect("Poisoned").join(file))
-    }
-
-    pub async fn create_store(&self) -> Store {
-        let mut builder = RuntimeEnvBuilder::new();
-        if let Some(memory_size) = self.config.memory_size {
-            builder = builder.with_memory_limit(memory_size * 1024 * 1024, 1.0);
-        }
-
-        let registry = Arc::clone(&builder.object_store_registry);
-        registry.register_store(
-            &Url::parse("memory:///").unwrap(),
-            Arc::new(InMemory::new()),
-        );
-
-        let registry = Arc::new(CachingObjectStoreRegistry::new(
-            registry,
-            1024 * 1024 * 1024,
-        ));
-        builder = builder.with_object_store_registry(registry);
-
-        let runtime_env = builder.build_arc().expect("Failed to build RuntimeEnv");
-
-        let storage_backend = match self.config.storage_backend {
-            BenchmarkStorageBackend::DeltaLakeInMemory => {
-                let url = ObjectStoreUrl::parse("memory://").unwrap();
-                let object_store = runtime_env
-                    .object_store(&url)
-                    .expect("Failed to get in-memory object store");
-                let log_store = logstore_with(
-                    Arc::clone(&object_store),
-                    url.as_ref(),
-                    StorageConfig::default()
-                        .with_io_runtime(IORuntime::RT(Handle::current())),
-                )
-                .expect("Failed to create log store");
-
-                let rdf_fusion_config = self
-                    .config
-                    .data_fusion_config
-                    .rdf_fusion_options_or_from_env()
-                    .expect("Failed to get RDF Fusion options");
-
-                DeltaQuadStorageBuilder::new()
-                    .with_log_store(log_store)
-                    .with_encoding(self.config.storage_encoding)
-                    .with_log_max_age(rdf_fusion_config.storage.delta.log_max_age)
-                    .build()
-                    .await
-                    .expect("Failed to create DeltaQuadStorage")
-            }
-            BenchmarkStorageBackend::DeltaLakeOnDisk => {
-                let full_iri = prepare_database_directory(self);
-                let full_iri = Url::parse(&full_iri).unwrap();
-
-                let base_url =
-                    ObjectStoreUrl::parse("file://").expect("Invalid database URL");
-                let object_store = runtime_env
-                    .object_store(&base_url)
-                    .expect("Failed to get object store");
-                let log_store = logstore_with(
-                    Arc::clone(&object_store),
-                    &full_iri,
-                    StorageConfig::default()
-                        .with_io_runtime(IORuntime::RT(Handle::current())),
-                )
-                .expect("Failed to create log store");
-
-                let rdf_fusion_config = self
-                    .config
-                    .data_fusion_config
-                    .rdf_fusion_options_or_from_env()
-                    .expect("Failed to get RDF Fusion options");
-
-                DeltaQuadStorageBuilder::new()
-                    .with_log_store(log_store)
-                    .with_encoding(self.config.storage_encoding)
-                    .with_log_max_age(rdf_fusion_config.storage.delta.log_max_age)
-                    .build()
-                    .await
-                    .expect("Failed to create DeltaQuadStorage")
-            }
-        };
-
-        let context = RdfFusionContextBuilder::new(Arc::new(storage_backend))
-            .with_session_config(Some(self.config.data_fusion_config.clone()))
-            .with_runtime_env(Some(runtime_env))
-            .build()
-            .expect("Failed to create RdfFusionContext");
-        return Store::new(context);
-
-        /// Prepares the directory where the database is stored.
-        fn prepare_database_directory(context: &RdfFusionBenchContext) -> String {
-            let database_dir = context.databases_dir.lock().expect("Poisoned");
-
-            let full_path = if database_dir.is_absolute() {
-                database_dir.clone()
-            } else {
-                std::env::current_dir()
-                    .expect("Failed to get current directory")
-                    .join(database_dir.as_path())
-            };
-
-            if full_path.exists() {
-                std::fs::remove_dir_all(&full_path)
-                    .expect("Failed to remove existing directory");
-            }
-            std::fs::create_dir_all(&full_path).expect("Failed to create directory");
-
-            let full_path = full_path
-                .canonicalize()
-                .expect("Failed to resolve absolute path");
-
-            format!("file://{}", full_path.display())
-        }
-    }
-
-    /// Creates a new folder in the results directory and uses it until [Self::pop_dir] is
-    /// called.
-    ///
-    /// This can be used to create folder hierarchies to separate the results of different
-    /// benchmarks.
-    #[allow(clippy::create_dir)]
-    #[allow(clippy::unwrap_used, reason = "Mutex poisoning")]
-    pub fn push_dir(
-        &self,
-        data_dir_name: &str,
-        results_dir_name: &str,
-    ) -> anyhow::Result<()> {
-        let mut data_dir = self.data_dir.lock().unwrap();
-        let mut databases_dir = self.databases_dir.lock().unwrap();
-        let mut results_dir = self.results_dir.lock().unwrap();
-
-        data_dir.push(data_dir_name);
-        databases_dir.push(data_dir_name);
-        results_dir.push(results_dir_name);
-
-        Ok(())
-    }
-
-    /// Pops the last directory from the stack.
-    pub fn pop_dir(&self) {
-        let mut data_dir = self.data_dir.lock().unwrap();
-        let mut databases_dir = self.databases_dir.lock().unwrap();
-        let mut results_dir = self.results_dir.lock().unwrap();
-
-        data_dir.pop();
-        databases_dir.pop();
-        results_dir.pop();
+        Ok(self.data_dir.join(file))
     }
 
     /// Creates a new bencher and modifies the context for this benchmark.
@@ -246,10 +165,6 @@ impl RdfFusionBenchContext {
         &self,
         benchmark_name: BenchmarkName,
     ) -> anyhow::Result<BenchmarkContext<'_>> {
-        self.push_dir(
-            &benchmark_name.data_dir_name(),
-            &benchmark_name.results_dir_name(),
-        )?;
         Ok(BenchmarkContext {
             context: self,
             benchmark_name,
@@ -286,12 +201,254 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
     /// Returns the path to the results directory of this benchmark.
     pub fn data_dir(&self) -> PathBuf {
-        self.context.data_dir.lock().unwrap().clone()
+        self.context
+            .data_dir
+            .join(self.benchmark_name.data_dir_name())
+    }
+
+    /// Returns the path to the database directory of this benchmark.
+    pub fn databases_dir(&self) -> PathBuf {
+        self.context
+            .databases_dir
+            .join(self.benchmark_name.data_dir_name())
     }
 
     /// Returns the path to the results directory of this benchmark.
     pub fn results_dir(&self) -> PathBuf {
-        self.context.results_dir.lock().unwrap().clone()
+        self.context
+            .results_dir
+            .join(self.benchmark_name.results_dir_name())
+    }
+
+    /// Resolves a relative path `file` against the isolated data directory of this benchmark.
+    pub fn join_data_dir(&self, file: &Path) -> anyhow::Result<PathBuf> {
+        if !file.is_relative() {
+            bail!("Only relative paths can be resolved.")
+        }
+
+        Ok(self.data_dir().join(file))
+    }
+
+    /// Returns the RDF Fusion configuration.
+    pub fn get_rdf_fusion_config(&self) -> rdf_fusion::common::config::RdfFusionOptions {
+        self.context
+            .config
+            .data_fusion_config
+            .rdf_fusion_options_or_from_env()
+            .expect("Failed to get RDF Fusion options")
+    }
+
+    /// Creates a [RuntimeEnv] with the configured memory limits and caching.
+    pub async fn create_runtime_env(&self) -> Arc<RuntimeEnv> {
+        let mut builder = RuntimeEnvBuilder::new();
+        if let Some(memory_size) = self.context.config.memory_size {
+            builder = builder.with_memory_limit(memory_size * 1024 * 1024, 1.0);
+        }
+
+        let registry = Arc::clone(&builder.object_store_registry);
+        registry.register_store(
+            &Url::parse("memory:///").unwrap(),
+            Arc::new(InMemory::new()),
+        );
+
+        let registry = Arc::new(CachingObjectStoreRegistry::new(
+            registry,
+            1024 * 1024 * 1024,
+        ));
+        *self.context.cache_registry.lock().expect("Poisoned") =
+            Some(Arc::clone(&registry));
+        builder = builder.with_object_store_registry(registry);
+
+        builder.build_arc().expect("Failed to build RuntimeEnv")
+    }
+
+    /// Resolves a path to a `file://` URL.
+    pub fn resolve_path_to_url(&self, path: &Path) -> anyhow::Result<String> {
+        let full_path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(path)
+        };
+        // Canonicalize if it exists to get an absolute path that is consistent
+        let full_path = if full_path.exists() {
+            full_path.canonicalize()?
+        } else {
+            full_path
+        };
+        Ok(format!("file://{}", full_path.display()))
+    }
+
+    /// Dumps the given sources to a Parquet file in the database directory.
+    pub async fn dump_to_parquet(
+        &self,
+        sources: Vec<(rdf_fusion::common::GraphName, RdfFileSourceConfig)>,
+        sort_order: Option<DumpSortOrder>,
+    ) -> anyhow::Result<()> {
+        let mut parquet_path = self.databases_dir();
+        parquet_path.push("dataset.parquet");
+
+        let url = match self.context.config.storage_location {
+            QuadStorageLocationArg::InMemory => {
+                format!(
+                    "memory:///databases/{}/dataset.parquet",
+                    self.benchmark_name.data_dir_name()
+                )
+            }
+            QuadStorageLocationArg::OnDisk => {
+                if parquet_path.exists() {
+                    std::fs::remove_file(&parquet_path)?;
+                } else {
+                    let parent = parquet_path.parent().expect("Invalid parquet path");
+                    if !parent.exists() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                }
+
+                self.resolve_path_to_url(&parquet_path)?
+            }
+        };
+
+        let rdf_fusion_config = self.get_rdf_fusion_config();
+        let storage =
+            RdfFileQuadStorage::new(sources, rdf_fusion_config.storage.rdf_files);
+
+        let runtime_env = self.create_runtime_env().await;
+        let context = RdfFusionContextBuilder::new(Arc::new(storage))
+            .with_session_config(Some(self.context.config.data_fusion_config.clone()))
+            .with_runtime_env(Some(runtime_env))
+            .build()?;
+        let store = Store::new(context);
+
+        let dump_options = DumpOptions::default()
+            .with_sort_by(sort_order)
+            .with_encoding(match self.context.config.storage_encoding {
+                QuadStorageEncodingName::PlainTerm => DumpEncoding::PlainTerm,
+                QuadStorageEncodingName::String => DumpEncoding::String,
+                QuadStorageEncodingName::ObjectId => {
+                    anyhow::bail!("Parquet storage does not support object IDs.")
+                }
+            });
+
+        store.dump(url, RdfFormat::Parquet, dump_options).await?;
+        Ok(())
+    }
+
+    pub async fn create_store(&self) -> Store {
+        let runtime_env = self.create_runtime_env().await;
+        let rdf_fusion_config = self.get_rdf_fusion_config();
+
+        let (base_url, object_store_url) = match self.context.config.storage_location {
+            QuadStorageLocationArg::InMemory => (
+                format!(
+                    "memory:///databases/{}",
+                    self.benchmark_name.data_dir_name()
+                ),
+                "memory://".to_string(),
+            ),
+            QuadStorageLocationArg::OnDisk => {
+                let full_iri = self.prepare_database_directory();
+                (full_iri, "file://".to_string())
+            }
+        };
+
+        let storage_backend: Arc<dyn rdf_fusion::api::storage::QuadStorage> =
+            match self.context.config.storage_type {
+                QuadStorageType::Delta => {
+                    let url = Url::parse(&base_url).unwrap();
+                    let object_store_url =
+                        ObjectStoreUrl::parse(&object_store_url).unwrap();
+
+                    let object_store = runtime_env
+                        .object_store(&object_store_url)
+                        .expect("Failed to get object store");
+                    let log_store = logstore_with(
+                        Arc::clone(&object_store),
+                        &url,
+                        StorageConfig::default()
+                            .with_io_runtime(IORuntime::RT(Handle::current())),
+                    )
+                    .expect("Failed to create log store");
+
+                    Arc::new(
+                        DeltaQuadStorageBuilder::new()
+                            .with_log_store(log_store)
+                            .with_encoding(self.context.config.storage_encoding)
+                            .with_log_max_age(rdf_fusion_config.storage.delta.log_max_age)
+                            .build()
+                            .await
+                            .expect("Failed to create DeltaQuadStorage"),
+                    )
+                }
+                QuadStorageType::Parquet { .. } => {
+                    let url = format!("{base_url}/dataset.parquet");
+
+                    let source = RdfFileSourceConfig {
+                        url,
+                        format: RdfFormat::Parquet,
+                    };
+
+                    let encoding = match self.context.config.storage_encoding {
+                        QuadStorageEncodingName::PlainTerm => {
+                            rdf_fusion::encoding::QuadStorageEncoding::PlainTerm
+                        }
+                        QuadStorageEncodingName::String => {
+                            rdf_fusion::encoding::QuadStorageEncoding::String
+                        }
+                        QuadStorageEncodingName::ObjectId => {
+                            panic!("Parquet storage does not support object IDs.")
+                        }
+                    };
+
+                    let storage = RdfFileQuadStorage::new_with_encoding(
+                        vec![(rdf_fusion::common::GraphName::DefaultGraph, source)],
+                        encoding,
+                        rdf_fusion_config.storage.rdf_files,
+                    );
+                    Arc::new(storage)
+                }
+            };
+
+        let context = RdfFusionContextBuilder::new(storage_backend)
+            .with_session_config(Some(self.context.config.data_fusion_config.clone()))
+            .with_runtime_env(Some(runtime_env))
+            .build()
+            .expect("Failed to create RdfFusionContext");
+        Store::new(context)
+    }
+
+    /// Prepares the directory where the database is stored.
+    fn prepare_database_directory(&self) -> String {
+        let database_dir = self.databases_dir();
+
+        let full_path = if database_dir.is_absolute() {
+            database_dir.clone()
+        } else {
+            std::env::current_dir()
+                .expect("Failed to get current directory")
+                .join(database_dir.as_path())
+        };
+
+        match self.context.config.storage_type {
+            QuadStorageType::Delta => {
+                if full_path.exists() {
+                    std::fs::remove_dir_all(&full_path)
+                        .expect("Failed to remove existing directory");
+                }
+                std::fs::create_dir_all(&full_path).expect("Failed to create directory");
+            }
+            QuadStorageType::Parquet { .. } => {
+                if !full_path.exists() {
+                    std::fs::create_dir_all(&full_path)
+                        .expect("Failed to create directory");
+                }
+            }
+        }
+
+        let full_path = full_path
+            .canonicalize()
+            .expect("Failed to resolve absolute path");
+
+        format!("file://{}", full_path.display())
     }
 
     /// Prepares the context such that `requirement` is fulfilled.
@@ -319,7 +476,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
                 args,
                 ..
             } => {
-                let workdir = self.context.join_data_dir(&workdir)?;
+                let workdir = self.join_data_dir(&workdir)?;
                 prepare_run_command(&workdir, &program, &args)
             }
         }
@@ -341,12 +498,5 @@ impl<'ctx> BenchmarkContext<'ctx> {
                 check_requirement, ..
             } => check_requirement(self),
         }
-    }
-}
-
-/// Pops the results directory from the context when the bencher is dropped.
-impl Drop for BenchmarkContext<'_> {
-    fn drop(&mut self) {
-        self.context.pop_dir();
     }
 }

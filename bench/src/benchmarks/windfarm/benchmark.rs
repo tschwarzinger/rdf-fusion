@@ -1,3 +1,4 @@
+use crate::QuadStorageType;
 use crate::benchmarks::windfarm::NumTurbines;
 use crate::benchmarks::windfarm::generate::{generate_static, generate_time_series};
 use crate::benchmarks::windfarm::queries::WindFarmQueryName;
@@ -13,7 +14,8 @@ use crate::utils::print_store_stats;
 use anyhow::Context;
 use async_trait::async_trait;
 use rdf_fusion::common::RdfFormat;
-use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
+use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
+use rdf_fusion::store::DumpSortOrder;
 use rdf_fusion::store::Store;
 use reqwest::Url;
 use std::fs;
@@ -113,12 +115,72 @@ impl Benchmark for WindFarmBenchmark {
         ctx: &BenchmarkContext<'_>,
         print_info: bool,
     ) -> anyhow::Result<Store> {
+        match &ctx.parent().options().storage_type {
+            QuadStorageType::Delta => self.prepare_delta_store(ctx, print_info).await,
+            QuadStorageType::Parquet { sort_order } => {
+                self.prepare_parquet_store(ctx, print_info, sort_order.clone())
+                    .await
+            }
+        }
+    }
+
+    async fn execute(
+        &self,
+        bench_context: &BenchmarkContext<'_>,
+    ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
+        let memory_store = self.prepare_store(bench_context, true).await?;
+        let report = execute_benchmark(bench_context, &memory_store).await?;
+        Ok(Box::new(report))
+    }
+}
+
+impl WindFarmBenchmark {
+    async fn prepare_parquet_store(
+        &self,
+        ctx: &BenchmarkContext<'_>,
+        print_info: bool,
+        sort_order: Option<DumpSortOrder>,
+    ) -> anyhow::Result<Store> {
+        if print_info {
+            println!("Generating Parquet dataset ...");
+        }
+        let dataset_paths = create_files(ctx)?;
+
+        let source1 = RdfFileSourceConfig {
+            url: ctx.resolve_path_to_url(&dataset_paths.wind_farm_data)?,
+            format: RdfFormat::N3,
+        };
+        let source2 = RdfFileSourceConfig {
+            url: ctx.resolve_path_to_url(&dataset_paths.time_series_data)?,
+            format: RdfFormat::N3,
+        };
+
+        ctx.dump_to_parquet(
+            vec![
+                (rdf_fusion::common::GraphName::DefaultGraph, source1),
+                (rdf_fusion::common::GraphName::DefaultGraph, source2),
+            ],
+            sort_order,
+        )
+        .await?;
+
+        if print_info {
+            println!("Parquet dataset generated.");
+        }
+        Ok(ctx.create_store().await)
+    }
+
+    async fn prepare_delta_store(
+        &self,
+        ctx: &BenchmarkContext<'_>,
+        print_info: bool,
+    ) -> anyhow::Result<Store> {
         let start = datafusion::common::instant::Instant::now();
         if print_info {
             println!("Creating store and loading data ...");
         }
         let dataset_path = create_files(ctx)?;
-        let memory_store = ctx.parent().create_store().await;
+        let memory_store = ctx.create_store().await;
 
         if print_info {
             println!("Loading static data ...");
@@ -155,15 +217,6 @@ impl Benchmark for WindFarmBenchmark {
 
         Ok(memory_store)
     }
-
-    async fn execute(
-        &self,
-        bench_context: &BenchmarkContext<'_>,
-    ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
-        let memory_store = self.prepare_store(bench_context, true).await?;
-        let report = execute_benchmark(bench_context, &memory_store).await?;
-        Ok(Box::new(report))
-    }
 }
 
 async fn execute_benchmark(
@@ -172,6 +225,7 @@ async fn execute_benchmark(
 ) -> anyhow::Result<WindFarmReport> {
     println!("Evaluating queries ...");
 
+    let mut recorder = crate::utils::cache::CacheMetricsRecorder::new(context)?;
     let mut report = WindFarmReportBuilder::new();
     for query_name in WindFarmQueryName::list_queries() {
         println!("Executing query: {query_name}");
@@ -190,8 +244,12 @@ async fn execute_benchmark(
             };
             report.add_explanation(query_name, details);
         }
+
+        recorder.record_run(context, &query_name.to_string())?;
     }
     let report = report.build();
+
+    recorder.write_summary(context)?;
 
     println!("All queries evaluated.");
 
@@ -212,11 +270,10 @@ pub fn get_wind_farm_raw_sparql_operation(
 }
 
 fn create_files(ctx: &BenchmarkContext) -> anyhow::Result<WindFarmFilePaths> {
-    let wind_farm_data = ctx.parent().join_data_dir(Path::new("wind-farm.ttl"))?;
-    let time_series_data = ctx.parent().join_data_dir(Path::new("timeseries.ttl"))?;
-    let query_folder = ctx
-        .parent()
-        .join_data_dir(Path::new("./source/benchmark-docker/queries_chrontext/"))?;
+    let wind_farm_data = ctx.join_data_dir(Path::new("wind-farm.ttl"))?;
+    let time_series_data = ctx.join_data_dir(Path::new("timeseries.ttl"))?;
+    let query_folder =
+        ctx.join_data_dir(Path::new("./source/benchmark-docker/queries_chrontext/"))?;
     Ok(WindFarmFilePaths {
         wind_farm_data,
         time_series_data,

@@ -5,6 +5,7 @@ use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::store::Store;
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
+use rdf_fusion_bench::{QuadStorageLocationArg, QuadStorageType};
 use tokio::runtime::{Builder, Runtime};
 
 pub mod verbose;
@@ -14,6 +15,16 @@ pub const ENCODINGS_TO_BENCHMARK: [QuadStorageEncodingName; 3] = [
     QuadStorageEncodingName::String,
     QuadStorageEncodingName::PlainTerm,
 ];
+
+pub fn backends_to_benchmark() -> Vec<(QuadStorageType, QuadStorageLocationArg)> {
+    vec![
+        (QuadStorageType::Delta, QuadStorageLocationArg::OnDisk),
+        (
+            QuadStorageType::Parquet { sort_order: None },
+            QuadStorageLocationArg::OnDisk,
+        ),
+    ]
+}
 
 pub async fn consume_results(result: QueryResults) -> anyhow::Result<usize> {
     match result {

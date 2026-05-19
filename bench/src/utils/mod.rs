@@ -1,5 +1,7 @@
 use rdf_fusion::store::Store;
 
+pub mod cache;
+
 pub async fn print_store_stats(store: &Store) -> anyhow::Result<()> {
     println!("Store stats:");
     println!("- Triples: {}", store.len().await?);

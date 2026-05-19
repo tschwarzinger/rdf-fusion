@@ -31,7 +31,6 @@ pub fn prepare_copy_file(
     );
 
     let target_path = env
-        .parent()
         .join_data_dir(target_path)
         .context("Cant join data dir with target path")?;
     if target_path.exists() {

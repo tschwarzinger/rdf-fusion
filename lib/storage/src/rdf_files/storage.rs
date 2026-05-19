@@ -3,7 +3,6 @@ use crate::rdf_files::manager::RdfFileManager;
 use crate::rdf_files::rdf::RdfFileSourceConfig;
 use crate::rdf_files::snapshot::RdfFileQuadStorageSnapshot;
 use async_trait::async_trait;
-use datafusion::catalog::TableProvider;
 use datafusion::execution::SessionState;
 use rdf_fusion_common::StorageError;
 use rdf_fusion_common::config::RdfFileStorageOptions;

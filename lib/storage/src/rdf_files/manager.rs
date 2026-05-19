@@ -4,6 +4,7 @@ use datafusion::catalog::TableProvider;
 use datafusion::datasource::memory::MemTable;
 use datafusion::error::DataFusionError;
 use datafusion::execution::context::SessionState;
+use rdf_fusion_common::RdfFormat;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
@@ -12,12 +13,12 @@ use tokio::sync::OnceCell;
 type RdfFileKey = (String, RdfFileScanOptions);
 
 /// The cached value for a single RDF file.
-type RdfFileValue = Arc<OnceCell<Arc<MemTable>>>;
+type RdfFileValue = Arc<OnceCell<Arc<dyn TableProvider>>>;
 
 /// A manager for RDF files that handles parsing and caching of results.
 #[derive(Clone, Default, Debug)]
 pub struct RdfFileManager {
-    /// Caches the results of parsing RDF dumps as [`MemTable`]s.
+    /// Caches the results of parsing RDF dumps as [`MemTable`]s (or directly as `UrlRdfParserTableProvider` for Parquet).
     /// Keyed by (url, options).
     cache: Arc<Mutex<HashMap<RdfFileKey, RdfFileValue>>>,
 }
@@ -28,13 +29,19 @@ impl RdfFileManager {
         Self::default()
     }
 
-    /// Gets the scan plan (as a [`MemTable`]) for the given URL and options.
+    /// Gets the scan plan (as a [`TableProvider`]) for the given URL and options.
     pub async fn get_scan_plan(
         &self,
         url: String,
         options: RdfFileScanOptions,
         state: &SessionState,
-    ) -> Result<Arc<MemTable>, DataFusionError> {
+    ) -> Result<Arc<dyn TableProvider>, DataFusionError> {
+        // Parquet doesn't need to be collected into memory.
+        if options.format == RdfFormat::Parquet {
+            let provider = UrlRdfParserTableProvider::try_new(url, options)?;
+            return Ok(Arc::new(provider));
+        }
+
         let key = (url.clone(), options.clone());
         let cell = {
             let mut cache = self.cache.lock().unwrap();
@@ -54,7 +61,7 @@ impl RdfFileManager {
 
             let schema = plan.schema();
             let mem_table = Arc::new(MemTable::try_new(schema, vec![batches])?);
-            Ok(mem_table)
+            Ok(mem_table as Arc<dyn TableProvider>)
         })
         .await
         .map(Arc::clone)

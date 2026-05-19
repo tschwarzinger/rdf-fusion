@@ -30,7 +30,6 @@ pub async fn prepare_file_download(
 ) -> anyhow::Result<()> {
     println!("Downloading file '{url}' ...");
     let file_path = env
-        .parent()
         .join_data_dir(&file_name)
         .context("Cant join data dir with file name")?;
     if file_path.exists() {

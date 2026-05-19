@@ -17,7 +17,8 @@ fn bench_bsbm_store_prepare(c: &mut Criterion) {
             PathBuf::from("./data"),
             encoding,
             1,
-        );
+        )
+        .build();
         let benchmark =
             BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
 
@@ -49,7 +50,8 @@ fn bench_windfarm_store_prepare(c: &mut Criterion) {
             PathBuf::from("./data"),
             encoding,
             1,
-        );
+        )
+        .build();
         let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
         let target_partitions = benchmarking_context

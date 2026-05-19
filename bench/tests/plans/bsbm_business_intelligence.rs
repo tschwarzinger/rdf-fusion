@@ -102,7 +102,8 @@ async fn for_all_explanations(
     assertion: impl Fn(String, QueryExplanation) -> (),
 ) {
     let benchmarking_context =
-        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1);
+        RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
+            .build();
 
     // Load the benchmark data and set max query count to one.
     let benchmark =

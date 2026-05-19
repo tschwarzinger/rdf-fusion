@@ -9,8 +9,8 @@ use crate::environment::RdfFusionBenchContext;
 use clap::ValueEnum;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::store::DumpSortOrder;
 use std::fs;
-use std::path::PathBuf;
 
 pub mod benchmarks;
 pub mod environment;
@@ -37,20 +37,61 @@ pub struct BenchmarkingConfig {
     pub verbose_results: bool,
     /// The number of MiBs that DataFusion is allowed to Suse.
     pub memory_size: Option<usize>,
-    /// The storage backend to use for the benchmark.
-    pub storage_backend: BenchmarkStorageBackend,
+    /// The storage location to use for the benchmark.
+    pub storage_location: QuadStorageLocationArg,
+    /// The storage type to use for the benchmark.
+    pub storage_type: QuadStorageType,
     /// The storage encoding to use for the benchmark.
     pub storage_encoding: QuadStorageEncodingName,
     /// The DataFusion config.
     pub data_fusion_config: SessionConfig,
 }
 
-/// Represents the possible storage backends a benchmark.
-pub enum BenchmarkStorageBackend {
-    /// A Delta Lake storage backend that is stored in-memory.
-    DeltaLakeInMemory,
-    /// A Delta Lake storage backend that is stored on disk.
-    DeltaLakeOnDisk,
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
+pub enum QuadStorageLocationArg {
+    /// The storage location is in-memory.
+    InMemory,
+    /// The storage location is on disk.
+    OnDisk,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
+pub enum QuadStorageTypeArg {
+    /// Uses a storage based on Delta Lake.
+    Delta,
+    /// The storage type is a single parquet file.
+    Parquet,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum QuadStorageType {
+    /// Uses a storage based on Delta Lake.
+    Delta,
+    /// The storage type is a single parquet file.
+    Parquet {
+        /// The sort order for the parquet file.
+        sort_order: Option<DumpSortOrder>,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
+pub enum QuadStorageEncodingNameArg {
+    /// The plain term encoding
+    PlainTerm,
+    /// The string encoding
+    String,
+    /// Use the object id
+    ObjectId,
+}
+
+impl From<QuadStorageEncodingNameArg> for QuadStorageEncodingName {
+    fn from(value: QuadStorageEncodingNameArg) -> Self {
+        match value {
+            QuadStorageEncodingNameArg::PlainTerm => QuadStorageEncodingName::PlainTerm,
+            QuadStorageEncodingNameArg::String => QuadStorageEncodingName::String,
+            QuadStorageEncodingNameArg::ObjectId => QuadStorageEncodingName::ObjectId,
+        }
+    }
 }
 
 /// Executes an `operation` of a given `benchmark`.
@@ -63,16 +104,18 @@ pub async fn execute_benchmark_operation(
     operation: Operation,
     benchmark: BenchmarkName,
 ) -> anyhow::Result<()> {
-    let bench_files = PathBuf::from("./bench_files");
-    let data = PathBuf::from("./data");
-    let databases = PathBuf::from("./databases");
-    let results = PathBuf::from("./results");
+    let current_dir = std::env::current_dir()?;
+    let bench_files = current_dir.join("bench_files");
+    let data = current_dir.join("data");
+    let databases = current_dir.join("databases");
+    let results = current_dir.join("results");
 
     fs::create_dir_all(&data)?;
     fs::create_dir_all(&results)?;
 
     let context =
-        RdfFusionBenchContext::new(options, bench_files, data, databases, results);
+        RdfFusionBenchContext::builder(options, bench_files, data, databases, results)
+            .build();
 
     let benchmark = create_benchmark_instance(benchmark)?;
     match operation {

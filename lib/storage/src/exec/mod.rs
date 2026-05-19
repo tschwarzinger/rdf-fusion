@@ -44,32 +44,45 @@ pub fn extract_and_alias_inner_metrics(
                     "files_scanned",
                     "row_groups_pruned_statistics",
                     "page_index_rows_pruned",
+                    "elapsed_compute",
                 ];
 
                 if target_prefixes
                     .iter()
                     .any(|prefix| name.starts_with(prefix))
                 {
-                    let new_name: Cow<'static, str> = format!("index_{name}").into();
+                    // If it's the inner AggregateExec elapsed_compute, we rename it to deduplicate_compute
+                    let new_name: Cow<'static, str> =
+                        if name == "elapsed_compute" && plan.name() == "AggregateExec" {
+                            "deduplicate_compute".into()
+                        } else if name == "elapsed_compute" {
+                            continue; // Do not alias elapsed_compute for other operators
+                        } else {
+                            name.to_string().into()
+                        };
+
+                    let partition = metric.partition().unwrap_or(0);
+                    let final_name: Cow<'static, str> =
+                        format!("file_{partition}_{new_name}").into();
 
                     // Clone the underlying atomic references so the new metric updates automatically
                     let new_value = match metric.value() {
                         MetricValue::Count { count, .. } => MetricValue::Count {
-                            name: new_name,
+                            name: final_name,
                             count: count.clone(),
                         },
                         MetricValue::Time { time, .. } => MetricValue::Time {
-                            name: new_name,
+                            name: final_name,
                             time: time.clone(),
                         },
                         MetricValue::Gauge { gauge, .. } => MetricValue::Gauge {
-                            name: new_name,
+                            name: final_name,
                             gauge: gauge.clone(),
                         },
                         MetricValue::PruningMetrics {
                             pruning_metrics, ..
                         } => MetricValue::PruningMetrics {
-                            name: new_name,
+                            name: final_name,
                             pruning_metrics: pruning_metrics.clone(),
                         },
                         _ => unreachable!(),

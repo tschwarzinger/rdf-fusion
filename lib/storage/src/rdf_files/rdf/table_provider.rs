@@ -350,9 +350,7 @@ impl UrlRdfParserTableProvider {
 
         let file_source =
             format.file_source(TableSchema::new(Arc::clone(&inferred_schema), vec![]));
-        let statistics = format
-            .infer_stats(state, &object_store, Arc::clone(&inferred_schema), &meta)
-            .await?;
+        let statistics = datafusion::common::Statistics::new_unknown(&inferred_schema);
 
         let file_scan_config = FileScanConfigBuilder::new(object_store_url, file_source)
             .with_file_group(FileGroup::new(vec![PartitionedFile::from(meta.clone())]))
