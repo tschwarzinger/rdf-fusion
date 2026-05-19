@@ -1,5 +1,6 @@
 use crate::error::SerializerError;
 use crate::store::Store;
+use anyhow::Context;
 use datafusion::datasource::file_format::parquet::ParquetSink;
 use datafusion::datasource::listing::ListingTableUrl;
 use datafusion::datasource::physical_plan::{FileOutputMode, FileSinkConfig};
@@ -7,8 +8,7 @@ use datafusion::datasource::sink::{DataSink, DataSinkExec};
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::dml::InsertOp;
 use datafusion::logical_expr::{SortExpr, col};
-use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
-use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanProperties, collect};
+use datafusion::physical_plan::{ExecutionPlan, collect};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -231,17 +231,13 @@ pub(crate) async fn dump_store(
             apply_dump_sort_order(builder, sort_order).map_err(SerializerError::Other)?
     }
 
-    let builder = if format != RdfFormat::Parquet {
-        match options.encoding {
-            DumpEncoding::PlainTerm => builder
-                .with_plain_terms()
-                .map_err(|e| SerializerError::Other(e.into()))?,
-            DumpEncoding::String => builder
-                .with_encoding(rdf_fusion_encoding::EncodingName::String)
-                .map_err(|e| SerializerError::Other(e.into()))?,
-        }
-    } else {
-        builder
+    builder = match options.encoding {
+        DumpEncoding::PlainTerm => builder
+            .with_plain_terms()
+            .map_err(|e| SerializerError::Other(e.into()))?,
+        DumpEncoding::String => builder
+            .with_encoding(rdf_fusion_encoding::EncodingName::String)
+            .map_err(|e| SerializerError::Other(e.into()))?,
     };
 
     let mut df = datafusion::prelude::DataFrame::new(
@@ -262,12 +258,6 @@ pub(crate) async fn dump_store(
     let (session, plan): (SessionState, _) = df.into_parts();
     let physical_plan: Arc<dyn ExecutionPlan> =
         session.create_physical_plan(&plan).await?;
-
-    let physical_plan = if physical_plan.output_partitioning().partition_count() > 1 {
-        Arc::new(CoalescePartitionsExec::new(physical_plan))
-    } else {
-        physical_plan
-    };
 
     let runtime_env = session.runtime_env();
     let object_store_url = url.as_object_store_url();

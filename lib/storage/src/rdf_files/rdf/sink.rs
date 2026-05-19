@@ -41,6 +41,8 @@ enum RdfDataSinkInner {
 
 impl RdfDataSink {
     /// Creates a new [`RdfDataSink`] for RDF formats.
+    ///
+    /// TODO: Fix these three new methods.
     pub fn new_rdf(
         object_store: Arc<dyn ObjectStore>,
         path: Path,

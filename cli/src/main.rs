@@ -86,6 +86,7 @@ pub async fn main() -> anyhow::Result<()> {
             graph,
             sort_by,
             triple_fallback,
+            encoding,
         } => {
             let store = create_store(&args).await?;
             let output_url = resolve_location(output)?;
@@ -96,6 +97,7 @@ pub async fn main() -> anyhow::Result<()> {
                 graph.clone(),
                 sort_by.clone(),
                 triple_fallback.clone(),
+                encoding.clone(),
             )
             .await
         }
@@ -224,10 +226,11 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
         builder = builder.with_memory_limit(memory_limit * 1024 * 1024, 1.0);
     }
 
-    let registry = Arc::new(CachingObjectStoreRegistry::new(
-        Arc::clone(&builder.object_store_registry),
-        1024 * 1024 * 1024,
-    ));
+    // let registry = Arc::new(CachingObjectStoreRegistry::new(
+    //     Arc::clone(&builder.object_store_registry),
+    //     1024 * 1024 * 1024,
+    // ));
+    let registry = Arc::clone(&builder.object_store_registry);
 
     // Register s3-compatible object store if its in the arguments
     let mut locations = Vec::new();
@@ -272,7 +275,7 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
 }
 
 fn register_s3_store(
-    registry: &Arc<CachingObjectStoreRegistry>,
+    registry: &Arc<dyn ObjectStoreRegistry>,
     location: &str,
 ) -> anyhow::Result<()> {
     let s3_url = Url::parse(location)

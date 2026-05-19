@@ -93,7 +93,6 @@ pub enum Command {
     /// Export the database to an RDF data dump.
     Dump {
         /// The location where the dump should be written.
-        #[arg(long)]
         output: String,
         /// The format of the output RDF data dump. If not provided, RDF Fusion tries to guess it
         /// from the extension.
@@ -107,10 +106,9 @@ pub enum Command {
         /// Supports the following sort specifications:
         /// - *Regular*: regular sorting as defined in SPARQL's ORDER BY (e.g., `GSPO`, `SP`)
         /// - [*ZOrder*]: Interleave bits of the components (e.g., `ZOrder(PS)`)
-        /// - [*Native*]: Use DataFusion's native order for the respective encoding (e.g., `NATIVE(GSPO)`)
+        /// - *Native*: Use DataFusion's native order for the respective encoding (e.g., `NATIVE(GSPO)`)
         ///
         /// [*ZOrder*]: https://en.wikipedia.org/wiki/Z-order_curve
-        /// [*Native*]: https://datafusion.apache.org/
         #[arg(long)]
         sort_by: Option<String>,
         /// The strategy to use when exporting quads to a triple-only format.
@@ -118,7 +116,14 @@ pub enum Command {
         /// Supported strategies:
         /// - *error*: returns an error if a non-default graph is encountered.
         /// - *ignore*: ignores the graph column and deduplicates the triples.
-        #[arg(long)]
-        triple_fallback: Option<String>,
+        #[arg(long, default_value = "error")]
+        triple_fallback: String,
+        /// The encoding to use for dumping.
+        ///
+        /// Supported encodings:
+        /// - *plain-term*: Use the plain term encoding.
+        /// - *string*: Use the string encoding.
+        #[arg(long, default_value = "string")]
+        encoding: String,
     },
 }
