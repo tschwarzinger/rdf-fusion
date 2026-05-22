@@ -33,6 +33,17 @@ pub enum QuadStorageEncoding {
     String,
 }
 
+impl QuadStorageEncoding {
+    /// Returns the name of the encoding.
+    pub fn name(&self) -> QuadStorageEncodingName {
+        match self {
+            QuadStorageEncoding::PlainTerm => QuadStorageEncodingName::PlainTerm,
+            QuadStorageEncoding::ObjectId(_) => QuadStorageEncodingName::ObjectId,
+            QuadStorageEncoding::String => QuadStorageEncodingName::String,
+        }
+    }
+}
+
 /// A version of [`QuadStorageEncoding`] that only reflects the name of the encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum QuadStorageEncodingName {
@@ -56,7 +67,7 @@ impl Display for QuadStorageEncodingName {
 
 #[derive(Debug, Error)]
 #[error(
-    "Invalid quad storage encoding: {0}. Supported encodings: plain-term, object-id."
+    "Invalid quad storage encoding: {0}. Supported encodings: plain-term, string, object-id."
 )]
 pub struct QuadStorageEncodingNameParserError(String);
 
@@ -64,10 +75,10 @@ impl FromStr for QuadStorageEncodingName {
     type Err = QuadStorageEncodingNameParserError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "PlainTerm" => Ok(QuadStorageEncodingName::PlainTerm),
-            "ObjectId" => Ok(QuadStorageEncodingName::ObjectId),
-            "String" => Ok(QuadStorageEncodingName::String),
+        match s.to_lowercase().as_str() {
+            "plain-term" | "plainterm" => Ok(QuadStorageEncodingName::PlainTerm),
+            "object-id" | "objectid" => Ok(QuadStorageEncodingName::ObjectId),
+            "string" => Ok(QuadStorageEncodingName::String),
             _ => Err(QuadStorageEncodingNameParserError(s.to_string())),
         }
     }

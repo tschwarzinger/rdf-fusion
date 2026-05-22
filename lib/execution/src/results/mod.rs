@@ -111,16 +111,10 @@ impl QueryResults {
     pub async fn write_graph<W: Write>(
         self,
         writer: W,
-        format: impl Into<RdfFormat>,
+        format: RdfFormat,
     ) -> Result<W, QueryEvaluationError> {
         if let Self::Graph(mut triples) = self {
-            let rdf_format = format.into();
-            let oxigraph_format = rdf_format.to_oxigraph().ok_or_else(|| {
-                QueryEvaluationError::NotImplemented("Unsupported RDF format".to_string())
-            })?;
-
-            let mut serializer =
-                RdfSerializer::from_format(oxigraph_format).for_writer(writer);
+            let mut serializer = RdfSerializer::from_format(format).for_writer(writer);
 
             while let Some(triple) = triples.next().await {
                 serializer

@@ -6,8 +6,11 @@ use futures::StreamExt;
 use rdf_fusion::common::vocab::{rdf, xsd};
 use rdf_fusion::common::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::execution::results::QueryResults;
-use rdf_fusion::store::{DumpOptions, Store};
-use rdf_fusion_common::{BlankNode, GraphName, NamedNode, Quad, RdfFormat};
+use rdf_fusion::store::{RdfDumpOptions, Store};
+use rdf_fusion_common::{
+    BlankNode, GraphName, NamedNode, Quad, RdfDumpFormat, RdfFormat,
+};
+use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::error::Error;
 
@@ -150,7 +153,7 @@ async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_dump_graph_and_then_load_dump() -> Result<(), Box<dyn Error>> {
+async fn test_dump_graph_and_then_query_dump() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q).await?;
@@ -158,16 +161,16 @@ async fn test_dump_graph_and_then_load_dump() -> Result<(), Box<dyn Error>> {
 
     store
         .dump(
-            "memory:///test".to_owned(),
-            RdfFormat::NQuads,
-            DumpOptions::default(),
+            "memory:///test.parquet".to_owned(),
+            RdfDumpFormat::Parquet,
+            RdfDumpOptions::default(),
         )
         .await?;
 
     let store = create_store_for_result(
         store.context().session_context().runtime_env(),
-        "memory:///test",
-        RdfFormat::NQuads,
+        "memory:///test.parquet",
+        QuadStorageEncodingName::PlainTerm,
     );
     assert_eq!(store.len().await?, NUMBER_OF_TRIPLES);
 
@@ -183,9 +186,9 @@ async fn test_dump_named_graph() -> Result<(), Box<dyn Error>> {
 
     store
         .dump(
-            "memory:///test.nq".to_owned(),
-            RdfFormat::NQuads,
-            DumpOptions::default().with_graph(Some(
+            "memory:///test_named_dump/data.parquet".to_owned(),
+            RdfDumpFormat::Parquet,
+            RdfDumpOptions::default().with_graph(Some(
                 NamedNode::new_unchecked("http://example.com/g1".to_string()).into(),
             )),
         )
@@ -193,8 +196,8 @@ async fn test_dump_named_graph() -> Result<(), Box<dyn Error>> {
 
     let store = create_store_for_result(
         store.context().session_context().runtime_env(),
-        "memory:///test.nq",
-        RdfFormat::NQuads,
+        "memory:///test_named_dump/",
+        QuadStorageEncodingName::PlainTerm,
     );
     assert_eq!(store.len().await?, NUMBER_OF_TRIPLES);
 
@@ -211,16 +214,16 @@ async fn test_dump_graph_with_no_quad_in_graph() -> Result<(), Box<dyn Error>> {
 
     store
         .dump(
-            "memory:///test".to_owned(),
-            RdfFormat::NQuads,
-            DumpOptions::default().with_graph(Some(GraphName::DefaultGraph)),
+            "memory:///test_empty_dump/data.parquet".to_owned(),
+            RdfDumpFormat::Parquet,
+            RdfDumpOptions::default().with_graph(Some(GraphName::DefaultGraph)),
         )
         .await?;
 
     let store = create_store_for_result(
         store.context().session_context().runtime_env(),
-        "memory:///test",
-        RdfFormat::NQuads,
+        "memory:///test_empty_dump/",
+        QuadStorageEncodingName::PlainTerm,
     );
     assert_eq!(store.len().await?, 0);
 

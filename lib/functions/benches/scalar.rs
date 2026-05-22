@@ -6,7 +6,6 @@ use rdf_fusion_common::{BlankNode, Float, Integer, Literal, NamedNodeRef, TermRe
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
-use rdf_fusion_encoding::sortable_term::SORTABLE_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};

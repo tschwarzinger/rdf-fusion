@@ -21,6 +21,7 @@ use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion::catalog::memory::DataSourceExec;
 use datafusion::common::ScalarValue;
 use datafusion::datasource::listing::PartitionedFile;
+use datafusion::datasource::physical_plan::parquet::DefaultParquetFileReaderFactory;
 use datafusion::datasource::physical_plan::{
     FileGroup, FileScanConfigBuilder, ParquetSource,
 };
@@ -33,9 +34,9 @@ use datafusion::physical_expr::expressions::col;
 use datafusion::physical_expr::projection::ProjectionExpr;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
-use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
+use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use deltalake::kernel::Action;
@@ -46,6 +47,7 @@ use deltalake::table::state::DeltaTableState;
 use deltalake::{
     DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField, TableProperty,
 };
+use object_store::ObjectStore;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use std::fmt::{Debug, Display, Formatter};
@@ -312,10 +314,6 @@ impl DeltaQuadStorageLog {
 
         let table = self.table.read().await.clone();
 
-        state
-            .runtime_env()
-            .register_object_store(table.table_url(), table.object_store());
-
         let table_state = table.state.as_ref().ok_or_else(|| {
             DeltaQuadStorageError::Other("Table not loaded".to_string())
         })?;
@@ -341,7 +339,13 @@ impl DeltaQuadStorageLog {
         }
 
         // Fallback to eager for complex changesets
-        let cdf_scan = query_cdf(table.table_url(), table_state, &added_files).await?;
+        let cdf_scan = query_cdf(
+            table.table_url(),
+            table_state,
+            &added_files,
+            table.object_store(),
+        )
+        .await?;
         let current_plan = create_changeset_plan(state, cdf_scan)?;
 
         let stream = execute_stream(current_plan, state.task_ctx())?;
@@ -430,6 +434,7 @@ impl DeltaQuadStorageLog {
             url: &Url,
             table: &DeltaTableState,
             files: &[OperationLogFile],
+            object_store: Arc<dyn ObjectStore>,
         ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
             let mut partitioned_files = Vec::with_capacity(files.len());
             for op_file in files {
@@ -455,26 +460,19 @@ impl DeltaQuadStorageLog {
                 false,
             ))];
             let table_schema = TableSchema::new(Arc::new(file_schema), partition_cols);
-            let source = Arc::new(ParquetSource::new(table_schema));
+
+            let file_factory = DefaultParquetFileReaderFactory::new(object_store);
+            let source = Arc::new(
+                ParquetSource::new(table_schema)
+                    .with_parquet_file_reader_factory(Arc::new(file_factory)),
+            );
             let scan_config =
                 FileScanConfigBuilder::new(url.as_object_store_url(), source)
                     .with_file_group(FileGroup::new(partitioned_files))
                     .build();
             let data_source_exec = Arc::new(DataSourceExec::new(Arc::new(scan_config)));
 
-            let plan = if data_source_exec
-                .properties()
-                .output_partitioning()
-                .partition_count()
-                > 1
-            {
-                Arc::new(CoalescePartitionsExec::new(data_source_exec))
-                    as Arc<dyn ExecutionPlan>
-            } else {
-                data_source_exec as Arc<dyn ExecutionPlan>
-            };
-
-            let schema = plan.schema();
+            let schema = data_source_exec.schema();
             let plan = ProjectionExec::try_new(
                 [
                     ProjectionExpr::new(
@@ -491,7 +489,7 @@ impl DeltaQuadStorageLog {
                     ProjectionExpr::new(col(COL_PREDICATE, &schema)?, COL_PREDICATE),
                     ProjectionExpr::new(col(COL_OBJECT, &schema)?, COL_OBJECT),
                 ],
-                plan,
+                data_source_exec,
             )?;
 
             let sort_exprs = vec![
@@ -506,11 +504,16 @@ impl DeltaQuadStorageLog {
                     options: SortOptions::default().asc(),
                 },
             ];
+            let ordering = LexOrdering::new(sort_exprs).expect("Valid sort expressions");
 
-            Ok(Arc::new(SortExec::new(
-                LexOrdering::new(sort_exprs).expect("Valid sort expressions"),
-                Arc::new(plan),
-            )))
+            let sorted = Arc::new(SortExec::new(ordering.clone(), Arc::new(plan)))
+                as Arc<dyn ExecutionPlan>;
+
+            if sorted.properties().output_partitioning().partition_count() > 1 {
+                Ok(Arc::new(SortPreservingMergeExec::new(ordering, sorted)))
+            } else {
+                Ok(sorted)
+            }
         }
 
         /// Creates the [`ComputeLogChangesetExec`] plan and runs some optimizations.
@@ -809,7 +812,14 @@ mod tests {
     /// Creates a new session context for the test
     fn create_session() -> SessionContext {
         let options = SessionConfig::default().with_target_partitions(1);
-        SessionContext::new_with_config(options)
+        let session = SessionContext::new_with_config(options);
+
+        session.runtime_env().register_object_store(
+            &Url::parse("memory:///").unwrap(),
+            Arc::new(object_store::memory::InMemory::new()),
+        );
+
+        session
     }
 
     /// Helper: Create the Delta Storage

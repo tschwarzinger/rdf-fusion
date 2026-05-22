@@ -9,18 +9,27 @@ fn temp_db_path(name: &str) -> String {
 }
 
 #[test]
-fn test_cli_build_database_delta_lake() {
-    let db_path = temp_db_path("test_cli_build_database_delta_lake");
+fn test_cli_load_delta() {
+    run_cli_load_and_query_test("test_cli_load_delta_lake", "delta-lake");
+}
+
+#[test]
+fn test_cli_load_parquet() {
+    run_cli_load_and_query_test("test_cli_load_parquet.parquet", "parquet");
+}
+
+fn run_cli_load_and_query_test(database_name: &str, storage_type: &str) {
+    let db_path = temp_db_path(database_name);
 
     // 1. Build the database
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        storage_type,
         "--location",
-        "../examples/data/spiderman.ttl",
-        "build-database",
         &db_path,
+        "load",
+        "../examples/data/spiderman.ttl",
     ]);
     cmd.assert().success();
 
@@ -28,7 +37,7 @@ fn test_cli_build_database_delta_lake() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        storage_type,
         "--location",
         &db_path,
         "query",

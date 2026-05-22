@@ -44,7 +44,7 @@ impl W3CSparqlUpdateEvaluationTest {
             default_graphs.push((
                 GraphName::DefaultGraph,
                 RdfFileSourceConfig {
-                    url: data.clone(),
+                    url: url::Url::parse(data)?,
                     format: guess_rdf_format(data)?,
                 },
             ));
@@ -54,7 +54,7 @@ impl W3CSparqlUpdateEvaluationTest {
             named_graphs.push((
                 name.clone(),
                 RdfFileSourceConfig {
-                    url: value.clone(),
+                    url: url::Url::parse(value)?,
                     format: guess_rdf_format(value)?,
                 },
             ));
@@ -72,7 +72,7 @@ impl W3CSparqlUpdateEvaluationTest {
             result_default_graphs.push((
                 GraphName::DefaultGraph,
                 RdfFileSourceConfig {
-                    url: data.clone(),
+                    url: url::Url::parse(data)?,
                     format: guess_rdf_format(data)?,
                 },
             ));
@@ -82,7 +82,7 @@ impl W3CSparqlUpdateEvaluationTest {
             result_named_graphs.push((
                 name.clone(),
                 RdfFileSourceConfig {
-                    url: value.clone(),
+                    url: url::Url::parse(value)?,
                     format: guess_rdf_format(value)?,
                 },
             ));

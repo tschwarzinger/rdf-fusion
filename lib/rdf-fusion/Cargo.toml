@@ -15,7 +15,6 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-anyhow.workspace = true
 datafusion.workspace = true
 deltalake.workspace = true
 rdf-fusion-extensions.workspace = true

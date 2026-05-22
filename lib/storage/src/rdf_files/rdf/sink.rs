@@ -4,7 +4,7 @@ use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::DataFusionError;
 use datafusion::datasource::sink::DataSink;
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
-use datafusion::physical_plan::DisplayAs;
+use datafusion::physical_plan::{DisplayAs, DisplayFormatType};
 use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::path::Path;
@@ -23,108 +23,32 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use crate::rdf_files::detect_encoding_from_schema;
-use crate::rdf_files::rdf::RdfFormat;
-use datafusion::datasource::file_format::parquet::ParquetSink;
 
-/// A [`DataSink`] that handles both RDF and Parquet serialization.
+/// A [`DataSink`] for writing RDF data using Oxigraph's serializers.
 #[derive(Debug)]
-pub struct RdfDataSink {
-    inner: RdfDataSinkInner,
+pub struct RdfFileDataSink {
+    object_store: Arc<dyn ObjectStore>,
+    path: Path,
+    format: oxrdfio::RdfFormat,
     schema: SchemaRef,
 }
 
-#[derive(Debug)]
-enum RdfDataSinkInner {
-    Oxigraph(Box<OxigraphRdfDataSink>),
-    Parquet(Box<ParquetSink>),
-}
-
-impl RdfDataSink {
-    /// Creates a new [`RdfDataSink`] for RDF formats.
-    ///
-    /// TODO: Fix these three new methods.
-    pub fn new_rdf(
-        object_store: Arc<dyn ObjectStore>,
-        path: Path,
-        format: RdfFormat,
-        schema: SchemaRef,
-    ) -> Self {
-        let oxigraph_format = format.to_oxigraph().expect("RDF format expected");
-        Self {
-            inner: RdfDataSinkInner::Oxigraph(Box::new(OxigraphRdfDataSink::new(
-                object_store,
-                path,
-                oxigraph_format,
-                Arc::clone(&schema),
-            ))),
-            schema,
-        }
-    }
-
-    /// Creates a new [`RdfDataSink`] for Parquet format.
-    pub fn new_parquet(sink: ParquetSink, schema: SchemaRef) -> Self {
-        Self {
-            inner: RdfDataSinkInner::Parquet(Box::new(sink)),
-            schema,
-        }
-    }
-
-    /// Compatibility constructor for existing code.
+impl RdfFileDataSink {
+    /// Creates a new [`RdfFileDataSink`].
     pub fn new(
         object_store: Arc<dyn ObjectStore>,
         path: Path,
-        format: RdfFormat,
+        format: oxrdfio::RdfFormat,
         schema: SchemaRef,
     ) -> Self {
-        match format {
-            RdfFormat::Parquet => {
-                // This is a bit of a hack because we need FileSinkConfig to create ParquetSink properly.
-                // In store.dump, we might need to adjust how this is called.
-                panic!("Use new_parquet for Parquet format or provide enough config");
-            }
-            _ => Self::new_rdf(object_store, path, format, schema),
+        Self {
+            object_store,
+            path,
+            format,
+            schema,
         }
     }
-}
 
-impl DisplayAs for RdfDataSink {
-    fn fmt_as(
-        &self,
-        t: datafusion::physical_plan::DisplayFormatType,
-        f: &mut std::fmt::Formatter,
-    ) -> std::fmt::Result {
-        match &self.inner {
-            RdfDataSinkInner::Oxigraph(s) => s.fmt_as(t, f),
-            RdfDataSinkInner::Parquet(s) => s.fmt_as(t, f),
-        }
-    }
-}
-
-#[async_trait]
-impl DataSink for RdfDataSink {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn schema(&self) -> &SchemaRef {
-        &self.schema
-    }
-
-    async fn write_all(
-        &self,
-        data: SendableRecordBatchStream,
-        context: &Arc<TaskContext>,
-    ) -> datafusion::common::Result<u64> {
-        self.validate_schema()?;
-
-        match &self.inner {
-            RdfDataSinkInner::Oxigraph(s) => s.write_all(data, context).await,
-            RdfDataSinkInner::Parquet(s) => s.write_all(data, context).await,
-        }
-    }
-}
-
-impl RdfDataSink {
     fn validate_schema(&self) -> datafusion::common::Result<()> {
         let has_subject = self.schema.field_with_name(COL_SUBJECT).is_ok();
         let has_predicate = self.schema.field_with_name(COL_PREDICATE).is_ok();
@@ -144,44 +68,22 @@ impl RdfDataSink {
     }
 }
 
-/// A [`DataSink`] for writing RDF data using Oxigraph's serializers.
-#[derive(Debug)]
-pub struct OxigraphRdfDataSink {
-    object_store: Arc<dyn ObjectStore>,
-    path: Path,
-    format: oxrdfio::RdfFormat,
-    schema: SchemaRef,
-}
-
-impl OxigraphRdfDataSink {
-    /// Creates a new [`OxigraphRdfDataSink`].
-    pub fn new(
-        object_store: Arc<dyn ObjectStore>,
-        path: Path,
-        format: oxrdfio::RdfFormat,
-        schema: SchemaRef,
-    ) -> Self {
-        Self {
-            object_store,
-            path,
-            format,
-            schema,
-        }
-    }
-}
-
-impl DisplayAs for OxigraphRdfDataSink {
+impl DisplayAs for RdfFileDataSink {
     fn fmt_as(
         &self,
-        _t: datafusion::physical_plan::DisplayFormatType,
+        _t: DisplayFormatType,
         f: &mut std::fmt::Formatter,
     ) -> std::fmt::Result {
-        write!(f, "OxigraphRdfDataSink(path={})", self.path)
+        write!(
+            f,
+            "RdfFileDataSink(path={}, format={:?})",
+            self.path, self.format
+        )
     }
 }
 
 #[async_trait]
-impl DataSink for OxigraphRdfDataSink {
+impl DataSink for RdfFileDataSink {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -195,6 +97,7 @@ impl DataSink for OxigraphRdfDataSink {
         data: SendableRecordBatchStream,
         _context: &Arc<TaskContext>,
     ) -> datafusion::common::Result<u64> {
+        self.validate_schema()?;
         let mut serializer = self.create_serializer();
 
         let has_graph = self.schema.field_with_name(COL_GRAPH).is_ok();
@@ -219,7 +122,7 @@ impl DataSink for OxigraphRdfDataSink {
     }
 }
 
-impl OxigraphRdfDataSink {
+impl RdfFileDataSink {
     /// Creates a new quad serializer for the given format and object store path.
     fn create_serializer(
         &self,
@@ -670,7 +573,7 @@ mod tests {
     use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
 
     #[tokio::test]
-    async fn test_rdf_data_sink_triples() -> datafusion::common::Result<()> {
+    async fn test_rdf_file_data_sink_triples() -> datafusion::common::Result<()> {
         let store = Arc::new(InMemory::new());
         let path = Path::from("test.ttl");
         let schema = Arc::clone(QuadStorageEncoding::String.quad_schema().inner());
@@ -704,10 +607,10 @@ mod tests {
             ],
         )?;
 
-        let sink = RdfDataSink::new(
+        let sink = RdfFileDataSink::new(
             Arc::clone(&store) as Arc<dyn ObjectStore>,
             path.clone(),
-            RdfFormat::Turtle,
+            oxrdfio::RdfFormat::Turtle,
             Arc::clone(&triple_schema),
         );
 
@@ -722,10 +625,10 @@ mod tests {
         // Read back and verify
         let get_result: GetResult = store.get(&path).await?;
         let bytes = get_result.bytes().await?;
-        let mut parser =
+        let parser =
             RdfParser::from_format(oxrdfio::RdfFormat::Turtle).for_reader(&bytes[..]);
         let mut count = 0;
-        while let Some(quad_result) = parser.next() {
+        for quad_result in parser {
             quad_result.map_err(|e| DataFusionError::External(Box::new(e)))?;
             count += 1;
         }
@@ -735,7 +638,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_rdf_data_sink_quads() -> datafusion::common::Result<()> {
+    async fn test_rdf_file_data_sink_quads() -> datafusion::common::Result<()> {
         let store = Arc::new(InMemory::new());
         let path = Path::from("test.nq");
         let schema = Arc::clone(QuadStorageEncoding::PlainTerm.quad_schema().inner());
@@ -751,10 +654,10 @@ mod tests {
 
         let batch = builder.finish().into_record_batch();
 
-        let sink = RdfDataSink::new(
+        let sink = RdfFileDataSink::new(
             Arc::clone(&store) as Arc<dyn ObjectStore>,
             path.clone(),
-            RdfFormat::NQuads,
+            oxrdfio::RdfFormat::NQuads,
             Arc::clone(&schema),
         );
 

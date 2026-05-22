@@ -1,4 +1,4 @@
-use crate::DFResult;
+use crate::{DFResult, RdfSortOrder};
 use datafusion::common::config::{ConfigEntry, ConfigExtension, ExtensionOptions};
 use datafusion::error::DataFusionError;
 use datafusion::prelude::SessionConfig;
@@ -21,8 +21,17 @@ impl ConfigExtension for RdfFusionOptions {
 pub struct StorageOptions {
     /// Delta storage configuration.
     pub delta: DeltaStorageOptions,
+    /// Parquet storage configuration.
+    pub parquet: ParquetStorageOptions,
     /// RDF file storage options.
     pub rdf_files: RdfFileStorageOptions,
+}
+
+/// Parquet storage configuration for RDF Fusion.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ParquetStorageOptions {
+    /// The sort order for the Parquet files.
+    pub sort_order: Option<RdfSortOrder>,
 }
 
 /// Delta storage configuration for RDF Fusion.
@@ -67,6 +76,14 @@ impl ExtensionOptions for RdfFusionOptions {
                     self.storage.delta.log_max_age = Some(Duration::from_millis(ms));
                 }
             }
+            "storage.parquet.sort_order" => {
+                let value: RdfSortOrder = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.parquet.sort_order: {e}"
+                    ))
+                })?;
+                self.storage.parquet.sort_order = Some(value);
+            }
             "storage.rdf.assume_quads_unique_in_single_file" => {
                 let value: bool = value.parse().map_err(|e| {
                     DataFusionError::Configuration(format!(
@@ -97,6 +114,17 @@ impl ExtensionOptions for RdfFusionOptions {
                 description: "The maximum age of the operations log that should be queried before refreshing.",
             },
             ConfigEntry {
+                key: format!("{}.storage.parquet.sort_order", Self::PREFIX),
+                value: self
+                    .storage
+                    .parquet
+                    .sort_order
+                    .as_ref()
+                    .map(|so| so.to_string())
+                    .clone(),
+                description: "The sort order for the Parquet files.",
+            },
+            ConfigEntry {
                 key: format!(
                     "{}.storage.rdf.assume_quads_unique_in_single_file",
                     Self::PREFIX
@@ -124,6 +152,12 @@ impl RdfFusionOptions {
         let mut config = Self::default();
         if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE") {
             config.set("storage.delta.log_max_age", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_PARQUET_TARGET_FILE_COUNT") {
+            config.set("storage.parquet.target_file_count", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_PARQUET_SORT_ORDER") {
+            config.set("storage.parquet.sort_order", &val)?;
         }
         if let Ok(val) =
             std::env::var("RDF_FUSION_STORAGE_RDF_ASSUME_QUADS_UNIQUE_IN_SINGLE_FILE")
@@ -191,6 +225,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 2);
+        assert_eq!(entries.len(), 3);
     }
 }

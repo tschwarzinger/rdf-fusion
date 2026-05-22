@@ -539,7 +539,7 @@ mod tests {
             )],
         );
         let stream1 = session
-            .read_batch(batch1.project(&vec![2, 3, 4, 5, 6]).unwrap())
+            .read_batch(batch1.project(&[2, 3, 4, 5, 6]).unwrap())
             .unwrap()
             .execute_stream()
             .await
@@ -624,7 +624,7 @@ mod tests {
             )],
         );
         let stream1 = session
-            .read_batch(batch1.project(&vec![2, 3, 4, 5, 6]).unwrap())
+            .read_batch(batch1.project(&[2, 3, 4, 5, 6]).unwrap())
             .unwrap()
             .execute_stream()
             .await
@@ -804,7 +804,7 @@ mod tests {
             ],
         );
         let stream = session
-            .read_batch(batch.project(&vec![2, 3, 4, 5, 6]).unwrap())
+            .read_batch(batch.project(&[2, 3, 4, 5, 6]).unwrap())
             .unwrap()
             .execute_stream()
             .await

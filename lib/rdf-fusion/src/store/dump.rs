@@ -1,133 +1,20 @@
 use crate::error::SerializerError;
 use crate::store::Store;
-use anyhow::Context;
+use datafusion::dataframe::DataFrame;
 use datafusion::datasource::file_format::parquet::ParquetSink;
 use datafusion::datasource::listing::ListingTableUrl;
 use datafusion::datasource::physical_plan::{FileOutputMode, FileSinkConfig};
-use datafusion::datasource::sink::{DataSink, DataSinkExec};
-use datafusion::execution::SessionState;
+use datafusion::datasource::sink::DataSink;
+use datafusion::logical_expr::col;
 use datafusion::logical_expr::dml::InsertOp;
-use datafusion::logical_expr::{SortExpr, col};
-use datafusion::physical_plan::{ExecutionPlan, collect};
+use datafusion::physical_plan::execute_stream;
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_common::{GraphName, QuadComponent, RdfFormat};
-use rdf_fusion_logical::RdfFusionLogicalPlanBuilder;
-use rdf_fusion_storage::rdf_files::RdfDataSink;
+use rdf_fusion_common::{GraphName, RdfDumpFormat, RdfSortOrder};
+use rdf_fusion_storage::rdf_files::{RdfFileDataSink, RdfParquetDataSink};
 use std::sync::Arc;
 use url::Url;
-
-/// The sort order for dumping a store.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DumpSortOrder {
-    /// Standard lexicographical sort as defined by SPARQL.
-    SparqlOrder(Vec<QuadComponent>),
-    /// Use the native order (i.e., DataFusion's order) of the respective encoding.
-    NativeOrder(Vec<QuadComponent>),
-    /// Z-Order clustering.
-    ZOrder(Vec<QuadComponent>),
-}
-
-impl DumpSortOrder {
-    /// Validates that all components in the sort order are unique.
-    pub fn validate(&self) -> anyhow::Result<()> {
-        let components = match self {
-            DumpSortOrder::SparqlOrder(c) => c,
-            DumpSortOrder::NativeOrder(c) => c,
-            DumpSortOrder::ZOrder(c) => c,
-        };
-        let mut seen = std::collections::HashSet::new();
-        for component in components {
-            if !seen.insert(component) {
-                anyhow::bail!("Duplicate quad component in sort order: {component}");
-            }
-        }
-        Ok(())
-    }
-
-    /// Returns the components of the sort order.
-    pub fn components(&self) -> &[QuadComponent] {
-        match self {
-            DumpSortOrder::SparqlOrder(c) => c,
-            DumpSortOrder::NativeOrder(c) => c,
-            DumpSortOrder::ZOrder(c) => c,
-        }
-    }
-}
-
-impl std::str::FromStr for DumpSortOrder {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let upper = s.trim().to_uppercase();
-
-        if upper.starts_with("ZORDER(") && upper.ends_with(')') {
-            let inner = &upper[7..upper.len() - 1];
-            if inner.is_empty() {
-                anyhow::bail!(
-                    "ZORDER() requires at least one argument (e.g., ZORDER(S))"
-                );
-            }
-
-            let mut components = Vec::new();
-            for c in inner.chars() {
-                if c == ',' || c.is_whitespace() {
-                    continue;
-                }
-                let comp = QuadComponent::from_char(c)
-                    .ok_or_else(|| anyhow::anyhow!("Unknown ZOrder column: '{c}'"))?;
-                components.push(comp);
-            }
-
-            if components.is_empty() {
-                anyhow::bail!("ZORDER() contains no valid columns");
-            }
-
-            Ok(DumpSortOrder::ZOrder(components))
-        } else if upper.starts_with("NATIVE(") && upper.ends_with(')') {
-            let inner = &upper[7..upper.len() - 1];
-            if inner.is_empty() {
-                anyhow::bail!(
-                    "NATIVE() requires at least one argument (e.g., NATIVE(GSPO))"
-                );
-            }
-
-            let mut components = Vec::new();
-            for c in inner.chars() {
-                if c == ',' || c.is_whitespace() {
-                    continue;
-                }
-                let comp = QuadComponent::from_char(c).ok_or_else(|| {
-                    anyhow::anyhow!("Unknown native sort column: '{c}'")
-                })?;
-                components.push(comp);
-            }
-
-            if components.is_empty() {
-                anyhow::bail!("NATIVE() contains no valid columns");
-            }
-
-            Ok(DumpSortOrder::NativeOrder(components))
-        } else {
-            let mut components = Vec::new();
-            for c in upper.chars() {
-                if c.is_whitespace() {
-                    continue;
-                }
-                let comp = QuadComponent::from_char(c)
-                    .ok_or_else(|| anyhow::anyhow!("Unknown sort column: '{c}'"))?;
-                components.push(comp);
-            }
-
-            if components.is_empty() {
-                anyhow::bail!("Sort argument contains no valid columns");
-            }
-
-            Ok(DumpSortOrder::SparqlOrder(components))
-        }
-    }
-}
 
 /// The encoding to use for dumping.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -141,21 +28,21 @@ pub enum DumpEncoding {
 
 /// Options for dumping a store.
 #[derive(Debug, Default, Clone)]
-pub struct DumpOptions {
+pub struct RdfDumpOptions {
     graph: Option<GraphName>,
-    sort_by: Option<DumpSortOrder>,
+    sort_by: Option<RdfSortOrder>,
     triple_fallback: TripleFallbackStrategy,
     encoding: DumpEncoding,
 }
 
-impl DumpOptions {
+impl RdfDumpOptions {
     /// The graph to dump. If `None`, the whole store is dumped.
     pub fn graph(&self) -> Option<&GraphName> {
         self.graph.as_ref()
     }
 
     /// The sort order.
-    pub fn sort_by(&self) -> Option<&DumpSortOrder> {
+    pub fn sort_by(&self) -> Option<&RdfSortOrder> {
         self.sort_by.as_ref()
     }
 
@@ -176,7 +63,7 @@ impl DumpOptions {
     }
 
     /// See [`Self::sort_by`]
-    pub fn with_sort_by(mut self, sort_by: Option<DumpSortOrder>) -> Self {
+    pub fn with_sort_by(mut self, sort_by: Option<RdfSortOrder>) -> Self {
         self.sort_by = sort_by;
         self
     }
@@ -210,14 +97,16 @@ pub enum TripleFallbackStrategy {
 pub(crate) async fn dump_store(
     store: &Store,
     output_url: String,
-    format: RdfFormat,
-    options: DumpOptions,
+    format: RdfDumpFormat,
+    options: RdfDumpOptions,
 ) -> Result<(), SerializerError> {
     if let Some(sort_by) = &options.sort_by {
-        sort_by.validate().map_err(SerializerError::Other)?;
+        sort_by
+            .validate()
+            .map_err(|err| SerializerError::Other(Box::new(err)))?;
     }
 
-    let url = Url::parse(&output_url).map_err(|e| anyhow::anyhow!(e))?;
+    let url = Url::parse(&output_url).map_err(|e| SerializerError::Other(Box::new(e)))?;
 
     let mut builder = store.context().quads_for_pattern_as_builder(
         options.graph.as_ref().map(|g| g.as_ref()),
@@ -227,20 +116,17 @@ pub(crate) async fn dump_store(
     );
 
     if let Some(sort_order) = &options.sort_by {
-        builder =
-            apply_dump_sort_order(builder, sort_order).map_err(SerializerError::Other)?
+        builder = builder.apply_rdf_sort_order(sort_order)?
     }
 
     builder = match options.encoding {
-        DumpEncoding::PlainTerm => builder
-            .with_plain_terms()
-            .map_err(|e| SerializerError::Other(e.into()))?,
-        DumpEncoding::String => builder
-            .with_encoding(rdf_fusion_encoding::EncodingName::String)
-            .map_err(|e| SerializerError::Other(e.into()))?,
+        DumpEncoding::PlainTerm => builder.with_plain_terms()?,
+        DumpEncoding::String => {
+            builder.with_encoding(rdf_fusion_encoding::EncodingName::String)?
+        }
     };
 
-    let mut df = datafusion::prelude::DataFrame::new(
+    let mut df = DataFrame::new(
         store.context().session_context().state(),
         builder
             .build()
@@ -255,78 +141,45 @@ pub(crate) async fn dump_store(
             .distinct()?;
     }
 
-    let (session, plan): (SessionState, _) = df.into_parts();
-    let physical_plan: Arc<dyn ExecutionPlan> =
-        session.create_physical_plan(&plan).await?;
+    let (session, plan) = df.into_parts();
+    let optimized_plan = session.optimize(&plan)?;
+    let physical_plan = session.create_physical_plan(&optimized_plan).await?;
 
     let runtime_env = session.runtime_env();
     let object_store_url = url.as_object_store_url();
     let object_store = runtime_env.object_store(&object_store_url)?;
 
+    let sink_schema = physical_plan.schema();
     let sink: Arc<dyn DataSink> = match format {
-        RdfFormat::Parquet => {
+        RdfDumpFormat::Parquet => {
             let config = FileSinkConfig {
                 original_url: output_url.clone(),
                 object_store_url: object_store_url.clone(),
                 file_group: Default::default(),
-                table_paths: vec![
-                    ListingTableUrl::parse(&output_url)
-                        .map_err(|e| anyhow::anyhow!(e))?,
-                ],
-                output_schema: physical_plan.schema(),
+                table_paths: vec![ListingTableUrl::parse(&output_url)?],
+                output_schema: Arc::clone(&sink_schema),
                 table_partition_cols: vec![],
                 insert_op: InsertOp::Overwrite,
                 keep_partition_by_columns: false,
-                file_extension: "parquet".to_string(),
+                file_extension: format.file_extension().to_string(),
                 file_output_mode: FileOutputMode::SingleFile,
             };
             let parquet_sink = ParquetSink::new(config, Default::default());
-            Arc::new(RdfDataSink::new_parquet(
+            Arc::new(RdfParquetDataSink::new(
                 parquet_sink,
-                physical_plan.schema(),
+                Arc::clone(&sink_schema),
             ))
         }
-        _ => Arc::new(RdfDataSink::new_rdf(
+        RdfDumpFormat::Rdf(rdf_format) => Arc::new(RdfFileDataSink::new(
             object_store,
             Path::from(url.path()),
-            format,
-            physical_plan.schema(),
+            rdf_format,
+            Arc::clone(&sink_schema),
         )),
     };
 
-    let sink_exec = DataSinkExec::new(physical_plan, sink, None);
-    collect(Arc::new(sink_exec), session.task_ctx()).await?;
+    let stream = execute_stream(physical_plan, session.task_ctx())?;
+    sink.write_all(stream, &session.task_ctx()).await?;
 
     Ok(())
-}
-
-fn apply_dump_sort_order(
-    builder: RdfFusionLogicalPlanBuilder,
-    sort_order: &DumpSortOrder,
-) -> anyhow::Result<RdfFusionLogicalPlanBuilder> {
-    match sort_order {
-        DumpSortOrder::SparqlOrder(components) => {
-            let sort_exprs: Vec<_> = components
-                .iter()
-                .map(|c| SortExpr::new(col(c.column_name()), true, true))
-                .collect();
-            Ok(builder.order_by(sort_exprs)?)
-        }
-        DumpSortOrder::NativeOrder(components) => {
-            let sort_exprs: Vec<_> = components
-                .iter()
-                .map(|c| SortExpr::new(col(c.column_name()), true, true))
-                .collect();
-            let context = builder.context().clone();
-            let builder = builder.into_inner().sort(sort_exprs)?;
-            Ok(context.create(Arc::new(builder.build()?)))
-        }
-        DumpSortOrder::ZOrder(components) => {
-            let zorder_args: Vec<_> =
-                components.iter().map(|c| col(c.column_name())).collect();
-
-            let expr = builder.expr_builder_root().zorder(zorder_args)?;
-            Ok(builder.order_by(vec![expr.sort(true, true)])?)
-        }
-    }
 }

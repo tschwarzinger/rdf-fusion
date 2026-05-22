@@ -3,22 +3,15 @@
 
 mod utils;
 
-use crate::utils::{ENCODINGS_TO_BENCHMARK, create_runtime};
+use crate::utils::{benchmark_storage_configs, create_runtime};
 use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
 use rdf_fusion_bench::benchmarks::windfarm::{NumTurbines, WindFarmBenchmark};
-use rdf_fusion_bench::environment::RdfFusionBenchContext;
-use std::path::PathBuf;
 
 fn bench_bsbm_store_prepare(c: &mut Criterion) {
-    for encoding in ENCODINGS_TO_BENCHMARK {
-        let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
-            PathBuf::from("./data"),
-            encoding,
-            1,
-        )
-        .build();
+    for storage_configuration in benchmark_storage_configs() {
+        let benchmarking_context = storage_configuration.bench_context();
         let benchmark =
             BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
 
@@ -33,25 +26,23 @@ fn bench_bsbm_store_prepare(c: &mut Criterion) {
             .create_benchmark_context(benchmark_name)
             .unwrap();
 
-        c.bench_function(&format!("Prepare Store (BSBM 10000, {encoding})"), |b| {
-            b.to_async(&runtime).iter(|| async {
-                benchmark
-                    .prepare_store(&benchmark_context, false)
-                    .await
-                    .unwrap()
-            });
-        });
+        c.bench_function(
+            &format!("Prepare Store (BSBM 10000, {storage_configuration})"),
+            |b| {
+                b.to_async(&runtime).iter(|| async {
+                    benchmark
+                        .prepare_store(&benchmark_context, false)
+                        .await
+                        .unwrap()
+                });
+            },
+        );
     }
 }
 
 fn bench_windfarm_store_prepare(c: &mut Criterion) {
-    for encoding in ENCODINGS_TO_BENCHMARK {
-        let benchmarking_context = RdfFusionBenchContext::new_for_criterion(
-            PathBuf::from("./data"),
-            encoding,
-            1,
-        )
-        .build();
+    for storage_configuration in benchmark_storage_configs() {
+        let benchmarking_context = storage_configuration.bench_context();
         let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
 
         let target_partitions = benchmarking_context
@@ -65,14 +56,17 @@ fn bench_windfarm_store_prepare(c: &mut Criterion) {
             .create_benchmark_context(benchmark_name)
             .unwrap();
 
-        c.bench_function(&format!("Prepare Store (WindFarm 16, {encoding})"), |b| {
-            b.to_async(&runtime).iter(|| async {
-                benchmark
-                    .prepare_store(&benchmark_context, false)
-                    .await
-                    .unwrap()
-            });
-        });
+        c.bench_function(
+            &format!("Prepare Store (WindFarm 16, {storage_configuration})"),
+            |b| {
+                b.to_async(&runtime).iter(|| async {
+                    benchmark
+                        .prepare_store(&benchmark_context, false)
+                        .await
+                        .unwrap()
+                });
+            },
+        );
     }
 }
 

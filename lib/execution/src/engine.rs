@@ -13,6 +13,7 @@ use datafusion::execution::runtime_env::RuntimeEnv;
 use datafusion::functions_aggregate::first_last::FirstValue;
 use datafusion::logical_expr::AggregateUDF;
 use datafusion::prelude::{SessionConfig, SessionContext};
+use rdf_fusion_common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
 use rdf_fusion_common::{DFResult, NamedOrBlankNodeRef};
 use rdf_fusion_common::{GraphName, GraphNameRef, NamedNodeRef, QuadRef, TermRef};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
@@ -128,6 +129,11 @@ impl RdfFusionContext {
     /// Provides access to the [QuadStorage] of this instance for writing operations.
     pub fn storage(&self) -> &Arc<dyn QuadStorage> {
         &self.storage
+    }
+
+    /// Returns the configuration options of this context.
+    pub fn options(&self) -> RdfFusionOptions {
+        self.ctx.state().config().rdf_fusion_options_or_default()
     }
 
     //

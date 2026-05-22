@@ -236,8 +236,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_index_update_with_only_adds() {
-        let config = SessionConfig::new().with_target_partitions(1);
-        let session_context = SessionContext::new_with_config(config);
+        let options = SessionConfig::default().with_target_partitions(1);
+        let session_context = SessionContext::new_with_config(options);
+        session_context.runtime_env().register_object_store(
+            &Url::parse("memory:///").unwrap(),
+            Arc::new(InMemory::new()),
+        );
+
         let storage = DeltaQuadStorage::new_in_memory(
             QuadStorageEncodingName::PlainTerm,
             vec![IndexComponents::GSPO],

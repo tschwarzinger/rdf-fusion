@@ -1,4 +1,5 @@
 use anyhow::Context;
+use datafusion::common::instant::Instant;
 use datafusion::physical_plan::display::DisplayableExecutionPlan;
 use datafusion::physical_plan::displayable;
 use rdf_fusion::execution::results::QueryResultsFormat;
@@ -28,13 +29,16 @@ pub async fn query(
             "\nPlanning Latency: {}ms",
             explanation.planning_latency.as_millis()
         );
-        println!("\nExecution Plan:");
 
         if analyze {
+            let start_execution = Instant::now();
+            println!("\nResults:");
             results
                 .write(std::io::stdout(), QueryResultsFormat::Tsv)
                 .await?;
+            let execution_latency = start_execution.elapsed();
 
+            println!("\nExecution Plan:");
             println!(
                 "{}",
                 DisplayableExecutionPlan::with_metrics(
@@ -42,7 +46,10 @@ pub async fn query(
                 )
                 .indent(true)
             );
+
+            println!("\nExecution Latency: {}ms", execution_latency.as_millis())
         } else {
+            println!("\nExecution Plan:");
             println!(
                 "{}",
                 displayable(explanation.execution_plan.as_ref()).indent(false)

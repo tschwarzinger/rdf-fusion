@@ -8,8 +8,8 @@ use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::RdfFusionBenchContext;
 use clap::ValueEnum;
 use datafusion::prelude::SessionConfig;
+use rdf_fusion::common::RdfSortOrder;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::store::DumpSortOrder;
 use std::fs;
 
 pub mod benchmarks;
@@ -40,7 +40,7 @@ pub struct BenchmarkingConfig {
     /// The storage location to use for the benchmark.
     pub storage_location: QuadStorageLocationArg,
     /// The storage type to use for the benchmark.
-    pub storage_type: QuadStorageType,
+    pub storage_type: BenchQuadStorageType,
     /// The storage encoding to use for the benchmark.
     pub storage_encoding: QuadStorageEncodingName,
     /// The DataFusion config.
@@ -56,7 +56,7 @@ pub enum QuadStorageLocationArg {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
-pub enum QuadStorageTypeArg {
+pub enum BenchQuadStorageTypeArg {
     /// Uses a storage based on Delta Lake.
     Delta,
     /// The storage type is a single parquet file.
@@ -64,13 +64,13 @@ pub enum QuadStorageTypeArg {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum QuadStorageType {
+pub enum BenchQuadStorageType {
     /// Uses a storage based on Delta Lake.
     Delta,
     /// The storage type is a single parquet file.
     Parquet {
         /// The sort order for the parquet file.
-        sort_order: Option<DumpSortOrder>,
+        sort_order: Option<RdfSortOrder>,
     },
 }
 

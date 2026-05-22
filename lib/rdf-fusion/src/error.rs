@@ -49,5 +49,5 @@ pub enum SerializerError {
 
     /// A generic error.
     #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    Other(Box<dyn Error + Send + Sync>),
 }

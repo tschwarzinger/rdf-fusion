@@ -10,17 +10,19 @@ RDF Fusion Common
 """
 
 [dependencies]
+datafusion.workspace = true
+object_store.workspace = true
+spargebra.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+url.workspace = true
+
 # Dependencies to oxigraph's data model. We re-export them in this crate if we rely on it. To avoid any other crates
 # accidentally depending directly on oxiraph's data model, we do not include it in the workspace.
-oxsdatatypes.workspace = true
 oxiri.workspace = true
 oxrdf.workspace = true
 oxrdfio.workspace = true
-spargebra.workspace = true
-
-# Regular Dependencies
-datafusion.workspace = true
-thiserror.workspace = true
 
 [lints]
 workspace = true

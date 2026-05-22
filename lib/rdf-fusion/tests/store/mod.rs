@@ -3,34 +3,23 @@ use datafusion::prelude::SessionContext;
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::ObjectStoreExt;
 use object_store::path::Path;
-use rdf_fusion::common::GraphName;
 use rdf_fusion::store::Store;
-use rdf_fusion_common::RdfFormat;
-use rdf_fusion_common::config::RdfFileStorageOptions;
+use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_execution::RdfFusionContextBuilder;
-use rdf_fusion_storage::rdf_files::{RdfFileQuadStorage, RdfFileSourceConfig};
+use rdf_fusion_storage::parquet::ParquetQuadStorage;
 use std::sync::Arc;
 use url::Url;
 
 mod dump_fallback;
 mod store_tests;
 
-fn create_store_for_result(
+pub fn create_store_for_result(
     runtime_env: Arc<RuntimeEnv>,
     path: &str,
-    format: RdfFormat,
+    encoding: QuadStorageEncodingName,
 ) -> Store {
-    let storage = RdfFileQuadStorage::new(
-        vec![(
-            GraphName::DefaultGraph,
-            RdfFileSourceConfig {
-                url: path.to_string(),
-                format,
-            },
-        )],
-        RdfFileStorageOptions::default(),
-    );
-
+    let url = Url::parse(path).unwrap();
+    let storage = ParquetQuadStorage::try_new(url, encoding).unwrap();
     let context = RdfFusionContextBuilder::new(Arc::new(storage))
         .with_runtime_env(Some(runtime_env))
         .build()
@@ -38,11 +27,19 @@ fn create_store_for_result(
     Store::new(context)
 }
 
-async fn read_dump(context: &SessionContext, output_url: &str) -> anyhow::Result<String> {
-    let url = Url::parse(output_url)?;
-    let runtime_env = context.runtime_env();
-    let object_store = runtime_env.object_store(url.as_object_store_url())?;
+pub async fn read_dump(ctx: &SessionContext, output_url: &str) -> String {
+    let url = Url::parse(output_url).unwrap();
+    let object_store = ctx
+        .runtime_env()
+        .object_store(&url.as_object_store_url())
+        .unwrap();
     let path = Path::from(url.path());
-    let bytes = object_store.get(&path).await?.bytes().await?;
-    Ok(String::from_utf8(bytes.to_vec())?)
+    let bytes = object_store
+        .get(&path)
+        .await
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    String::from_utf8(bytes.to_vec()).unwrap()
 }

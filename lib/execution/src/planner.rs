@@ -11,6 +11,7 @@ use rdf_fusion_common::{DFResult, StorageError};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::{QuadStorage, QuadStorageSnapshot};
 use rdf_fusion_physical::paths::KleenePlusPathPlanner;
+use rdf_fusion_storage::rdf_files::RdfFilePlanner;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -64,7 +65,7 @@ impl QueryPlanner for RdfFusionPlanner {
             .map_err(|err| DataFusionError::External(Box::new(err)))?;
 
         let mut planners: Vec<Arc<dyn ExtensionPlanner + Send + Sync>> =
-            vec![Arc::new(KleenePlusPathPlanner)];
+            vec![Arc::new(KleenePlusPathPlanner), Arc::new(RdfFilePlanner)];
         planners.extend(snapshot.planners(&self.context).await);
 
         let planner = DefaultPhysicalPlanner::with_extension_planners(planners);

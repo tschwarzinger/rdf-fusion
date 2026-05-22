@@ -55,7 +55,7 @@ impl W3CTestUtils {
     ) -> Result<()> {
         self.load_to_store_from_source(
             &RdfFileSourceConfig {
-                url: url.to_string(),
+                url: url::Url::parse(url)?,
                 format: guess_rdf_format(url)?,
             },
             store,
@@ -71,13 +71,13 @@ impl W3CTestUtils {
         to_graph_name: impl Into<GraphName>,
     ) -> Result<()> {
         let to_graph_name = to_graph_name.into();
-        let reader = self.runtime.read_file(&source.url).await?;
+        let reader = self.runtime.read_file(source.url.as_str()).await?;
         store
             .load_from_reader(
                 reader,
                 RdfFileScanOptions {
                     format: source.format,
-                    base_iri: Some(source.url.parse()?),
+                    base_iri: Some(Iri::parse(source.url.to_string())?),
                     rename_blank_nodes: false,
                     default_graph: Some(to_graph_name),
                     without_named_graphs: false,

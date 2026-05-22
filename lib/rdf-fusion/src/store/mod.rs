@@ -32,11 +32,12 @@
 
 mod dump;
 
-pub use dump::{DumpEncoding, DumpOptions, DumpSortOrder, TripleFallbackStrategy};
+pub use dump::{DumpEncoding, RdfDumpOptions, TripleFallbackStrategy};
 
 use crate::error::{LoaderError, SerializerError};
 use crate::store::dump::dump_store;
-use datafusion::logical_expr::{col, lit};
+use datafusion::dataframe::DataFrame;
+use datafusion::logical_expr::{Extension, LogicalPlan, col, lit};
 use datafusion::optimizer::OptimizerConfig;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
@@ -44,15 +45,21 @@ use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use futures::StreamExt;
-use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_common::{CorruptionError, RdfFormat, StorageError};
+use rdf_fusion_common::quads::COL_GRAPH;
+use rdf_fusion_common::{CorruptionError, RdfDumpFormat, RdfInputSource, StorageError};
 use rdf_fusion_common::{
-    GraphNameRef, Iri, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
-    QuadRef, TermRef, Variable,
+    GraphNameRef, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
+    TermRef, Variable,
 };
 use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 
+use datafusion::datasource::object_store::{
+    DefaultObjectStoreRegistry, ObjectStoreRegistry,
+};
+use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+use object_store::ObjectStore;
+use object_store::memory::InMemory;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
     QuadStorageEncoding, TermEncoding, quads_to_plain_term_dataframe,
@@ -65,9 +72,7 @@ use rdf_fusion_execution::sparql::{
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
-use rdf_fusion_storage::rdf_files::{
-    RdfFileScanOptions, RdfParserTableProvider, RdfParserTableProviderError,
-};
+use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
 use tokio::runtime::Handle;
@@ -132,8 +137,19 @@ impl Store {
     /// [`RdfFusionContextBuilder`] and the implementation of the used quad storage (e.g.
     /// [`DeltaQuadStorageBuilder`]).
     pub async fn new_in_memory() -> Store {
-        let memory_store = Arc::new(object_store::memory::InMemory::new());
-        let url = Url::parse("memory://").unwrap();
+        let memory_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let registry = DefaultObjectStoreRegistry::new();
+        registry.register_store(
+            &Url::parse("memory:///").expect("valid object store url"),
+            Arc::clone(&memory_store),
+        );
+
+        let runtime_env = RuntimeEnvBuilder::default()
+            .with_object_store_registry(Arc::new(registry))
+            .build_arc()
+            .expect("Valid configuration");
+
+        let url = Url::parse("memory:///delta/").unwrap();
 
         let log_store = logstore_with(
             memory_store,
@@ -150,6 +166,7 @@ impl Store {
 
         let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
             .with_single_partition_session_config()
+            .with_runtime_env(Some(runtime_env))
             .build()
             .expect("Default in-memory works. Session config is set.");
         Self::new(context)
@@ -523,42 +540,28 @@ impl Store {
         reader: impl AsyncRead + Unpin + Send + 'static,
         options: RdfFileScanOptions,
     ) -> Result<(), LoaderError> {
-        let iri = options.base_iri.clone();
-        let table_provider =
-            RdfParserTableProvider::new(reader, options.with_rename_blank_nodes(true))
-                .map_err(|e| match e {
-                    RdfParserTableProviderError::IriParseError(e) => {
-                        LoaderError::InvalidBaseIri {
-                            iri: iri
-                                .map(|i: Iri<String>| i.to_string())
-                                .expect("Iri Parser Errors requires base iri"),
-                            error: e,
-                        }
-                    }
-                    RdfParserTableProviderError::UnsupportedRdfFormat(format) => {
-                        LoaderError::UnsupportedRdfFormat(format)
-                    }
-                })?
-                .with_track_progress(true);
-        let quads = self
-            .context
-            .session_context()
-            .read_table(Arc::new(table_provider))
-            .expect("TODo")
-            .select([
-                col(COL_GRAPH).alias(COL_GRAPH),
-                col(COL_SUBJECT).alias(COL_SUBJECT),
-                col(COL_PREDICATE).alias(COL_PREDICATE),
-                col(COL_OBJECT).alias(COL_OBJECT),
-            ])
-            .expect("TODO");
+        let options = options.with_rename_blank_nodes(true);
+        let schema = QuadStorageEncoding::String.quad_schema();
+        let source = RdfInputSource::from_stream(reader);
+        let node = ParseRdfFileNode::new(source, options, schema);
+
+        let df = DataFrame::new(
+            self.context.session_context().state(),
+            LogicalPlan::Extension(Extension {
+                node: Arc::new(node),
+            }),
+        );
+
         let transaction = self
             .context
             .storage()
             .begin_transaction(&self.context.session_context().state())
             .await?;
-        transaction.insert(quads).await?;
+
+        transaction.insert(df).await?;
+
         transaction.commit().await?;
+
         Ok(())
     }
 
@@ -679,7 +682,7 @@ impl Store {
     ///
     /// ```
     /// use rdf_fusion::common::*;
-    /// use rdf_fusion::store::{DumpOptions, Store};
+    /// use rdf_fusion::store::{RdfDumpOptions, Store};
     /// use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
     ///
     /// let file = "<http://example.com> <http://example.com> <http://example.com> .\n".as_bytes();
@@ -689,17 +692,17 @@ impl Store {
     /// let store = Store::new_in_memory().await;
     /// store.load_from_reader(file.as_ref(), RdfFileScanOptions::with_format(RdfFormat::NTriples)).await?;
     ///
-    /// store.dump("memory:///my-target.ttl".to_owned(), RdfFormat::Turtle, DumpOptions::default()).await?;
+    /// store.dump("memory:///my-target.ttl".to_owned(), RdfFormat::Turtle, RdfDumpOptions::default()).await?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
     pub async fn dump(
         &self,
         output_url: String,
-        format: RdfFormat,
-        options: DumpOptions,
+        format: impl Into<RdfDumpFormat>,
+        options: RdfDumpOptions,
     ) -> Result<(), SerializerError> {
-        dump_store(self, output_url, format, options).await
+        dump_store(self, output_url, format.into(), options).await
     }
 
     /// Returns all the store named graphs.
@@ -1035,7 +1038,7 @@ mod tests {
                 GraphName::DefaultGraph,
             ),
         ];
-        let all_quads = vec![
+        let all_quads = [
             named_quad.clone(),
             Quad::new(
                 main_s.clone(),

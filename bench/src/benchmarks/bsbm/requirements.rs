@@ -1,4 +1,5 @@
 use crate::benchmarks::bsbm::NumProducts;
+use crate::environment::BenchmarkContext;
 use crate::prepare::{ArchiveType, FileAction, PrepRequirement};
 use anyhow::bail;
 use reqwest::Url;
@@ -33,7 +34,7 @@ pub fn generate_dataset_requirement(
             "-fn".to_owned(),
             format!("../{}", &file_name_str[..file_name_str.len() - 3]), // The script appends .nt
         ],
-        check_requirement: Box::new(move |ctx| {
+        check_requirement: Box::new(move |ctx: &BenchmarkContext| {
             let path = ctx.parent().join_data_dir(&file_name)?;
             if File::open(&path).is_err() {
                 bail!("File {} does not exist", path.display());

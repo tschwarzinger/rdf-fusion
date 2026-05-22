@@ -1,9 +1,9 @@
-mod format;
+mod dump;
 mod language_string;
 mod simple_literal;
 mod string_literal;
 
-pub use format::RdfFormat;
+pub use dump::RdfDumpFormat;
 pub use language_string::LanguageString;
 pub use language_string::LanguageStringRef;
 pub use simple_literal::SimpleLiteral;

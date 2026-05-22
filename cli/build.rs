@@ -6,10 +6,9 @@ use clap_mangen::Man;
 use std::env::var_os;
 use std::fs::create_dir_all;
 use std::io::Result;
-use std::path::PathBuf;
 
 fn main() -> Result<()> {
-    let out_dir = PathBuf::from(var_os("OUT_DIR").unwrap());
+    let out_dir = std::path::PathBuf::from(var_os("OUT_DIR").unwrap());
     let mut app = Args::command();
 
     let complete_dir = out_dir.join("complete");

@@ -1,8 +1,8 @@
 use anyhow::Context;
-use rdf_fusion::common::{GraphName, IriParseError, NamedNode, RdfFormat};
-use rdf_fusion::store::{
-    DumpEncoding, DumpOptions, DumpSortOrder, Store, TripleFallbackStrategy,
+use rdf_fusion::common::{
+    GraphName, IriParseError, NamedNode, RdfDumpFormat, RdfSortOrder,
 };
+use rdf_fusion::store::{DumpEncoding, RdfDumpOptions, Store, TripleFallbackStrategy};
 use url::Url;
 
 /// Dumps the store content to the specified output URL in the desired format.
@@ -22,7 +22,7 @@ pub async fn dump(
     let dump_format = try_identify_format(format, &url)?;
 
     let sort_by = sort_by
-        .map(|sort_by| sort_by.parse::<DumpSortOrder>())
+        .map(|sort_by| sort_by.parse::<RdfSortOrder>())
         .transpose()?;
 
     let triple_fallback = match triple_fallback.as_str() {
@@ -47,7 +47,7 @@ pub async fn dump(
         .transpose()
         .context("Invalid graph name")?;
 
-    let options = DumpOptions::default()
+    let options = RdfDumpOptions::default()
         .with_graph(graph)
         .with_sort_by(sort_by)
         .with_triple_fallback_strategy(triple_fallback)
@@ -62,7 +62,10 @@ pub async fn dump(
 }
 
 /// Tries to identify the format from the given format string or URL.
-fn try_identify_format(format: Option<String>, url: &Url) -> anyhow::Result<RdfFormat> {
+fn try_identify_format(
+    format: Option<String>,
+    url: &Url,
+) -> anyhow::Result<RdfDumpFormat> {
     let format_str = format
         .as_deref()
         .or_else(|| {
@@ -71,7 +74,8 @@ fn try_identify_format(format: Option<String>, url: &Url) -> anyhow::Result<RdfF
         })
         .unwrap_or_default();
 
-    RdfFormat::from_extension(format_str)
-        .or_else(|| RdfFormat::from_extension(&format_str.to_lowercase()))
+    format_str
+        .parse::<RdfDumpFormat>()
+        .map_err(|e| anyhow::anyhow!(e))
         .context(format!("Unknown format: {format_str}"))
 }

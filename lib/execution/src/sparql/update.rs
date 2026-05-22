@@ -176,12 +176,7 @@ pub async fn evaluate_update(
 
                     let stream = response.bytes_stream().map_err(io::Error::other);
                     let reader = StreamReader::new(stream);
-                    let oxigraph_format = format.to_oxigraph().ok_or_else(|| {
-                        QueryEvaluationError::InternalError(
-                            "Unsupported RDF format".to_string(),
-                        )
-                    })?;
-                    let mut parser = RdfParser::from_format(oxigraph_format)
+                    let mut parser = RdfParser::from_format(format)
                         .with_base_iri(source.as_str())
                         .map_err(|err| {
                             QueryEvaluationError::InternalError(format!(
@@ -191,7 +186,7 @@ pub async fn evaluate_update(
                         .for_tokio_async_reader(reader);
 
                     let mut quads = Vec::new();
-                    let destination = convert_rdf_fusion_graph_name(destination.clone());
+                    let destination = convert_graph_name(destination.clone());
 
                     while let Some(quad) = parser.next().await {
                         let mut quad =
@@ -234,19 +229,6 @@ pub async fn evaluate_update(
     transaction.commit().await?;
 
     Ok(())
-}
-
-fn convert_rdf_fusion_graph_name(
-    gn: rdf_fusion_common::sparql::term::GraphName,
-) -> GraphName {
-    match gn {
-        rdf_fusion_common::sparql::term::GraphName::NamedNode(n) => {
-            GraphName::NamedNode(n)
-        }
-        rdf_fusion_common::sparql::term::GraphName::DefaultGraph => {
-            GraphName::DefaultGraph
-        }
-    }
 }
 
 fn convert_graph_name(gn: rdf_fusion_common::sparql::term::GraphName) -> GraphName {

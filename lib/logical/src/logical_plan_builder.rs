@@ -11,8 +11,9 @@ use datafusion::logical_expr::{
     Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort, SortExpr,
     UserDefinedLogicalNode, col,
 };
-use rdf_fusion_common::Variable;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{DFResult, TermPattern};
+use rdf_fusion_common::{RdfSortOrder, Variable};
 use rdf_fusion_encoding::{EncodingName, QuadStorageEncoding};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -337,6 +338,52 @@ impl RdfFusionLogicalPlanBuilder {
     /// Ensures all columns are encoded as plain terms.
     pub fn with_plain_terms(self) -> DFResult<RdfFusionLogicalPlanBuilder> {
         self.with_encoding(EncodingName::PlainTerm)
+    }
+
+    pub fn apply_rdf_sort_order(
+        self,
+        sort_order: &RdfSortOrder,
+    ) -> DFResult<RdfFusionLogicalPlanBuilder> {
+        if !self.has_quad_schema() {
+            return plan_err!(
+                "RDF sort order can only be applied to a plan that returns quads."
+            );
+        }
+
+        match sort_order {
+            RdfSortOrder::SparqlOrder(components) => {
+                let sort_exprs: Vec<_> = components
+                    .iter()
+                    .map(|c| SortExpr::new(col(c.column_name()), true, true))
+                    .collect();
+                Ok(self.order_by(sort_exprs)?)
+            }
+            RdfSortOrder::NativeOrder(components) => {
+                let sort_exprs: Vec<_> = components
+                    .iter()
+                    .map(|c| SortExpr::new(col(c.column_name()), true, true))
+                    .collect();
+                let context = self.context().clone();
+                let builder = self.into_inner().sort(sort_exprs)?;
+                Ok(context.create(Arc::new(builder.build()?)))
+            }
+            RdfSortOrder::ZOrder(components) => {
+                let zorder_args: Vec<_> =
+                    components.iter().map(|c| col(c.column_name())).collect();
+
+                let expr = self.expr_builder_root().zorder(zorder_args)?;
+                Ok(self.order_by(vec![expr.sort(true, true)])?)
+            }
+        }
+    }
+
+    /// Returns whether the current plan represents quads.
+    fn has_quad_schema(&self) -> bool {
+        let schema = self.schema();
+        schema.has_column(&Column::new_unqualified(COL_GRAPH))
+            && schema.has_column(&Column::new_unqualified(COL_SUBJECT))
+            && schema.has_column(&Column::new_unqualified(COL_PREDICATE))
+            && schema.has_column(&Column::new_unqualified(COL_OBJECT))
     }
 
     /// Returns the schema of the current plan.

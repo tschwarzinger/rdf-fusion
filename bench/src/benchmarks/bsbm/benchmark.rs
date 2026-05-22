@@ -1,4 +1,4 @@
-use crate::QuadStorageType;
+use crate::BenchQuadStorageType;
 use crate::benchmarks::bsbm::operation::list_raw_operations;
 use crate::benchmarks::bsbm::report::{BsbmReport, ExploreReportBuilder, QueryDetails};
 use crate::benchmarks::bsbm::requirements::{
@@ -13,12 +13,12 @@ use crate::prepare::PrepRequirement;
 use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use async_trait::async_trait;
-use rdf_fusion::common::RdfFormat;
+use rdf_fusion::common::{RdfFormat, RdfSortOrder};
 use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
-use rdf_fusion::store::DumpSortOrder;
 use rdf_fusion::store::Store;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use url::Url;
 
 /// Holds file paths for the files required for executing a BSBM run.
 #[derive(Clone)]
@@ -144,8 +144,10 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
         print_info: bool,
     ) -> anyhow::Result<Store> {
         match &ctx.parent().options().storage_type {
-            QuadStorageType::Delta => self.prepare_delta_store(ctx, print_info).await,
-            QuadStorageType::Parquet { sort_order } => {
+            BenchQuadStorageType::Delta => {
+                self.prepare_delta_store(ctx, print_info).await
+            }
+            BenchQuadStorageType::Parquet { sort_order } => {
                 self.prepare_parquet_store(ctx, print_info, sort_order.clone())
                     .await
             }
@@ -171,7 +173,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
         &self,
         ctx: &BenchmarkContext<'_>,
         print_info: bool,
-        sort_order: Option<DumpSortOrder>,
+        sort_order: Option<RdfSortOrder>,
     ) -> anyhow::Result<Store> {
         if print_info {
             println!("Generating Parquet dataset ...");
@@ -180,7 +182,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
         let url = ctx.resolve_path_to_url(&dataset_path)?;
 
         let source = RdfFileSourceConfig {
-            url,
+            url: Url::parse(&url)?,
             format: RdfFormat::NTriples,
         };
 
@@ -209,7 +211,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
         let dataset_path = ctx.join_data_dir(&self.paths.dataset)?;
         let data = tokio::fs::File::open(&dataset_path).await?;
 
-        let memory_store = ctx.create_store().await;
+        let memory_store: Store = ctx.create_store().await;
         memory_store
             .load_from_reader(data, RdfFileScanOptions::with_format(RdfFormat::NTriples))
             .await?;

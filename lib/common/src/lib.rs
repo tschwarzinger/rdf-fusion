@@ -15,9 +15,11 @@
 mod blank_node_mode;
 pub mod config;
 mod error;
+mod input;
 mod quad_component;
 pub mod quads;
 mod rdf;
+mod sort_order;
 pub mod sparql;
 mod typed_value;
 pub mod vocab;
@@ -25,13 +27,15 @@ mod xsd;
 
 pub use blank_node_mode::BlankNodeMatchingMode;
 pub use error::*;
+pub use input::*;
 pub use quad_component::*;
 pub use rdf::*;
+pub use sort_order::*;
 pub use typed_value::*;
 pub use xsd::*;
 
 // Re-export some oxrdf types.
-pub use crate::rdf::RdfFormat;
+pub use crate::rdf::RdfDumpFormat;
 pub use oxiri::Iri;
 pub use oxrdf::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, IriParseError,
@@ -39,6 +43,7 @@ pub use oxrdf::{
     Quad, QuadRef, Term, TermParseError, TermRef, Triple, TripleRef, Variable,
     VariableNameParseError, VariableRef, dataset,
 };
+pub use oxrdfio::RdfFormat;
 pub use spargebra::algebra::PropertyPathExpression;
 pub use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 

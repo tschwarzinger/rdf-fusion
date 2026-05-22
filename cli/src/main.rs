@@ -1,6 +1,6 @@
 #![allow(clippy::print_stderr, clippy::cast_precision_loss, clippy::use_debug)]
 use crate::cli::{Args, Command};
-use anyhow::Context;
+use anyhow::{Context, bail};
 use clap::Parser;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::SessionStateBuilder;
@@ -13,15 +13,15 @@ use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
 use rdf_fusion::common::config::RdfFusionOptions;
-use rdf_fusion::common::{GraphName, RdfFormat};
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::execution::cache::CachingObjectStoreRegistry;
 use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
-use rdf_fusion::storage::rdf_files::{RdfFileQuadStorage, RdfFileSourceConfig};
+use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::store::Store;
 use rdf_fusion_extensions::storage::QuadStorage;
 use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
@@ -57,20 +57,23 @@ pub async fn main() -> anyhow::Result<()> {
             let store = create_store(&args).await?;
             commands::serve::serve(store, bind, false, *cors, *union_default_graph).await
         }
-        Command::BuildDatabase { output } => {
-            let mut args_with_output = args.clone();
-            args_with_output.storage.location = Some(vec![output.clone()]);
-            let store = create_store(&args_with_output).await?;
-
-            let inputs = args
-                .storage
-                .location
-                .as_ref()
-                .context("Location is required as input for BuildDatabase. Please specify the source files using the --location option.")?
+        Command::Load { inputs } => {
+            let location_str = resolve_location(&args.storage.location)?;
+            let location_url = Url::parse(&location_str)?;
+            let inputs = inputs
                 .iter()
-                .map(PathBuf::from)
-                .collect();
-            commands::build_database::build_database(store, inputs).await
+                .map(|u| Ok(Url::parse(&resolve_location(u)?)?))
+                .collect::<Result<Vec<Url>, anyhow::Error>>()?;
+
+            let store = create_store(&args).await?;
+
+            commands::load::load(
+                store,
+                &inputs,
+                location_url,
+                args.storage.storage_type.clone(),
+            )
+            .await
         }
         Command::Query {
             query,
@@ -114,25 +117,20 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
         .options_mut()
         .extensions
         .insert(rdf_fusion_options.clone());
+    let encoding = QuadStorageEncodingName::from_str(&args.storage.encoding)?;
+    let location = Url::parse(&resolve_location(&args.storage.location)?)
+        .context("Invalid object store URL")?;
 
     let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
         cli::QuadStorageType::DeltaLake => {
-            let location = args
-                .storage
-                .location
-                .as_ref()
-                .and_then(|l| l.first())
-                .context("Location is required for DeltaLake storage")?;
-            let url = Url::parse(&resolve_location(location)?)
-                .context("Invalid object store URL")?;
-            let object_store_url = url.as_object_store_url();
+            let object_store_url = location.as_object_store_url();
 
             let object_store = runtime_env
                 .object_store(&object_store_url)
                 .expect("Failed to get object store");
             let log_store = logstore_with(
                 Arc::clone(&object_store),
-                &url,
+                &location,
                 StorageConfig::default()
                     .with_io_runtime(IORuntime::RT(Handle::current())),
             )
@@ -147,45 +145,20 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
                 DeltaQuadStorageBuilder::new()
                     .with_log_store(log_store)
                     .with_load_mode(LoadMode::Load(Box::new(loading_state)))
+                    .with_encoding(encoding)
                     .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
                     .build()
                     .await?,
             )
         }
-        cli::QuadStorageType::RdfFiles => {
-            let locations = args
-                .storage
-                .location
-                .as_ref()
-                .context("Location is required for RdfFiles storage")?;
-            let mut sources = Vec::new();
-            for location in locations {
-                let path = PathBuf::from(&location);
-                let extension = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or_default();
-                let format = RdfFormat::from_extension(extension)
-                    .context(format!("Could not guess RDF format for {location}"))?;
-
-                let url = resolve_location(location)?;
-
-                sources
-                    .push((GraphName::DefaultGraph, RdfFileSourceConfig { url, format }));
+        cli::QuadStorageType::Parquet => {
+            if matches!(encoding, QuadStorageEncodingName::ObjectId) {
+                bail!("ObjectId encoding is not supported for Parquet storage");
             }
 
-            let state = SessionStateBuilder::new()
-                .with_runtime_env(Arc::clone(&runtime_env))
-                .with_config(session_config)
-                .build();
-
             Arc::new(
-                RdfFileQuadStorage::new_with_discover_encoding(
-                    sources,
-                    rdf_fusion_options.storage.rdf_files.clone(),
-                    &state,
-                )
-                .await?,
+                ParquetQuadStorage::try_new(location, encoding)
+                    .context("Failed to create Parquet storage")?,
             )
         }
     };
@@ -234,17 +207,15 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
 
     // Register s3-compatible object store if its in the arguments
     let mut locations = Vec::new();
-    if let Some(storage_locations) = &args.storage.location {
-        for loc in storage_locations {
-            locations.push(resolve_location(loc)?);
-        }
-    }
+    locations.push(resolve_location(&args.storage.location)?);
 
     if let Command::Dump { output, .. } = &args.command {
         locations.push(resolve_location(output)?);
     }
-    if let Command::BuildDatabase { output } = &args.command {
-        locations.push(resolve_location(output)?);
+    if let Command::Load { inputs } = &args.command {
+        for input in inputs {
+            locations.push(resolve_location(input)?);
+        }
     }
 
     for location in &locations {

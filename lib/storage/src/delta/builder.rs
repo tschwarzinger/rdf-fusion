@@ -52,6 +52,8 @@ impl DeltaQuadStorageBuilder {
         self.load_mode = load_mode;
         self
     }
+
+    /// Sets the log store
     pub fn with_log_store(mut self, log_store: LogStoreRef) -> Self {
         self.log_store = Some(log_store);
         self

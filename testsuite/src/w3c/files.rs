@@ -40,6 +40,11 @@ pub fn create_test_runtime_env() -> Arc<RuntimeEnv> {
     runtime_env
         .register_object_store(&Url::parse("https://codeberg.org/").unwrap(), test_store);
 
+    runtime_env.register_object_store(
+        &Url::parse("memory:///").unwrap(),
+        Arc::new(object_store::memory::InMemory::new()),
+    );
+
     runtime_env
 }
 
@@ -221,8 +226,6 @@ impl W3CTestRuntime {
         base_iri: Option<&str>,
         ignore_errors: bool,
     ) -> Result<()> {
-        let format = format.to_oxigraph().context("Invalid RDF format")?;
-
         let parser = oxrdfio::RdfParser::from_format(format)
             .with_base_iri(base_iri.unwrap_or(url))?;
         let mut stream = parser.for_tokio_async_reader(self.read_file(url).await?);
@@ -257,7 +260,7 @@ impl W3CTestRuntime {
         &self,
         url: &str,
         dataset: &mut Dataset,
-        format: oxrdfio::RdfFormat,
+        format: RdfFormat,
         ignore_errors: bool,
         unchecked: bool,
     ) -> Result<()> {
@@ -284,7 +287,7 @@ impl W3CTestRuntime {
     pub async fn load_dataset(
         &self,
         url: &str,
-        format: oxrdfio::RdfFormat,
+        format: RdfFormat,
         ignore_errors: bool,
         unchecked: bool,
     ) -> Result<Dataset> {

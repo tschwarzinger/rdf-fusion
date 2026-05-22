@@ -92,7 +92,8 @@ impl RdfFusionContextBuilder {
                 .extensions
                 .insert(RdfFusionOptions::from_env()?);
         }
-        let runtime_env = self.query_runtime.unwrap_or_else(|| {
+
+        let query_runtime = self.query_runtime.unwrap_or_else(|| {
             RuntimeEnvBuilder::default()
                 .build_arc()
                 .expect("Default runtime env")
@@ -101,12 +102,12 @@ impl RdfFusionContextBuilder {
         // Ensure that we have an in-memory object store registered.
         if self.register_in_memory_store {
             let memory_url = Url::parse("memory://").unwrap();
-            if runtime_env
+            if query_runtime
                 .object_store_registry
                 .get_store(&memory_url)
                 .is_err()
             {
-                runtime_env.register_object_store(
+                query_runtime.register_object_store(
                     &memory_url,
                     Arc::new(object_store::memory::InMemory::new()),
                 );
@@ -115,7 +116,7 @@ impl RdfFusionContextBuilder {
 
         Ok(RdfFusionContext::new(
             session_config,
-            runtime_env,
+            query_runtime,
             self.quad_storage,
             typed_family_encoding,
         ))

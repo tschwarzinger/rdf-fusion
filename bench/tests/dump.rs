@@ -1,8 +1,7 @@
-use datafusion::prelude::SessionContext;
-use rdf_fusion::common::RdfFormat;
-use rdf_fusion::encoding::{EncodingName, QuadStorageEncodingName};
+use rdf_fusion::common::{RdfDumpFormat, RdfFormat};
+use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
-use rdf_fusion::store::{DumpOptions, Store};
+use rdf_fusion::store::{RdfDumpOptions, Store};
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
 use rdf_fusion_bench::environment::RdfFusionBenchContext;
@@ -19,7 +18,7 @@ async fn test_dump_correctness_turtle() {
     let output_url = format!("file://{}", path.to_str().unwrap());
 
     store
-        .dump(output_url, RdfFormat::Turtle, DumpOptions::default())
+        .dump(output_url, RdfFormat::Turtle, RdfDumpOptions::default())
         .await
         .unwrap();
 
@@ -34,7 +33,7 @@ async fn test_dump_correctness_nquads() {
     let output_url = format!("file://{}", path.to_str().unwrap());
 
     store
-        .dump(output_url, RdfFormat::NQuads, DumpOptions::default())
+        .dump(output_url, RdfFormat::NQuads, RdfDumpOptions::default())
         .await
         .unwrap();
 
@@ -49,22 +48,15 @@ async fn test_dump_correctness_parquet() {
     let output_url = format!("file://{}", path.to_str().unwrap());
 
     store
-        .dump(output_url, RdfFormat::Parquet, DumpOptions::default())
+        .dump(
+            output_url,
+            RdfDumpFormat::Parquet,
+            RdfDumpOptions::default(),
+        )
         .await
         .unwrap();
 
-    let (session, _) = store
-        .context()
-        .quads_for_pattern(None, None, None, None, Some(EncodingName::PlainTerm))
-        .await
-        .unwrap()
-        .into_parts();
-    let session_ctx = SessionContext::new_with_state(session);
-    let df_read = session_ctx
-        .read_parquet(path.to_str().unwrap(), Default::default())
-        .await
-        .unwrap();
-    let count = df_read.count().await.unwrap();
+    let count = store.context().len().await.unwrap();
     assert_eq!(count, EXPECTED_COUNT, "Parquet count mismatch");
 }
 

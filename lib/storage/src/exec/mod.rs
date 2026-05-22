@@ -2,19 +2,11 @@ mod verify_not_null;
 
 pub use verify_not_null::VerifyNotNullExec;
 
-use datafusion::arrow::array::RecordBatch;
-use datafusion::arrow::datatypes::SchemaRef;
-use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream};
-use datafusion::physical_expr_common::metrics::BaselineMetrics;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::execution_plan::SchedulingType;
 use datafusion::physical_plan::metrics::{Metric, MetricValue, MetricsSet};
-use futures::Stream;
-use rdf_fusion_common::DFResult;
 use std::borrow::Cow;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 /// Recursively find and alias target metrics from an inner execution plan.
 ///
@@ -110,53 +102,4 @@ pub fn is_cooperative_on_all_paths(plan: &Arc<dyn ExecutionPlan>) -> bool {
     plan.children()
         .iter()
         .all(|child| is_cooperative_on_all_paths(child))
-}
-
-/// A wrapping stream that records the metrics for the scan.
-pub struct QuadStorageScanStream {
-    inner: SendableRecordBatchStream,
-    baseline_metrics: BaselineMetrics,
-}
-
-impl QuadStorageScanStream {
-    /// Creates a new [`QuadStorageScanStream`].
-    pub fn new(
-        inner: SendableRecordBatchStream,
-        baseline_metrics: BaselineMetrics,
-    ) -> Self {
-        Self {
-            inner,
-            baseline_metrics,
-        }
-    }
-}
-
-impl RecordBatchStream for QuadStorageScanStream {
-    fn schema(&self) -> SchemaRef {
-        self.inner.schema()
-    }
-}
-
-impl Stream for QuadStorageScanStream {
-    type Item = DFResult<RecordBatch>;
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        let elapsed_compute = self.baseline_metrics.elapsed_compute().clone();
-
-        let mut timer = elapsed_compute.timer();
-        let poll = self.inner.as_mut().poll_next(cx);
-        timer.stop();
-
-        match poll {
-            Poll::Ready(Some(Ok(batch))) => self
-                .baseline_metrics
-                .record_poll(Poll::Ready(Some(Ok(batch)))),
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
-            Poll::Ready(None) => self.baseline_metrics.record_poll(Poll::Ready(None)),
-            Poll::Pending => self.baseline_metrics.record_poll(Poll::Pending),
-        }
-    }
 }

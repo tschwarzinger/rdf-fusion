@@ -1,14 +1,34 @@
 use assert_cmd::Command;
 use std::str;
+use tempfile::TempDir;
 
-#[test]
-fn test_cli_query_spiderman() {
+fn setup_delta_lake() -> (TempDir, String) {
+    let temp_dir = TempDir::new().unwrap();
+    let location = format!("file://{}", temp_dir.path().to_str().unwrap());
+
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "rdf-files",
+        "delta-lake",
         "--location",
+        &location,
+        "load",
         "file://../examples/data/spiderman.ttl",
+    ]);
+    cmd.assert().success();
+
+    (temp_dir, location)
+}
+
+#[test]
+fn test_cli_query_spiderman() {
+    let (_temp_dir, location) = setup_delta_lake();
+    let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
+    cmd.args([
+        "--storage-type",
+        "delta-lake",
+        "--location",
+        &location,
         "query",
         "SELECT ?name WHERE { <http://example.org/#spiderman> <http://xmlns.com/foaf/0.1/name> ?name } ORDER BY ?name",
     ]);
@@ -29,12 +49,13 @@ fn test_cli_query_spiderman() {
 
 #[test]
 fn test_cli_query_explain() {
+    let (_temp_dir, location) = setup_delta_lake();
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "rdf-files",
+        "delta-lake",
         "--location",
-        "file://../examples/data/spiderman.ttl",
+        &location,
         "query",
         "--explain",
         "SELECT ?name WHERE { <http://example.org/#spiderman> <http://xmlns.com/foaf/0.1/name> ?name }",
@@ -48,12 +69,13 @@ fn test_cli_query_explain() {
 
 #[test]
 fn test_cli_query_explain_analyze() {
+    let (_temp_dir, location) = setup_delta_lake();
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "rdf-files",
+        "delta-lake",
         "--location",
-        "file://../examples/data/spiderman.ttl",
+        &location,
         "query",
         "--explain",
         "--analyze",
@@ -68,12 +90,13 @@ fn test_cli_query_explain_analyze() {
 
 #[test]
 fn test_cli_query_analyze_without_explain_fails() {
+    let (_temp_dir, location) = setup_delta_lake();
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "rdf-files",
+        "delta-lake",
         "--location",
-        "file://../examples/data/spiderman.ttl",
+        &location,
         "query",
         "--analyze",
         "SELECT ?name WHERE { <http://example.org/#spiderman> <http://xmlns.com/foaf/0.1/name> ?name }",

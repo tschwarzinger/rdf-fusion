@@ -55,7 +55,7 @@ impl W3CSparqlEvaluationTest {
             default_graphs.push((
                 GraphName::DefaultGraph,
                 RdfFileSourceConfig {
-                    url: data.clone(),
+                    url: url::Url::parse(data)?,
                     format: guess_rdf_format(data)?,
                 },
             ));
@@ -68,7 +68,7 @@ impl W3CSparqlEvaluationTest {
             named_graphs.push((
                 name.clone(),
                 RdfFileSourceConfig {
-                    url: value.clone(),
+                    url: url::Url::parse(value)?,
                     format: guess_rdf_format(value)?,
                 },
             ));
@@ -86,7 +86,7 @@ impl W3CSparqlEvaluationTest {
                     default_graphs.push((
                         graph_name.clone(),
                         RdfFileSourceConfig {
-                            url: url.clone(),
+                            url: url::Url::parse(&url)?,
                             format: guess_rdf_format(&url)?,
                         },
                     ));
@@ -102,7 +102,7 @@ impl W3CSparqlEvaluationTest {
                     named_graphs.push((
                         graph_node.clone(),
                         RdfFileSourceConfig {
-                            url: url.clone(),
+                            url: url::Url::parse(&url)?,
                             format: guess_rdf_format(&url)?,
                         },
                     ));

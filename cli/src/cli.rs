@@ -40,8 +40,15 @@ pub struct StorageConfigArgs {
     /// - file store [`file://`]
     /// - S3-compatible object store [`s3a://[bucket].[endpoint]/path`]. S3 credentials are set via
     ///   the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
-    #[arg(long, action = clap::ArgAction::Append)]
-    pub location: Option<Vec<String>>,
+    #[arg(long)]
+    pub location: String,
+    /// The encoding to use for the storage.
+    ///
+    /// Supported encodings:
+    /// - *plain-term*: Use the plain term encoding.
+    /// - *string*: Use the string encoding.
+    #[arg(long, default_value = "string")]
+    pub encoding: String,
 }
 
 #[derive(Debug, Clone, clap::ValueEnum)]
@@ -50,10 +57,8 @@ pub enum QuadStorageType {
     ///
     /// Only supports a single location.
     DeltaLake,
-    /// Directly queries a set of RDF files.
-    ///
-    ///
-    RdfFiles,
+    /// Directly queries a set of Parquet files.
+    Parquet,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -85,10 +90,11 @@ pub enum Command {
         #[arg(long, requires = "explain")]
         analyze: bool,
     },
-    /// Build a database from the source files.
-    BuildDatabase {
-        /// The location where the database should be built.
-        output: String,
+    /// Load RDF files into a Parquet or Delta Lake storage.
+    Load {
+        /// The input RDF file to load.
+        #[arg(required = true)]
+        inputs: Vec<String>,
     },
     /// Export the database to an RDF data dump.
     Dump {

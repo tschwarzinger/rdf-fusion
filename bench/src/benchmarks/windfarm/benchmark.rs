@@ -1,4 +1,4 @@
-use crate::QuadStorageType;
+use crate::BenchQuadStorageType;
 use crate::benchmarks::windfarm::NumTurbines;
 use crate::benchmarks::windfarm::generate::{generate_static, generate_time_series};
 use crate::benchmarks::windfarm::queries::WindFarmQueryName;
@@ -13,9 +13,8 @@ use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use anyhow::Context;
 use async_trait::async_trait;
-use rdf_fusion::common::RdfFormat;
+use rdf_fusion::common::{RdfFormat, RdfSortOrder};
 use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
-use rdf_fusion::store::DumpSortOrder;
 use rdf_fusion::store::Store;
 use reqwest::Url;
 use std::fs;
@@ -116,8 +115,10 @@ impl Benchmark for WindFarmBenchmark {
         print_info: bool,
     ) -> anyhow::Result<Store> {
         match &ctx.parent().options().storage_type {
-            QuadStorageType::Delta => self.prepare_delta_store(ctx, print_info).await,
-            QuadStorageType::Parquet { sort_order } => {
+            BenchQuadStorageType::Delta => {
+                self.prepare_delta_store(ctx, print_info).await
+            }
+            BenchQuadStorageType::Parquet { sort_order } => {
                 self.prepare_parquet_store(ctx, print_info, sort_order.clone())
                     .await
             }
@@ -139,28 +140,28 @@ impl WindFarmBenchmark {
         &self,
         ctx: &BenchmarkContext<'_>,
         print_info: bool,
-        sort_order: Option<DumpSortOrder>,
+        _sort_order: Option<RdfSortOrder>,
     ) -> anyhow::Result<Store> {
         if print_info {
             println!("Generating Parquet dataset ...");
         }
         let dataset_paths = create_files(ctx)?;
 
-        let source1 = RdfFileSourceConfig {
-            url: ctx.resolve_path_to_url(&dataset_paths.wind_farm_data)?,
+        let source = RdfFileSourceConfig {
+            url: Url::parse(&ctx.resolve_path_to_url(&dataset_paths.wind_farm_data)?)?,
             format: RdfFormat::N3,
         };
-        let source2 = RdfFileSourceConfig {
-            url: ctx.resolve_path_to_url(&dataset_paths.time_series_data)?,
+        let ts_source = RdfFileSourceConfig {
+            url: Url::parse(&ctx.resolve_path_to_url(&dataset_paths.time_series_data)?)?,
             format: RdfFormat::N3,
         };
 
         ctx.dump_to_parquet(
             vec![
-                (rdf_fusion::common::GraphName::DefaultGraph, source1),
-                (rdf_fusion::common::GraphName::DefaultGraph, source2),
+                (rdf_fusion::common::GraphName::DefaultGraph, source),
+                (rdf_fusion::common::GraphName::DefaultGraph, ts_source),
             ],
-            sort_order,
+            None,
         )
         .await?;
 
@@ -180,7 +181,7 @@ impl WindFarmBenchmark {
             println!("Creating store and loading data ...");
         }
         let dataset_path = create_files(ctx)?;
-        let memory_store = ctx.create_store().await;
+        let memory_store: Store = ctx.create_store().await;
 
         if print_info {
             println!("Loading static data ...");

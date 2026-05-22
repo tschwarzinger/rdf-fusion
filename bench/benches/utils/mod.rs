@@ -1,28 +1,71 @@
 use anyhow::Context;
 use futures::StreamExt;
+use rdf_fusion::common::{QuadComponent, RdfSortOrder};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::store::Store;
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
-use rdf_fusion_bench::{QuadStorageLocationArg, QuadStorageType};
+use rdf_fusion_bench::{BenchQuadStorageType, QuadStorageLocationArg};
+use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 use tokio::runtime::{Builder, Runtime};
 
 pub mod verbose;
 
-pub const ENCODINGS_TO_BENCHMARK: [QuadStorageEncodingName; 3] = [
-    QuadStorageEncodingName::ObjectId,
-    QuadStorageEncodingName::String,
-    QuadStorageEncodingName::PlainTerm,
-];
+pub struct BenchmarkStorageConfig {
+    pub storage_type: BenchQuadStorageType,
+    pub storage_location: QuadStorageLocationArg,
+    pub encoding: QuadStorageEncodingName,
+}
 
-pub fn backends_to_benchmark() -> Vec<(QuadStorageType, QuadStorageLocationArg)> {
+impl BenchmarkStorageConfig {
+    pub fn bench_context(&self) -> RdfFusionBenchContext {
+        RdfFusionBenchContext::new_for_criterion(
+            PathBuf::from("./data"),
+            self.encoding,
+            1,
+        )
+        .with_storage_type(self.storage_type.clone())
+        .with_storage_location(self.storage_location.clone())
+        .build()
+    }
+}
+
+impl Display for BenchmarkStorageConfig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "storage_type={:?}, storage_location={:?}, encoding={}",
+            self.storage_type, self.storage_location, self.encoding
+        )
+    }
+}
+
+pub fn benchmark_storage_configs() -> Vec<BenchmarkStorageConfig> {
     vec![
-        (QuadStorageType::Delta, QuadStorageLocationArg::OnDisk),
-        (
-            QuadStorageType::Parquet { sort_order: None },
-            QuadStorageLocationArg::OnDisk,
-        ),
+        BenchmarkStorageConfig {
+            storage_type: BenchQuadStorageType::Delta,
+            storage_location: QuadStorageLocationArg::OnDisk,
+            encoding: QuadStorageEncodingName::ObjectId,
+        },
+        BenchmarkStorageConfig {
+            storage_type: BenchQuadStorageType::Delta,
+            storage_location: QuadStorageLocationArg::OnDisk,
+            encoding: QuadStorageEncodingName::String,
+        },
+        BenchmarkStorageConfig {
+            storage_type: BenchQuadStorageType::Parquet {
+                sort_order: Some(RdfSortOrder::NativeOrder(vec![
+                    QuadComponent::GraphName,
+                    QuadComponent::Predicate,
+                    QuadComponent::Subject,
+                    QuadComponent::Object,
+                ])),
+            },
+            storage_location: QuadStorageLocationArg::OnDisk,
+            encoding: QuadStorageEncodingName::String,
+        },
     ]
 }
 

@@ -2,13 +2,13 @@ use anyhow::Context;
 use clap::Parser;
 use datafusion::common::runtime::SpawnedTask;
 use datafusion::prelude::SessionConfig;
+use rdf_fusion::common::RdfSortOrder;
 use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::store::DumpSortOrder;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::{
-    BenchmarkingConfig, Operation, QuadStorageEncodingNameArg, QuadStorageLocationArg,
-    QuadStorageType, QuadStorageTypeArg, execute_benchmark_operation,
+    BenchQuadStorageType, BenchQuadStorageTypeArg, BenchmarkingConfig, Operation,
+    QuadStorageEncodingNameArg, QuadStorageLocationArg, execute_benchmark_operation,
 };
 
 #[global_allocator]
@@ -21,23 +21,23 @@ async fn main() -> anyhow::Result<()> {
     let storage_encoding = QuadStorageEncodingName::from(args.storage_encoding);
 
     // Validate invalid combinations
-    if args.storage_type == QuadStorageTypeArg::Parquet
+    if args.storage_type == BenchQuadStorageTypeArg::Parquet
         && storage_encoding == QuadStorageEncodingName::ObjectId
     {
         anyhow::bail!("Parquet storage does not support object IDs.");
     }
 
-    if args.storage_type == QuadStorageTypeArg::Delta && args.sort_order.is_some() {
+    if args.storage_type == BenchQuadStorageTypeArg::Delta && args.sort_order.is_some() {
         anyhow::bail!("Sort order is only supported for Parquet storage.");
     }
 
-    let storage_type = if args.storage_type == QuadStorageTypeArg::Parquet {
+    let storage_type = if args.storage_type == BenchQuadStorageTypeArg::Parquet {
         let sort_order_str = args.sort_order.as_deref().unwrap_or("ZORDER(PS)");
-        QuadStorageType::Parquet {
-            sort_order: Some(sort_order_str.parse::<DumpSortOrder>()?),
+        BenchQuadStorageType::Parquet {
+            sort_order: Some(sort_order_str.parse::<RdfSortOrder>()?),
         }
     } else {
-        QuadStorageType::Delta
+        BenchQuadStorageType::Delta
     };
 
     let mut config =
@@ -83,7 +83,7 @@ pub struct RdfFusionBenchArgs {
     pub storage_location: QuadStorageLocationArg,
     /// Defines how to store the database.
     #[arg(long, default_value = "delta")]
-    pub storage_type: QuadStorageTypeArg,
+    pub storage_type: BenchQuadStorageTypeArg,
     /// Defines which encoding to use for the database.
     #[arg(long, default_value = "object-id")]
     pub storage_encoding: QuadStorageEncodingNameArg,
