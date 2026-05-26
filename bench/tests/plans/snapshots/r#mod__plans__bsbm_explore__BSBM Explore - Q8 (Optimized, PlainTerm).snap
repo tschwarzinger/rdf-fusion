@@ -15,38 +15,18 @@ Sort: AS_SORTABLE_BYTES(ENC_TF(reviewDate)) DESC NULLS FIRST, fetch=20
                     Projection: lhs.review AS review, lhs.title AS title, lhs.text AS text, lhs.reviewDate AS reviewDate, lhs.reviewer AS reviewer, lhs.reviewerName AS reviewerName, rhs.rating1 AS rating1
                       Left Join: lhs.review = rhs.review
                         SubqueryAlias: lhs
-                          Projection: lhs.review AS review, lhs.title AS title, lhs.text AS text, lhs.reviewDate AS reviewDate, lhs.reviewer AS reviewer, rhs.reviewerName AS reviewerName
-                            Inner Join: lhs.reviewer = rhs.reviewer
-                              SubqueryAlias: lhs
-                                Projection: lhs.review AS review, lhs.title AS title, lhs.text AS text, lhs.reviewDate AS reviewDate, rhs.reviewer AS reviewer
-                                  Inner Join: lhs.review = rhs.review
-                                    SubqueryAlias: lhs
-                                      Projection: lhs.review AS review, lhs.title AS title, lhs.text AS text, rhs.reviewDate AS reviewDate
-                                        Inner Join: lhs.review = rhs.review
-                                          SubqueryAlias: lhs
-                                            Projection: lhs.review AS review, lhs.title AS title, rhs.text AS text
-                                              Inner Join: lhs.review = rhs.review
-                                                SubqueryAlias: lhs
-                                                  Projection: lhs.review AS review, rhs.title AS title
-                                                    Inner Join: lhs.review = rhs.review
-                                                      SubqueryAlias: lhs
-                                                        QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product578>)
-                                                      SubqueryAlias: rhs
-                                                        QuadPattern (?review <http://purl.org/dc/elements/1.1/title> ?title)
-                                                SubqueryAlias: rhs
-                                                  Filter: EBV(LANGMATCHES(ENC_TF(LANG(text)), Union 2:{value:EN,language:}))
-                                                    QuadPattern (?review <http://purl.org/stuff/rev#text> ?text)
-                                          SubqueryAlias: rhs
-                                            QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewDate> ?reviewDate)
-                                    SubqueryAlias: rhs
-                                      QuadPattern (?review <http://purl.org/stuff/rev#reviewer> ?reviewer)
-                              SubqueryAlias: rhs
-                                QuadPattern (?reviewer <http://xmlns.com/foaf/0.1/name> ?reviewerName)
+                          BasicGraphPattern: filters=[EBV(LANGMATCHES(ENC_TF(LANG(text)), Union 2:{value:EN,language:}))], 
+                            QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product578>]
+                            QuadPattern: triple_pattern=[?review <http://purl.org/dc/elements/1.1/title> ?title]
+                            QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#text> ?text]
+                            QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewDate> ?reviewDate]
+                            QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
+                            QuadPattern: triple_pattern=[?reviewer <http://xmlns.com/foaf/0.1/name> ?reviewerName]
                         SubqueryAlias: rhs
-                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?rating1)
+                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?rating1]
                   SubqueryAlias: rhs
-                    QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?rating2)
+                    QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?rating2]
             SubqueryAlias: rhs
-              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?rating3)
+              QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?rating3]
       SubqueryAlias: rhs
-        QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?rating4)
+        QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?rating4]

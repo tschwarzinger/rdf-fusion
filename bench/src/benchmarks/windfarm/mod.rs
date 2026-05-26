@@ -4,7 +4,6 @@ mod queries;
 mod report;
 
 pub use benchmark::WindFarmBenchmark;
-pub use benchmark::get_wind_farm_raw_sparql_operation;
 use clap::ValueEnum;
 pub use queries::WindFarmQueryName;
 use std::fmt::{Display, Formatter};

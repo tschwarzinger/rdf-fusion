@@ -8,23 +8,12 @@ Projection: ENC_PT(product) AS product
       Sort: AS_SORTABLE_BYTES(offerCount) DESC NULLS FIRST, fetch=1000
         Projection: product, <uuid> AS offerCount
           Aggregate: groupBy=[[product AS product]], aggr=[[COUNT(offer) AS <uuid>]]
-            Projection: lhs.product AS product, rhs.offer AS offer
-              Inner Join: lhs.product = rhs.product
-                SubqueryAlias: lhs
-                  QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType1>)
-                SubqueryAlias: rhs
-                  QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
+            BasicGraphPattern: 
+              QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType1>]
+              QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
     SubqueryAlias: __correlated_sq_1
-      Projection: lhs.product AS __inner__product
-        Inner Join: lhs.vendor = rhs.vendor
-          SubqueryAlias: lhs
-            Projection: lhs.product AS product, rhs.vendor AS vendor
-              Inner Join: lhs.offer = rhs.offer
-                SubqueryAlias: lhs
-                  QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
-                SubqueryAlias: rhs
-                  QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
-          SubqueryAlias: rhs
-            Projection: vendor
-              Filter: country = Utf8("<http://downlode.org/rdf/iso-3166/countries#US>")
-                QuadPattern (?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country)
+      Projection: product AS __inner__product
+        BasicGraphPattern: filters=[country = Utf8("<http://downlode.org/rdf/iso-3166/countries#US>")], projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "country" }], 
+          QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+          QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor]
+          QuadPattern: triple_pattern=[?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]

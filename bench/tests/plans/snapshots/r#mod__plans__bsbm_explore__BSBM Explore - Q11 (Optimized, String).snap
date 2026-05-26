@@ -5,6 +5,6 @@ expression: "&explanation.optimized_logical_plan.to_string()"
 Projection: ENC_PT(property) AS property, ENC_PT(hasValue) AS hasValue, ENC_PT(isValueOf) AS isValueOf
   Union
     Projection: property, hasValue, Utf8(NULL) AS isValueOf
-      QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250> ?property ?hasValue)
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250> ?property ?hasValue]
     Projection: property, Utf8(NULL) AS hasValue, isValueOf
-      QuadPattern (?isValueOf ?property <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250>)
+      QuadPattern: triple_pattern=[?isValueOf ?property <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250>]

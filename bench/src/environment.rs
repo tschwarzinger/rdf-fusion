@@ -4,7 +4,6 @@ use crate::prepare::{
 };
 use crate::prepare::{ensure_file_download, prepare_file_download};
 use crate::{BenchQuadStorageType, BenchmarkingConfig, QuadStorageLocationArg};
-use anyhow::bail;
 use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
@@ -139,13 +138,30 @@ impl RdfFusionBenchContext {
         &self.config
     }
 
-    /// Resolves a relative path `file` against the data directory.
-    pub fn join_data_dir(&self, file: &Path) -> anyhow::Result<PathBuf> {
-        if !file.is_relative() {
-            bail!("Only relative paths can be resolved.")
-        }
+    pub fn bench_files_dir(&self) -> &Path {
+        &self.bench_files_dir
+    }
 
-        Ok(self.data_dir.join(file))
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
+    pub fn databases_dir(&self) -> &Path {
+        &self.databases_dir
+    }
+
+    pub fn results_dir(&self) -> &Path {
+        &self.results_dir
+    }
+
+    /// Resolves a path to a `file://` URL.
+    pub fn resolve_path_to_url(&self, path: &Path) -> anyhow::Result<String> {
+        let full_path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(path)
+        };
+        Ok(format!("file://{}", full_path.display()))
     }
 
     /// Creates a new bencher and modifies the context for this benchmark.
@@ -208,15 +224,6 @@ impl<'ctx> BenchmarkContext<'ctx> {
             .join(self.benchmark_name.results_dir_name())
     }
 
-    /// Resolves a relative path `file` against the isolated data directory of this benchmark.
-    pub fn join_data_dir(&self, file: &Path) -> anyhow::Result<PathBuf> {
-        if !file.is_relative() {
-            bail!("Only relative paths can be resolved.")
-        }
-
-        Ok(self.data_dir().join(file))
-    }
-
     /// Returns the RDF Fusion configuration.
     pub fn get_rdf_fusion_config(&self) -> rdf_fusion::common::config::RdfFusionOptions {
         self.context
@@ -246,18 +253,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
     /// Resolves a path to a `file://` URL.
     pub fn resolve_path_to_url(&self, path: &Path) -> anyhow::Result<String> {
-        let full_path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()?.join(path)
-        };
-        // Canonicalize if it exists to get an absolute path that is consistent
-        let full_path = if full_path.exists() {
-            full_path.canonicalize()?
-        } else {
-            full_path
-        };
-        Ok(format!("file://{}", full_path.display()))
+        self.context.resolve_path_to_url(path)
     }
 
     /// Dumps the given sources to a Parquet file in the database directory.
@@ -378,6 +374,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
                     let storage = ParquetQuadStorage::try_new(
                         url,
                         self.context.config.storage_encoding,
+                        &self.context.config.data_fusion_config,
                     )
                     .expect("Failed to create ParquetQuadStorage");
                     Arc::new(storage)
@@ -437,12 +434,12 @@ impl<'ctx> BenchmarkContext<'ctx> {
                 source_path,
                 target_path,
                 action,
-            } => prepare_copy_file(self, &source_path, &target_path, action.as_ref()),
+            } => prepare_copy_file(&source_path, &target_path, action.as_ref()),
             PrepRequirement::FileDownload {
                 url,
                 file_name,
                 action,
-            } => prepare_file_download(self, url, file_name, action).await,
+            } => prepare_file_download(url, file_name, action).await,
             PrepRequirement::RunClosure { execute, .. } => {
                 prepare_run_closure(self, &execute)
             }
@@ -451,10 +448,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
                 program,
                 args,
                 ..
-            } => {
-                let workdir = self.join_data_dir(&workdir)?;
-                prepare_run_command(&workdir, &program, &args)
-            }
+            } => prepare_run_command(&workdir, &program, &args),
         }
     }
 
@@ -462,10 +456,10 @@ impl<'ctx> BenchmarkContext<'ctx> {
     pub fn ensure_requirement(&self, requirement: PrepRequirement) -> anyhow::Result<()> {
         match requirement {
             PrepRequirement::CopyFile { target_path, .. } => {
-                ensure_file_download(self, target_path.as_path())
+                ensure_file_download(target_path.as_path())
             }
             PrepRequirement::FileDownload { file_name, .. } => {
-                ensure_file_download(self, file_name.as_path())
+                ensure_file_download(file_name.as_path())
             }
             PrepRequirement::RunClosure {
                 check_requirement, ..

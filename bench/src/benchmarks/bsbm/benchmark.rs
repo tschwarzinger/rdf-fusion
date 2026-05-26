@@ -23,10 +23,22 @@ use url::Url;
 /// Holds file paths for the files required for executing a BSBM run.
 #[derive(Clone)]
 struct BsbmFilePaths {
+    /// A path to the bsbmtools directory.
+    bsbmtools: PathBuf,
+    /// A path to the td_data directory.
+    td_data: PathBuf,
     /// A path to the dataset NTriples file.
     dataset: PathBuf,
     /// A path to the csv file that contains the pre-generated queries.
     queries: PathBuf,
+    /// A path to the source of the explore queries.
+    queries_explore_source: PathBuf,
+    /// A path to the target of the explore queries.
+    queries_explore_target: PathBuf,
+    /// A path to the source of the business intelligence queries.
+    queries_bi_source: PathBuf,
+    /// A path to the target of the business intelligence queries.
+    queries_bi_target: PathBuf,
 }
 
 /// The [Berlin SPARQL Benchmark](http://wbsg.informatik.uni-mannheim.de/bizer/berlinsparqlbenchmark/)
@@ -51,14 +63,41 @@ pub struct BsbmBenchmark<TUseCase: BsbmUseCase> {
 impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
     /// Creates a new [BsbmBenchmark] with the given sizes.
     pub fn try_new(
+        context: &BenchmarkContext,
         num_products: NumProducts,
         max_query_count: Option<u64>,
     ) -> anyhow::Result<Self> {
-        let dataset_path = PathBuf::from("./dataset.nt".to_string());
-        let queries_path = TUseCase::queries_file_path();
+        let bsbmtools = context.data_dir().join("bsbmtools");
+        let td_data = context.data_dir().join("td_data");
+        let dataset_path = context.data_dir().join("dataset.nt");
+        let queries_path = context.data_dir().join(TUseCase::queries_file_path());
+
+        let queries_explore_source = context
+            .parent()
+            .bench_files_dir()
+            .join("bsbm_queries")
+            .join(format!("explore-{num_products}.csv.bz2"));
+        let queries_explore_target =
+            context.data_dir().join(ExploreUseCase::queries_file_path());
+
+        let queries_bi_source = context
+            .parent()
+            .bench_files_dir()
+            .join("bsbm_queries")
+            .join(format!("businessIntelligence-{num_products}.csv.bz2"));
+        let queries_bi_target = context
+            .data_dir()
+            .join(BusinessIntelligenceUseCase::queries_file_path());
+
         let paths = BsbmFilePaths {
+            bsbmtools,
+            td_data,
             dataset: dataset_path,
             queries: queries_path,
+            queries_explore_source,
+            queries_explore_target,
+            queries_bi_source,
+            queries_bi_target,
         };
 
         Ok(Self {
@@ -98,12 +137,12 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
     /// method returns a list of these queries that should be executed during this run.
     pub fn list_raw_operations(
         &self,
-        ctx: &BenchmarkContext,
+        _ctx: &BenchmarkContext,
     ) -> anyhow::Result<impl Iterator<Item = SparqlRawOperation<TUseCase::QueryName>>>
     {
-        let queries_path = ctx.join_data_dir(&self.paths.queries)?;
-        let result = list_raw_operations::<TUseCase::QueryName>(queries_path.clone())?
-            .map(|q| match q {
+        let queries_path = self.paths.queries.clone();
+        let result =
+            list_raw_operations::<TUseCase::QueryName>(queries_path)?.map(|q| match q {
                 SparqlRawOperation::Query(name, text) => {
                     SparqlRawOperation::Query(name, text.replace(" #", ""))
                 }
@@ -119,21 +158,22 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
     }
 
     #[allow(clippy::expect_used)]
-    fn requirements(&self, bench_files_path: &Path) -> Vec<PrepRequirement> {
+    fn requirements(&self, _bench_files_path: &Path) -> Vec<PrepRequirement> {
         vec![
-            download_bsbm_tools(),
-            generate_dataset_requirement(self.paths.dataset.clone(), self.num_products),
-            copy_pre_generated_queries(
-                bench_files_path,
-                "explore",
-                ExploreUseCase::queries_file_path(),
+            download_bsbm_tools(self.paths.bsbmtools.clone()),
+            generate_dataset_requirement(
+                self.paths.bsbmtools.clone(),
+                self.paths.dataset.clone(),
+                self.paths.td_data.clone(),
                 self.num_products,
             ),
             copy_pre_generated_queries(
-                bench_files_path,
-                "businessIntelligence",
-                BusinessIntelligenceUseCase::queries_file_path(),
-                self.num_products,
+                self.paths.queries_explore_source.clone(),
+                self.paths.queries_explore_target.clone(),
+            ),
+            copy_pre_generated_queries(
+                self.paths.queries_bi_source.clone(),
+                self.paths.queries_bi_target.clone(),
             ),
         ]
     }
@@ -178,8 +218,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
         if print_info {
             println!("Generating Parquet dataset ...");
         }
-        let dataset_path = ctx.join_data_dir(&self.paths.dataset)?;
-        let url = ctx.resolve_path_to_url(&dataset_path)?;
+        let url = ctx.resolve_path_to_url(&self.paths.dataset)?;
 
         let source = RdfFileSourceConfig {
             url: Url::parse(&url)?,
@@ -208,8 +247,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
             println!("Creating store and loading data ...");
         }
 
-        let dataset_path = ctx.join_data_dir(&self.paths.dataset)?;
-        let data = tokio::fs::File::open(&dataset_path).await?;
+        let data = tokio::fs::File::open(&self.paths.dataset).await?;
 
         let memory_store: Store = ctx.create_store().await;
         memory_store

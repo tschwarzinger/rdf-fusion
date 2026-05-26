@@ -7,26 +7,9 @@ Projection: first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(label)) ASC 
     Aggregate: groupBy=[[__common_expr_1 AS AS_SORTABLE_BYTES(ENC_TF(label)), product]], aggr=[[first_value(product) ORDER BY [__common_expr_1 AS AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST, product ASC NULLS FIRST], first_value(label) ORDER BY [__common_expr_1 AS AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST, product ASC NULLS FIRST] AS first_value(label) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST, product ASC NULLS FIRST]]]
       Projection: AS_SORTABLE_BYTES(ENC_TF(label)) AS __common_expr_1, product, label
         Sort: AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST
-          Projection: lhs.product AS product, lhs.label AS label
-            Inner Join: lhs.product = rhs.product
-              SubqueryAlias: lhs
-                Projection: lhs.product AS product, lhs.label AS label
-                  Inner Join: lhs.product = rhs.product
-                    SubqueryAlias: lhs
-                      Projection: lhs.product AS product, lhs.label AS label
-                        Inner Join: lhs.product = rhs.product
-                          SubqueryAlias: lhs
-                            Projection: lhs.product AS product, lhs.label AS label
-                              Inner Join: lhs.product = rhs.product
-                                SubqueryAlias: lhs
-                                  QuadPattern (?product <http://www.w3.org/2000/01/rdf-schema#label> ?label)
-                                SubqueryAlias: rhs
-                                  QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType66>)
-                          SubqueryAlias: rhs
-                            QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature3>)
-                    SubqueryAlias: rhs
-                      QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1967>)
-              SubqueryAlias: rhs
-                Projection: product
-                  Filter: EBV(GT(ENC_TF(value1), Union 4:4:136))
-                    QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?value1)
+          BasicGraphPattern: filters=[EBV(GT(ENC_TF(value1), Union 4:4:136)) AS EBV(GT(ENC_TF(value1),ENC_TF(Struct({term_type:2,value:136,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))], projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "label" }], 
+            QuadPattern: triple_pattern=[?product <http://www.w3.org/2000/01/rdf-schema#label> ?label]
+            QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType66>]
+            QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature3>]
+            QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1967>]
+            QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?value1]

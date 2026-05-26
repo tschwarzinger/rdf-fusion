@@ -4891,6 +4891,7 @@ version = "0.1.0"
 dependencies = [
  "datafusion",
  "insta",
+ "itertools 0.14.0",
  "rdf-fusion-common",
  "rdf-fusion-encoding",
  "rdf-fusion-extensions",

@@ -7,6 +7,7 @@ use datafusion::optimizer::{Optimizer, OptimizerRule};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::optimizer::PhysicalOptimizer;
 use rdf_fusion_extensions::RdfFusionContextView;
+use rdf_fusion_logical::bgp::rewrite::{BgpFilterAbsorbRule, BgpProjectionPushdownRule};
 use rdf_fusion_logical::encoding::change::LowerChangeEncodingRule;
 use rdf_fusion_logical::expr::SimplifySparqlExpressionsRule;
 use rdf_fusion_logical::extend::ExtendLoweringRule;
@@ -22,6 +23,8 @@ pub fn create_optimizer_rules(
     optimization_level: OptimizationLevel,
 ) -> Vec<Arc<dyn OptimizerRule + Send + Sync>> {
     let lowering_rules: Vec<Arc<dyn OptimizerRule + Send + Sync>> = vec![
+        Arc::new(BgpFilterAbsorbRule),
+        Arc::new(BgpProjectionPushdownRule),
         Arc::new(MinusLoweringRule::new(context.clone())),
         Arc::new(ExtendLoweringRule::new()),
         Arc::new(PropertyPathLoweringRule::new(context.clone())),

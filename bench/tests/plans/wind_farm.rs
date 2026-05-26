@@ -4,10 +4,10 @@ use datafusion::physical_plan::displayable;
 use insta::assert_snapshot;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
-use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::windfarm::{
-    NumTurbines, WindFarmBenchmark, WindFarmQueryName, get_wind_farm_raw_sparql_operation,
+    NumTurbines, WindFarmBenchmark, WindFarmQueryName,
 };
+use rdf_fusion_bench::benchmarks::{Benchmark, BenchmarkName};
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use rdf_fusion_bench::operation::SparqlRawOperation;
 use std::path::PathBuf;
@@ -104,12 +104,12 @@ async fn for_all_explanations(
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
             .build();
 
-    // Load the benchmark data and set max query count to one.
-    let benchmark = WindFarmBenchmark::new(NumTurbines::N4);
-    let benchmark_name = benchmark.name();
-    let benchmark_context = benchmarking_context
-        .create_benchmark_context(benchmark_name)
-        .unwrap();
+    let name = BenchmarkName::WindFarm {
+        num_turbines: NumTurbines::N4,
+    };
+    let benchmark_context = benchmarking_context.create_benchmark_context(name).unwrap();
+    let benchmark =
+        WindFarmBenchmark::try_new(&benchmark_context, NumTurbines::N4).unwrap();
 
     let store = benchmark
         .prepare_store(&benchmark_context, true)
@@ -129,7 +129,7 @@ async fn for_all_explanations(
         }
 
         let benchmark_name = format!("Wind Farm - {query_name}");
-        let query = get_query_to_execute(&benchmark_context, query_name);
+        let query = get_query_to_execute(&benchmark, &benchmark_context, query_name);
 
         let (_, explanation) = store
             .explain_query_opt(query.text(), QueryOptions::default())
@@ -149,10 +149,12 @@ async fn for_all_explanations(
 }
 
 fn get_query_to_execute(
+    benchmark: &WindFarmBenchmark,
     benchmark_context: &BenchmarkContext,
     query_name: WindFarmQueryName,
 ) -> SparqlRawOperation<WindFarmQueryName> {
-    get_wind_farm_raw_sparql_operation(benchmark_context, query_name)
+    benchmark
+        .get_wind_farm_raw_sparql_operation(benchmark_context, query_name)
         .context("Could not list raw operations for Wind Farm benchmark. Have you prepared a wind-farm-4 dataset?")
         .unwrap()
 }

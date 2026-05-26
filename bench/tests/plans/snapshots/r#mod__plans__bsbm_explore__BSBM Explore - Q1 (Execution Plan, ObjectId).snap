@@ -18,6 +18,6 @@ ProjectionExec: expr=[ENC_PT(first_value(product) ORDER BY [AS_SORTABLE_BYTES(EN
                   DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature3>], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
               FilterExec: DynamicFilter [ empty ]
                 DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1967>], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
-            FilterExec: EBV(GT(ENC_TF(value1@1), 4:4:136)), projection=[product@0]
+            FilterExec: EBV(GT(ENC_TF(value1@1), 4:4:136))
               FilterExec: DynamicFilter [ empty ]
                 DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?value1], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]

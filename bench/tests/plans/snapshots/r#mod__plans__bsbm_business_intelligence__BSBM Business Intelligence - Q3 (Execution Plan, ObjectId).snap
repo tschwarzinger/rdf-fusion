@@ -10,7 +10,7 @@ ProjectionExec: expr=[ENC_PT(product@0) as product, ENC_PT(ratio@3) as ratio]
           AggregateExec: mode=Single, gby=[product@1 as product], aggr=[<uuid>]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@0, review@0)], projection=[review@0, product@1]
               DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product], blank_node_mode=Variable
-              FilterExec: EBV(GEQ(__common_expr_5@0, 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})) AND EBV(LT(__common_expr_5@0, 5:{date_time_type:1,value:63329990400.000000000000000000,offset:})), projection=[review@1]
+              FilterExec: EBV(GEQ(ENC_TF(date@1), 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})) AND EBV(LT(ENC_TF(date@1), 5:{date_time_type:1,value:63329990400.000000000000000000,offset:}))
                 FilterExec: DynamicFilter [ empty ]
                   DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://purl.org/dc/elements/1.1/date> ?date], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
         ProjectionExec: expr=[product@0 as product, <uuid>@1 as monthBeforeCount]
@@ -18,6 +18,6 @@ ProjectionExec: expr=[ENC_PT(product@0) as product, ENC_PT(ratio@3) as ratio]
             AggregateExec: mode=Single, gby=[product@1 as product], aggr=[<uuid>]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@0, review@0)], projection=[review@0, product@1]
                 DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product], blank_node_mode=Variable
-                FilterExec: EBV(GEQ(__common_expr_6@0, 5:{date_time_type:1,value:63325152000.000000000000000000,offset:})) AND EBV(LT(__common_expr_6@0, 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})), projection=[review@1]
+                FilterExec: EBV(GEQ(ENC_TF(date@1), 5:{date_time_type:1,value:63325152000.000000000000000000,offset:})) AND EBV(LT(ENC_TF(date@1), 5:{date_time_type:1,value:63327571200.000000000000000000,offset:}))
                   FilterExec: DynamicFilter [ empty ]
                     DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://purl.org/dc/elements/1.1/date> ?date], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]

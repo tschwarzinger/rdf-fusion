@@ -1,5 +1,5 @@
 use crate::active_graph::ActiveGraph;
-use crate::join::SparqlJoinType;
+use crate::bgp::BgpNode;
 use crate::paths::PropertyPathNode;
 use crate::quad_pattern::QuadPatternNode;
 use crate::{RdfFusionExprBuilderContext, RdfFusionLogicalPlanBuilder};
@@ -236,18 +236,41 @@ impl RdfFusionLogicalPlanBuilderContext {
         graph_variables: Option<&Variable>,
         patterns: &[TriplePattern],
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        patterns
-            .iter()
-            .map(|p| {
-                self.create_pattern(
-                    active_graph.clone(),
-                    graph_variables.cloned(),
-                    p.clone(),
-                )
-            })
-            .map(Ok)
-            .reduce(|lhs, rhs| lhs?.join(rhs?.build()?, SparqlJoinType::Inner, None))
-            .unwrap_or_else(|| Ok(self.create_empty_solution()))
+        if patterns.is_empty() {
+            return Ok(self.create_empty_solution());
+        }
+
+        let mut logical_patterns = Vec::new();
+        let mut schema = None;
+
+        for p in patterns {
+            let pattern_builder = self.create_pattern(
+                active_graph.clone(),
+                graph_variables.cloned(),
+                p.clone(),
+            );
+            let lp = pattern_builder.build()?;
+
+            match &mut schema {
+                None => schema = Some(lp.schema().as_ref().clone()),
+                Some(s) => s.merge(lp.schema()),
+            }
+            logical_patterns.push(lp);
+        }
+
+        if logical_patterns.len() == 1 {
+            return Ok(RdfFusionLogicalPlanBuilder::new(
+                self.clone(),
+                Arc::new(logical_patterns.pop().expect("Len is 1")),
+            ));
+        }
+
+        let bgp_node =
+            BgpNode::new(logical_patterns, Arc::new(schema.unwrap()), vec![], None);
+        Ok(RdfFusionLogicalPlanBuilder::new(
+            self.clone(),
+            create_extension_plan(bgp_node),
+        ))
     }
 
     /// Creates a new [RdfFusionLogicalPlanBuilder] that matches a single `pattern` on the

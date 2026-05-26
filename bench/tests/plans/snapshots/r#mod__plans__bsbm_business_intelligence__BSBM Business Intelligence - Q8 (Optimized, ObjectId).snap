@@ -12,53 +12,23 @@ Projection: ENC_PT(vendor) AS vendor, ENC_PT(cheapExpensiveRatio) AS cheapExpens
               Projection: lhs.offer AS offer, lhs.vendor AS vendor
                 Inner Join: lhs.product = rhs.product Filter: EBV(LT(xsd:float(xsd:string(ENC_TF(lhs.price))), rhs.avgPrice))
                   SubqueryAlias: lhs
-                    Projection: lhs.product AS product, lhs.offer AS offer, lhs.vendor AS vendor, rhs.price AS price
-                      Inner Join: lhs.offer = rhs.offer
-                        SubqueryAlias: lhs
-                          Projection: lhs.product AS product, lhs.offer AS offer, rhs.vendor AS vendor
-                            Inner Join: lhs.offer = rhs.offer
-                              SubqueryAlias: lhs
-                                Projection: lhs.product AS product, rhs.offer AS offer
-                                  Inner Join: lhs.product = rhs.product
-                                    SubqueryAlias: lhs
-                                      QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>)
-                                    SubqueryAlias: rhs
-                                      QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
-                              SubqueryAlias: rhs
-                                QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
-                        SubqueryAlias: rhs
-                          QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
+                    BasicGraphPattern: 
+                      QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>]
+                      QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+                      QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor]
+                      QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
                   SubqueryAlias: rhs
                     Projection: product, <uuid> AS avgPrice
                       Aggregate: groupBy=[[product AS product]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
-                        Projection: lhs.product AS product, rhs.price AS price
-                          Inner Join: lhs.offer = rhs.offer
-                            SubqueryAlias: lhs
-                              Projection: lhs.product AS product, lhs.offer AS offer
-                                Inner Join: lhs.offer = rhs.offer
-                                  SubqueryAlias: lhs
-                                    Projection: lhs.product AS product, rhs.offer AS offer
-                                      Inner Join: lhs.product = rhs.product
-                                        SubqueryAlias: lhs
-                                          QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>)
-                                        SubqueryAlias: rhs
-                                          QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
-                                  SubqueryAlias: rhs
-                                    Projection: offer
-                                      QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
-                            SubqueryAlias: rhs
-                              QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
+                        BasicGraphPattern: projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "price" }], 
+                          QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>]
+                          QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+                          QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor], projection=[0]
+                          QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
         SubqueryAlias: rhs
           Projection: vendor, <uuid> AS offerCount
             Aggregate: groupBy=[[vendor AS vendor]], aggr=[[COUNT(offer) AS <uuid>]]
-              Projection: lhs.offer AS offer, rhs.vendor AS vendor
-                Inner Join: lhs.offer = rhs.offer
-                  SubqueryAlias: lhs
-                    Projection: rhs.offer AS offer
-                      Inner Join: lhs.product = rhs.product
-                        SubqueryAlias: lhs
-                          QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>)
-                        SubqueryAlias: rhs
-                          QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
-                  SubqueryAlias: rhs
-                    QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
+              BasicGraphPattern: projection=[Column { relation: None, name: "offer" }, Column { relation: None, name: "vendor" }], 
+                QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>]
+                QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+                QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor]

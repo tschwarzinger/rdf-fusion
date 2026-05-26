@@ -16,6 +16,7 @@
 extern crate core;
 
 mod active_graph;
+pub mod bgp;
 pub mod encoding;
 pub mod expr;
 mod expr_builder;

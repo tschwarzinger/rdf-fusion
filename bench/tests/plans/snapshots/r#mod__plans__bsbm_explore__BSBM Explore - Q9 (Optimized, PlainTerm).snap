@@ -5,6 +5,6 @@ expression: "&explanation.optimized_logical_plan.to_string()"
 Projection: lhs.x AS x, rhs.x__type AS x__type
   Inner Join: lhs.x = rhs.x
     SubqueryAlias: lhs
-      QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review4194> <http://purl.org/stuff/rev#reviewer> ?x)
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review4194> <http://purl.org/stuff/rev#reviewer> ?x]
     SubqueryAlias: rhs
-      QuadPattern (?x <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?x__type)
+      QuadPattern: triple_pattern=[?x <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?x__type]

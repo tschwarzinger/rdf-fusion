@@ -16,8 +16,14 @@ fn bench_dump_formats(c: &mut Criterion) {
         1,
     )
     .build();
+    let name = rdf_fusion_bench::benchmarks::BenchmarkName::BsbmExplore {
+        num_products: NumProducts::N10_000,
+        max_query_count: None,
+    };
+    let context = benchmarking_context.create_benchmark_context(name).unwrap();
     let benchmark =
-        BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
+        BsbmBenchmark::<ExploreUseCase>::try_new(&context, NumProducts::N10_000, None)
+            .unwrap();
 
     let (runtime, _benchmark_context, store) =
         setup_benchmark_env(&benchmarking_context, &benchmark);

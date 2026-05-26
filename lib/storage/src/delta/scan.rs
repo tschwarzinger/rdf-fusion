@@ -289,21 +289,11 @@ impl ExecutionPlan for DeltaQuadStorageScanExec {
 
     fn try_swapping_with_projection(
         &self,
-        projection: &ProjectionExec,
+        _projection: &ProjectionExec,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
-        let Some(inner) = self.inner.try_swapping_with_projection(projection)? else {
-            return Ok(None);
-        };
-
-        let new_plan = Self::try_new(
-            Arc::clone(&self.log),
-            self.quad_pattern.clone(),
-            self.changeset_version,
-            inner,
-            self.index_name.clone(),
-        )?
-        .with_pushed_filters(self.pushed_down_filters.clone());
-        Ok(Some(Arc::new(new_plan) as Arc<dyn ExecutionPlan>))
+        // For now, we do not support projection pushdown. It could be beneficial to check whether
+        // columns are being dropped in the projection and avoid decoding them all together.
+        Ok(None)
     }
 }
 
@@ -319,10 +309,8 @@ impl DisplayAs for DeltaQuadStorageScanExec {
 
         write!(
             f,
-            ", triple_pattern=[{} {} {}]",
-            &self.quad_pattern.triple_pattern.subject,
-            &self.quad_pattern.triple_pattern.predicate,
-            &self.quad_pattern.triple_pattern.object
+            ", triple_pattern=[{}]",
+            &self.quad_pattern.triple_pattern
         )?;
         write!(f, ", blank_node_mode={}", self.quad_pattern.blank_node_mode)?;
 
@@ -410,7 +398,6 @@ mod tests {
         ColumnarValue, Operator, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
         Volatility,
     };
-    use datafusion::physical_optimizer::projection_pushdown::ProjectionPushdown;
     use datafusion::physical_plan::displayable;
     use datafusion::physical_plan::expressions::{BinaryExpr, Column, Literal};
     use datafusion::physical_plan::filter::FilterExec;
@@ -508,56 +495,6 @@ mod tests {
             @"
         FilterExec: mock_udf(p@0)
           DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p <https://my.at/>], blank_node_mode=Variable
-        "
-        );
-    }
-
-    #[tokio::test]
-    async fn test_projection_pushdown() {
-        let quad_pattern = QuadPattern::new(
-            ActiveGraph::DefaultGraph,
-            None,
-            TriplePattern {
-                subject: Variable::new_unchecked("s").into(),
-                predicate: Variable::new_unchecked("p").into(),
-                object: Variable::new_unchecked("o").into(),
-            },
-            BlankNodeMatchingMode::Variable,
-        );
-        let (session, scan) = setup_quad_scan_with_pattern(quad_pattern, true).await;
-
-        let exprs = vec![(
-            Arc::new(Column::new("s", 0)) as Arc<dyn PhysicalExpr>,
-            "s".to_string(),
-        )];
-
-        let projection_plan: Arc<dyn ExecutionPlan> = Arc::new(
-            ProjectionExec::try_new(exprs, Arc::clone(&scan) as Arc<dyn ExecutionPlan>)
-                .unwrap(),
-        );
-        let rule = ProjectionPushdown::new();
-        let optimized_plan = rule
-            .optimize(projection_plan, session.state().config_options())
-            .unwrap();
-
-        let optimized_scan = optimized_plan
-            .as_any()
-            .downcast_ref::<DeltaQuadStorageScanExec>()
-            .expect("The outer ProjectionExec should have been absorbed by the DeltaQuadStorageScanExec");
-
-        assert_snapshot!(
-            displayable(optimized_scan).indent(false),
-            @"DeltaQuadStorageScanExec: index=GSPO, active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, projection=[s]"
-        );
-
-        // Delta does not (yet) pushdown these kind of projections, so we do not yet have any
-        // performance benefits. But we are prepared to handle this case in the future.
-        assert_snapshot!(
-            displayable(optimized_scan.inner_scan().as_ref()).indent(false),
-            @r"
-        ProjectionExec: expr=[subject@0 as s]
-          DeltaScan
-            DataSourceExec: file_groups={1 group: [[]]}, projection=[subject, predicate, object], file_type=parquet, predicate=graph@3 IS NULL, pruning_predicate=graph_null_count@0 > 0, required_guarantees=[]
         "
         );
     }

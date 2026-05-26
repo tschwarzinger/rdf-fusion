@@ -5,7 +5,7 @@ use crate::benchmarks::bsbm::{
 };
 use crate::benchmarks::windfarm::WindFarmBenchmark;
 use crate::benchmarks::{Benchmark, BenchmarkName};
-use crate::environment::RdfFusionBenchContext;
+use crate::environment::{BenchmarkContext, RdfFusionBenchContext};
 use clap::ValueEnum;
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::common::RdfSortOrder;
@@ -116,13 +116,13 @@ pub async fn execute_benchmark_operation(
     let context =
         RdfFusionBenchContext::builder(options, bench_files, data, databases, results)
             .build();
+    let bench_ctx = context.create_benchmark_context(benchmark)?;
+    let benchmark = create_benchmark_instance(&bench_ctx, benchmark)?;
 
-    let benchmark = create_benchmark_instance(benchmark)?;
     match operation {
         Operation::Prepare => {
             println!("Preparing benchmark '{}' ...", benchmark.name());
 
-            let bench_ctx = context.create_benchmark_context(benchmark.name())?;
             if bench_ctx.data_dir().exists() {
                 println!(
                     "Cleaning data directory '{}' ...",
@@ -143,7 +143,6 @@ pub async fn execute_benchmark_operation(
         Operation::Execute => {
             println!("Executing benchmark '{}' ...\n", benchmark.name());
 
-            let bench_ctx = context.create_benchmark_context(benchmark.name())?;
             if bench_ctx.results_dir().exists() {
                 println!(
                     "Cleaning results directory '{}' ...",
@@ -173,6 +172,7 @@ pub async fn execute_benchmark_operation(
 }
 
 fn create_benchmark_instance(
+    context: &BenchmarkContext,
     benchmark: BenchmarkName,
 ) -> anyhow::Result<Box<dyn Benchmark>> {
     let benchmark: Box<dyn Benchmark> = match benchmark {
@@ -180,6 +180,7 @@ fn create_benchmark_instance(
             num_products: dataset_size,
             max_query_count: query_size,
         } => Box::new(BsbmBenchmark::<ExploreUseCase>::try_new(
+            context,
             dataset_size,
             query_size,
         )?),
@@ -187,11 +188,12 @@ fn create_benchmark_instance(
             num_products: dataset_size,
             max_query_count: query_size,
         } => Box::new(BsbmBenchmark::<BusinessIntelligenceUseCase>::try_new(
+            context,
             dataset_size,
             query_size,
         )?),
         BenchmarkName::WindFarm { num_turbines } => {
-            Box::new(WindFarmBenchmark::new(num_turbines))
+            Box::new(WindFarmBenchmark::try_new(context, num_turbines)?)
         }
     };
     Ok(benchmark)

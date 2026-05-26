@@ -7,8 +7,9 @@ use crate::utils::{consume_results, setup_benchmark_env};
 use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::QueryOptions;
+use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::benchmarks::windfarm::{
-    NumTurbines, WindFarmBenchmark, WindFarmQueryName, get_wind_farm_raw_sparql_operation,
+    NumTurbines, WindFarmBenchmark, WindFarmQueryName,
 };
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use std::path::PathBuf;
@@ -22,11 +23,15 @@ fn bench_planning(c: &mut Criterion) {
         .options()
         .data_fusion_config
         .target_partitions();
-    let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
+    let name = BenchmarkName::WindFarm {
+        num_turbines: NumTurbines::N16,
+    };
+    let context = benchmarking_context.create_benchmark_context(name).unwrap();
+    let benchmark = WindFarmBenchmark::try_new(&context, NumTurbines::N16).unwrap();
 
     let (runtime, benchmark_context, store) =
         setup_benchmark_env(&benchmarking_context, &benchmark);
-    let queries = get_queries(&benchmark_context);
+    let queries = get_queries(&benchmark, &benchmark_context);
     let verbose = is_verbose();
 
     for (query_name, query_text) in queries {
@@ -59,11 +64,15 @@ fn bench_full_execution(c: &mut Criterion) {
             .options()
             .data_fusion_config
             .target_partitions();
-        let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
+        let name = BenchmarkName::WindFarm {
+            num_turbines: NumTurbines::N16,
+        };
+        let context = benchmarking_context.create_benchmark_context(name).unwrap();
+        let benchmark = WindFarmBenchmark::try_new(&context, NumTurbines::N16).unwrap();
 
         let (runtime, benchmark_context, store) =
             setup_benchmark_env(&benchmarking_context, &benchmark);
-        let queries = get_queries(&benchmark_context);
+        let queries = get_queries(&benchmark, &benchmark_context);
 
         for (query_name, query_text) in queries {
             let benchmark_name = format!(
@@ -89,7 +98,10 @@ criterion_group!(
 );
 criterion_main!(wind_farm);
 
-fn get_queries(benchmark_context: &BenchmarkContext) -> Vec<(String, String)> {
+fn get_queries(
+    benchmark: &WindFarmBenchmark,
+    benchmark_context: &BenchmarkContext,
+) -> Vec<(String, String)> {
     let disabled_queries = vec![
         WindFarmQueryName::MultiGrouped1,
         WindFarmQueryName::MultiGrouped2,
@@ -104,9 +116,9 @@ fn get_queries(benchmark_context: &BenchmarkContext) -> Vec<(String, String)> {
                 println!("Skipping query: {}", query_name);
                 None
             } else {
-                let op =
-                    get_wind_farm_raw_sparql_operation(benchmark_context, query_name)
-                        .unwrap();
+                let op = benchmark
+                    .get_wind_farm_raw_sparql_operation(benchmark_context, query_name)
+                    .unwrap();
                 Some((query_name.to_string(), op.text().to_string()))
             }
         })

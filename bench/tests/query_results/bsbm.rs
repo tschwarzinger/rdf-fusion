@@ -47,12 +47,14 @@ async fn run_bsbm_1000_test_results(encoding: QuadStorageEncodingName) {
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
             .build();
+    let name = rdf_fusion_bench::benchmarks::BenchmarkName::BsbmExplore {
+        num_products: NumProducts::N1_000,
+        max_query_count: None,
+    };
+    let ctx = benchmarking_context.create_benchmark_context(name).unwrap();
     let benchmark =
-        BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N1_000, None).unwrap();
-    let benchmark_name = benchmark.name();
-    let ctx = benchmarking_context
-        .create_benchmark_context(benchmark_name)
-        .unwrap();
+        BsbmBenchmark::<ExploreUseCase>::try_new(&ctx, NumProducts::N1_000, None)
+            .unwrap();
 
     let store = benchmark.prepare_store(&ctx, false).await.unwrap();
 

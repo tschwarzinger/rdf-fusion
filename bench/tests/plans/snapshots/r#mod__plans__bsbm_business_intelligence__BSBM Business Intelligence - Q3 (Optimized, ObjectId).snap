@@ -9,25 +9,13 @@ Projection: ENC_PT(product) AS product, ENC_PT(ratio) AS ratio
         SubqueryAlias: lhs
           Projection: product, <uuid> AS monthCount
             Aggregate: groupBy=[[product AS product]], aggr=[[COUNT(review) AS <uuid>]]
-              Projection: lhs.review AS review, lhs.product AS product
-                Inner Join: lhs.review = rhs.review
-                  SubqueryAlias: lhs
-                    QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
-                  SubqueryAlias: rhs
-                    Projection: review
-                      Filter: EBV(GEQ(__common_expr_5, Union 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})) AND EBV(LT(__common_expr_5, Union 5:{date_time_type:1,value:63329990400.000000000000000000,offset:}))
-                        Projection: ENC_TF(date) AS __common_expr_5, review
-                          QuadPattern (?review <http://purl.org/dc/elements/1.1/date> ?date)
+              BasicGraphPattern: filters=[EBV(GEQ(ENC_TF(date), Union 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})) AND EBV(LT(ENC_TF(date), Union 5:{date_time_type:1,value:63329990400.000000000000000000,offset:})) AS EBV(BOOLEAN_AS_TERM(EBV(GEQ(ENC_TF(date),ENC_TF(Struct({term_type:2,value:2007-10-10,data_type:http://www.w3.org/2001/XMLSchema#date,language_tag:})))) AND EBV(LT(ENC_TF(date),ENC_TF(Struct({term_type:2,value:2007-11-07,data_type:http://www.w3.org/2001/XMLSchema#date,language_tag:}))))))], projection=[Column { relation: None, name: "review" }, Column { relation: None, name: "product" }], 
+                QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
+                QuadPattern: triple_pattern=[?review <http://purl.org/dc/elements/1.1/date> ?date]
         SubqueryAlias: rhs
           Projection: product, <uuid> AS monthBeforeCount
             Filter: EBV(GT(<uuid>, Union 4:4:0))
               Aggregate: groupBy=[[product AS product]], aggr=[[COUNT(review) AS <uuid>]]
-                Projection: lhs.review AS review, lhs.product AS product
-                  Inner Join: lhs.review = rhs.review
-                    SubqueryAlias: lhs
-                      QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
-                    SubqueryAlias: rhs
-                      Projection: review
-                        Filter: EBV(GEQ(__common_expr_6, Union 5:{date_time_type:1,value:63325152000.000000000000000000,offset:})) AND EBV(LT(__common_expr_6, Union 5:{date_time_type:1,value:63327571200.000000000000000000,offset:}))
-                          Projection: ENC_TF(date) AS __common_expr_6, review
-                            QuadPattern (?review <http://purl.org/dc/elements/1.1/date> ?date)
+                BasicGraphPattern: filters=[EBV(GEQ(ENC_TF(date), Union 5:{date_time_type:1,value:63325152000.000000000000000000,offset:})) AND EBV(LT(ENC_TF(date), Union 5:{date_time_type:1,value:63327571200.000000000000000000,offset:})) AS EBV(BOOLEAN_AS_TERM(EBV(GEQ(ENC_TF(date),ENC_TF(Struct({term_type:2,value:2007-09-12,data_type:http://www.w3.org/2001/XMLSchema#date,language_tag:})))) AND EBV(LT(ENC_TF(date),ENC_TF(Struct({term_type:2,value:2007-10-10,data_type:http://www.w3.org/2001/XMLSchema#date,language_tag:}))))))], projection=[Column { relation: None, name: "review" }, Column { relation: None, name: "product" }], 
+                  QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
+                  QuadPattern: triple_pattern=[?review <http://purl.org/dc/elements/1.1/date> ?date]

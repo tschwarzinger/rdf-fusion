@@ -10,4 +10,5 @@
 
 extern crate core;
 
+pub mod bgp;
 pub mod paths;

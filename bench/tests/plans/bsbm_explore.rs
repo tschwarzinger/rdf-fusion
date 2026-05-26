@@ -4,10 +4,10 @@ use datafusion::physical_plan::displayable;
 use insta::assert_snapshot;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
-use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{
     BsbmBenchmark, BsbmExploreQueryName, ExploreUseCase, NumProducts,
 };
+use rdf_fusion_bench::benchmarks::{Benchmark, BenchmarkName};
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use rdf_fusion_bench::operation::SparqlRawOperation;
 use std::path::PathBuf;
@@ -104,13 +104,17 @@ async fn for_all_explanations(
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
             .build();
 
-    // Load the benchmark data and set max query count to one.
-    let benchmark =
-        BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N1_000, None).unwrap();
-    let benchmark_name = benchmark.name();
-    let benchmark_context = benchmarking_context
-        .create_benchmark_context(benchmark_name)
-        .unwrap();
+    let name = BenchmarkName::BsbmExplore {
+        num_products: NumProducts::N1_000,
+        max_query_count: None,
+    };
+    let benchmark_context = benchmarking_context.create_benchmark_context(name).unwrap();
+    let benchmark = BsbmBenchmark::<ExploreUseCase>::try_new(
+        &benchmark_context,
+        NumProducts::N1_000,
+        None,
+    )
+    .unwrap();
 
     let store = benchmark
         .prepare_store(&benchmark_context, true)

@@ -14,52 +14,23 @@ Projection: country, product, ENC_PT(nrOfReviews) AS nrOfReviews, ENC_PT(avgPric
                   Aggregate: groupBy=[[country AS country]], aggr=[[MAX(nrOfReviews) AS <uuid>]]
                     Projection: country, <uuid> AS nrOfReviews
                       Aggregate: groupBy=[[country AS country, product AS product]], aggr=[[COUNT(review) AS <uuid>]]
-                        Projection: lhs.product AS product, lhs.review AS review, rhs.country AS country
-                          Inner Join: lhs.reviewer = rhs.reviewer
-                            SubqueryAlias: lhs
-                              Projection: lhs.product AS product, lhs.review AS review, rhs.reviewer AS reviewer
-                                Inner Join: lhs.review = rhs.review
-                                  SubqueryAlias: lhs
-                                    Projection: lhs.product AS product, rhs.review AS review
-                                      Inner Join: lhs.product = rhs.product
-                                        SubqueryAlias: lhs
-                                          QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>)
-                                        SubqueryAlias: rhs
-                                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
-                                  SubqueryAlias: rhs
-                                    QuadPattern (?review <http://purl.org/stuff/rev#reviewer> ?reviewer)
-                            SubqueryAlias: rhs
-                              QuadPattern (?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country)
+                        BasicGraphPattern: projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "review" }, Column { relation: None, name: "country" }], 
+                          QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
+                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
+                          QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
+                          QuadPattern: triple_pattern=[?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]
               SubqueryAlias: rhs
                 Projection: Struct({term_type:,value:,data_type:,language_tag:}) AS country, product, <uuid> AS avgPrice
                   Aggregate: groupBy=[[product AS product]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
-                    Projection: lhs.product AS product, rhs.price AS price
-                      Inner Join: lhs.offer = rhs.offer
-                        SubqueryAlias: lhs
-                          Projection: lhs.product AS product, rhs.offer AS offer
-                            Inner Join: lhs.product = rhs.product
-                              SubqueryAlias: lhs
-                                QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>)
-                              SubqueryAlias: rhs
-                                QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product)
-                        SubqueryAlias: rhs
-                          QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
+                    BasicGraphPattern: projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "price" }], 
+                      QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
+                      QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+                      QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
         SubqueryAlias: rhs
           Projection: country, product, <uuid> AS nrOfReviews
             Aggregate: groupBy=[[country AS country, product AS product]], aggr=[[COUNT(review) AS <uuid>]]
-              Projection: lhs.product AS product, lhs.review AS review, rhs.country AS country
-                Inner Join: lhs.reviewer = rhs.reviewer
-                  SubqueryAlias: lhs
-                    Projection: lhs.product AS product, lhs.review AS review, rhs.reviewer AS reviewer
-                      Inner Join: lhs.review = rhs.review
-                        SubqueryAlias: lhs
-                          Projection: lhs.product AS product, rhs.review AS review
-                            Inner Join: lhs.product = rhs.product
-                              SubqueryAlias: lhs
-                                QuadPattern (?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>)
-                              SubqueryAlias: rhs
-                                QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
-                        SubqueryAlias: rhs
-                          QuadPattern (?review <http://purl.org/stuff/rev#reviewer> ?reviewer)
-                  SubqueryAlias: rhs
-                    QuadPattern (?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country)
+              BasicGraphPattern: projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "review" }, Column { relation: None, name: "country" }], 
+                QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
+                QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
+                QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
+                QuadPattern: triple_pattern=[?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]

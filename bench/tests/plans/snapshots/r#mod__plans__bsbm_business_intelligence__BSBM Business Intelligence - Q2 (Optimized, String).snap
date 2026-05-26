@@ -8,12 +8,10 @@ Projection: ENC_PT(otherProduct) AS otherProduct, ENC_PT(sameFeatures) AS sameFe
       Inner Join: lhs.otherProduct = rhs.otherProduct
         SubqueryAlias: lhs
           Filter: otherProduct != Utf8("<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>")
-            QuadPattern (?otherProduct <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Product>)
+            QuadPattern: triple_pattern=[?otherProduct <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Product>]
         SubqueryAlias: rhs
           Projection: otherProduct, <uuid> AS sameFeatures
             Aggregate: groupBy=[[otherProduct AS otherProduct]], aggr=[[COUNT(otherFeature) AS <uuid>]]
-              Projection: otherProduct, otherFeature
-                Inner Join:  Filter: EBV(EQ(ENC_TF(ENC_PT(feature)), ENC_TF(ENC_PT(otherFeature))))
-                  QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature)
-                  Filter: otherProduct != Utf8("<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>")
-                    QuadPattern (?otherProduct <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?otherFeature)
+              BasicGraphPattern: filters=[EBV(EQ(ENC_TF(ENC_PT(feature)), ENC_TF(ENC_PT(otherFeature)))), otherProduct != Utf8("<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>")], projection=[Column { relation: None, name: "otherProduct" }, Column { relation: None, name: "otherFeature" }], 
+                QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
+                QuadPattern: triple_pattern=[?otherProduct <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?otherFeature]

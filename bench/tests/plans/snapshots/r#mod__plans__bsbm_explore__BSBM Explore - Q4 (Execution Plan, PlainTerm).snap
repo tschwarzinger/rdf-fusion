@@ -24,7 +24,7 @@ ProjectionExec: expr=[first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(la
                         DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1427>], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
                     FilterExec: DynamicFilter [ empty ]
                       DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual1> ?propertyTextual], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
-                  FilterExec: EBV(GT(ENC_TF(p1@1), 4:4:457)), projection=[product@0]
+                  FilterExec: EBV(GT(ENC_TF(p1@1), 4:4:457))
                     FilterExec: DynamicFilter [ empty ]
                       DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?p1], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
               SortExec: expr=[AS_SORTABLE_BYTES(ENC_TF(label@1)) ASC], preserve_partitioning=[false]
@@ -42,6 +42,6 @@ ProjectionExec: expr=[first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(la
                         DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1444>], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
                     FilterExec: DynamicFilter [ empty ]
                       DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyTextual1> ?propertyTextual], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
-                  FilterExec: EBV(GT(ENC_TF(p2@1), 4:4:488)), projection=[product@0]
+                  FilterExec: EBV(GT(ENC_TF(p2@1), 4:4:488))
                     FilterExec: DynamicFilter [ empty ]
                       DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?p2], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]

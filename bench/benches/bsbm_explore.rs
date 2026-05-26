@@ -12,6 +12,7 @@ use crate::utils::{consume_results, setup_benchmark_env};
 use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::QueryOptions;
+use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::benchmarks::bsbm::{
     BsbmBenchmark, BsbmExploreQueryName, ExploreUseCase, NumProducts,
 };
@@ -27,8 +28,14 @@ fn bench_planning(c: &mut Criterion) {
         .options()
         .data_fusion_config
         .target_partitions();
+    let name = BenchmarkName::BsbmExplore {
+        num_products: NumProducts::N10_000,
+        max_query_count: None,
+    };
+    let context = benchmarking_context.create_benchmark_context(name).unwrap();
     let benchmark =
-        BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
+        BsbmBenchmark::<ExploreUseCase>::try_new(&context, NumProducts::N10_000, None)
+            .unwrap();
 
     let (runtime, benchmark_context, store) =
         setup_benchmark_env(&benchmarking_context, &benchmark);
@@ -65,8 +72,17 @@ fn bench_full_execution(c: &mut Criterion) {
             .options()
             .data_fusion_config
             .target_partitions();
-        let benchmark =
-            BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
+        let name = BenchmarkName::BsbmExplore {
+            num_products: NumProducts::N10_000,
+            max_query_count: None,
+        };
+        let context = benchmarking_context.create_benchmark_context(name).unwrap();
+        let benchmark = BsbmBenchmark::<ExploreUseCase>::try_new(
+            &context,
+            NumProducts::N10_000,
+            None,
+        )
+        .unwrap();
 
         let (runtime, benchmark_context, store) =
             setup_benchmark_env(&benchmarking_context, &benchmark);

@@ -31,11 +31,11 @@ async fn run_wind_farm_4_test_results(encoding: QuadStorageEncodingName) {
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
             .build();
-    let benchmark = WindFarmBenchmark::new(NumTurbines::N4);
-    let benchmark_name = benchmark.name();
-    let ctx = benchmarking_context
-        .create_benchmark_context(benchmark_name)
-        .unwrap();
+    let name = rdf_fusion_bench::benchmarks::BenchmarkName::WindFarm {
+        num_turbines: NumTurbines::N4,
+    };
+    let ctx = benchmarking_context.create_benchmark_context(name).unwrap();
+    let benchmark = WindFarmBenchmark::try_new(&ctx, NumTurbines::N4).unwrap();
 
     let store = benchmark.prepare_store(&ctx, false).await.unwrap();
 

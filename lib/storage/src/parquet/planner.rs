@@ -53,11 +53,12 @@ impl ExtensionPlanner for ParquetQuadStoragePlanner {
         let expected_schema = node.schema();
         let mut exprs = Vec::new();
         for (expr, name) in projections {
-            let field = expected_schema.field_with_name(None, &name)?;
-            exprs.push(
-                datafusion::logical_expr::cast(expr, field.data_type().clone())
-                    .alias(name),
-            );
+            if let Ok(field) = expected_schema.field_with_unqualified_name(&name) {
+                exprs.push(
+                    datafusion::logical_expr::cast(expr, field.data_type().clone())
+                        .alias(name),
+                );
+            }
         }
         plan_builder = plan_builder.project(exprs)?;
 

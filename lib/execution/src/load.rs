@@ -78,7 +78,9 @@ impl RdfParquetLoader {
 
             let options = RdfFileScanOptions::with_format(format)
                 .with_default_graph(input.default_graph)
-                .with_rename_blank_nodes(true);
+                .with_rename_blank_nodes(true)
+                .with_base_iri(input.url.as_str())
+                .expect("IRI is valid");
             let node = ParseRdfFileNode::new(
                 RdfInputSource::from_url(input.url),
                 options,

@@ -1,20 +1,15 @@
-use crate::environment::BenchmarkContext;
 use crate::prepare::actions::{FileAction, execute_file_action};
 use anyhow::{Context, bail};
 use reqwest::Url;
 use std::path::{Path, PathBuf};
 use std::{fs, path};
 
-pub fn ensure_file_download(
-    env: &BenchmarkContext,
-    file_name: &Path,
-) -> anyhow::Result<()> {
-    let file_path = env.parent().join_data_dir(file_name)?;
+pub fn ensure_file_download(file_path: &Path) -> anyhow::Result<()> {
     if !file_path.exists() {
         bail!(
             "{:?} does not exist ({:?})",
             &file_path,
-            &path::absolute(&file_path)
+            &path::absolute(file_path)
         );
     }
     Ok(())
@@ -23,15 +18,11 @@ pub fn ensure_file_download(
 /// Downloads a file from the given url and executes a possible `action` afterward
 /// (e.g., Extract Archive).
 pub async fn prepare_file_download(
-    env: &BenchmarkContext<'_>,
     url: Url,
-    file_name: PathBuf,
+    file_path: PathBuf,
     action: Option<FileAction>,
 ) -> anyhow::Result<()> {
     println!("Downloading file '{url}' ...");
-    let file_path = env
-        .join_data_dir(&file_name)
-        .context("Cant join data dir with file name")?;
     if file_path.exists() {
         if file_path.is_dir() {
             fs::remove_dir_all(&file_path)

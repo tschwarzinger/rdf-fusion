@@ -27,8 +27,8 @@ ProjectionExec: expr=[reviewer@0 as reviewer, ENC_PT(<uuid>@1) as reviewerAvgSco
                             DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
                           FilterExec: DynamicFilter [ empty ]
                             DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
-              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@0, review@0)], projection=[review@0, reviewer@2]
-                HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[review@1]
+              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(review@1, review@0)], projection=[review@1, reviewer@3]
+                HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[product@0, review@1]
                   DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>], blank_node_mode=Variable
                   FilterExec: DynamicFilter [ empty ]
                     DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]

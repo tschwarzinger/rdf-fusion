@@ -1,12 +1,14 @@
 use crate::active_graph::ActiveGraph;
 use crate::quad_pattern::QuadPattern;
-use datafusion::common::{DFSchemaRef, plan_err};
+use datafusion::arrow::datatypes::Fields;
+use datafusion::common::{DFSchema, DFSchemaRef, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{BlankNodeMatchingMode, DFResult};
 use rdf_fusion_common::{NamedNodePattern, TermPattern, TriplePattern, Variable};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
 use std::sync::Arc;
@@ -36,6 +38,8 @@ pub struct QuadPatternNode {
     pattern: QuadPattern,
     /// The schema of the result.
     schema: DFSchemaRef,
+    /// The projection to apply.
+    pub projection: Option<Vec<usize>>,
 }
 
 impl QuadPatternNode {
@@ -57,6 +61,7 @@ impl QuadPatternNode {
             storage_encoding,
             pattern,
             schema,
+            projection: None,
         }
     }
 
@@ -81,6 +86,7 @@ impl QuadPatternNode {
             storage_encoding,
             pattern,
             schema,
+            projection: None,
         }
     }
 
@@ -107,7 +113,26 @@ impl QuadPatternNode {
             storage_encoding,
             pattern,
             schema,
+            projection: None,
         }
+    }
+
+    /// Returns a new [QuadPatternNode] with the given projection.
+    pub fn with_projection(&self, projection: Vec<usize>) -> DFResult<Self> {
+        let mut fields = Vec::new();
+        let arrow_schema = self.schema.as_arrow();
+        for &i in &projection {
+            fields.push(arrow_schema.field(i).clone());
+        }
+        let fields = Fields::from(fields);
+        let projected_schema = DFSchema::from_unqualified_fields(fields, HashMap::new())?;
+
+        Ok(Self {
+            storage_encoding: self.storage_encoding.clone(),
+            pattern: self.pattern.clone(),
+            schema: Arc::new(projected_schema),
+            projection: Some(projection),
+        })
     }
 
     /// The storage encoding of the [QuadPatternNode].
@@ -151,15 +176,19 @@ impl UserDefinedLogicalNodeCore for QuadPatternNode {
     }
 
     fn fmt_for_explain(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "QuadPattern (")?;
+        write!(f, "QuadPattern: ")?;
 
         if let Some(graph_variable) = &self.pattern.graph_variable {
-            write!(f, "{graph_variable} ")?;
+            write!(f, "graph_variable={graph_variable} ")?;
         }
-        write!(f, "{})", &self.pattern.triple_pattern)?;
+        write!(f, "triple_pattern=[{}]", &self.pattern.triple_pattern)?;
 
         if self.pattern.active_graph != ActiveGraph::DefaultGraph {
             write!(f, ", active_graph: {} ", self.pattern.active_graph)?;
+        }
+
+        if let Some(projection) = &self.projection {
+            write!(f, ", projection={projection:?}")?;
         }
 
         Ok(())
@@ -182,6 +211,7 @@ impl UserDefinedLogicalNodeCore for QuadPatternNode {
             storage_encoding: self.storage_encoding.clone(),
             pattern: self.pattern.clone(),
             schema: Arc::clone(&self.schema),
+            projection: self.projection.clone(),
         })
     }
 }

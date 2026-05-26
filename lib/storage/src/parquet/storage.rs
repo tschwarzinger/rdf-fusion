@@ -5,6 +5,7 @@ use datafusion::datasource::listing::{
     ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
 };
 use datafusion::execution::context::SessionState;
+use datafusion::prelude::SessionConfig;
 use rdf_fusion_common::StorageError;
 use rdf_fusion_encoding::object_id::ObjectIdMapping;
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
@@ -28,6 +29,7 @@ impl ParquetQuadStorage {
     pub fn try_new(
         url: Url,
         encoding: QuadStorageEncodingName,
+        config: &SessionConfig,
     ) -> Result<Self, StorageError> {
         let encoding = match encoding {
             QuadStorageEncodingName::PlainTerm => QuadStorageEncoding::PlainTerm,
@@ -40,13 +42,14 @@ impl ParquetQuadStorage {
         };
 
         let table_path = ListingTableUrl::parse(&url)?;
-        let config = ListingTableConfig::new(table_path)
+        let listing_config = ListingTableConfig::new(table_path)
             .with_listing_options(
                 ListingOptions::new(Arc::new(ParquetFormat::default()))
-                    .with_file_extension(".parquet"),
+                    .with_file_extension(".parquet")
+                    .with_session_config_options(config),
             )
             .with_schema(Arc::clone(encoding.quad_schema().inner()));
-        let table = Arc::new(ListingTable::try_new(config)?);
+        let table = Arc::new(ListingTable::try_new(listing_config)?);
 
         Ok(Self {
             url,

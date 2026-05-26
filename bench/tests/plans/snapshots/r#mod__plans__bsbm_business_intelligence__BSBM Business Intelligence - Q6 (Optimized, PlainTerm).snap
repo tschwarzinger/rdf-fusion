@@ -14,32 +14,22 @@ Projection: reviewer, ENC_PT(<uuid>) AS reviewerAvgScore
                   Projection: rhs.score AS score
                     Inner Join: lhs.review = rhs.review
                       SubqueryAlias: lhs
-                        Projection: rhs.review AS review
-                          Inner Join: lhs.product = rhs.product
-                            SubqueryAlias: lhs
-                              QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>)
-                            SubqueryAlias: rhs
-                              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
+                        BasicGraphPattern: projection=[Column { relation: None, name: "review" }], 
+                          QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>]
+                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
                       SubqueryAlias: rhs
                         Union
-                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score)
-                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score)
-                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score)
-                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score)
-              Projection: lhs.review AS review, rhs.reviewer AS reviewer
-                Inner Join: lhs.review = rhs.review
-                  SubqueryAlias: lhs
-                    Projection: rhs.review AS review
-                      Inner Join: lhs.product = rhs.product
-                        SubqueryAlias: lhs
-                          QuadPattern (?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>)
-                        SubqueryAlias: rhs
-                          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product)
-                  SubqueryAlias: rhs
-                    QuadPattern (?review <http://purl.org/stuff/rev#reviewer> ?reviewer)
+                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score]
+                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score]
+                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score]
+                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score]
+              BasicGraphPattern: projection=[Column { relation: None, name: "review" }, Column { relation: None, name: "reviewer" }], 
+                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>]
+                QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
+                QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
           SubqueryAlias: rhs
             Union
-              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score)
-              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score)
-              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score)
-              QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score)
+              QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score]
+              QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score]
+              QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score]
+              QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score]

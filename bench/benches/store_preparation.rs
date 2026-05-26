@@ -12,19 +12,24 @@ use rdf_fusion_bench::benchmarks::windfarm::{NumTurbines, WindFarmBenchmark};
 fn bench_bsbm_store_prepare(c: &mut Criterion) {
     for storage_configuration in benchmark_storage_configs() {
         let benchmarking_context = storage_configuration.bench_context();
-        let benchmark =
-            BsbmBenchmark::<ExploreUseCase>::try_new(NumProducts::N10_000, None).unwrap();
+        let name = rdf_fusion_bench::benchmarks::BenchmarkName::BsbmExplore {
+            num_products: NumProducts::N10_000,
+            max_query_count: None,
+        };
+        let benchmark_context =
+            benchmarking_context.create_benchmark_context(name).unwrap();
+        let benchmark = BsbmBenchmark::<ExploreUseCase>::try_new(
+            &benchmark_context,
+            NumProducts::N10_000,
+            None,
+        )
+        .unwrap();
 
         let target_partitions = benchmarking_context
             .options()
             .data_fusion_config
             .target_partitions();
         let runtime = create_runtime(target_partitions);
-
-        let benchmark_name = benchmark.name();
-        let benchmark_context = benchmarking_context
-            .create_benchmark_context(benchmark_name)
-            .unwrap();
 
         c.bench_function(
             &format!("Prepare Store (BSBM 10000, {storage_configuration})"),
@@ -43,18 +48,19 @@ fn bench_bsbm_store_prepare(c: &mut Criterion) {
 fn bench_windfarm_store_prepare(c: &mut Criterion) {
     for storage_configuration in benchmark_storage_configs() {
         let benchmarking_context = storage_configuration.bench_context();
-        let benchmark = WindFarmBenchmark::new(NumTurbines::N16);
+        let name = rdf_fusion_bench::benchmarks::BenchmarkName::WindFarm {
+            num_turbines: NumTurbines::N16,
+        };
+        let benchmark_context =
+            benchmarking_context.create_benchmark_context(name).unwrap();
+        let benchmark =
+            WindFarmBenchmark::try_new(&benchmark_context, NumTurbines::N16).unwrap();
 
         let target_partitions = benchmarking_context
             .options()
             .data_fusion_config
             .target_partitions();
         let runtime = create_runtime(target_partitions);
-
-        let benchmark_name = benchmark.name();
-        let benchmark_context = benchmarking_context
-            .create_benchmark_context(benchmark_name)
-            .unwrap();
 
         c.bench_function(
             &format!("Prepare Store (WindFarm 16, {storage_configuration})"),

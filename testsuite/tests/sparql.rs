@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use anyhow::Result;
+use datafusion::prelude::SessionConfig;
 use rdf_fusion::common::RdfInput;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
@@ -447,7 +448,12 @@ fn parquet_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory {
 
             loader.load_many(inputs, output_url.clone()).await.unwrap();
 
-            let storage = ParquetQuadStorage::try_new(output_url, encoding).unwrap();
+            let storage = ParquetQuadStorage::try_new(
+                output_url,
+                encoding,
+                &SessionConfig::default(),
+            )
+            .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(storage))
                 .with_runtime_env(Some(config.runtime_env))

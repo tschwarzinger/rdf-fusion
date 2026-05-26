@@ -23,6 +23,7 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
 /// Holds file paths for the files required for executing a BSBM run.
+#[derive(Clone)]
 struct WindFarmFilePaths {
     /// A path to the wind farm data NTriples file.
     wind_farm_data: PathBuf,
@@ -30,6 +31,8 @@ struct WindFarmFilePaths {
     time_series_data: PathBuf,
     /// A path to the folder that contains all the queries.
     query_folder: PathBuf,
+    /// A path to the downloaded source.
+    source: PathBuf,
 }
 
 /// The "Wind Farm" benchmark is derived from the benchmarks used to evaluate Chrontext \[1\], an
@@ -49,47 +52,56 @@ struct WindFarmFilePaths {
 pub struct WindFarmBenchmark {
     name: BenchmarkName,
     num_turbines: NumTurbines,
+    paths: WindFarmFilePaths,
 }
 
 impl WindFarmBenchmark {
     /// Creates a new [WindFarmBenchmark] with the given sizes.
-    pub fn new(num_turbines: NumTurbines) -> Self {
+    pub fn try_new(
+        ctx: &BenchmarkContext,
+        num_turbines: NumTurbines,
+    ) -> anyhow::Result<Self> {
         let name = BenchmarkName::WindFarm { num_turbines };
-        Self { name, num_turbines }
+        let paths = create_files(ctx)?;
+        Ok(Self {
+            name,
+            num_turbines,
+            paths,
+        })
     }
 
-    fn generate_data_set(&self, num_turbines: usize) -> PrepRequirement {
+    fn generate_data_set(&self) -> PrepRequirement {
+        let paths = self.paths.clone();
+        let num_turbines = self.num_turbines.into_usize();
+        let paths_clone = paths.clone();
         PrepRequirement::RunClosure {
-            execute: Box::new(move |ctx| {
-                let files = create_files(ctx)?;
-
+            execute: Box::new(move |_ctx| {
                 let mut wind_farm_static_file = BufWriter::new(
-                    File::create(&files.wind_farm_data)
+                    File::create(&paths.wind_farm_data)
                         .context("Could not create file for static wind farm data")?,
                 );
                 generate_static(&mut wind_farm_static_file, num_turbines)?;
 
                 let mut time_series_file =
-                    BufWriter::new(File::create(&files.time_series_data).context(
+                    BufWriter::new(File::create(&paths.time_series_data).context(
                         "Could not create file for time series wind farm data",
                     )?);
                 generate_time_series(&mut time_series_file, num_turbines)
             }),
-            check_requirement: Box::new(move |ctx| {
-                let files = create_files(ctx)?;
-                File::open(files.wind_farm_data.clone())
+            check_requirement: Box::new(move |_ctx| {
+                File::open(paths_clone.wind_farm_data.clone())
                     .context("Could not open file for static wind farm data")?;
-                File::open(files.time_series_data.clone())
+                File::open(paths_clone.time_series_data.clone())
                     .context("Could not open file for time series wind farm data")?;
                 Ok(())
             }),
         }
     }
 
-    fn download_source() -> PrepRequirement {
+    fn download_source(&self) -> PrepRequirement {
         PrepRequirement::FileDownload {
             url: Url::parse("https://github.com/magbak/chrontext_benchmarks/archive/7947750d4f929b3483b5f4250aaf275676ec1139.zip").unwrap(),
-            file_name: PathBuf::from("./source"),
+            file_name: self.paths.source.clone(),
             action: Some(FileAction::Unpack(ArchiveType::Zip)),
         }
     }
@@ -103,9 +115,8 @@ impl Benchmark for WindFarmBenchmark {
 
     #[allow(clippy::expect_used)]
     fn requirements(&self, _bench_files_path: &Path) -> Vec<PrepRequirement> {
-        let num_turbines = self.num_turbines.into_usize();
-        let generate_dataset = self.generate_data_set(num_turbines);
-        let download_source = Self::download_source();
+        let generate_dataset = self.generate_data_set();
+        let download_source = self.download_source();
         vec![generate_dataset, download_source]
     }
 
@@ -130,7 +141,7 @@ impl Benchmark for WindFarmBenchmark {
         bench_context: &BenchmarkContext<'_>,
     ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
         let memory_store = self.prepare_store(bench_context, true).await?;
-        let report = execute_benchmark(bench_context, &memory_store).await?;
+        let report = execute_benchmark(self, bench_context, &memory_store).await?;
         Ok(Box::new(report))
     }
 }
@@ -145,14 +156,13 @@ impl WindFarmBenchmark {
         if print_info {
             println!("Generating Parquet dataset ...");
         }
-        let dataset_paths = create_files(ctx)?;
 
         let source = RdfFileSourceConfig {
-            url: Url::parse(&ctx.resolve_path_to_url(&dataset_paths.wind_farm_data)?)?,
+            url: Url::parse(&ctx.resolve_path_to_url(&self.paths.wind_farm_data)?)?,
             format: RdfFormat::N3,
         };
         let ts_source = RdfFileSourceConfig {
-            url: Url::parse(&ctx.resolve_path_to_url(&dataset_paths.time_series_data)?)?,
+            url: Url::parse(&ctx.resolve_path_to_url(&self.paths.time_series_data)?)?,
             format: RdfFormat::N3,
         };
 
@@ -180,13 +190,12 @@ impl WindFarmBenchmark {
         if print_info {
             println!("Creating store and loading data ...");
         }
-        let dataset_path = create_files(ctx)?;
         let memory_store: Store = ctx.create_store().await;
 
         if print_info {
             println!("Loading static data ...");
         }
-        let data = tokio::fs::File::open(&dataset_path.wind_farm_data).await?;
+        let data = tokio::fs::File::open(&self.paths.wind_farm_data).await?;
         memory_store
             .load_from_reader(data, RdfFileScanOptions::with_format(RdfFormat::N3))
             .await?;
@@ -194,7 +203,7 @@ impl WindFarmBenchmark {
         if print_info {
             println!("Loading time series data ...");
         }
-        let data = tokio::fs::File::open(&dataset_path.time_series_data).await?;
+        let data = tokio::fs::File::open(&self.paths.time_series_data).await?;
         memory_store
             .load_from_reader(data, RdfFileScanOptions::with_format(RdfFormat::N3))
             .await?;
@@ -218,9 +227,23 @@ impl WindFarmBenchmark {
 
         Ok(memory_store)
     }
+
+    pub fn get_wind_farm_raw_sparql_operation(
+        &self,
+        _context: &BenchmarkContext<'_>,
+        query_name: WindFarmQueryName,
+    ) -> anyhow::Result<SparqlRawOperation<WindFarmQueryName>> {
+        let query_file = self.paths.query_folder.join(query_name.file_name());
+        let query = fs::read_to_string(&query_file).context(format!(
+            "Could not read query file: {}",
+            query_file.display()
+        ))?;
+        Ok(SparqlRawOperation::Query(query_name, query.clone()))
+    }
 }
 
 async fn execute_benchmark(
+    benchmark: &WindFarmBenchmark,
     context: &BenchmarkContext<'_>,
     store: &Store,
 ) -> anyhow::Result<WindFarmReport> {
@@ -231,7 +254,8 @@ async fn execute_benchmark(
     for query_name in WindFarmQueryName::list_queries() {
         println!("Executing query: {query_name}");
 
-        let operation = get_wind_farm_raw_sparql_operation(context, query_name)?;
+        let operation =
+            benchmark.get_wind_farm_raw_sparql_operation(context, query_name)?;
         let query_text = operation.text().to_owned();
         let (run, explanation, num_results) =
             operation.parse().unwrap().run(store).await?;
@@ -257,27 +281,17 @@ async fn execute_benchmark(
     Ok(report)
 }
 
-pub fn get_wind_farm_raw_sparql_operation(
-    context: &BenchmarkContext<'_>,
-    query_name: WindFarmQueryName,
-) -> anyhow::Result<SparqlRawOperation<WindFarmQueryName>> {
-    let files = create_files(context)?;
-    let query_file = files.query_folder.join(query_name.file_name());
-    let query = fs::read_to_string(&query_file).context(format!(
-        "Could not read query file: {}",
-        query_file.display()
-    ))?;
-    Ok(SparqlRawOperation::Query(query_name, query.clone()))
-}
-
 fn create_files(ctx: &BenchmarkContext) -> anyhow::Result<WindFarmFilePaths> {
-    let wind_farm_data = ctx.join_data_dir(Path::new("wind-farm.ttl"))?;
-    let time_series_data = ctx.join_data_dir(Path::new("timeseries.ttl"))?;
-    let query_folder =
-        ctx.join_data_dir(Path::new("./source/benchmark-docker/queries_chrontext/"))?;
+    let wind_farm_data = ctx.data_dir().join("wind-farm.ttl");
+    let time_series_data = ctx.data_dir().join("timeseries.ttl");
+    let query_folder = ctx
+        .data_dir()
+        .join("source/benchmark-docker/queries_chrontext/");
+    let source = ctx.data_dir().join("source");
     Ok(WindFarmFilePaths {
         wind_farm_data,
         time_series_data,
         query_folder,
+        source,
     })
 }

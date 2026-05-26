@@ -1,5 +1,5 @@
 use datafusion::execution::runtime_env::RuntimeEnv;
-use datafusion::prelude::SessionContext;
+use datafusion::prelude::{SessionConfig, SessionContext};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::ObjectStoreExt;
 use object_store::path::Path;
@@ -19,7 +19,8 @@ pub fn create_store_for_result(
     encoding: QuadStorageEncodingName,
 ) -> Store {
     let url = Url::parse(path).unwrap();
-    let storage = ParquetQuadStorage::try_new(url, encoding).unwrap();
+    let storage =
+        ParquetQuadStorage::try_new(url, encoding, &SessionConfig::default()).unwrap();
     let context = RdfFusionContextBuilder::new(Arc::new(storage))
         .with_runtime_env(Some(runtime_env))
         .build()

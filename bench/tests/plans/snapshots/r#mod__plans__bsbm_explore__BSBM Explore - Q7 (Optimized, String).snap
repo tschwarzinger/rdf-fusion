@@ -7,64 +7,28 @@ Projection: ENC_PT(productLabel) AS productLabel, ENC_PT(offer) AS offer, ENC_PT
     Projection: lhs.productLabel AS productLabel, rhs.offer AS offer, rhs.price AS price, rhs.vendor AS vendor, rhs.vendorTitle AS vendorTitle
       Left Join:
         SubqueryAlias: lhs
-          QuadPattern (<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801> <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel)
+          QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801> <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel]
         SubqueryAlias: rhs
-          Projection: lhs.offer AS offer, lhs.price AS price, lhs.vendor AS vendor, lhs.vendorTitle AS vendorTitle
-            Inner Join: lhs.offer = rhs.offer
-              SubqueryAlias: lhs
-                Projection: lhs.offer AS offer, lhs.price AS price, lhs.vendor AS vendor, lhs.vendorTitle AS vendorTitle
-                  Inner Join: lhs.offer = rhs.offer, lhs.vendor = rhs.vendor
-                    SubqueryAlias: lhs
-                      Projection: lhs.offer AS offer, lhs.price AS price, lhs.vendor AS vendor, lhs.vendorTitle AS vendorTitle
-                        Inner Join: lhs.vendor = rhs.vendor
-                          SubqueryAlias: lhs
-                            Projection: lhs.offer AS offer, lhs.price AS price, lhs.vendor AS vendor, rhs.vendorTitle AS vendorTitle
-                              Inner Join: lhs.vendor = rhs.vendor
-                                SubqueryAlias: lhs
-                                  Projection: lhs.offer AS offer, lhs.price AS price, rhs.vendor AS vendor
-                                    Inner Join: lhs.offer = rhs.offer
-                                      SubqueryAlias: lhs
-                                        Projection: lhs.offer AS offer, rhs.price AS price
-                                          Inner Join: lhs.offer = rhs.offer
-                                            SubqueryAlias: lhs
-                                              QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801>)
-                                            SubqueryAlias: rhs
-                                              QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price)
-                                      SubqueryAlias: rhs
-                                        QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor)
-                                SubqueryAlias: rhs
-                                  QuadPattern (?vendor <http://www.w3.org/2000/01/rdf-schema#label> ?vendorTitle)
-                          SubqueryAlias: rhs
-                            QuadPattern (?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> <http://downlode.org/rdf/iso-3166/countries#DE>)
-                    SubqueryAlias: rhs
-                      QuadPattern (?offer <http://purl.org/dc/elements/1.1/publisher> ?vendor)
-              SubqueryAlias: rhs
-                Projection: offer
-                  Filter: EBV(GT(ENC_TF(ENC_PT(date)), Union 5:{date_time_type:0,value:63349516800.000000000000000000,offset:}))
-                    QuadPattern (?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo> ?date)
+          BasicGraphPattern: filters=[EBV(GT(ENC_TF(ENC_PT(date)), Union 5:{date_time_type:0,value:63349516800.000000000000000000,offset:}))], projection=[Column { relation: None, name: "offer" }, Column { relation: None, name: "price" }, Column { relation: None, name: "vendor" }, Column { relation: None, name: "vendorTitle" }], 
+            QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801>]
+            QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
+            QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor]
+            QuadPattern: triple_pattern=[?vendor <http://www.w3.org/2000/01/rdf-schema#label> ?vendorTitle]
+            QuadPattern: triple_pattern=[?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> <http://downlode.org/rdf/iso-3166/countries#DE>]
+            QuadPattern: triple_pattern=[?offer <http://purl.org/dc/elements/1.1/publisher> ?vendor]
+            QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo> ?date]
     Projection: lhs.review AS review, lhs.reviewer AS reviewer, lhs.revName AS revName, lhs.revTitle AS revTitle, lhs.rating1 AS rating1, rhs.rating2 AS rating2
       Left Join: lhs.review = rhs.review
         SubqueryAlias: lhs
           Projection: lhs.review AS review, lhs.reviewer AS reviewer, lhs.revName AS revName, lhs.revTitle AS revTitle, rhs.rating1 AS rating1
             Left Join: lhs.review = rhs.review
               SubqueryAlias: lhs
-                Projection: lhs.review AS review, lhs.reviewer AS reviewer, lhs.revName AS revName, rhs.revTitle AS revTitle
-                  Inner Join: lhs.review = rhs.review
-                    SubqueryAlias: lhs
-                      Projection: lhs.review AS review, lhs.reviewer AS reviewer, rhs.revName AS revName
-                        Inner Join: lhs.reviewer = rhs.reviewer
-                          SubqueryAlias: lhs
-                            Projection: lhs.review AS review, rhs.reviewer AS reviewer
-                              Inner Join: lhs.review = rhs.review
-                                SubqueryAlias: lhs
-                                  QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801>)
-                                SubqueryAlias: rhs
-                                  QuadPattern (?review <http://purl.org/stuff/rev#reviewer> ?reviewer)
-                          SubqueryAlias: rhs
-                            QuadPattern (?reviewer <http://xmlns.com/foaf/0.1/name> ?revName)
-                    SubqueryAlias: rhs
-                      QuadPattern (?review <http://purl.org/dc/elements/1.1/title> ?revTitle)
+                BasicGraphPattern: 
+                  QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801>]
+                  QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
+                  QuadPattern: triple_pattern=[?reviewer <http://xmlns.com/foaf/0.1/name> ?revName]
+                  QuadPattern: triple_pattern=[?review <http://purl.org/dc/elements/1.1/title> ?revTitle]
               SubqueryAlias: rhs
-                QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?rating1)
+                QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?rating1]
         SubqueryAlias: rhs
-          QuadPattern (?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?rating2)
+          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?rating2]

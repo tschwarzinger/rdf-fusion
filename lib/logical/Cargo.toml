@@ -11,6 +11,7 @@ RDF Fusion Logical Operators and Rewriting Rules
 
 [dependencies]
 datafusion.workspace = true
+itertools.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-functions.workspace = true

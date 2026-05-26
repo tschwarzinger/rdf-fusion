@@ -157,7 +157,7 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
             }
 
             Arc::new(
-                ParquetQuadStorage::try_new(location, encoding)
+                ParquetQuadStorage::try_new(location, encoding, &session_config)
                     .context("Failed to create Parquet storage")?,
             )
         }

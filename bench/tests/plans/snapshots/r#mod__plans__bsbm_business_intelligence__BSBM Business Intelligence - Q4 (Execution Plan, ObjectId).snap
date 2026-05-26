@@ -8,8 +8,8 @@ ProjectionExec: expr=[ENC_PT(feature@0) as feature, ENC_PT(priceRatio@3) as pric
       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(feature@0, feature@0)], projection=[feature@0, withFeaturePrice@1, withoutFeaturePrice@3]
         ProjectionExec: expr=[feature@0 as feature, <uuid>@1 as withFeaturePrice]
           AggregateExec: mode=Single, gby=[feature@0 as feature], aggr=[<uuid>]
-            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@1, offer@0)], projection=[feature@0, price@3]
-              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[feature@1, offer@2]
+            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@2, offer@0)], projection=[feature@1, price@4]
+              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[product@0, feature@1, offer@2]
                 HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@0)], projection=[product@0, feature@2]
                   DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>], blank_node_mode=Variable
                   FilterExec: DynamicFilter [ empty ]
@@ -34,4 +34,5 @@ ProjectionExec: expr=[ENC_PT(feature@0) as feature, ENC_PT(priceRatio@3) as pric
                       DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
                   FilterExec: DynamicFilter [ empty ]
                     DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price], blank_node_mode=Variable, pushed_filters=[DynamicFilter [ empty ]]
-              DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature], blank_node_mode=Variable
+              ProjectionExec: expr=[product@0 as __inner__product, feature@1 as __inner__feature]
+                DeltaQuadStorageScanExec: index=GPOS, active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature], blank_node_mode=Variable

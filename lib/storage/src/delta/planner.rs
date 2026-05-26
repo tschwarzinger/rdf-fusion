@@ -8,7 +8,10 @@ use datafusion::common::plan_err;
 use datafusion::error::DataFusionError;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
+use datafusion::physical_expr::PhysicalExpr;
+use datafusion::physical_expr::expressions::Column as PhysicalColumn;
 use datafusion::physical_plan::ExecutionPlan;
+use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_logical::encoding::object_id::EncodeAsObjectIdNode;
@@ -49,13 +52,38 @@ impl DeltaQuadStoragePlanner {
 
         let scan_planning_result = builder.build().await?;
 
-        Ok(Arc::new(DeltaQuadStorageScanExec::try_new(
-            Arc::clone(self.snapshot.log()),
-            node.quad_pattern().clone(),
-            scan_planning_result.changeset_version_range,
-            scan_planning_result.scan,
-            scan_planning_result.chosen_index.map(|idx| idx.to_string()),
-        )?))
+        let mut exec: Arc<dyn ExecutionPlan> =
+            Arc::new(DeltaQuadStorageScanExec::try_new(
+                Arc::clone(self.snapshot.log()),
+                node.quad_pattern().clone(),
+                scan_planning_result.changeset_version_range,
+                scan_planning_result.scan,
+                scan_planning_result.chosen_index.map(|idx| idx.to_string()),
+            )?);
+
+        if let Some(projection) = &node.projection {
+            let schema = exec.schema();
+            let exprs = projection
+                .iter()
+                .map(|&i| {
+                    let field = schema.field(i);
+                    (
+                        Arc::new(PhysicalColumn::new(field.name(), i))
+                            as Arc<dyn PhysicalExpr>,
+                        field.name().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            let projection_exec = ProjectionExec::try_new(exprs, Arc::clone(&exec))?;
+            if let Some(pushed) = exec.try_swapping_with_projection(&projection_exec)? {
+                exec = pushed;
+            } else {
+                exec = Arc::new(projection_exec);
+            }
+        }
+
+        Ok(exec)
     }
 
     /// Tries to plan a [`QuadPatternNode`].
