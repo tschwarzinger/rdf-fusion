@@ -4741,6 +4741,7 @@ dependencies = [
  "serde_json",
  "snmalloc-rs",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "url",
  "zip",

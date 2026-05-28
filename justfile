@@ -34,15 +34,7 @@ test-examples:
 rustdoc:
     RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
 
-[working-directory('bench')]
-prepare-benches-tests:
-    cargo run --profile test prepare bsbm-explore --num-products 1000 # BSBM use cases share the data
-    cargo run --profile test prepare wind-farm --num-turbines 4
-
-[working-directory('bench')]
-prepare-benches:
-    cargo run --profile profiling-nonlto prepare bsbm-explore --num-products 10000 # BSBM use cases share the data
-    cargo run --profile profiling-nonlto prepare wind-farm --num-turbines 16
+import 'bench/justfile'
 
 # Starts a webserver that can answer SPARQL queries
 serve location="memory:///" profile="profiling-nonlto":
@@ -64,8 +56,9 @@ prepare-release:
 
 # Runs all checks and releases all crates to crates.io
 release: lint prepare-benches-tests test test-examples rustdoc
-    (cd lib/model && cargo publish)
+    (cd lib/common && cargo publish)
     (cd lib/encoding && cargo publish)
+    (cd lib/compute && cargo publish)
     (cd lib/extensions && cargo publish)
     (cd lib/functions && cargo publish)
     (cd lib/logical && cargo publish)

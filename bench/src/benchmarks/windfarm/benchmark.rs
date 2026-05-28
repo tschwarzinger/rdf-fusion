@@ -1,4 +1,4 @@
-use crate::BenchQuadStorageType;
+use crate::BenchQuadStorageTypeArg;
 use crate::benchmarks::windfarm::NumTurbines;
 use crate::benchmarks::windfarm::generate::{generate_static, generate_time_series};
 use crate::benchmarks::windfarm::queries::WindFarmQueryName;
@@ -13,6 +13,7 @@ use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
 use anyhow::Context;
 use async_trait::async_trait;
+use rdf_fusion::common::config::RdfFusionSessionConfigExt;
 use rdf_fusion::common::{RdfFormat, RdfSortOrder};
 use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
 use rdf_fusion::store::Store;
@@ -126,12 +127,21 @@ impl Benchmark for WindFarmBenchmark {
         print_info: bool,
     ) -> anyhow::Result<Store> {
         match &ctx.parent().options().storage_type {
-            BenchQuadStorageType::Delta => {
+            BenchQuadStorageTypeArg::Delta => {
                 self.prepare_delta_store(ctx, print_info).await
             }
-            BenchQuadStorageType::Parquet { sort_order } => {
-                self.prepare_parquet_store(ctx, print_info, sort_order.clone())
-                    .await
+            BenchQuadStorageTypeArg::Parquet => {
+                let rdf_fusion_options = ctx
+                    .parent()
+                    .options()
+                    .data_fusion_config
+                    .rdf_fusion_options_or_from_env()?;
+                self.prepare_parquet_store(
+                    ctx,
+                    print_info,
+                    rdf_fusion_options.storage.parquet.sort_order,
+                )
+                .await
             }
         }
     }

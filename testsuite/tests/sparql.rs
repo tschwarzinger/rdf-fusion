@@ -1,7 +1,6 @@
 #![cfg(test)]
 
 use anyhow::Result;
-use datafusion::prelude::SessionConfig;
 use rdf_fusion::common::RdfInput;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;

@@ -1,5 +1,5 @@
 use datafusion::execution::runtime_env::RuntimeEnv;
-use datafusion::prelude::{SessionConfig, SessionContext};
+use datafusion::prelude::SessionContext;
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::ObjectStoreExt;
 use object_store::path::Path;

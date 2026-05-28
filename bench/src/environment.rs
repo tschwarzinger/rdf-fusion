@@ -3,7 +3,7 @@ use crate::prepare::{
     PrepRequirement, prepare_copy_file, prepare_run_closure, prepare_run_command,
 };
 use crate::prepare::{ensure_file_download, prepare_file_download};
-use crate::{BenchQuadStorageType, BenchmarkingConfig, QuadStorageLocationArg};
+use crate::{BenchQuadStorageTypeArg, BenchmarkingConfig, QuadStorageLocationArg};
 use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
@@ -63,7 +63,7 @@ impl RdfFusionBenchContextBuilder {
         }
     }
 
-    pub fn with_storage_type(mut self, storage_type: BenchQuadStorageType) -> Self {
+    pub fn with_storage_type(mut self, storage_type: BenchQuadStorageTypeArg) -> Self {
         self.config.storage_type = storage_type;
         self
     }
@@ -115,14 +115,10 @@ impl RdfFusionBenchContext {
         config.options_mut().execution.target_partitions = target_partitions;
         config.options_mut().execution.parquet.pushdown_filters = true;
 
-        let options = BenchmarkingConfig {
-            verbose_results: false,
-            memory_size: None,
-            storage_location: QuadStorageLocationArg::InMemory,
-            storage_type: BenchQuadStorageType::Delta,
-            storage_encoding,
-            data_fusion_config: config,
-        };
+        let options = BenchmarkingConfig::new_for_criterion()
+            .with_storage_encoding(storage_encoding)
+            .with_storage_type(BenchQuadStorageTypeArg::Delta)
+            .with_data_fusion_config(config);
 
         RdfFusionBenchContextBuilder::new(
             options,
@@ -219,9 +215,11 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
     /// Returns the path to the results directory of this benchmark.
     pub fn results_dir(&self) -> PathBuf {
-        self.context
-            .results_dir
-            .join(self.benchmark_name.results_dir_name())
+        let mut name = self.benchmark_name.results_dir_name();
+        if let Some(postfix) = &self.context.config.results_postfix {
+            name = format!("{name}-{postfix}");
+        }
+        self.context.results_dir.join(name)
     }
 
     /// Returns the RDF Fusion configuration.
@@ -236,8 +234,8 @@ impl<'ctx> BenchmarkContext<'ctx> {
     /// Creates a [RuntimeEnv] with the configured memory limits and caching.
     pub async fn create_runtime_env(&self) -> Arc<RuntimeEnv> {
         let mut builder = RuntimeEnvBuilder::new();
-        if let Some(memory_size) = self.context.config.memory_size {
-            builder = builder.with_memory_limit(memory_size * 1024 * 1024, 1.0);
+        if let Some(memory_limit) = self.context.config.memory_limit {
+            builder = builder.with_memory_limit(memory_limit, 1.0);
         }
 
         let registry = Arc::clone(&builder.object_store_registry);
@@ -336,7 +334,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
         let storage_backend: Arc<dyn rdf_fusion::api::storage::QuadStorage> =
             match self.context.config.storage_type {
-                BenchQuadStorageType::Delta => {
+                BenchQuadStorageTypeArg::Delta => {
                     let url = Url::parse(&base_url).unwrap();
                     let object_store_url =
                         ObjectStoreUrl::parse(&object_store_url).unwrap();
@@ -362,7 +360,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
                             .expect("Failed to create DeltaQuadStorage"),
                     )
                 }
-                BenchQuadStorageType::Parquet { .. } => {
+                BenchQuadStorageTypeArg::Parquet => {
                     if matches!(
                         self.context.config.storage_encoding,
                         QuadStorageEncodingName::ObjectId
@@ -403,14 +401,14 @@ impl<'ctx> BenchmarkContext<'ctx> {
         };
 
         match self.context.config.storage_type {
-            BenchQuadStorageType::Delta => {
+            BenchQuadStorageTypeArg::Delta => {
                 if full_path.exists() {
                     std::fs::remove_dir_all(&full_path)
                         .expect("Failed to remove existing directory");
                 }
                 std::fs::create_dir_all(&full_path).expect("Failed to create directory");
             }
-            BenchQuadStorageType::Parquet { .. } => {
+            BenchQuadStorageTypeArg::Parquet => {
                 if !full_path.exists() {
                     std::fs::create_dir_all(&full_path)
                         .expect("Failed to create directory");

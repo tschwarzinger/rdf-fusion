@@ -1,4 +1,4 @@
-use crate::BenchQuadStorageType;
+use crate::BenchQuadStorageTypeArg;
 use crate::benchmarks::bsbm::operation::list_raw_operations;
 use crate::benchmarks::bsbm::report::{BsbmReport, ExploreReportBuilder, QueryDetails};
 use crate::benchmarks::bsbm::requirements::{
@@ -12,7 +12,11 @@ use crate::operation::{SparqlOperation, SparqlRawOperation};
 use crate::prepare::PrepRequirement;
 use crate::report::BenchmarkReport;
 use crate::utils::print_store_stats;
+use anyhow::Context;
 use async_trait::async_trait;
+use datafusion::common::runtime::SpawnedTask;
+use futures::StreamExt;
+use rdf_fusion::common::config::RdfFusionSessionConfigExt;
 use rdf_fusion::common::{RdfFormat, RdfSortOrder};
 use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
 use rdf_fusion::store::Store;
@@ -184,12 +188,21 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
         print_info: bool,
     ) -> anyhow::Result<Store> {
         match &ctx.parent().options().storage_type {
-            BenchQuadStorageType::Delta => {
+            BenchQuadStorageTypeArg::Delta => {
                 self.prepare_delta_store(ctx, print_info).await
             }
-            BenchQuadStorageType::Parquet { sort_order } => {
-                self.prepare_parquet_store(ctx, print_info, sort_order.clone())
-                    .await
+            BenchQuadStorageTypeArg::Parquet => {
+                let rdf_fusion_options = ctx
+                    .parent()
+                    .options()
+                    .data_fusion_config
+                    .rdf_fusion_options_or_from_env()?;
+                self.prepare_parquet_store(
+                    ctx,
+                    print_info,
+                    rdf_fusion_options.storage.parquet.sort_order,
+                )
+                .await
             }
         }
     }
@@ -279,22 +292,68 @@ async fn execute_benchmark<TUseCase: BsbmUseCase>(
     context: &BenchmarkContext<'_>,
     operations: Vec<SparqlOperation<TUseCase::QueryName>>,
     memory_store: &Store,
-) -> anyhow::Result<BsbmReport<TUseCase>> {
+) -> anyhow::Result<BsbmReport<TUseCase>>
+where
+    TUseCase::QueryName: 'static,
+{
     println!("Evaluating queries ...");
 
     let mut recorder = crate::utils::cache::CacheMetricsRecorder::new(context)?;
 
     let mut report = ExploreReportBuilder::new();
     let len = operations.len();
-    for (idx, operation) in operations.iter().enumerate() {
+    let max_parallel_tasks = context.parent().options().max_parallel_tasks;
+
+    let mut stream = futures::stream::iter(operations.into_iter().enumerate())
+        .map(|(idx, operation)| {
+            let store = memory_store.clone();
+            SpawnedTask::spawn(async move {
+                let (run, explanation, num_results) = operation.run(&store).await?;
+                Ok::<
+                    (
+                        usize,
+                        TUseCase::QueryName,
+                        String,
+                        crate::runs::BenchmarkRun,
+                        rdf_fusion::execution::sparql::QueryExplanation,
+                        usize,
+                    ),
+                    anyhow::Error,
+                >((
+                    idx,
+                    operation.query_name(),
+                    operation.query().to_string(),
+                    run,
+                    explanation,
+                    num_results,
+                ))
+            })
+        })
+        .buffer_unordered(max_parallel_tasks);
+
+    while let Some(result) = stream.next().await {
+        let result = result.context("Failed to join query task")??;
+        let (idx, query_name, query_text, run, explanation, num_results) = result;
+
         if idx % 25 == 0 {
             println!("Progress: {idx}/{len}");
         }
 
-        run_operation(context, &mut report, memory_store, operation).await?;
+        report.add_run(query_name, run.clone());
+        if context.parent().options().verbose_results {
+            let details = QueryDetails {
+                query: query_text,
+                query_type: query_name.to_string(),
+                total_time: run.duration,
+                explanation,
+                num_results,
+            };
+            report.add_explanation(details);
+        }
 
-        recorder.record_run(context, &operation.query_name().to_string())?;
+        recorder.record_run(context, &query_name.to_string())?;
     }
+
     let report = report.build();
 
     recorder.write_summary(context)?;
@@ -303,26 +362,4 @@ async fn execute_benchmark<TUseCase: BsbmUseCase>(
     println!("All queries evaluated.");
 
     Ok(report)
-}
-
-/// Executes a single [SparqlOperation] and stores the results of the profiling in the `report`.
-async fn run_operation<TUseCase: BsbmUseCase>(
-    context: &BenchmarkContext<'_>,
-    report: &mut ExploreReportBuilder<TUseCase>,
-    store: &Store,
-    operation: &SparqlOperation<TUseCase::QueryName>,
-) -> anyhow::Result<()> {
-    let (run, explanation, num_results) = operation.run(store).await?;
-    report.add_run(operation.query_name(), run.clone());
-    if context.parent().options().verbose_results {
-        let details = QueryDetails {
-            query: operation.query().to_string(),
-            query_type: operation.query_name().to_string(),
-            total_time: run.duration,
-            explanation,
-            num_results,
-        };
-        report.add_explanation(details);
-    }
-    Ok(())
 }

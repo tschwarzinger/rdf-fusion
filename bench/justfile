@@ -1,0 +1,74 @@
+[working-directory('bench')]
+prepare-benches-tests:
+    cargo run --profile test prepare bsbm-explore --num-products 1000 # BSBM use cases share the data
+    cargo run --profile test prepare wind-farm --num-turbines 4
+
+[working-directory('bench')]
+prepare-benches:
+    cargo run --profile profiling-nonlto prepare bsbm-explore --num-products 10000 # BSBM use cases share the data
+    cargo run --profile profiling-nonlto prepare wind-farm --num-turbines 16
+
+# Executes the BSBM Explore benchmark against Parquet files with multiple sort orders.
+[working-directory('bench')]
+bench-bsbm-explore num_products="10000" max_query_count="" parallel_tasks="" sort_orders="Native(SPO) Native(POS) Native(OSP)":
+    #!/usr/bin/env bash
+    set -e
+
+    num_products="10000"
+    max_query_count=""
+    parallel_tasks=""
+    sort_orders="Native(SPO) Native(POS) Native(OSP)"
+    
+    args=("{{num_products}}" "{{max_query_count}}" "{{parallel_tasks}}" "{{sort_orders}}")
+    
+    if [[ "${args[0]}" == *=* ]]; then
+        for arg in "${args[@]}"; do
+            if [[ "$arg" == *=* ]]; then
+                key="${arg%%=*}"
+                value="${arg#*=}"
+                declare "$key"="$value"
+            fi
+        done
+    else
+        num_products="${args[0]}"
+        max_query_count="${args[1]}"
+        parallel_tasks="${args[2]}"
+        sort_orders="${args[3]}"
+    fi
+
+    export DATAFUSION_EXECUTION_TARGET_PARTITIONS=1
+    export DATAFUSION_EXECUTION_PARQUET_PUSHDOWN_FILTERS=true
+    export DATAFUSION_EXPLAIN_SHOW_STATISTICS=true
+    if [ -n "$parallel_tasks" ]; then
+      export RDF_FUSION_BENCH_MAX_PARALLEL_TASKS=$parallel_tasks
+    fi
+    export RDF_FUSION_BENCH_VERBOSE_RESULTS=true
+
+    EXTRA_ARGS=""
+    if [ -n "$max_query_count" ]; then
+        EXTRA_ARGS="--max-query-count $max_query_count"
+    fi
+
+    # Use read to safely split the sort orders string into an array, avoiding issues with parentheses
+    IFS=' ' read -r -a ORDERS_ARRAY <<< "$sort_orders"
+
+    for ORDER in "${ORDERS_ARRAY[@]}"; do
+        echo "================================================================================"
+        echo "Running BSBM Explore(num_products=$num_products) with sort order: $ORDER"
+        echo "================================================================================"
+
+        # Create a postfix by replacing '(' with '-' and removing ')'
+        POSTFIX=$(echo "$ORDER" | tr '[:upper:]' '[:lower:]' | sed 's/(/-/g' | sed 's/)//g')
+
+        export RDF_FUSION_BENCH_RESULTS_POSTFIX="$POSTFIX"
+        export RDF_FUSION_STORAGE_PARQUET_SORT_ORDER="$ORDER"
+        cargo run --profile profiling-nonlto -- \
+            execute \
+            --storage-type parquet \
+            --storage-encoding string \
+            bsbm-explore \
+            --num-products $num_products \
+            $EXTRA_ARGS
+
+        echo -e "\nFinished $ORDER.\n"
+    done

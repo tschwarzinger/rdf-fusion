@@ -197,7 +197,7 @@ async fn test_dump_named_graph() -> Result<(), Box<dyn Error>> {
 
     let store = create_store_for_result(
         store.context().session_context().runtime_env(),
-        "memory:///test_named_dump/",
+        "memory:///test_named_dump/data.parquet",
         QuadStorageEncodingName::PlainTerm,
     )
     .await;
@@ -224,7 +224,7 @@ async fn test_dump_graph_with_no_quad_in_graph() -> Result<(), Box<dyn Error>> {
 
     let store = create_store_for_result(
         store.context().session_context().runtime_env(),
-        "memory:///test_empty_dump/",
+        "memory:///test_empty_dump/data.parquet",
         QuadStorageEncodingName::PlainTerm,
     )
     .await;

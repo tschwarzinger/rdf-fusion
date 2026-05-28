@@ -7,12 +7,10 @@ use crate::benchmarks::windfarm::WindFarmBenchmark;
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::{BenchmarkContext, RdfFusionBenchContext};
 use clap::ValueEnum;
-use datafusion::prelude::SessionConfig;
-use rdf_fusion::common::RdfSortOrder;
-use rdf_fusion::encoding::QuadStorageEncodingName;
 use std::fs;
 
 pub mod benchmarks;
+pub mod config;
 pub mod environment;
 pub mod operation;
 pub mod prepare;
@@ -20,78 +18,14 @@ pub mod report;
 pub mod runs;
 mod utils;
 
+pub use config::*;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
 pub enum Operation {
     /// Prepares the data for a given benchmark.
     Prepare,
     /// Executes a given benchmark, assuming that the preparation has already been done.
     Execute,
-}
-
-/// Provides options for the benchmarking process.
-pub struct BenchmarkingConfig {
-    /// Indicates whether the benchmarking results should be verbose.
-    ///
-    /// For example, while non-verbose results could show an aggregated version of multiple runs,
-    /// verbose results could write the results for each run.
-    pub verbose_results: bool,
-    /// The number of MiBs that DataFusion is allowed to Suse.
-    pub memory_size: Option<usize>,
-    /// The storage location to use for the benchmark.
-    pub storage_location: QuadStorageLocationArg,
-    /// The storage type to use for the benchmark.
-    pub storage_type: BenchQuadStorageType,
-    /// The storage encoding to use for the benchmark.
-    pub storage_encoding: QuadStorageEncodingName,
-    /// The DataFusion config.
-    pub data_fusion_config: SessionConfig,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
-pub enum QuadStorageLocationArg {
-    /// The storage location is in-memory.
-    InMemory,
-    /// The storage location is on disk.
-    OnDisk,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
-pub enum BenchQuadStorageTypeArg {
-    /// Uses a storage based on Delta Lake.
-    Delta,
-    /// The storage type is a single parquet file.
-    Parquet,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum BenchQuadStorageType {
-    /// Uses a storage based on Delta Lake.
-    Delta,
-    /// The storage type is a single parquet file.
-    Parquet {
-        /// The sort order for the parquet file.
-        sort_order: Option<RdfSortOrder>,
-    },
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
-pub enum QuadStorageEncodingNameArg {
-    /// The plain term encoding
-    PlainTerm,
-    /// The string encoding
-    String,
-    /// Use the object id
-    ObjectId,
-}
-
-impl From<QuadStorageEncodingNameArg> for QuadStorageEncodingName {
-    fn from(value: QuadStorageEncodingNameArg) -> Self {
-        match value {
-            QuadStorageEncodingNameArg::PlainTerm => QuadStorageEncodingName::PlainTerm,
-            QuadStorageEncodingNameArg::String => QuadStorageEncodingName::String,
-            QuadStorageEncodingNameArg::ObjectId => QuadStorageEncodingName::ObjectId,
-        }
-    }
 }
 
 /// Executes an `operation` of a given `benchmark`.
