@@ -1,11 +1,13 @@
 use crate::parquet::snapshot::ParquetQuadStorageSnapshot;
 use async_trait::async_trait;
-use datafusion::datasource::file_format::parquet::ParquetFormat;
-use datafusion::datasource::listing::{
-    ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
-};
+use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::context::SessionState;
-use datafusion::prelude::SessionConfig;
+use datafusion::parquet::arrow::ParquetRecordBatchStreamBuilder;
+use datafusion::parquet::arrow::arrow_reader::ArrowReaderOptions;
+use datafusion::parquet::arrow::async_reader::ParquetObjectReader;
+use datafusion::parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
+use object_store::path::Path;
+use object_store::{ObjectMeta, ObjectStoreExt};
 use rdf_fusion_common::StorageError;
 use rdf_fusion_encoding::object_id::ObjectIdMapping;
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
@@ -21,15 +23,16 @@ use url::Url;
 pub struct ParquetQuadStorage {
     url: Url,
     encoding: QuadStorageEncoding,
-    table: Arc<ListingTable>,
+    object_meta: ObjectMeta,
+    parquet_meta: Arc<ParquetMetaData>,
 }
 
 impl ParquetQuadStorage {
     /// Creates a new [`ParquetQuadStorage`].
-    pub fn try_new(
+    pub async fn try_load(
         url: Url,
         encoding: QuadStorageEncodingName,
-        config: &SessionConfig,
+        object_store: &dyn ObjectStoreRegistry,
     ) -> Result<Self, StorageError> {
         let encoding = match encoding {
             QuadStorageEncodingName::PlainTerm => QuadStorageEncoding::PlainTerm,
@@ -41,20 +44,29 @@ impl ParquetQuadStorage {
             }
         };
 
-        let table_path = ListingTableUrl::parse(&url)?;
-        let listing_config = ListingTableConfig::new(table_path)
-            .with_listing_options(
-                ListingOptions::new(Arc::new(ParquetFormat::default()))
-                    .with_file_extension(".parquet")
-                    .with_session_config_options(config),
-            )
-            .with_schema(Arc::clone(encoding.quad_schema().inner()));
-        let table = Arc::new(ListingTable::try_new(listing_config)?);
+        let object_store = object_store
+            .get_store(&url)
+            .map_err(|e| StorageError::Other(e.to_string().into()))?;
+        let path = Path::from_url_path(url.path())
+            .map_err(|e| StorageError::Other(e.to_string().into()))?;
+        let object_meta = object_store
+            .head(&path)
+            .await
+            .map_err(|e| StorageError::Other(e.to_string().into()))?;
+
+        let reader =
+            ParquetObjectReader::new(object_store, path).with_file_size(object_meta.size);
+        let options =
+            ArrowReaderOptions::new().with_page_index_policy(PageIndexPolicy::Optional);
+        let builder = ParquetRecordBatchStreamBuilder::new_with_options(reader, options)
+            .await
+            .map_err(|e| StorageError::Other(e.to_string().into()))?;
 
         Ok(Self {
             url,
             encoding,
-            table,
+            object_meta,
+            parquet_meta: Arc::clone(builder.metadata()),
         })
     }
 }
@@ -64,6 +76,7 @@ impl Debug for ParquetQuadStorage {
         f.debug_struct("ParquetQuadStorage")
             .field("url", &self.url)
             .field("encoding", &self.encoding)
+            .field("metadata", &self.parquet_meta)
             .finish()
     }
 }
@@ -80,9 +93,10 @@ impl QuadStorage for ParquetQuadStorage {
 
     async fn snapshot(&self) -> Result<Arc<dyn QuadStorageSnapshot>, StorageError> {
         Ok(Arc::new(ParquetQuadStorageSnapshot::new(
-            self.url.clone(),
             self.encoding.clone(),
-            Arc::clone(&self.table),
+            self.url.clone(),
+            self.object_meta.clone(),
+            Arc::clone(&self.parquet_meta),
         )))
     }
 

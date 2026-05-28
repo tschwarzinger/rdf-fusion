@@ -12,6 +12,7 @@ RDF Fusion Storage Layers
 [dependencies]
 ahash.workspace = true
 async-trait.workspace = true
+bytes.workspace = true
 hashbrown.workspace = true
 futures.workspace = true
 object_store.workspace = true

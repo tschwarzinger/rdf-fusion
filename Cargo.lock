@@ -4920,6 +4920,7 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "async-trait",
+ "bytes",
  "criterion",
  "datafusion",
  "deltalake",

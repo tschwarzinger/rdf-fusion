@@ -5,7 +5,21 @@ use datafusion::optimizer::replace_distinct_aggregate::ReplaceDistinctWithAggreg
 use datafusion::optimizer::scalar_subquery_to_join::ScalarSubqueryToJoin;
 use datafusion::optimizer::{Optimizer, OptimizerRule};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
-use datafusion::physical_optimizer::optimizer::PhysicalOptimizer;
+use datafusion::physical_optimizer::aggregate_statistics::AggregateStatistics;
+use datafusion::physical_optimizer::combine_partial_final_agg::CombinePartialFinalAggregate;
+use datafusion::physical_optimizer::enforce_distribution::EnforceDistribution;
+use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
+use datafusion::physical_optimizer::ensure_coop::EnsureCooperative;
+use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
+use datafusion::physical_optimizer::limit_pushdown::LimitPushdown;
+use datafusion::physical_optimizer::limit_pushdown_past_window::LimitPushPastWindows;
+use datafusion::physical_optimizer::limited_distinct_aggregation::LimitedDistinctAggregation;
+use datafusion::physical_optimizer::output_requirements::OutputRequirements;
+use datafusion::physical_optimizer::projection_pushdown::ProjectionPushdown;
+use datafusion::physical_optimizer::pushdown_sort::PushdownSort;
+use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
+use datafusion::physical_optimizer::topk_aggregation::TopKAggregation;
+use datafusion::physical_optimizer::update_aggr_exprs::OptimizeAggregateOrder;
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::bgp::rewrite::{BgpFilterAbsorbRule, BgpProjectionPushdownRule};
 use rdf_fusion_logical::encoding::change::LowerChangeEncodingRule;
@@ -95,5 +109,26 @@ pub fn create_pyhsical_optimizer_rules(
     _optimization_level: OptimizationLevel,
 ) -> Vec<Arc<dyn PhysicalOptimizerRule + Send + Sync>> {
     // TODO: build based on optimization level
-    PhysicalOptimizer::default().rules
+
+    // This mirrors DataFusion's pipeline except JoinSelection.
+    vec![
+        Arc::new(OutputRequirements::new_add_mode()),
+        Arc::new(AggregateStatistics::new()),
+        Arc::new(LimitedDistinctAggregation::new()),
+        Arc::new(FilterPushdown::new()),
+        Arc::new(EnforceDistribution::new()),
+        Arc::new(CombinePartialFinalAggregate::new()),
+        Arc::new(EnforceSorting::new()),
+        Arc::new(OptimizeAggregateOrder::new()),
+        Arc::new(ProjectionPushdown::new()),
+        Arc::new(OutputRequirements::new_remove_mode()),
+        Arc::new(TopKAggregation::new()),
+        Arc::new(LimitPushPastWindows::new()),
+        Arc::new(LimitPushdown::new()),
+        Arc::new(ProjectionPushdown::new()),
+        Arc::new(PushdownSort::new()),
+        Arc::new(EnsureCooperative::new()),
+        Arc::new(FilterPushdown::new_post_optimization()),
+        Arc::new(SanityCheckPlan::new()),
+    ]
 }

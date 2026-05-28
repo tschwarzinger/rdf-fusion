@@ -1,15 +1,19 @@
 use crate::RdfFusionContext;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::exec_datafusion_err;
-use datafusion::dataframe::DataFrameWriteOptions;
 use datafusion::error::DataFusionError;
 use datafusion::logical_expr::LogicalPlan;
+use datafusion::parquet::arrow::AsyncArrowWriter;
+use datafusion::parquet::errors::ParquetError;
 use datafusion::prelude::*;
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
+use futures::StreamExt;
+use object_store::buffered::BufWriter;
 use object_store::path::Path;
-use rdf_fusion_common::{RdfFormat, RdfInput, RdfInputSource, RdfSortOrder};
+use rdf_fusion_common::{RdfFormat, RdfInput, RdfInputSource};
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
+use rdf_fusion_storage::parquet::RdfFusionParquetWriterProperties;
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::Arc;
 use url::Url;
@@ -61,7 +65,7 @@ impl RdfParquetLoader {
 
         // Check if destination exists and is not empty
         let mut list_stream = object_store.list(Some(&path));
-        if let Some(item) = futures::StreamExt::next(&mut list_stream).await {
+        if let Some(item) = list_stream.next().await {
             item.map_err(|e| DataFusionError::External(Box::new(e)))?;
             return Err(RdfParquetLoadingError::AlreadyExists(output_url.clone()));
         }
@@ -111,19 +115,9 @@ impl RdfParquetLoader {
         // Ensure quads are unique in the store
         df = df.distinct()?;
 
-        let write_options =
-            DataFrameWriteOptions::default().with_single_file_output(true);
-
         let rdf_fusion_options = self.context.options().clone();
-        let (df, write_options) = match &rdf_fusion_options.storage.parquet.sort_order {
-            None => (df, write_options),
-            Some(RdfSortOrder::NativeOrder(sort_order)) => {
-                let sort_expr = sort_order
-                    .iter()
-                    .map(|c| col(c.column_name()).sort(true, true))
-                    .collect::<Vec<_>>();
-                (df, write_options.with_sort_by(sort_expr))
-            }
+        let df = match &rdf_fusion_options.storage.parquet.sort_order {
+            None => df,
             Some(sort_order) => {
                 let (state, plan) = df.into_parts();
                 let builder =
@@ -131,13 +125,28 @@ impl RdfParquetLoader {
                         .create(Arc::new(plan))
                         .apply_rdf_sort_order(sort_order)?
                         .build()?;
-                df = DataFrame::new(state, builder);
-                (df, write_options)
+                DataFrame::new(state, builder)
             }
         };
 
-        df.write_parquet(output_url.as_str(), write_options, None)
-            .await?;
+        let mut stream = df.execute_stream().await?;
+        let schema = stream.schema();
+
+        let properties = RdfFusionParquetWriterProperties::new(self.encoding.clone())
+            .with_sort_order(rdf_fusion_options.storage.parquet.sort_order);
+        let arrow_properties = properties.to_arrow();
+        let mut parquet_writer = AsyncArrowWriter::try_new(
+            BufWriter::new(Arc::clone(&object_store), path.clone()),
+            schema,
+            Some(arrow_properties),
+        )?;
+
+        while let Some(batch) = stream.next().await {
+            let batch = batch?;
+            parquet_writer.write(&batch).await?;
+        }
+
+        parquet_writer.close().await?;
 
         Ok(())
     }
@@ -150,6 +159,8 @@ pub enum RdfParquetLoadingError {
     AlreadyExists(Url),
     #[error(transparent)]
     DataFusion(#[from] DataFusionError),
+    #[error(transparent)]
+    Parquet(#[from] ParquetError),
 }
 
 #[derive(Debug, thiserror::Error)]

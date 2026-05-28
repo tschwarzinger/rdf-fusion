@@ -371,11 +371,12 @@ impl<'ctx> BenchmarkContext<'ctx> {
                     }
 
                     let url = Url::parse(&format!("{base_url}/dataset.parquet")).unwrap();
-                    let storage = ParquetQuadStorage::try_new(
+                    let storage = ParquetQuadStorage::try_load(
                         url,
                         self.context.config.storage_encoding,
-                        &self.context.config.data_fusion_config,
+                        runtime_env.object_store_registry.as_ref(),
                     )
+                    .await
                     .expect("Failed to create ParquetQuadStorage");
                     Arc::new(storage)
                 }

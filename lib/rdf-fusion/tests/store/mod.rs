@@ -13,14 +13,19 @@ use url::Url;
 mod dump_fallback;
 mod store_tests;
 
-pub fn create_store_for_result(
+pub async fn create_store_for_result(
     runtime_env: Arc<RuntimeEnv>,
     path: &str,
     encoding: QuadStorageEncodingName,
 ) -> Store {
     let url = Url::parse(path).unwrap();
-    let storage =
-        ParquetQuadStorage::try_new(url, encoding, &SessionConfig::default()).unwrap();
+    let storage = ParquetQuadStorage::try_load(
+        url,
+        encoding,
+        runtime_env.object_store_registry.as_ref(),
+    )
+    .await
+    .unwrap();
     let context = RdfFusionContextBuilder::new(Arc::new(storage))
         .with_runtime_env(Some(runtime_env))
         .build()

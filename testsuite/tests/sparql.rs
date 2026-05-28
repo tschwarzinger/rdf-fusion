@@ -448,11 +448,12 @@ fn parquet_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory {
 
             loader.load_many(inputs, output_url.clone()).await.unwrap();
 
-            let storage = ParquetQuadStorage::try_new(
+            let storage = ParquetQuadStorage::try_load(
                 output_url,
                 encoding,
-                &SessionConfig::default(),
+                config.runtime_env.object_store_registry.as_ref(),
             )
+            .await
             .unwrap();
 
             let context = RdfFusionContextBuilder::new(Arc::new(storage))

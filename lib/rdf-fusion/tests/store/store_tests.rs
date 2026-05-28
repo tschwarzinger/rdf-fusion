@@ -171,7 +171,8 @@ async fn test_dump_graph_and_then_query_dump() -> Result<(), Box<dyn Error>> {
         store.context().session_context().runtime_env(),
         "memory:///test.parquet",
         QuadStorageEncodingName::PlainTerm,
-    );
+    )
+    .await;
     assert_eq!(store.len().await?, NUMBER_OF_TRIPLES);
 
     Ok(())
@@ -198,7 +199,8 @@ async fn test_dump_named_graph() -> Result<(), Box<dyn Error>> {
         store.context().session_context().runtime_env(),
         "memory:///test_named_dump/",
         QuadStorageEncodingName::PlainTerm,
-    );
+    )
+    .await;
     assert_eq!(store.len().await?, NUMBER_OF_TRIPLES);
 
     Ok(())
@@ -224,7 +226,8 @@ async fn test_dump_graph_with_no_quad_in_graph() -> Result<(), Box<dyn Error>> {
         store.context().session_context().runtime_env(),
         "memory:///test_empty_dump/",
         QuadStorageEncodingName::PlainTerm,
-    );
+    )
+    .await;
     assert_eq!(store.len().await?, 0);
 
     Ok(())
