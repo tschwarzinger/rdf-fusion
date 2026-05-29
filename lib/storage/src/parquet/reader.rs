@@ -11,11 +11,33 @@ use futures::future::BoxFuture;
 use std::ops::Range;
 use std::sync::Arc;
 
+/// A cache for pre-downloaded Bloom filters.
+#[derive(Debug, Clone, Default)]
+pub struct BloomFilterCache {
+    filters: Arc<Vec<(Range<u64>, Bytes)>>,
+}
+
+impl BloomFilterCache {
+    pub fn new(filters: Vec<(Range<u64>, Bytes)>) -> Self {
+        Self {
+            filters: Arc::new(filters),
+        }
+    }
+
+    pub fn get(&self, range: &Range<u64>) -> Option<Bytes> {
+        self.filters
+            .iter()
+            .find(|(r, _)| r == range)
+            .map(|(_, b)| b.clone())
+    }
+}
+
 /// A custom [`AsyncFileReader`] that serves ParquetMetaData from memory, but delegates actual byte
 /// reading to the underlying storage reader.
 pub struct PreloadedMetadataReader {
     inner: Box<dyn AsyncFileReader + Send>,
     metadata: Arc<ParquetMetaData>,
+    bloom_filter_cache: BloomFilterCache,
 }
 
 impl AsyncFileReader for PreloadedMetadataReader {
@@ -23,6 +45,9 @@ impl AsyncFileReader for PreloadedMetadataReader {
         &mut self,
         range: Range<u64>,
     ) -> BoxFuture<'_, Result<Bytes, ParquetError>> {
+        if let Some(bytes) = self.bloom_filter_cache.get(&range) {
+            return Box::pin(async move { Ok(bytes) });
+        }
         self.inner.get_bytes(range)
     }
 
@@ -30,6 +55,16 @@ impl AsyncFileReader for PreloadedMetadataReader {
         &mut self,
         ranges: Vec<Range<u64>>,
     ) -> BoxFuture<'_, Result<Vec<Bytes>, ParquetError>> {
+        let all_cached = ranges
+            .iter()
+            .all(|r| self.bloom_filter_cache.get(r).is_some());
+        if all_cached {
+            let bytes = ranges
+                .iter()
+                .map(|r| self.bloom_filter_cache.get(r).unwrap())
+                .collect();
+            return Box::pin(async move { Ok(bytes) });
+        }
         self.inner.get_byte_ranges(ranges)
     }
 
@@ -48,6 +83,7 @@ pub struct PreLoadedMetadataReaderFactory {
     inner_factory: Arc<dyn ParquetFileReaderFactory>,
     expected_path: String,
     cached_parquet_meta: Arc<ParquetMetaData>,
+    bloom_filter_cache: BloomFilterCache,
 }
 
 impl PreLoadedMetadataReaderFactory {
@@ -55,11 +91,13 @@ impl PreLoadedMetadataReaderFactory {
         inner_factory: Arc<dyn ParquetFileReaderFactory>,
         expected_path: String,
         cached_parquet_meta: Arc<ParquetMetaData>,
+        bloom_filter_cache: BloomFilterCache,
     ) -> Self {
         Self {
             inner_factory,
             expected_path,
             cached_parquet_meta,
+            bloom_filter_cache,
         }
     }
 }
@@ -94,6 +132,7 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
         Ok(Box::new(PreloadedMetadataReader {
             inner: inner_reader,
             metadata: Arc::clone(&self.cached_parquet_meta),
+            bloom_filter_cache: self.bloom_filter_cache.clone(),
         }))
     }
 }

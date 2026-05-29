@@ -1,5 +1,5 @@
 use crate::parquet::planner::ParquetQuadStoragePlanner;
-use crate::parquet::reader::PreLoadedMetadataReaderFactory;
+use crate::parquet::reader::{BloomFilterCache, PreLoadedMetadataReaderFactory};
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::common::stats::Precision;
@@ -47,6 +47,7 @@ pub struct ParquetQuadStorageSnapshot {
     url: Url,
     object_meta: ObjectMeta,
     parquet_meta: Arc<ParquetMetaData>,
+    bloom_filter_cache: BloomFilterCache,
 }
 
 impl ParquetQuadStorageSnapshot {
@@ -56,12 +57,14 @@ impl ParquetQuadStorageSnapshot {
         url: Url,
         object_meta: ObjectMeta,
         parquet_meta: Arc<ParquetMetaData>,
+        bloom_filter_cache: BloomFilterCache,
     ) -> Self {
         Self {
             encoding,
             url,
             object_meta,
             parquet_meta,
+            bloom_filter_cache,
         }
     }
 
@@ -174,6 +177,7 @@ impl ParquetQuadStorageSnapshot {
             default_factory,
             self.object_meta.location.to_string(),
             Arc::clone(&self.parquet_meta),
+            self.bloom_filter_cache.clone(),
         ));
 
         // Inject the factory into ParquetSource

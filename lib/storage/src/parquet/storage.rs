@@ -1,3 +1,4 @@
+use crate::parquet::reader::BloomFilterCache;
 use crate::parquet::snapshot::ParquetQuadStorageSnapshot;
 use async_trait::async_trait;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
@@ -25,6 +26,7 @@ pub struct ParquetQuadStorage {
     encoding: QuadStorageEncoding,
     object_meta: ObjectMeta,
     parquet_meta: Arc<ParquetMetaData>,
+    bloom_filter_cache: BloomFilterCache,
 }
 
 impl ParquetQuadStorage {
@@ -55,18 +57,48 @@ impl ParquetQuadStorage {
             .map_err(|e| StorageError::Other(e.to_string().into()))?;
 
         let reader =
-            ParquetObjectReader::new(object_store, path).with_file_size(object_meta.size);
+            ParquetObjectReader::new(object_store.clone(), path.clone()).with_file_size(object_meta.size);
         let options =
             ArrowReaderOptions::new().with_page_index_policy(PageIndexPolicy::Optional);
         let builder = ParquetRecordBatchStreamBuilder::new_with_options(reader, options)
             .await
             .map_err(|e| StorageError::Other(e.to_string().into()))?;
 
+        let parquet_meta = Arc::clone(builder.metadata());
+        let mut bloom_filter_ranges = Vec::new();
+        for rg in parquet_meta.row_groups() {
+            for col in rg.columns() {
+                if let Some(offset) = col.bloom_filter_offset() {
+                    if let Some(length) = col.bloom_filter_length() {
+                        bloom_filter_ranges
+                            .push(offset as u64..(offset as u64 + length as u64));
+                    }
+                }
+            }
+        }
+
+        let bloom_filter_bytes = if bloom_filter_ranges.is_empty() {
+            Vec::new()
+        } else {
+            object_store
+                .get_ranges(&path, &bloom_filter_ranges)
+                .await
+                .map_err(|e| StorageError::Other(e.to_string().into()))?
+        };
+
+        let bloom_filter_cache = BloomFilterCache::new(
+            bloom_filter_ranges
+                .into_iter()
+                .zip(bloom_filter_bytes)
+                .collect(),
+        );
+
         Ok(Self {
             url,
             encoding,
             object_meta,
-            parquet_meta: Arc::clone(builder.metadata()),
+            parquet_meta,
+            bloom_filter_cache,
         })
     }
 }
@@ -97,6 +129,7 @@ impl QuadStorage for ParquetQuadStorage {
             self.url.clone(),
             self.object_meta.clone(),
             Arc::clone(&self.parquet_meta),
+            self.bloom_filter_cache.clone(),
         )))
     }
 

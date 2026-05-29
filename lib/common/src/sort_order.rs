@@ -2,7 +2,6 @@ use crate::QuadComponent;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
-
 /// The sort order for dumping a store.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RdfSortOrder {
@@ -14,11 +13,42 @@ pub enum RdfSortOrder {
     ZOrder(Vec<QuadComponent>),
 }
 
+/// A version of [`RdfSortOrder`] that reflects the name of the sort order (but currently also carries the components).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RdfSortOrderName {
+    /// See [`RdfSortOrder::SparqlOrder`]
+    SparqlOrder(Vec<QuadComponent>),
+    /// See [`RdfSortOrder::NativeOrder`]
+    NativeOrder(Vec<QuadComponent>),
+    /// See [`RdfSortOrder::ZOrder`]
+    ZOrder(Vec<QuadComponent>),
+}
+
+impl RdfSortOrderName {
+    /// Returns the components of the sort order name.
+    pub fn components(&self) -> &[QuadComponent] {
+        match self {
+            RdfSortOrderName::SparqlOrder(c) => c,
+            RdfSortOrderName::NativeOrder(c) => c,
+            RdfSortOrderName::ZOrder(c) => c,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 #[error("Duplicate components in sort order: {0:?}")]
 pub struct RdfSortOrderValidationError(Vec<QuadComponent>);
 
 impl RdfSortOrder {
+    /// Returns the name of the sort order.
+    pub fn name(&self) -> RdfSortOrderName {
+        match self {
+            RdfSortOrder::SparqlOrder(c) => RdfSortOrderName::SparqlOrder(c.clone()),
+            RdfSortOrder::NativeOrder(c) => RdfSortOrderName::NativeOrder(c.clone()),
+            RdfSortOrder::ZOrder(c) => RdfSortOrderName::ZOrder(c.clone()),
+        }
+    }
+
     /// Validates that all components in the sort order are unique.
     pub fn validate(&self) -> Result<(), RdfSortOrderValidationError> {
         let components = match self {
