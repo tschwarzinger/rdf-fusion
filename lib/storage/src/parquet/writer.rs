@@ -60,20 +60,23 @@ impl RdfFusionParquetWriterProperties {
             _ => None,
         });
 
-        let non_clustered_columns = self.sort_order.as_ref().and_then(|order: &RdfSortOrderName| {
-            if let Some(first) = order.components().first() {
-                // We only assume that the first columns of the sort order exhibit
-                // good-enough clustering.
-                let column_paths = QuadComponent::all()
-                    .iter()
-                    .filter(|c| *c != first)
-                    .map(|c| ColumnPath::new(vec![c.column_name().to_owned()]))
-                    .collect::<Vec<_>>();
-                Some(column_paths)
-            } else {
-                None
-            }
-        });
+        let non_clustered_columns =
+            self.sort_order
+                .as_ref()
+                .and_then(|order: &RdfSortOrderName| {
+                    if let Some(first) = order.components().first() {
+                        // We only assume that the first columns of the sort order exhibit
+                        // good-enough clustering.
+                        let column_paths = QuadComponent::all()
+                            .iter()
+                            .filter(|c| *c != first)
+                            .map(|c| ColumnPath::new(vec![c.column_name().to_owned()]))
+                            .collect::<Vec<_>>();
+                        Some(column_paths)
+                    } else {
+                        None
+                    }
+                });
 
         let mut builder = WriterProperties::builder()
             .set_max_row_group_row_count(Some(ROW_GROUP_ROW_COUNT))
@@ -98,10 +101,16 @@ impl RdfFusionParquetWriterProperties {
                 builder = builder
                     .set_column_bloom_filter_enabled(non_clustered_column.clone(), true);
                 builder = if self.encoding.term_type().is_primitive() {
-                    builder.set_column_encoding(non_clustered_column.clone(), Encoding::PLAIN)
+                    builder.set_column_encoding(
+                        non_clustered_column.clone(),
+                        Encoding::PLAIN,
+                    )
                 } else {
                     builder
-                        .set_column_dictionary_enabled(non_clustered_column.clone(), false)
+                        .set_column_dictionary_enabled(
+                            non_clustered_column.clone(),
+                            false,
+                        )
                         .set_column_encoding(
                             non_clustered_column,
                             Encoding::DELTA_LENGTH_BYTE_ARRAY, // Good for common prefixes

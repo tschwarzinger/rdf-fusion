@@ -56,8 +56,8 @@ impl ParquetQuadStorage {
             .await
             .map_err(|e| StorageError::Other(e.to_string().into()))?;
 
-        let reader =
-            ParquetObjectReader::new(object_store.clone(), path.clone()).with_file_size(object_meta.size);
+        let reader = ParquetObjectReader::new(Arc::clone(&object_store), path.clone())
+            .with_file_size(object_meta.size);
         let options =
             ArrowReaderOptions::new().with_page_index_policy(PageIndexPolicy::Optional);
         let builder = ParquetRecordBatchStreamBuilder::new_with_options(reader, options)
