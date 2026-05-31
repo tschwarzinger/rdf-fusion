@@ -1,21 +1,32 @@
-use crate::cli::QuadStorageType;
 use anyhow::{Context, bail};
+use datafusion::prelude::SessionContext;
 use object_store::ObjectStoreExt;
 use object_store::path::Path;
-use rdf_fusion::common::{GraphName, RdfInput};
-use rdf_fusion::execution::load::RdfParquetLoader;
+use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
+use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::storage::parquet::RdfParquetLoader;
 use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
+use rdf_fusion_extensions::RdfFusionContextView;
 use tokio_util::io::StreamReader;
 use tracing::info;
 use url::Url;
 
+pub enum LoadCommandType {
+    Parquet {
+        session_context: SessionContext,
+        context_view: RdfFusionContextView,
+        encoding: QuadStorageEncodingName,
+        sort_order: Option<RdfSortOrder>,
+    },
+    Other(Store),
+}
+
 /// Loads an RDF file into the database.
 pub async fn load(
-    store: Store,
+    command: LoadCommandType,
     inputs: &[Url],
     output: Url,
-    storage_type: QuadStorageType,
 ) -> anyhow::Result<()> {
     if inputs.is_empty() {
         bail!("No input files provided");
@@ -23,22 +34,31 @@ pub async fn load(
 
     info!("Loading {} input(s) into {} ...", inputs.len(), output);
 
-    match storage_type {
-        QuadStorageType::Parquet => {
+    match command {
+        LoadCommandType::Parquet {
+            session_context,
+            context_view,
+            encoding,
+            sort_order,
+        } => {
             let inputs = inputs
                 .iter()
                 .map(|u| RdfInput::try_new(u.clone(), GraphName::DefaultGraph))
                 .collect::<Result<Vec<_>, _>>()
                 .context("Error while processing input URLs")?;
 
-            let encoding = store.context().storage().encoding().name();
-            let loader = RdfParquetLoader::try_new(store.context().clone(), encoding)?;
+            let loader = RdfParquetLoader::try_new(
+                session_context,
+                context_view,
+                encoding,
+                sort_order,
+            )?;
             loader
                 .load_many(inputs, output)
                 .await
                 .context("Failed to load RDF file into Parquet")?;
         }
-        _ => {
+        LoadCommandType::Other(store) => {
             let context = store.context();
             let runtime_env = context.session_context().runtime_env();
 

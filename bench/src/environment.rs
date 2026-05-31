@@ -13,9 +13,9 @@ use rdf_fusion::common::config::RdfFusionSessionConfigExt;
 use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::execution::load::RdfParquetLoader;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
 use rdf_fusion::storage::parquet::ParquetQuadStorage;
+use rdf_fusion::storage::parquet::RdfParquetLoader;
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 use rdf_fusion::store::Store;
 use std::path::{Path, PathBuf};
@@ -302,7 +302,12 @@ impl<'ctx> BenchmarkContext<'ctx> {
             .with_runtime_env(Some(runtime_env))
             .build()?;
 
-        let loader = RdfParquetLoader::try_new(context, QuadStorageEncodingName::String)?;
+        let loader = RdfParquetLoader::try_new(
+            context.session_context().clone(),
+            context.create_view(),
+            QuadStorageEncodingName::String,
+            context.options().storage.parquet.sort_order.clone(),
+        )?;
         let inputs: Vec<_> = sources
             .into_iter()
             .map(|(_, s)| {

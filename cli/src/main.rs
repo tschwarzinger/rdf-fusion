@@ -14,7 +14,7 @@ use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
 use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::execution::RdfFusionContextBuilder;
+use rdf_fusion::execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
 use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::store::Store;
@@ -65,15 +65,37 @@ pub async fn main() -> anyhow::Result<()> {
                 .map(|u| Ok(Url::parse(&resolve_location(u)?)?))
                 .collect::<Result<Vec<Url>, anyhow::Error>>()?;
 
-            let store = create_store(&args).await?;
+            match args.storage.storage_type {
+                cli::QuadStorageType::Parquet => {
+                    let context = create_context_for_parquet_load(&args).await?;
+                    let session_context = context.session_context().clone();
+                    let context_view = context.create_view();
+                    let sort_order = context.options().storage.parquet.sort_order.clone();
+                    let encoding =
+                        QuadStorageEncodingName::from_str(&args.storage.encoding)?;
 
-            commands::load::load(
-                store,
-                &inputs,
-                location_url,
-                args.storage.storage_type.clone(),
-            )
-            .await
+                    commands::load::load(
+                        commands::load::LoadCommandType::Parquet {
+                            session_context,
+                            context_view,
+                            encoding,
+                            sort_order,
+                        },
+                        &inputs,
+                        location_url,
+                    )
+                    .await
+                }
+                cli::QuadStorageType::DeltaLake => {
+                    let store = create_store(&args).await?;
+                    commands::load::load(
+                        commands::load::LoadCommandType::Other(store),
+                        &inputs,
+                        location_url,
+                    )
+                    .await
+                }
+            }
         }
         Command::Query {
             query,
@@ -123,33 +145,14 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
 
     let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
         cli::QuadStorageType::DeltaLake => {
-            let object_store_url = location.as_object_store_url();
-
-            let object_store = runtime_env
-                .object_store(&object_store_url)
-                .expect("Failed to get object store");
-            let log_store = logstore_with(
-                Arc::clone(&object_store),
+            create_delta_storage(
                 &location,
-                StorageConfig::default()
-                    .with_io_runtime(IORuntime::RT(Handle::current())),
+                encoding,
+                &runtime_env,
+                &session_config,
+                &rdf_fusion_options,
             )
-            .expect("Failed to create log store");
-
-            let loading_state = SessionStateBuilder::new()
-                .with_runtime_env(Arc::clone(&runtime_env))
-                .with_config(session_config.clone())
-                .build();
-
-            Arc::new(
-                DeltaQuadStorageBuilder::new()
-                    .with_log_store(log_store)
-                    .with_load_mode(LoadMode::Load(Box::new(loading_state)))
-                    .with_encoding(encoding)
-                    .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
-                    .build()
-                    .await?,
-            )
+            .await?
         }
         cli::QuadStorageType::Parquet => {
             if matches!(encoding, QuadStorageEncodingName::ObjectId) {
@@ -173,6 +176,82 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
         .build()
         .context("Failed to create RDF Fusion Context")?;
     Ok(Store::new(context))
+}
+
+/// Helper to create a `DeltaQuadStorage` instance.
+async fn create_delta_storage(
+    location: &Url,
+    encoding: QuadStorageEncodingName,
+    runtime_env: &Arc<RuntimeEnv>,
+    session_config: &SessionConfig,
+    rdf_fusion_options: &RdfFusionOptions,
+) -> anyhow::Result<Arc<dyn QuadStorage>> {
+    let object_store_url = location.as_object_store_url();
+
+    let object_store = runtime_env
+        .object_store(&object_store_url)
+        .context("Failed to get object store")?;
+    let log_store = logstore_with(
+        Arc::clone(&object_store),
+        location,
+        StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
+    )
+    .context("Failed to create log store")?;
+
+    let loading_state = SessionStateBuilder::new()
+        .with_runtime_env(Arc::clone(runtime_env))
+        .with_config(session_config.clone())
+        .build();
+
+    Ok(Arc::new(
+        DeltaQuadStorageBuilder::new()
+            .with_log_store(log_store)
+            .with_load_mode(LoadMode::Load(Box::new(loading_state)))
+            .with_encoding(encoding)
+            .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
+            .build()
+            .await?,
+    ))
+}
+
+/// HACK: Creates a dummy RdfFusionContext for Parquet loading because we cannot create an empty
+/// Parquet store, so we set up a dummy DeltaLake store inside an in-memory object store.
+async fn create_context_for_parquet_load(
+    args: &Args,
+) -> anyhow::Result<RdfFusionContext> {
+    let runtime_env = build_runtime_env(args)?;
+
+    let mut session_config = SessionConfig::from_env()?;
+    let rdf_fusion_options = RdfFusionOptions::from_env()?;
+    session_config
+        .options_mut()
+        .extensions
+        .insert(rdf_fusion_options.clone());
+    let encoding = QuadStorageEncodingName::from_str(&args.storage.encoding)?;
+
+    if matches!(encoding, QuadStorageEncodingName::ObjectId) {
+        bail!("ObjectId encoding is not supported for Parquet storage");
+    }
+
+    // Register a dummy in-memory location for Delta lake storage setup
+    let dummy_location = Url::parse("memory:///temp/").unwrap();
+    runtime_env.register_object_store(&dummy_location, Arc::new(InMemory::new()));
+
+    let storage = create_delta_storage(
+        &dummy_location,
+        encoding,
+        &runtime_env,
+        &session_config,
+        &rdf_fusion_options,
+    )
+    .await?;
+
+    let context = RdfFusionContextBuilder::new(storage)
+        .with_runtime_env(Some(runtime_env))
+        .build()
+        .context("Failed to create RDF Fusion Context")?;
+
+    Ok(context)
 }
 
 /// Resolves a location string to a uniform absolute URL string.
@@ -203,11 +282,6 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     if let Some(memory_limit) = args.runtime.memory_limit {
         builder = builder.with_memory_limit(memory_limit * 1024 * 1024, 1.0);
     }
-
-    // let registry = Arc::new(CachingObjectStoreRegistry::new(
-    //     Arc::clone(&builder.object_store_registry),
-    //     1024 * 1024 * 1024,
-    // ));
     let registry = Arc::clone(&builder.object_store_registry);
 
     // Register s3-compatible object store if its in the arguments

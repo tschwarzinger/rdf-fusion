@@ -1,17 +1,15 @@
 use crate::error::SerializerError;
 use crate::store::Store;
 use datafusion::dataframe::DataFrame;
-use datafusion::datasource::file_format::parquet::ParquetSink;
-use datafusion::datasource::listing::ListingTableUrl;
-use datafusion::datasource::physical_plan::{FileOutputMode, FileSinkConfig};
 use datafusion::datasource::sink::DataSink;
 use datafusion::logical_expr::col;
-use datafusion::logical_expr::dml::InsertOp;
 use datafusion::physical_plan::execute_stream;
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{GraphName, RdfDumpFormat, RdfSortOrder};
+use rdf_fusion_encoding::QuadStorageEncoding;
+use rdf_fusion_storage::parquet::RdfFusionParquetWriterProperties;
 use rdf_fusion_storage::rdf_files::{RdfFileDataSink, RdfParquetDataSink};
 use std::sync::Arc;
 use url::Url;
@@ -152,21 +150,16 @@ pub(crate) async fn dump_store(
     let sink_schema = physical_plan.schema();
     let sink: Arc<dyn DataSink> = match format {
         RdfDumpFormat::Parquet => {
-            let config = FileSinkConfig {
-                original_url: output_url.clone(),
-                object_store_url: object_store_url.clone(),
-                file_group: Default::default(),
-                table_paths: vec![ListingTableUrl::parse(&output_url)?],
-                output_schema: Arc::clone(&sink_schema),
-                table_partition_cols: vec![],
-                insert_op: InsertOp::Overwrite,
-                keep_partition_by_columns: false,
-                file_extension: format.file_extension().to_string(),
-                file_output_mode: FileOutputMode::SingleFile,
+            let storage_encoding = match options.encoding {
+                DumpEncoding::PlainTerm => QuadStorageEncoding::PlainTerm,
+                DumpEncoding::String => QuadStorageEncoding::String,
             };
-            let parquet_sink = ParquetSink::new(config, Default::default());
+            let properties = RdfFusionParquetWriterProperties::new(storage_encoding)
+                .with_sort_order(options.sort_by.clone());
             Arc::new(RdfParquetDataSink::new(
-                parquet_sink,
+                Arc::clone(&object_store),
+                Path::from(url.path()),
+                properties,
                 Arc::clone(&sink_schema),
             ))
         }

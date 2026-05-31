@@ -37,8 +37,6 @@ extern crate core;
 
 mod builder;
 mod engine;
-pub mod input;
-pub mod load;
 mod planner;
 pub mod results;
 pub mod sparql;

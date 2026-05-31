@@ -23,6 +23,7 @@ bzip2.workspace = true
 chrono.workspace = true
 clap = { workspace = true, features = ["derive"] }
 csv.workspace = true
+bytes.workspace = true
 datafusion.workspace = true
 deltalake.workspace = true
 futures.workspace = true

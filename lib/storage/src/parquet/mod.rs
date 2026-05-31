@@ -1,9 +1,13 @@
+mod loader;
 mod planner;
 mod reader;
 mod snapshot;
 mod storage;
-mod writer;
+mod writer_properties;
 
+pub use loader::{
+    RdfParquetLoader, RdfParquetLoaderCreationError, RdfParquetLoadingError,
+};
 pub use snapshot::*;
-pub use storage::*;
-pub use writer::*;
+pub use storage::ParquetQuadStorage;
+pub use writer_properties::RdfFusionParquetWriterProperties;

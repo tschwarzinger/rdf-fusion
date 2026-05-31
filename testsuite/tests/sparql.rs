@@ -4,9 +4,8 @@ use anyhow::Result;
 use rdf_fusion::common::RdfInput;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::execution::load::RdfParquetLoader;
 use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
-use rdf_fusion::storage::parquet::ParquetQuadStorage;
+use rdf_fusion::storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
 use rdf_fusion::store::Store;
 use rdf_fusion_testsuite::w3c::files::W3CTestRuntime;
 use rdf_fusion_testsuite::w3c::utils::W3CTestUtils;
@@ -436,7 +435,13 @@ fn parquet_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory {
                 .build()
                 .unwrap();
 
-            let loader = RdfParquetLoader::try_new(context, encoding).unwrap();
+            let loader = RdfParquetLoader::try_new(
+                context.session_context().clone(),
+                context.create_view(),
+                encoding,
+                None,
+            )
+            .unwrap();
             let mut inputs = Vec::new();
             for (name, source) in config.default_graphs {
                 inputs.push(RdfInput::new_with_format(source.url, name, source.format));

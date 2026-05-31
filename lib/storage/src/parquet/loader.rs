@@ -1,4 +1,5 @@
-use crate::RdfFusionContext;
+use crate::parquet::RdfFusionParquetWriterProperties;
+use crate::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::exec_datafusion_err;
 use datafusion::error::DataFusionError;
@@ -10,25 +11,28 @@ use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use futures::StreamExt;
 use object_store::buffered::BufWriter;
 use object_store::path::Path;
-use rdf_fusion_common::{RdfFormat, RdfInput, RdfInputSource};
+use rdf_fusion_common::{RdfFormat, RdfInput, RdfInputSource, RdfSortOrder};
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
+use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
-use rdf_fusion_storage::parquet::RdfFusionParquetWriterProperties;
-use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::Arc;
 use url::Url;
 
 /// A loader that converts RDF files into Parquet format.
 pub struct RdfParquetLoader {
-    context: RdfFusionContext,
+    session_context: SessionContext,
+    context_view: RdfFusionContextView,
     encoding: QuadStorageEncoding,
+    sort_order: Option<RdfSortOrder>,
 }
 
 impl RdfParquetLoader {
     /// Creates a new [`RdfParquetLoader`].
     pub fn try_new(
-        context: RdfFusionContext,
+        session_context: SessionContext,
+        context_view: RdfFusionContextView,
         encoding: QuadStorageEncodingName,
+        sort_order: Option<RdfSortOrder>,
     ) -> Result<Self, RdfParquetLoaderCreationError> {
         let encoding = match encoding {
             QuadStorageEncodingName::PlainTerm => QuadStorageEncoding::PlainTerm,
@@ -37,7 +41,12 @@ impl RdfParquetLoader {
             }
             QuadStorageEncodingName::String => QuadStorageEncoding::String,
         };
-        Ok(Self { context, encoding })
+        Ok(Self {
+            session_context,
+            context_view,
+            encoding,
+            sort_order,
+        })
     }
 
     /// Loads the given RDF file into a Parquet database at the specified output URL.
@@ -57,8 +66,7 @@ impl RdfParquetLoader {
     ) -> Result<(), RdfParquetLoadingError> {
         let object_store_url = output_url.as_object_store_url();
         let object_store = self
-            .context
-            .session_context()
+            .session_context
             .runtime_env()
             .object_store(&object_store_url)?;
         let path = Path::from(output_url.path());
@@ -70,7 +78,7 @@ impl RdfParquetLoader {
             return Err(RdfParquetLoadingError::AlreadyExists(output_url.clone()));
         }
 
-        let ctx = self.context.session_context();
+        let ctx = &self.session_context;
 
         let mut df: Option<DataFrame> = None;
 
@@ -115,13 +123,12 @@ impl RdfParquetLoader {
         // Ensure quads are unique in the store
         df = df.distinct()?;
 
-        let rdf_fusion_options = self.context.options().clone();
-        let df = match &rdf_fusion_options.storage.parquet.sort_order {
+        let df = match &self.sort_order {
             None => df,
             Some(sort_order) => {
                 let (state, plan) = df.into_parts();
                 let builder =
-                    RdfFusionLogicalPlanBuilderContext::new(self.context.create_view())
+                    RdfFusionLogicalPlanBuilderContext::new(self.context_view.clone())
                         .create(Arc::new(plan))
                         .apply_rdf_sort_order(sort_order)?
                         .build()?;
@@ -133,7 +140,7 @@ impl RdfParquetLoader {
         let schema = stream.schema();
 
         let properties = RdfFusionParquetWriterProperties::new(self.encoding.clone())
-            .with_sort_order(rdf_fusion_options.storage.parquet.sort_order);
+            .with_sort_order(self.sort_order.clone());
         let arrow_properties = properties.to_arrow();
         let mut parquet_writer = AsyncArrowWriter::try_new(
             BufWriter::new(Arc::clone(&object_store), path.clone()),
