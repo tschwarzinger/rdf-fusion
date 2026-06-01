@@ -1,13 +1,12 @@
-use crate::parquet::setup_test_store;
+use crate::parquet::{
+    ParquetTestConfig, format_bytes, get_dumped_bytes, setup_test_store,
+};
 use bytes::Bytes;
 use datafusion::parquet::file::reader::FileReader;
 use datafusion::parquet::file::serialized_reader::SerializedFileReader;
-use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
-use object_store::ObjectStoreExt;
 use prettytable::{Table, row};
 use rdf_fusion::common::{QuadComponent, RdfDumpFormat, RdfSortOrder};
-use rdf_fusion::store::{DumpEncoding, RdfDumpOptions, Store};
-use url::Url;
+use rdf_fusion::store::{DumpEncoding, RdfDumpOptions};
 
 struct ParquetSizeMetrics {
     total_file_size: i64,
@@ -21,22 +20,37 @@ struct ParquetSizeMetrics {
 async fn test_parquet_file_and_bloom_filter_size() {
     let store = setup_test_store().await;
 
-    let sort_orders = vec![
-        RdfSortOrder::NativeOrder(vec![
-            QuadComponent::Subject,
-            QuadComponent::Predicate,
-            QuadComponent::Object,
-        ]),
-        RdfSortOrder::NativeOrder(vec![
-            QuadComponent::Predicate,
-            QuadComponent::Object,
-            QuadComponent::Subject,
-        ]),
-        RdfSortOrder::NativeOrder(vec![
-            QuadComponent::Object,
-            QuadComponent::Subject,
-            QuadComponent::Predicate,
-        ]),
+    let configs = vec![
+        ParquetTestConfig::new(
+            "NativeOrder([Subject, Predicate, Object])",
+            RdfDumpOptions::default()
+                .with_encoding(DumpEncoding::String)
+                .with_sort_by(Some(RdfSortOrder::NativeOrder(vec![
+                    QuadComponent::Subject,
+                    QuadComponent::Predicate,
+                    QuadComponent::Object,
+                ]))),
+        ),
+        ParquetTestConfig::new(
+            "NativeOrder([Predicate, Object, Subject])",
+            RdfDumpOptions::default()
+                .with_encoding(DumpEncoding::String)
+                .with_sort_by(Some(RdfSortOrder::NativeOrder(vec![
+                    QuadComponent::Predicate,
+                    QuadComponent::Object,
+                    QuadComponent::Subject,
+                ]))),
+        ),
+        ParquetTestConfig::new(
+            "NativeOrder([Object, Subject, Predicate])",
+            RdfDumpOptions::default()
+                .with_encoding(DumpEncoding::String)
+                .with_sort_by(Some(RdfSortOrder::NativeOrder(vec![
+                    QuadComponent::Object,
+                    QuadComponent::Subject,
+                    QuadComponent::Predicate,
+                ]))),
+        ),
     ];
 
     let mut table = Table::new();
@@ -49,15 +63,13 @@ async fn test_parquet_file_and_bloom_filter_size() {
         "Bloom Filter Size (Bytes)"
     ]);
 
-    for (i, order) in sort_orders.into_iter().enumerate() {
+    for (i, config) in configs.into_iter().enumerate() {
         let test_url = format!("memory:///test_{i}.parquet");
         store
             .dump(
                 test_url.clone(),
                 RdfDumpFormat::Parquet,
-                RdfDumpOptions::default()
-                    .with_encoding(DumpEncoding::String)
-                    .with_sort_by(Some(order.clone())),
+                config.config.clone(),
             )
             .await
             .unwrap();
@@ -66,12 +78,12 @@ async fn test_parquet_file_and_bloom_filter_size() {
         let metrics = compute_parquet_size_metrics(&bytes);
 
         table.add_row(row![
-            format!("{:?}", order),
-            metrics.total_file_size,
-            metrics.footer_size,
-            metrics.total_data_size,
-            metrics.page_index_size,
-            metrics.bloom_filter_size
+            config.name,
+            format_bytes(metrics.total_file_size as u64),
+            format_bytes(metrics.footer_size as u64),
+            format_bytes(metrics.total_data_size as u64),
+            format_bytes(metrics.page_index_size as u64),
+            format_bytes(metrics.bloom_filter_size as u64)
         ]);
     }
 
@@ -82,33 +94,13 @@ async fn test_parquet_file_and_bloom_filter_size() {
     +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
     | Sort Order                                | File Size (Bytes) | Footer Size (Bytes) | Total Data Size (Bytes) | Page Index Size (Bytes) | Bloom Filter Size (Bytes) |
     +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
-    | NativeOrder([Subject, Predicate, Object]) | 10166029          | 10330               | 9686095                 | 174068                  | 295524                    |
+    | NativeOrder([Subject, Predicate, Object]) | 10 166 029        | 10 330              | 9 686 095               | 174 068                 | 295 524                   |
     +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
-    | NativeOrder([Predicate, Object, Subject]) | 10182572          | 11341               | 9684650                 | 191045                  | 295524                    |
+    | NativeOrder([Predicate, Object, Subject]) | 10 182 572        | 11 341              | 9 684 650               | 191 045                 | 295 524                   |
     +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
-    | NativeOrder([Object, Subject, Predicate]) | 10444310          | 10919               | 9947424                 | 190431                  | 295524                    |
+    | NativeOrder([Object, Subject, Predicate]) | 10 444 310        | 10 919              | 9 947 424               | 190 431                 | 295 524                   |
     +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
     ");
-}
-
-async fn get_dumped_bytes(store: &Store, url_str: &str) -> Bytes {
-    let url = Url::parse(url_str).unwrap();
-    let object_store = store
-        .context()
-        .session_context()
-        .runtime_env()
-        .object_store(&url.as_object_store_url())
-        .unwrap();
-
-    let path = object_store::path::Path::from(url.path());
-
-    object_store
-        .get(&path)
-        .await
-        .unwrap()
-        .bytes()
-        .await
-        .unwrap()
 }
 
 fn compute_parquet_size_metrics(bytes: &Bytes) -> ParquetSizeMetrics {

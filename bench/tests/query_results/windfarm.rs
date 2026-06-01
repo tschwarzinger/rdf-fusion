@@ -39,69 +39,15 @@ async fn run_wind_farm_4_test_results(encoding: QuadStorageEncodingName) {
 
     let store = benchmark.prepare_store(&ctx, false).await.unwrap();
 
-    assert_snapshot!(
-        format!("Production Q1 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-production-query1.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Production Q2 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-production-query2.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Production Q3 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-production-query3.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Production Q4 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-production-query4.sparql")
-        )
-        .await
-    );
-
-    assert_snapshot!(
-        format!("Grouped Production Q1 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-grouped-production-query1.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Grouped Production Q2 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-grouped-production-query2.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Grouped Production Q3 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-grouped-production-query3.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Grouped Production Q4 ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/wind-farm-grouped-production-query4.sparql")
-        )
-        .await
-    );
+    let windfarm_queries =
+        crate::load::load_queries("tests/test_queries/windfarm").unwrap();
+    for (name, query_str) in windfarm_queries {
+        let formatted_name = name
+            .replace("wind-farm-grouped-production-query", "Grouped Production Q")
+            .replace("wind-farm-production-query", "Production Q");
+        assert_snapshot!(
+            format!("{formatted_name} ({encoding_name})"),
+            run_select_query(&store, &query_str).await
+        );
+    }
 }

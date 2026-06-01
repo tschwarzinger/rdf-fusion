@@ -1,4 +1,4 @@
-//! This file contains tests for an adapte version of the BSBM explore use case. The adaption have
+//! This file contains tests for an adapted version of the BSBM explore use case. The adaption have
 //! been made such that the queries produce stable results.
 //!
 //! The results have been compared against GraphDB 11.0.1. The following curl command can be used to
@@ -61,99 +61,32 @@ async fn run_bsbm_1000_test_results(encoding: QuadStorageEncodingName) {
     //
     // Explore
     //
-
-    assert_snapshot!(
-        format!("Explore Q1 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q1.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q2 (empty optional) ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/explore-q2-empty-optional.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Explore Q2 (non-empty optional) ({encoding_name})"),
-        run_select_query(
-            &store,
-            include_str!("./queries/explore-q2-non-empty-optional.sparql")
-        )
-        .await
-    );
-    assert_snapshot!(
-        format!("Explore Q3 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q3.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q4 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q4.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q5 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q5.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q7 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q7.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q8 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q8.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q9 ({encoding_name})"),
-        run_graph_result_query(&store, include_str!("./queries/explore-q9.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q10 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q10.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q11 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/explore-q11.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Explore Q12 ({encoding_name})"),
-        run_graph_result_query(&store, include_str!("./queries/explore-q12.sparql"))
-            .await
-    );
+    let explore_queries =
+        crate::load::load_queries("tests/test_queries/bsbm/explore").unwrap();
+    for (name, query_str) in explore_queries {
+        let formatted_name = name
+            .replace("explore-q", "Q")
+            .replace("-non-empty-optional", " (non-empty optional)")
+            .replace("-empty-optional", " (empty optional)");
+        assert_snapshot!(
+            format!("Explore {formatted_name} ({encoding_name})"),
+            if name == "explore-q9" || name == "explore-q12" {
+                run_graph_result_query(&store, &query_str).await
+            } else {
+                run_select_query(&store, &query_str).await
+            }
+        );
+    }
 
     //
     // Business Intelligence
     //
-
-    assert_snapshot!(
-        format!("Business Intelligence Q1 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q1.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Business Intelligence Q2 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q2.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Business Intelligence Q3 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q3.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Business Intelligence Q4 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q4.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Business Intelligence Q5 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q5.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Business Intelligence Q6 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q6.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Business Intelligence Q7 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q7.sparql")).await
-    );
-    assert_snapshot!(
-        format!("Business Intelligence Q8 ({encoding_name})"),
-        run_select_query(&store, include_str!("./queries/bi-q8.sparql")).await
-    );
+    let bi_queries = crate::load::load_queries("tests/test_queries/bsbm/bi").unwrap();
+    for (name, query_str) in bi_queries {
+        let formatted_name = name.replace("bi-q", "Q");
+        assert_snapshot!(
+            format!("Business Intelligence {formatted_name} ({encoding_name})"),
+            run_select_query(&store, &query_str).await
+        );
+    }
 }

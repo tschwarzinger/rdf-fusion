@@ -118,6 +118,14 @@ rdf-fusion-web = { version = "=0.1.0", path = "lib/web" }
 # Most of the remainder of this file (profiles & lints) stem from DataFusion.
 #
 
+[profile.dev]
+# TODO: Remove once DF join estimation does not overflow
+overflow-checks = false
+
+[profile.test]
+# TODO: Remove once DF join estimation does not overflow
+overflow-checks = false
+
 [profile.release]
 codegen-units = 1
 lto = true

@@ -45,6 +45,7 @@ zip.workspace = true
 criterion = { workspace = true, features = ["async_tokio"] }
 insta.workspace = true
 tempfile.workspace = true
+rdf-fusion-storage.workspace = true
 
 [lints]
 workspace = true

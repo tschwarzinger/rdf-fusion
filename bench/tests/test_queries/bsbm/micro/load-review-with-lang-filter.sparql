@@ -1,0 +1,6 @@
+SELECT ?review ?text
+WHERE {
+    ?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product578> .
+    ?review <http://purl.org/stuff/rev#text> ?text .
+    FILTER(LANGMATCHES(LANG(?text), "EN"))
+}
