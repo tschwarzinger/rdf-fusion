@@ -1,6 +1,7 @@
 mod loader;
 mod planner;
 mod reader;
+mod scan;
 mod snapshot;
 mod storage;
 mod writer_properties;

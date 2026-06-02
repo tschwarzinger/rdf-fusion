@@ -1,5 +1,6 @@
 use crate::parquet::planner::ParquetQuadStoragePlanner;
 use crate::parquet::reader::{BloomFilterCache, PreLoadedMetadataReaderFactory};
+use crate::parquet::scan::ParquetQuadStorageScanExec;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::common::stats::Precision;
@@ -190,8 +191,10 @@ impl ParquetQuadStorageSnapshot {
                 .with_statistics(statistics)
                 .build();
 
-        let mut plan: Arc<dyn ExecutionPlan> =
-            Arc::new(DataSourceExec::new(Arc::new(file_scan_config)));
+        let data_source = Arc::new(DataSourceExec::new(Arc::new(file_scan_config)));
+        let mut plan: Arc<dyn ExecutionPlan> = Arc::new(
+            ParquetQuadStorageScanExec::try_new(pattern.clone(), data_source)?,
+        );
 
         // 5. FilterExec operates on the base schema implicitly because `plan` has the base schema
         if let Some(phys_filter) = physical_filter_expr {
