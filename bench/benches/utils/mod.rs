@@ -1,12 +1,11 @@
 use anyhow::Context;
 use futures::StreamExt;
-use rdf_fusion::common::{QuadComponent, RdfSortOrder};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::store::Store;
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
-use rdf_fusion_bench::{BenchQuadStorageType, QuadStorageLocationArg};
+use rdf_fusion_bench::{BenchQuadStorageTypeArg, QuadStorageLocationArg};
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use tokio::runtime::{Builder, Runtime};
@@ -14,7 +13,7 @@ use tokio::runtime::{Builder, Runtime};
 pub mod verbose;
 
 pub struct BenchmarkStorageConfig {
-    pub storage_type: BenchQuadStorageType,
+    pub storage_type: BenchQuadStorageTypeArg,
     pub storage_location: QuadStorageLocationArg,
     pub encoding: QuadStorageEncodingName,
 }
@@ -45,24 +44,17 @@ impl Display for BenchmarkStorageConfig {
 pub fn benchmark_storage_configs() -> Vec<BenchmarkStorageConfig> {
     vec![
         BenchmarkStorageConfig {
-            storage_type: BenchQuadStorageType::Delta,
+            storage_type: BenchQuadStorageTypeArg::Delta,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::ObjectId,
         },
         BenchmarkStorageConfig {
-            storage_type: BenchQuadStorageType::Delta,
+            storage_type: BenchQuadStorageTypeArg::Delta,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::String,
         },
         BenchmarkStorageConfig {
-            storage_type: BenchQuadStorageType::Parquet {
-                sort_order: Some(RdfSortOrder::NativeOrder(vec![
-                    QuadComponent::GraphName,
-                    QuadComponent::Predicate,
-                    QuadComponent::Subject,
-                    QuadComponent::Object,
-                ])),
-            },
+            storage_type: BenchQuadStorageTypeArg::Parquet,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::String,
         },
