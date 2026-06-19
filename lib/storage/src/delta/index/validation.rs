@@ -152,13 +152,12 @@ mod tests {
     }
 
     fn test_schema() -> Arc<Schema> {
-        let schema = Arc::new(Schema::new(vec![
+        Arc::new(Schema::new(vec![
             Field::new("graph", DataType::Utf8, true),
             Field::new("subject", DataType::Utf8, false),
             Field::new("predicate", DataType::Utf8, false),
             Field::new("object", DataType::Utf8, false),
-        ]));
-        schema
+        ]))
     }
 
     fn create_record_batch_with_default_graph(
@@ -172,8 +171,8 @@ mod tests {
         let predicate = StringArray::from(predicates);
         let object = StringArray::from(objects);
 
-        let batch = RecordBatch::try_new(
-            schema.clone(),
+        RecordBatch::try_new(
+            Arc::clone(&schema),
             vec![
                 Arc::new(graph),
                 Arc::new(subject),
@@ -181,7 +180,6 @@ mod tests {
                 Arc::new(object),
             ],
         )
-        .unwrap();
-        batch
+        .unwrap()
     }
 }

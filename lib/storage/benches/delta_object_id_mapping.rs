@@ -23,7 +23,7 @@ fn bench_decode_array(c: &mut Criterion) {
             rt.block_on(setup_encoded_shuffled_array(10_000, term_type));
         let name = term_type.unwrap_or("mixed");
 
-        group.bench_function(format!("decode_{}_10k", name), |b| {
+        group.bench_function(format!("decode_{name}_10k"), |b| {
             b.iter(|| {
                 let decoded =
                     mapping.decode_array(black_box(&shuffled_id_array)).unwrap();
@@ -46,7 +46,7 @@ fn bench_decode_array_to_typed_family(c: &mut Criterion) {
         let encoding: TypedFamilyEncodingRef = Arc::new(TypedFamilyEncoding::default());
         let name = term_type.unwrap_or("mixed");
 
-        group.bench_function(format!("decode_to_typed_family_{}_10k", name), |b| {
+        group.bench_function(format!("decode_to_typed_family_{name}_10k"), |b| {
             b.iter(|| {
                 let decoded = mapping
                     .decode_array_to_typed_family(
@@ -119,8 +119,8 @@ async fn create_mapping() -> Arc<dyn ObjectIdMapping> {
         .build()
         .await
         .unwrap();
-    let encoding = storage.encoding().object_id_encoding().unwrap().clone();
-    encoding.mapping().clone()
+    let encoding = Arc::clone(storage.encoding().object_id_encoding().unwrap());
+    Arc::clone(encoding.mapping())
 }
 
 /// Generates a PlainTermArray. If `term_type` is None, generates a mixed array.
@@ -149,7 +149,7 @@ fn generate_term_array(num_terms: usize, term_type: Option<&str>) -> PlainTermAr
                 format!("{i}"),
                 NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
             )),
-            _ => panic!("Unknown term type: {:?}", term_type),
+            _ => panic!("Unknown term type: {term_type:?}"),
         };
         builder.append_term(term.as_ref());
     }

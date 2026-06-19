@@ -102,7 +102,7 @@ fn get_queries(
     benchmark: &WindFarmBenchmark,
     benchmark_context: &BenchmarkContext,
 ) -> Vec<(String, String)> {
-    let disabled_queries = vec![
+    let disabled_queries = [
         WindFarmQueryName::MultiGrouped1,
         WindFarmQueryName::MultiGrouped2,
         WindFarmQueryName::MultiGrouped3,
@@ -113,7 +113,7 @@ fn get_queries(
         .into_iter()
         .filter_map(|query_name| {
             if disabled_queries.contains(&query_name) {
-                println!("Skipping query: {}", query_name);
+                println!("Skipping query: {query_name}");
                 None
             } else {
                 let op = benchmark

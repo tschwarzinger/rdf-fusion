@@ -184,13 +184,13 @@ mod tests {
             .find_typed_family_type_id(TypedFamilyId::String)
             .unwrap();
         let test_vector = TypedFamilyArrayBuilder::new(
-            Arc::clone(&encodings.typed_family()),
+            Arc::clone(encodings.typed_family()),
             vec![string_type_id, string_type_id],
             vec![0, 1],
         )
         .unwrap()
         .with_family_array::<StringFamilyArray>(Some(
-            StringFamilyArray::from_array_unchecked(strings_array.clone()),
+            StringFamilyArray::from_array_unchecked(Arc::clone(&strings_array)),
         ))
         .unwrap()
         .finish()

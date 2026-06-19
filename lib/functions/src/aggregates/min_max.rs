@@ -403,8 +403,8 @@ mod tests {
     /// Executes the test and returns the serialized DataFrame.
     async fn run_test(op: MinMaxOperator, typed_array: TypedFamilyArray) -> String {
         let udf = match op {
-            MinMaxOperator::Min => min_typed_family(Arc::clone(&typed_array.encoding())),
-            MinMaxOperator::Max => max_typed_family(Arc::clone(&typed_array.encoding())),
+            MinMaxOperator::Min => min_typed_family(Arc::clone(typed_array.encoding())),
+            MinMaxOperator::Max => max_typed_family(Arc::clone(typed_array.encoding())),
         };
         let df = evaluate_aggregate_for_test(typed_array.into_array_ref(), Arc::new(udf));
         df.to_string().await.unwrap()

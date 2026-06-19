@@ -535,9 +535,9 @@ mod tests {
 
         let ebv = tf_array.effective_boolean_value().unwrap();
         assert_eq!(ebv.len(), 3);
-        assert_eq!(ebv.value(0), true); // true
-        assert_eq!(ebv.value(1), true); // 42 is not zero
-        assert_eq!(ebv.value(2), false); // false
+        assert!(ebv.value(0)); // true
+        assert!(ebv.value(1)); // 42 is not zero
+        assert!(!ebv.value(2)); // false
 
         let pretty = tf_array.pretty_print().unwrap();
         assert_eq!(pretty.value(0), "true");
@@ -580,7 +580,7 @@ mod tests {
 
         // Slice the array to only include the second element: [2]
         let sliced_array = TypedFamilyArray::new_unchecked(
-            tf_array.encoding().clone(),
+            Arc::clone(tf_array.encoding()),
             tf_array.inner().slice(1, 1),
         );
 

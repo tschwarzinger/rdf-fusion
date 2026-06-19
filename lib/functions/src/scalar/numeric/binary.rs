@@ -137,8 +137,8 @@ mod tests {
     #[tokio::test]
     async fn test_add_typed_family() {
         let encodings = create_default_encodings();
-        let left = create_standard_test_vector(&encodings.typed_family());
-        let right = create_standard_test_vector(&encodings.typed_family());
+        let left = create_standard_test_vector(encodings.typed_family());
+        let right = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(add_udf(encodings).unwrap());
         let result = evaluate_binary_function_for_test(left, right, udf);
         assert_snapshot!(
@@ -170,8 +170,8 @@ mod tests {
     #[tokio::test]
     async fn test_sub_typed_family() {
         let encodings = create_default_encodings();
-        let left = create_standard_test_vector(&encodings.typed_family());
-        let right = create_standard_test_vector(&encodings.typed_family());
+        let left = create_standard_test_vector(encodings.typed_family());
+        let right = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(sub_udf(encodings).unwrap());
         let result = evaluate_binary_function_for_test(left, right, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -200,8 +200,8 @@ mod tests {
     #[tokio::test]
     async fn test_mul_typed_family() {
         let encodings = create_default_encodings();
-        let left = create_standard_test_vector(&encodings.typed_family());
-        let right = create_standard_test_vector(&encodings.typed_family());
+        let left = create_standard_test_vector(encodings.typed_family());
+        let right = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(mul_udf(encodings).unwrap());
         let result = evaluate_binary_function_for_test(left, right, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -230,8 +230,8 @@ mod tests {
     #[tokio::test]
     async fn test_div_typed_family() {
         let encodings = create_default_encodings();
-        let left = create_standard_test_vector(&encodings.typed_family());
-        let right = create_standard_test_vector(&encodings.typed_family());
+        let left = create_standard_test_vector(encodings.typed_family());
+        let right = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(div_udf(encodings).unwrap());
         let result = evaluate_binary_function_for_test(left, right, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"

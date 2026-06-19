@@ -87,10 +87,7 @@ async fn test_parquet_file_and_bloom_filter_size() {
         ]);
     }
 
-    let table_str = table.to_string();
-    println!("\nParquet File Size DataFrame:\n{}", table_str);
-
-    insta::assert_snapshot!(table_str, @"
+    insta::assert_snapshot!(table.to_string(), @"
     +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
     | Sort Order                                | File Size (Bytes) | Footer Size (Bytes) | Total Data Size (Bytes) | Page Index Size (Bytes) | Bloom Filter Size (Bytes) |
     +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+

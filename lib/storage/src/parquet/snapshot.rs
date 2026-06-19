@@ -1,6 +1,8 @@
 use crate::parquet::planner::ParquetQuadStoragePlanner;
 use crate::parquet::reader::{BloomFilterCache, PreLoadedMetadataReaderFactory};
 use crate::parquet::scan::ParquetQuadStorageScanExec;
+#[allow(unused_imports)]
+use crate::parquet::storage::ParquetQuadStorage;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::common::stats::Precision;

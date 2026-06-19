@@ -134,7 +134,7 @@ mod tests {
             .unwrap();
 
         let args = vec![
-            test_vector.clone(),
+            Arc::clone(&test_vector),
             true_val.into_array_ref(),
             false_val.into_array_ref(),
         ];

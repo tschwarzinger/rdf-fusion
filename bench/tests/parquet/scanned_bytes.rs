@@ -105,12 +105,13 @@ async fn test_parquet_scanned_bytes() {
         let bytes = get_dumped_bytes(&base_store, &test_url).await;
         let file_size = bytes.len() as u64;
 
-        let registry = base_store
-            .context()
-            .session_context()
-            .runtime_env()
-            .object_store_registry
-            .clone();
+        let registry = Arc::clone(
+            &base_store
+                .context()
+                .session_context()
+                .runtime_env()
+                .object_store_registry,
+        );
         let storage = ParquetQuadStorage::try_load(
             Url::parse(&test_url).unwrap(),
             QuadStorageEncodingName::String,
@@ -121,9 +122,9 @@ async fn test_parquet_scanned_bytes() {
 
         let context = RdfFusionContextBuilder::new(Arc::new(storage))
             .with_single_partition_session_config()
-            .with_runtime_env(Some(
-                base_store.context().session_context().runtime_env().clone(),
-            ))
+            .with_runtime_env(Some(Arc::clone(
+                &base_store.context().session_context().runtime_env(),
+            )))
             .build()
             .unwrap();
 

@@ -9,9 +9,9 @@ fmt:
 
 # Run all lints (e.g., formatting, clippy)
 lint:
-    cargo fmt -- --check
+    cargo fmt --all -- --check
     taplo fmt **.toml --check
-    cargo clippy -- -D warnings -D clippy::all
+    cargo clippy --workspace --all-targets -- -D warnings -D clippy::all
 
 # Run all tests
 test:
@@ -32,7 +32,7 @@ test-examples:
 
 # Build and check documentation
 rustdoc:
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
 
 import 'bench/justfile'
 

@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 use crate::delta::{create_test_log_store, populate_storage};
 use datafusion::execution::SessionStateBuilder;
 use rdf_fusion_encoding::QuadStorageEncodingName;

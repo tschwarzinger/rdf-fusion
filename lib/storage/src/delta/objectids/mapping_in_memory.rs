@@ -473,8 +473,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("Expected 1, found 2"),
-            "Error message did not contain expected validation details: {}",
-            err_msg
+            "Error message did not contain expected validation details: {err_msg}"
         );
 
         Ok(())
@@ -491,7 +490,6 @@ mod tests {
             Some("http://www.w3.org/2001/XMLSchema#integer"),
             None,
         );
-        let input_array = builder.finish();
-        input_array
+        builder.finish()
     }
 }

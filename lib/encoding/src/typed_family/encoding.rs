@@ -561,7 +561,8 @@ mod tests {
             .create_array_from_family(input_array)
             .expect("Failed to create array with nulls");
 
-        let printed = pretty_format_columns("result", &[result.inner().clone()]).unwrap();
+        let printed =
+            pretty_format_columns("result", &[Arc::clone(result.inner())]).unwrap();
         assert_snapshot!(printed, @"
         +-------------------------------+
         | result                        |
@@ -586,7 +587,8 @@ mod tests {
             .cast_from_plain_term_array(&input)
             .expect("Failed to create array with nulls");
 
-        let printed = pretty_format_columns("result", &[result.inner().clone()]).unwrap();
+        let printed =
+            pretty_format_columns("result", &[Arc::clone(result.inner())]).unwrap();
         assert_snapshot!(printed, @r"
         +------------------------------------+
         | result                             |

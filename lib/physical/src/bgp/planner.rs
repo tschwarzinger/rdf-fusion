@@ -431,7 +431,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_patterns() -> DFResult<()> {
-        let planner = BgpPlanner::default();
+        let planner = BgpPlanner;
         let ctx = SessionContext::new();
         let schema = Arc::new(DFSchema::from_unqualified_fields(
             Fields::empty(),
@@ -460,7 +460,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_short_circuit_zero_rows() -> DFResult<()> {
-        let planner = BgpPlanner::default();
+        let planner = BgpPlanner;
         let ctx = SessionContext::new();
         let schema = Arc::new(DFSchema::from_unqualified_fields(
             Fields::empty(),

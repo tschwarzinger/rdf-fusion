@@ -21,7 +21,7 @@ jobs:
       - name: Setup Rust
         uses: https://github.com/dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.94
+          toolchain: 1.95
 
       - name: Rust Cache
         uses: https://github.com/Swatinem/rust-cache@v2

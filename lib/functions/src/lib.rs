@@ -122,7 +122,7 @@ mod test_utils {
                     Arc::new(UInt8Array::from(vec![0])) as ArrayRef,
                     Arc::new(
                         Decimal128Array::from(vec![
-                            63808171200_000_000_000_000_000_000_i128,
+                            63_808_171_200_000_000_000_000_000_000_i128,
                         ])
                         .with_precision_and_scale(Decimal::PRECISION, Decimal::SCALE)
                         .unwrap(),
@@ -274,11 +274,10 @@ mod test_utils {
             StringArray::from(languages),
         )
         .unwrap();
-        let left = encodings
+        encodings
             .typed_family()
             .create_array_from_family(strings_array)
             .unwrap()
-            .into_array_ref();
-        left
+            .into_array_ref()
     }
 }

@@ -511,6 +511,43 @@ impl FamilyArray for DateTimeFamilyArray {
     }
 }
 
+/// A builder for creating an array of the [`DateTimeFamily`].
+pub struct DateTimeArrayBuilder {
+    date_time_types: UInt8Array,
+    timestamp_values: Decimal128Array,
+    timestamp_offsets: Int16Array,
+}
+
+impl DateTimeArrayBuilder {
+    /// Creates a new [`DateTimeArrayBuilder`].
+    pub fn new(
+        date_time_types: UInt8Array,
+        timestamp_values: Decimal128Array,
+        timestamp_offsets: Int16Array,
+    ) -> Self {
+        Self {
+            date_time_types,
+            timestamp_values,
+            timestamp_offsets,
+        }
+    }
+
+    /// Builds the array.
+    pub fn finish(self) -> AResult<ArrayRef> {
+        let nulls = self.date_time_types.nulls().cloned();
+        let struct_array = StructArray::try_new(
+            FIELDS_TIMESTAMP.clone(),
+            vec![
+                Arc::new(self.date_time_types) as ArrayRef,
+                Arc::new(self.timestamp_values) as ArrayRef,
+                Arc::new(self.timestamp_offsets) as ArrayRef,
+            ],
+            nulls,
+        )?;
+        Ok(Arc::new(struct_array) as ArrayRef)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -549,42 +586,5 @@ mod tests {
             | 0001-01-01T01:16:40+01:00 |
             +---------------------------+
             ");
-    }
-}
-
-/// A builder for creating an array of the [`DateTimeFamily`].
-pub struct DateTimeArrayBuilder {
-    date_time_types: UInt8Array,
-    timestamp_values: Decimal128Array,
-    timestamp_offsets: Int16Array,
-}
-
-impl DateTimeArrayBuilder {
-    /// Creates a new [`DateTimeArrayBuilder`].
-    pub fn new(
-        date_time_types: UInt8Array,
-        timestamp_values: Decimal128Array,
-        timestamp_offsets: Int16Array,
-    ) -> Self {
-        Self {
-            date_time_types,
-            timestamp_values,
-            timestamp_offsets,
-        }
-    }
-
-    /// Builds the array.
-    pub fn finish(self) -> AResult<ArrayRef> {
-        let nulls = self.date_time_types.nulls().cloned();
-        let struct_array = StructArray::try_new(
-            FIELDS_TIMESTAMP.clone(),
-            vec![
-                Arc::new(self.date_time_types) as ArrayRef,
-                Arc::new(self.timestamp_values) as ArrayRef,
-                Arc::new(self.timestamp_offsets) as ArrayRef,
-            ],
-            nulls,
-        )?;
-        Ok(Arc::new(struct_array) as ArrayRef)
     }
 }

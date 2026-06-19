@@ -127,10 +127,13 @@ fn bench_binary_function(
         b.iter(|| {
             let args = ScalarFunctionArgs {
                 args: args.clone(),
-                arg_fields: vec![input_field_left.clone(), input_field_right.clone()],
+                arg_fields: vec![
+                    Arc::clone(&input_field_left),
+                    Arc::clone(&input_field_right),
+                ],
                 number_rows: 8192,
-                return_field: return_field.clone(),
-                config_options: options.clone(),
+                return_field: Arc::clone(&return_field),
+                config_options: Arc::clone(&options),
             };
             function.invoke_with_args(args).unwrap();
         });

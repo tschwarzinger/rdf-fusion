@@ -18,5 +18,5 @@ fn run_plan_assertions(assertions: impl FnOnce()) {
     // uuids and that, on the other hand, 20 characters long hex numbers are also unlikely in LPs.
     settings.add_filter(r"\b[0-9a-fA-F]{20,32}\b", "<uuid>");
 
-    settings.bind(|| assertions());
+    settings.bind(assertions);
 }

@@ -279,7 +279,7 @@ mod tests {
         let state = session_context.state();
         storage.optimize(&state).await.unwrap();
 
-        let index = storage.indexes()[0].clone();
+        let index = Arc::clone(&storage.indexes()[0]);
         assert_quad_count(session_context, index, 2).await;
     }
 
@@ -325,7 +325,7 @@ mod tests {
         let index = index.snapshot().await.unwrap();
         let table_provider = DeltaTableProvider::try_new(
             index.eager_snapshot().clone(),
-            index.log_store().clone(),
+            Arc::clone(index.log_store()),
             DeltaScanConfig::default(),
         )
         .unwrap();

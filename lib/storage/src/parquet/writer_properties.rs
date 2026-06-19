@@ -97,13 +97,11 @@ impl RdfFusionParquetWriterProperties {
         let clustered_columns = name
             .as_ref()
             .and_then(|order: &RdfSortOrderName| {
-                if let Some(first) = order.components().first() {
+                order.components().first().map(|first| {
                     // We only assume that the first columns of the sort order exhibit
                     // good-enough clustering.
-                    Some(vec![ColumnPath::new(vec![first.column_name().to_owned()])])
-                } else {
-                    None
-                }
+                    vec![ColumnPath::new(vec![first.column_name().to_owned()])]
+                })
             })
             .unwrap_or_else(|| all_columns.clone());
 

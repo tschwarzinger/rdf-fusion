@@ -231,7 +231,7 @@ mod tests {
     #[tokio::test]
     async fn test_is_blank_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(is_blank_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -260,7 +260,7 @@ mod tests {
     #[tokio::test]
     async fn test_is_iri_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(is_iri_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -289,7 +289,7 @@ mod tests {
     #[tokio::test]
     async fn test_is_literal_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(is_literal_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -318,7 +318,7 @@ mod tests {
     #[tokio::test]
     async fn test_is_numeric_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(is_numeric_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"

@@ -122,7 +122,6 @@ fn get_queries(
             let op = benchmark
                 .list_raw_operations(benchmark_context)
                 .unwrap()
-                .into_iter()
                 .find(|q| q.query_name() == query_name)
                 .unwrap();
             (query_name.to_string(), op.text().to_string())

@@ -98,7 +98,7 @@ pub async fn wind_farm_string_execution_plan() {
 
 async fn for_all_explanations(
     encoding: QuadStorageEncodingName,
-    assertion: impl Fn(String, QueryExplanation) -> (),
+    assertion: impl Fn(String, QueryExplanation),
 ) {
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
@@ -139,9 +139,7 @@ async fn for_all_explanations(
         println!(
             "{}:\n{}",
             benchmark_name,
-            displayable(explanation.execution_plan.as_ref())
-                .indent(false)
-                .to_string()
+            displayable(explanation.execution_plan.as_ref()).indent(false)
         );
 
         run_plan_assertions(|| assertion(benchmark_name, explanation));

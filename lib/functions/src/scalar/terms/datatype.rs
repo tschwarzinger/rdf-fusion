@@ -128,7 +128,7 @@ mod tests {
     #[tokio::test]
     async fn test_datatype_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(datatype_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(

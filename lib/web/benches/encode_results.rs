@@ -39,9 +39,9 @@ fn encode_solution(criterion: &mut Criterion) {
 
 fn generate_quads(count: usize) -> impl Iterator<Item = Quad> {
     (0..count).map(|i| {
-        let subject = format!("http://example.com/subject{}", i);
-        let predicate = format!("http://example.com/predicate{}", i);
-        let object = format!("http://example.com/object{}", i);
+        let subject = format!("http://example.com/subject{i}");
+        let predicate = format!("http://example.com/predicate{i}");
+        let object = format!("http://example.com/object{i}");
         Quad::new(
             NamedOrBlankNode::NamedNode(NamedNode::new_unchecked(subject)),
             NamedNode::new_unchecked(predicate),

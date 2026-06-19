@@ -168,7 +168,7 @@ impl ExtensionPlanner for VecQuadStoragePlanner {
                 quad_pattern
                     .graph_variable
                     .clone()
-                    .map(|v| TermPattern::Variable(v.into())),
+                    .map(TermPattern::Variable),
                 Some(quad_pattern.triple_pattern.subject.clone()),
                 Some(quad_pattern.triple_pattern.predicate.clone().into()),
                 Some(quad_pattern.triple_pattern.object.clone()),
@@ -216,7 +216,7 @@ impl VecQuadStorageSnapshot {
             }
             subject.append_term(quad.subject.as_ref().into());
             predicate.append_term(quad.predicate.as_ref().into());
-            object.append_term(quad.object.as_ref().into());
+            object.append_term(quad.object.as_ref());
         }
 
         let graph_name = graph_name.finish();

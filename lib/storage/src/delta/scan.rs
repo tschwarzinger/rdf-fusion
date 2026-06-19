@@ -540,8 +540,10 @@ mod tests {
             Arc::new(Literal::new(ScalarValue::Int64(Some(123)))),
         ));
 
-        let filter_exec =
-            Arc::new(FilterExec::try_new(filter_expr, scan.clone()).unwrap());
+        let filter_exec = Arc::new(
+            FilterExec::try_new(filter_expr, Arc::clone(&scan) as Arc<dyn ExecutionPlan>)
+                .unwrap(),
+        );
 
         // Construct GlobalLimitExec -> FilterExec -> DeltaQuadStorageScanExec
         let limit_exec = Arc::new(GlobalLimitExec::new(filter_exec, 0, Some(10)));
@@ -627,7 +629,7 @@ mod tests {
             .expect("Failed to build scan plan");
 
         let scan = DeltaQuadStorageScanExec::try_new(
-            storage.log().clone(),
+            Arc::clone(storage.log()),
             quad_pattern,
             plan_result.changeset_version_range,
             plan_result.scan,

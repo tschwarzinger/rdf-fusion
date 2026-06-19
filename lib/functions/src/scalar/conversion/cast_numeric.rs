@@ -224,7 +224,7 @@ mod tests {
     #[tokio::test]
     async fn test_cast_int_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(cast_int_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -253,7 +253,7 @@ mod tests {
     #[tokio::test]
     async fn test_cast_integer_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(cast_integer_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -281,7 +281,7 @@ mod tests {
     #[tokio::test]
     async fn test_cast_float_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(cast_float_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -310,7 +310,7 @@ mod tests {
     #[tokio::test]
     async fn test_cast_double_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(cast_double_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"
@@ -339,7 +339,7 @@ mod tests {
     #[tokio::test]
     async fn test_cast_decimal_typed_family() {
         let encodings = create_default_encodings();
-        let test_vector = create_standard_test_vector(&encodings.typed_family());
+        let test_vector = create_standard_test_vector(encodings.typed_family());
         let udf = Arc::new(cast_decimal_udf(encodings).unwrap());
         let result = evaluate_function_for_test(test_vector, udf);
         assert_snapshot!(result.to_string().await.unwrap(), @"

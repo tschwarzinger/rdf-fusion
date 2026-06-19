@@ -1,4 +1,4 @@
-name: CI (test)
+name: CI (lint)
 
 on:
   push:
@@ -7,14 +7,14 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
+  lint:
     runs-on: tuw-runner
 
     steps:
       - name: Install System Dependencies
         run: |
           apt-get update
-          apt-get install -y git-lfs build-essential cmake default-jre-headless
+          apt-get install -y git-lfs build-essential cmake
           git lfs install
 
       - name: Setup Rust
@@ -36,11 +36,5 @@ jobs:
         with:
           lfs: true
 
-      - name: Prepare Benches for Tests
-        run: just prepare-benches-tests
-
-      - name: Tests
-        run: just test
-
-      - name: Test Examples
-        run: just test-examples
+      - name: Lints
+        run: just lint

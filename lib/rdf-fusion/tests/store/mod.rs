@@ -37,7 +37,7 @@ pub async fn read_dump(ctx: &SessionContext, output_url: &str) -> String {
     let url = Url::parse(output_url).unwrap();
     let object_store = ctx
         .runtime_env()
-        .object_store(&url.as_object_store_url())
+        .object_store(url.as_object_store_url())
         .unwrap();
     let path = Path::from(url.path());
     let bytes = object_store

@@ -203,7 +203,7 @@ mod tests {
         )
         .unwrap()
         .with_family_array::<StringFamilyArray>(Some(
-            StringFamilyArray::from_array_unchecked(strings_array.clone()),
+            StringFamilyArray::from_array_unchecked(Arc::clone(&strings_array)),
         ))
         .unwrap()
         .finish()

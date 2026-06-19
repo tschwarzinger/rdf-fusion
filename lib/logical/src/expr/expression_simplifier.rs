@@ -386,8 +386,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let rewritten = execute_test_for_expr(&schema, expression);
-        rewritten
+        execute_test_for_expr(&schema, expression)
     }
 
     fn execute_test_for_builtin(
@@ -422,17 +421,16 @@ mod tests {
         expr: Expr,
     ) -> Transformed<LogicalPlan> {
         let registry = create_context();
-        let plan = create_plan(&schema)
+        let plan = create_plan(schema)
             .project(vec![expr])
             .unwrap()
             .build()
             .unwrap();
         let rule = SimplifySparqlExpressionsRule::new(
             registry.encodings().clone(),
-            registry.functions().clone(),
+            Arc::clone(registry.functions()),
         );
-        let rewritten = rule.rewrite(plan, &OptimizerContext::new()).unwrap();
-        rewritten
+        rule.rewrite(plan, &OptimizerContext::new()).unwrap()
     }
 
     fn create_context() -> RdfFusionContextView {

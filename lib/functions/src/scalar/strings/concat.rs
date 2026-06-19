@@ -303,7 +303,7 @@ mod tests {
         let udf = Arc::new(concat_udf(encodings).unwrap());
 
         let input = datafusion::prelude::DataFrame::from_columns(vec![
-            ("s1", s1.clone()),
+            ("s1", Arc::clone(&s1)),
             ("s2", s1),
         ])
         .unwrap();

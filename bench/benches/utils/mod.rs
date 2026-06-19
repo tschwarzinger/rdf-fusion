@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::Context;
 use futures::StreamExt;
 use rdf_fusion::encoding::QuadStorageEncodingName;
@@ -25,8 +27,8 @@ impl BenchmarkStorageConfig {
             self.encoding,
             1,
         )
-        .with_storage_type(self.storage_type.clone())
-        .with_storage_location(self.storage_location.clone())
+        .with_storage_type(self.storage_type)
+        .with_storage_location(self.storage_location)
         .build()
     }
 }

@@ -239,12 +239,14 @@ mod tests {
     async fn test_as_eager_changeset_conversion() -> Result<(), Box<dyn std::error::Error>>
     {
         let storage = Arc::new(DeltaQuadStorageBuilder::new().build().await?);
-        let context = RdfFusionContextBuilder::new(storage.clone()).build()?;
+        let context =
+            RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
+                .build()?;
 
         let state = context.session_context().state();
         let txn = storage.begin_transaction(&state).await?;
         txn.insert(quads_to_plain_term_dataframe(
-            &context.session_context(),
+            context.session_context(),
             &[Quad::new(
                 NamedNode::new_unchecked("https://my.com/s"),
                 NamedNode::new_unchecked("https://my.com/p"),

@@ -98,7 +98,7 @@ pub async fn bsbm_explore_string_execution_plan() {
 
 async fn for_all_explanations(
     encoding: QuadStorageEncodingName,
-    assertion: impl Fn(String, QueryExplanation) -> (),
+    assertion: impl Fn(String, QueryExplanation),
 ) {
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
@@ -132,9 +132,7 @@ async fn for_all_explanations(
         println!(
             "{}:\n{}",
             benchmark_name,
-            displayable(explanation.execution_plan.as_ref())
-                .indent(false)
-                .to_string()
+            displayable(explanation.execution_plan.as_ref()).indent(false)
         );
 
         run_plan_assertions(|| assertion(benchmark_name, explanation));
@@ -147,7 +145,7 @@ fn get_query_to_execute(
     query_name: BsbmExploreQueryName,
 ) -> SparqlRawOperation<BsbmExploreQueryName> {
     benchmark
-        .list_raw_operations(&benchmark_context)
+        .list_raw_operations(benchmark_context)
         .context("Could not list raw operations for BSBM Explore benchmark. Have you prepared a bsbm-1000 dataset?")
         .unwrap()
         .into_iter()

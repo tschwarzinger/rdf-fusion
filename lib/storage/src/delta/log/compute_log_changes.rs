@@ -702,17 +702,19 @@ mod tests {
         ");
     }
 
+    type TestRow = (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        i8,
+        i64,
+        i64,
+    );
+
     struct TestChangesetBuilder {
         schema: SchemaRef,
-        rows: Vec<(
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            i8,
-            i64,
-            i64,
-        )>,
+        rows: Vec<TestRow>,
     }
 
     impl TestChangesetBuilder {

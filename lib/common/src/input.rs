@@ -12,7 +12,7 @@ use tokio::io::AsyncRead;
 use tokio::sync::Mutex;
 use url::Url;
 
-/// An input for the [`RdfParquetLoader`].
+/// Represents an RDF file URL with a default graph name.
 #[derive(Debug, Clone)]
 pub struct RdfInput {
     /// The URL of the RDF file.

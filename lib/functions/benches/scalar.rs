@@ -153,7 +153,7 @@ fn bench_unary_function(
     function: &ScalarUDF,
     scenario: UnaryScenario,
 ) {
-    let args = scenario.create_args(&encodings);
+    let args = scenario.create_args(encodings);
     let options = Arc::new(ConfigOptions::default());
 
     let input_field = Arc::new(Field::new(
@@ -172,10 +172,10 @@ fn bench_unary_function(
         b.iter(|| {
             let args = ScalarFunctionArgs {
                 args: args.clone(),
-                arg_fields: vec![input_field.clone()],
+                arg_fields: vec![Arc::clone(&input_field)],
                 number_rows: 8192,
-                return_field: return_field.clone(),
-                config_options: options.clone(),
+                return_field: Arc::clone(&return_field),
+                config_options: Arc::clone(&options),
             };
             function.invoke_with_args(args).unwrap();
         });

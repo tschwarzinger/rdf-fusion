@@ -64,7 +64,7 @@ async fn get_dumped_bytes(store: &Store, url_str: &str) -> bytes::Bytes {
         .context()
         .session_context()
         .runtime_env()
-        .object_store(&url.as_object_store_url())
+        .object_store(url.as_object_store_url())
         .unwrap();
 
     let path = object_store::path::Path::from(url.path());

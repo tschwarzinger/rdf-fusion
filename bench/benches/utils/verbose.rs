@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use datafusion::physical_plan::displayable;
 use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion::store::Store;
@@ -22,9 +24,9 @@ pub async fn print_query_details(
     query_name: &str,
     query: &str,
 ) -> anyhow::Result<()> {
-    println!("Executing query ({}):", query_name);
+    println!("Executing query ({query_name}):");
     println!("\n========== SPARQL Query ==========\n");
-    println!("{}", query);
+    println!("{query}");
     println!("\n==================================\n\n");
 
     let (_, explanation) = store.explain_query_opt(query, query_options).await?;
