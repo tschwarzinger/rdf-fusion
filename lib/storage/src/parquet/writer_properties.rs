@@ -67,9 +67,9 @@ impl RdfFusionParquetWriterProperties {
     /// Sets the sort order that the writer can store in the Parquet file. This is only used for
     /// setting the metadata. This assumes that the sort options are ascending and nulls first.
     pub fn with_sort_order(mut self, sort_order: Option<RdfSortOrder>) -> Self {
-        let name = sort_order.map(|s| s.name());
+        let sort_name = sort_order.map(|s| s.name());
 
-        let sorting_columns = name.as_ref().and_then(|order| match order {
+        let sorting_columns = sort_name.as_ref().and_then(|order| match order {
             RdfSortOrderName::NativeOrder(order) => {
                 if order.is_empty() {
                     None
@@ -94,7 +94,7 @@ impl RdfFusionParquetWriterProperties {
             .iter()
             .map(|c| ColumnPath::new(vec![c.column_name().to_owned()]))
             .collect::<Vec<_>>();
-        let clustered_columns = name
+        let clustered_columns = sort_name
             .as_ref()
             .and_then(|order: &RdfSortOrderName| {
                 order.components().first().map(|first| {
@@ -103,7 +103,7 @@ impl RdfFusionParquetWriterProperties {
                     vec![ColumnPath::new(vec![first.column_name().to_owned()])]
                 })
             })
-            .unwrap_or_else(|| all_columns.clone());
+            .unwrap_or_default();
 
         for col_path in all_columns {
             let is_clustered = clustered_columns.contains(&col_path);
@@ -145,7 +145,7 @@ impl RdfFusionParquetWriterProperties {
             }
         }
 
-        self.sort_order = name;
+        self.sort_order = sort_name;
         self
     }
 

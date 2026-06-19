@@ -10,25 +10,42 @@ use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
 use futures::future::BoxFuture;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
 /// A cache for pre-downloaded Bloom filters.
 #[derive(Debug, Clone, Default)]
 pub struct BloomFilterCache {
     filters: Arc<Vec<(Range<u64>, Bytes)>>,
+    hit_counter: Arc<AtomicUsize>,
 }
 
 impl BloomFilterCache {
     pub fn new(filters: Vec<(Range<u64>, Bytes)>) -> Self {
         Self {
             filters: Arc::new(filters),
+            hit_counter: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     pub fn get(&self, range: &Range<u64>) -> Option<Bytes> {
-        self.filters
+        let match_opt = self
+            .filters
             .iter()
             .find(|(r, _)| r == range)
-            .map(|(_, b)| b.clone())
+            .map(|(_, b)| b.clone());
+        if match_opt.is_some() {
+            self.hit_counter
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        match_opt
+    }
+
+    pub fn hit_count(&self) -> usize {
+        self.hit_counter.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn len(&self) -> usize {
+        self.filters.len()
     }
 }
 
@@ -55,17 +72,34 @@ impl AsyncFileReader for PreloadedMetadataReader {
         &mut self,
         ranges: Vec<Range<u64>>,
     ) -> BoxFuture<'_, Result<Vec<Bytes>, ParquetError>> {
-        let all_cached = ranges
-            .iter()
-            .all(|r| self.bloom_filter_cache.get(r).is_some());
-        if all_cached {
-            let bytes = ranges
-                .iter()
-                .map(|r| self.bloom_filter_cache.get(r).unwrap())
-                .collect();
+        let mut uncached_ranges = Vec::new();
+        let mut uncached_indices = Vec::new();
+        let mut results = vec![None; ranges.len()];
+
+        for (idx, range) in ranges.into_iter().enumerate() {
+            if let Some(bytes) = self.bloom_filter_cache.get(&range) {
+                results[idx] = Some(bytes);
+            } else {
+                uncached_ranges.push(range);
+                uncached_indices.push(idx);
+            }
+        }
+
+        if uncached_ranges.is_empty() {
+            let bytes = results.into_iter().map(Option::unwrap).collect();
             return Box::pin(async move { Ok(bytes) });
         }
-        self.inner.get_byte_ranges(ranges)
+
+        let fut = self.inner.get_byte_ranges(uncached_ranges);
+        Box::pin(async move {
+            let fetched = fut.await?;
+            let mut fetched_iter = fetched.into_iter();
+            for idx in uncached_indices {
+                results[idx] = Some(fetched_iter.next().expect("Fetched count mismatch"));
+            }
+            let bytes = results.into_iter().map(Option::unwrap).collect();
+            Ok(bytes)
+        })
     }
 
     fn get_metadata(
@@ -112,7 +146,6 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
     ) -> DFResult<Box<dyn AsyncFileReader + Send>> {
         let requested_path = file.object_meta.location.as_ref();
 
-        // Error out if the file name doesn't match
         if requested_path != self.expected_path {
             return Err(DataFusionError::Execution(format!(
                 "Pre-loaded metadata reader reader expected file '{}', but was asked to open '{}'",
@@ -120,7 +153,6 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
             )));
         }
 
-        // Create the actual underlying reader (e.g., ObjectStore reader)
         let inner_reader = self.inner_factory.create_reader(
             partition_index,
             file,
@@ -128,7 +160,6 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
             metrics,
         )?;
 
-        // Wrap it to intercept metadata requests
         Ok(Box::new(PreloadedMetadataReader {
             inner: inner_reader,
             metadata: Arc::clone(&self.cached_parquet_meta),

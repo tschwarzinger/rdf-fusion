@@ -326,8 +326,10 @@ fn contains_udf(expr: &Arc<dyn PhysicalExpr>) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::parquet::ParquetQuadStorage;
+    use datafusion::config::TableParquetOptions;
     use datafusion::dataframe::DataFrameWriteOptions;
     use datafusion::physical_plan::displayable;
+    use datafusion::prelude::{SessionConfig, SessionContext};
     use insta::assert_snapshot;
     use object_store::memory::InMemory;
     use rdf_fusion_common::{NamedNode, Quad};
@@ -337,12 +339,22 @@ mod tests {
     use rdf_fusion_execution::RdfFusionContextBuilder;
     use rdf_fusion_execution::sparql::QueryOptions;
     use rdf_fusion_execution::sparql::RdfFusionQuery;
+    use rdf_fusion_extensions::storage::QuadStorage;
     use std::sync::Arc;
     use url::Url;
 
     #[tokio::test]
     async fn test_parquet_scan_filter_pushdown_with_equality_with_named_node() {
-        let context = prepare_test_store().await;
+        let (context, _) = prepare_test_store(
+            &[(
+                "http://example.org/s1",
+                "http://example.org/p1",
+                "http://example.org/o1",
+            )],
+            false,
+            "test.parquet",
+        )
+        .await;
 
         let query_pushed: RdfFusionQuery = "SELECT ?s WHERE { ?s <http://example.org/p1> ?o . FILTER(?o = <http://example.org/o1>) }".try_into().unwrap();
         let (_, explanation_pushed) = context
@@ -359,7 +371,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_parquet_scan_filter_pushdown_with_function_prevented() {
-        let context = prepare_test_store().await;
+        let (context, _) = prepare_test_store(
+            &[(
+                "http://example.org/s1",
+                "http://example.org/p1",
+                "http://example.org/o1",
+            )],
+            false,
+            "test.parquet",
+        )
+        .await;
 
         let query_not_pushed: RdfFusionQuery = "SELECT ?s WHERE { ?s <http://example.org/p1> ?o . FILTER(LCASE(STR(?o)) = \"http://example.org/o1\") }".try_into().unwrap();
         let (_, explanation_not_pushed) = context
@@ -375,46 +396,105 @@ mod tests {
         ");
     }
 
-    async fn prepare_test_store() -> RdfFusionContext {
-        let context = datafusion::prelude::SessionContext::new();
+    #[tokio::test]
+    async fn test_parquet_bloom_filter_cache_hits() {
+        let (rdf_context, storage) = prepare_test_store(
+            &[
+                (
+                    "http://example.org/s1",
+                    "http://example.org/p1",
+                    "http://example.org/o1",
+                ),
+                (
+                    "http://example.org/s2",
+                    "http://example.org/p1",
+                    "http://example.org/o3",
+                ),
+            ],
+            true,
+            "test_bloom.parquet",
+        )
+        .await;
+        let cache = storage.bloom_filter_cache().clone();
+
+        let query: RdfFusionQuery = "SELECT ?s WHERE { ?s ?p <http://example.org/o2> . }"
+            .try_into()
+            .unwrap();
+        let (results, _) = rdf_context
+            .execute_query(&query, QueryOptions::default())
+            .await
+            .unwrap();
+
+        // Consume the results to drive execution.
+        if let rdf_fusion_execution::results::QueryResults::Solutions(mut solutions) =
+            results
+        {
+            use futures::StreamExt;
+            while let Some(row) = solutions.next().await {
+                row.unwrap();
+            }
+        }
+
+        let hits = cache.hit_count();
+        assert_eq!(hits, 1);
+    }
+
+    async fn prepare_test_store(
+        quads: &[(&str, &str, &str)],
+        enable_bloom: bool,
+        filename: &str,
+    ) -> (RdfFusionContext, Arc<ParquetQuadStorage>) {
+        let session_config = SessionConfig::default();
+        let context = SessionContext::new_with_config(session_config);
         context.runtime_env().object_store_registry.register_store(
             &Url::parse("memory:///").unwrap(),
             Arc::new(InMemory::new()),
         );
 
-        let mut builder = StringQuadsBuilder::with_capacity(1);
-        builder.append_quad(
-            Quad::new(
-                NamedNode::new_unchecked("http://example.org/s1"),
-                NamedNode::new_unchecked("http://example.org/p1"),
-                NamedNode::new_unchecked("http://example.org/o1"),
-                rdf_fusion_common::GraphNameRef::DefaultGraph,
-            )
-            .as_ref(),
-        );
+        let mut builder = StringQuadsBuilder::with_capacity(quads.len());
+        for &(s, p, o) in quads {
+            builder.append_quad(
+                Quad::new(
+                    NamedNode::new_unchecked(s),
+                    NamedNode::new_unchecked(p),
+                    NamedNode::new_unchecked(o),
+                    rdf_fusion_common::GraphNameRef::DefaultGraph,
+                )
+                .as_ref(),
+            );
+        }
         let batch = builder.finish().into_record_batch();
+        let path = format!("memory:///{filename}");
+
+        let mut options = TableParquetOptions::default();
+        options.global.bloom_filter_on_write = enable_bloom;
         context
             .read_batch(batch)
             .unwrap()
             .write_parquet(
-                "memory:///test.parquet",
+                &path,
                 DataFrameWriteOptions::new().with_single_file_output(true),
-                None,
+                Some(options),
             )
             .await
             .unwrap();
 
-        let storage = ParquetQuadStorage::try_load(
-            Url::parse("memory:///test.parquet").unwrap(),
-            QuadStorageEncodingName::String,
-            context.runtime_env().object_store_registry.as_ref(),
-        )
-        .await
-        .unwrap();
+        let storage = Arc::new(
+            ParquetQuadStorage::try_load(
+                Url::parse(&path).unwrap(),
+                QuadStorageEncodingName::String,
+                context.runtime_env().object_store_registry.as_ref(),
+            )
+            .await
+            .unwrap(),
+        );
 
-        RdfFusionContextBuilder::new(Arc::new(storage))
-            .with_single_partition_session_config()
-            .build()
-            .unwrap()
+        let rdf_context =
+            RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
+                .with_single_partition_session_config()
+                .build()
+                .unwrap();
+
+        (rdf_context, storage)
     }
 }

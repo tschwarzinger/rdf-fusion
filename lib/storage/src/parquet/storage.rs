@@ -101,6 +101,10 @@ impl ParquetQuadStorage {
             bloom_filter_cache,
         })
     }
+
+    pub fn bloom_filter_cache(&self) -> &BloomFilterCache {
+        &self.bloom_filter_cache
+    }
 }
 
 impl Debug for ParquetQuadStorage {
