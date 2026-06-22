@@ -145,15 +145,6 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
         self.apply_builtin(BuiltinName::Concat, args)
     }
 
-    /// Creates an expression that interleaves the bits of its inputs. This can be used for
-    /// clustering similar values over multiple inputs.
-    ///
-    /// # Relevant Resources
-    /// - <https://en.wikipedia.org/wiki/Z-order_curve>
-    pub fn zorder(&self, args: Vec<Expr>) -> DFResult<Expr> {
-        self.apply_with_args_no_builder(&FunctionName::Builtin(BuiltinName::ZOrder), args)
-    }
-
     /// Creates an expression that computes a pseudo-random value between 0 and 1.
     ///
     /// The data type of the value is `xsd:double`.

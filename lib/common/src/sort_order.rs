@@ -9,8 +9,6 @@ pub enum RdfSortOrder {
     SparqlOrder(Vec<QuadComponent>),
     /// Use the native order (i.e., DataFusion's order) of the respective encoding.
     NativeOrder(Vec<QuadComponent>),
-    /// Z-Order clustering.
-    ZOrder(Vec<QuadComponent>),
 }
 
 /// A version of [`RdfSortOrder`] that reflects the name of the sort order (but currently also carries the components).
@@ -20,8 +18,6 @@ pub enum RdfSortOrderName {
     SparqlOrder(Vec<QuadComponent>),
     /// See [`RdfSortOrder::NativeOrder`]
     NativeOrder(Vec<QuadComponent>),
-    /// See [`RdfSortOrder::ZOrder`]
-    ZOrder(Vec<QuadComponent>),
 }
 
 impl RdfSortOrderName {
@@ -30,7 +26,6 @@ impl RdfSortOrderName {
         match self {
             RdfSortOrderName::SparqlOrder(c) => c,
             RdfSortOrderName::NativeOrder(c) => c,
-            RdfSortOrderName::ZOrder(c) => c,
         }
     }
 }
@@ -45,7 +40,6 @@ impl RdfSortOrder {
         match self {
             RdfSortOrder::SparqlOrder(c) => RdfSortOrderName::SparqlOrder(c.clone()),
             RdfSortOrder::NativeOrder(c) => RdfSortOrderName::NativeOrder(c.clone()),
-            RdfSortOrder::ZOrder(c) => RdfSortOrderName::ZOrder(c.clone()),
         }
     }
 
@@ -54,7 +48,6 @@ impl RdfSortOrder {
         let components = match self {
             RdfSortOrder::SparqlOrder(c) => c,
             RdfSortOrder::NativeOrder(c) => c,
-            RdfSortOrder::ZOrder(c) => c,
         };
 
         let mut seen = std::collections::HashSet::new();
@@ -79,7 +72,6 @@ impl RdfSortOrder {
         match self {
             RdfSortOrder::SparqlOrder(c) => c,
             RdfSortOrder::NativeOrder(c) => c,
-            RdfSortOrder::ZOrder(c) => c,
         }
     }
 }
@@ -89,7 +81,6 @@ impl Display for RdfSortOrder {
         match self {
             RdfSortOrder::SparqlOrder(_) => {}
             RdfSortOrder::NativeOrder(_) => f.write_str("Native(")?,
-            RdfSortOrder::ZOrder(_) => f.write_str("ZOrder(")?,
         };
 
         let components = self.components();
@@ -97,7 +88,7 @@ impl Display for RdfSortOrder {
             write!(f, "{c}")?;
         }
 
-        if matches!(self, RdfSortOrder::NativeOrder(_) | RdfSortOrder::ZOrder(_)) {
+        if matches!(self, RdfSortOrder::NativeOrder(_)) {
             f.write_str(")")?;
         }
 
@@ -122,11 +113,7 @@ impl std::str::FromStr for RdfSortOrder {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let upper = s.trim().to_uppercase();
 
-        let result = if upper.starts_with("ZORDER(") && upper.ends_with(')') {
-            let inner = &upper[7..upper.len() - 1];
-            let components = parse_components(inner)?;
-            RdfSortOrder::ZOrder(components)
-        } else if upper.starts_with("NATIVE(") && upper.ends_with(')') {
+        let result = if upper.starts_with("NATIVE(") && upper.ends_with(')') {
             let inner = &upper[7..upper.len() - 1];
             let components = parse_components(inner)?;
             RdfSortOrder::NativeOrder(components)
@@ -171,19 +158,6 @@ mod tests {
         assert_eq!(
             RdfSortOrder::from_str("NATIVE(S)").unwrap(),
             RdfSortOrder::NativeOrder(vec![QuadComponent::Subject])
-        );
-    }
-
-    #[test]
-    fn test_rdf_sort_order_parse_zorder() {
-        assert_eq!(
-            RdfSortOrder::from_str("ZORDER(GSPO)").unwrap(),
-            RdfSortOrder::ZOrder(vec![
-                QuadComponent::GraphName,
-                QuadComponent::Subject,
-                QuadComponent::Predicate,
-                QuadComponent::Object
-            ])
         );
     }
 

@@ -10,7 +10,6 @@
     mf:entries
     (
         :complex_expression_in_order_by
-        # :zorder_test ZOrder is currently not supported in SPARQL
     ) .
 
 :complex_expression_in_order_by rdf:type mf:QueryEvaluationTest ;
@@ -20,9 +19,3 @@
            qt:data   <complex_expression_in_order_by.ttl> ] ;
     mf:result  <complex_expression_in_order_by.srx> .
 
-:zorder_test rdf:type mf:QueryEvaluationTest ;
-    mf:name "A SPARQL query with ZOrder function in ORDER BY" ;
-    mf:action
-         [ qt:query  <zorder_test.rq> ;
-           qt:data   <zorder_test.ttl> ] ;
-    mf:result  <zorder_test.srx> .

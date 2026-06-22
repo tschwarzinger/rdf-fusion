@@ -3,6 +3,7 @@ use crate::aggregates::{
     sparql_count, sparql_sum,
 };
 use crate::scalar::RenamedScalarUdfImpl;
+use crate::scalar::as_sortable_bytes_udf;
 use crate::scalar::comparison::{
     equal_udf, greater_or_equal_udf, greater_than_udf, is_compatible_udf,
     less_or_equal_udf, less_than_udf,
@@ -35,7 +36,6 @@ use crate::scalar::terms::{
     bnode_udf, datatype_udf, iri_udf, is_blank_udf, is_iri_udf, is_literal_udf,
     is_numeric_udf, lang_udf, str_udf, strdt_udf, strlang_udf, struuid_udf, uuid_udf,
 };
-use crate::scalar::{as_sortable_bytes_udf, zorder_udf};
 use datafusion::common::plan_datafusion_err;
 use datafusion::execution::FunctionRegistry;
 use datafusion::execution::registry::MemoryFunctionRegistry;
@@ -245,7 +245,6 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
         regex_udf(registry.encodings.clone())?,
         bound_udf(registry.encodings.clone())?,
         as_sortable_bytes_udf(registry.encodings.clone()),
-        zorder_udf(registry.encodings.clone()),
         renamed(
             &FunctionName::Builtin(BuiltinName::Coalesce),
             CoalesceFunc::new(),

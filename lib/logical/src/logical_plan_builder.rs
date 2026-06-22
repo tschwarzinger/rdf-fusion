@@ -367,13 +367,6 @@ impl RdfFusionLogicalPlanBuilder {
                 let builder = self.into_inner().sort(sort_exprs)?;
                 Ok(context.create(Arc::new(builder.build()?)))
             }
-            RdfSortOrder::ZOrder(components) => {
-                let zorder_args: Vec<_> =
-                    components.iter().map(|c| col(c.column_name())).collect();
-
-                let expr = self.expr_builder_root().zorder(zorder_args)?;
-                Ok(self.order_by(vec![expr.sort(true, true)])?)
-            }
         }
     }
 

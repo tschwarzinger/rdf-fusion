@@ -122,34 +122,6 @@ fn test_cli_dump_spiderman_sorted_osp() {
 }
 
 #[test]
-fn test_cli_dump_spiderman_sorted_zorder() {
-    let (_temp_dir, location) = setup_delta_lake();
-    let mut dump_file = std::env::temp_dir();
-    dump_file.push("dump_spiderman_sorted_zorder.nq");
-    let dump_path = dump_file.to_str().unwrap().to_string();
-    let _ = fs::remove_file(&dump_path);
-
-    let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
-    cmd.args([
-        "--storage-type",
-        "delta-lake",
-        "--location",
-        &location,
-        "dump",
-        &format!("file://{dump_path}"),
-        "--format",
-        "nq",
-        "--sort-by",
-        "ZOrder(SPO)",
-    ]);
-
-    cmd.assert().success();
-
-    let content = fs::read_to_string(&dump_path).expect("Dump file should exist");
-    insta::assert_snapshot!(content);
-}
-
-#[test]
 fn test_cli_dump_spiderman_sorted_native() {
     let (_temp_dir, location) = setup_delta_lake();
     let mut dump_file = std::env::temp_dir();

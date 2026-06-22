@@ -10,10 +10,8 @@ mod renamed;
 pub mod signature;
 pub mod strings;
 pub mod terms;
-pub mod zorder;
 
 pub use args::*;
 pub use as_sortable_bytes::as_sortable_bytes_udf;
 pub use renamed::*;
 pub use signature::*;
-pub use zorder::zorder_udf;

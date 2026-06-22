@@ -1,7 +1,0 @@
-PREFIX rf: <https://rdf-fusion.org/sparql/functions#>
-
-SELECT ?s ?p ?o
-WHERE {
-  ?s ?p ?o
-}
-ORDER BY rf:ZOrder(?s, ?p, ?o)
