@@ -52,22 +52,40 @@ Once installed, you can use the CLI to run a SPARQL engine. See `rdf-fusion --he
 
 #### Examples
 
-**Serve a SPARQL HTTP server from RDF files:**
-
-```bash
-rdf-fusion --storage-type rdf-files --location file://examples/data/spiderman.ttl serve
-```
+The following examples showcase some of the use cases that can be implemented using RDF Fusion's CLI.
+For more detailed information about the commands, please consult the manual or open an issue.
 
 **Build a Delta Lake database from RDF files:**
 
+Creates a new database at the location `file:///tmp/my-db` using the `delta-lake` storage backend.
+
 ```bash
-rdf-fusion --storage-type delta-lake --location file:///tmp/my-db build-database --inputs file://examples/data/spiderman.ttl
+rdf-fusion --storage-type delta-lake --location file:///tmp/my-db load ./examples/data/spiderman.ttl
 ```
 
-**Dump a store into a sorted N-Quads file:**
+**Serve a SPARQL HTTP server from a Delta Lake database:**
+
+Serves the database created in the example above at the default endpoint.
 
 ```bash
-rdf-fusion --storage-type rdf-files --location file://examples/data/spiderman.ttl dump --output ./dump.nq --format nq --sort-by GSPO
+rdf-fusion --storage-type delta-lake --location file:///tmp/my-db serve
+```
+
+**Query a Parquet file:**
+
+Queries a Parquet file that stores RDF data.
+For example, to find out how many names "Spiderman" has:
+
+```bash
+rdf-fusion --storage-type parquet --location ./examples/data/spiderman.parquet query "SELECT (COUNT(?name) AS ?count) WHERE { <http://example.org/#spiderman> <http://xmlns.com/foaf/0.1/name> ?name }"
+```
+
+**Dump a Delta Lake database into a sorted N-Quads file:**
+
+Dumps the current snapshot of a database to an RDF serialization format, such as N-Quads. 
+
+```bash
+rdf-fusion --storage-type delta-lake --location file:///tmp/my-db dump ./dump.nq --format nq --sort-by GSPO
 ```
 
 ### Using RDF Fusion in your Project
