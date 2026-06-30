@@ -1,4 +1,4 @@
-use crate::parquet::reader::BloomFilterCache;
+use crate::parquet::reader::PreloadedBloomFilters;
 use crate::parquet::snapshot::ParquetQuadStorageSnapshot;
 use async_trait::async_trait;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
@@ -26,7 +26,7 @@ pub struct ParquetQuadStorage {
     encoding: QuadStorageEncoding,
     object_meta: ObjectMeta,
     parquet_meta: Arc<ParquetMetaData>,
-    bloom_filter_cache: BloomFilterCache,
+    bloom_filter_cache: PreloadedBloomFilters,
 }
 
 impl ParquetQuadStorage {
@@ -86,7 +86,7 @@ impl ParquetQuadStorage {
                 .map_err(|e| StorageError::Other(e.to_string().into()))?
         };
 
-        let bloom_filter_cache = BloomFilterCache::new(
+        let bloom_filter_cache = PreloadedBloomFilters::new(
             bloom_filter_ranges
                 .into_iter()
                 .zip(bloom_filter_bytes)
@@ -102,7 +102,7 @@ impl ParquetQuadStorage {
         })
     }
 
-    pub fn bloom_filter_cache(&self) -> &BloomFilterCache {
+    pub fn bloom_filter_cache(&self) -> &PreloadedBloomFilters {
         &self.bloom_filter_cache
     }
 }

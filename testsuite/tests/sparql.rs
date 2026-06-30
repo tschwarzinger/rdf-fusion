@@ -356,8 +356,24 @@ async fn w3c_sparql11_tsv_evaluation() -> Result<()> {
 fn plain_term_store_factory() -> StoreFactory {
     Arc::new(|config| {
         Box::pin(async move {
+            let memory_store = Arc::new(object_store::memory::InMemory::new());
+            config.runtime_env.register_object_store(
+                &url::Url::parse("memory://").unwrap(),
+                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
+            );
+
+            let log_store = deltalake::logstore::logstore_with(
+                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
+                &url::Url::parse("memory:///").unwrap(),
+                deltalake::logstore::StorageConfig::default().with_io_runtime(
+                    deltalake::logstore::IORuntime::RT(tokio::runtime::Handle::current()),
+                ),
+            )
+            .unwrap();
+
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
+                .with_log_store(log_store)
                 .build()
                 .await
                 .unwrap();
@@ -391,8 +407,24 @@ fn plain_term_store_factory() -> StoreFactory {
 fn string_store_factory() -> StoreFactory {
     Arc::new(|config| {
         Box::pin(async move {
+            let memory_store = Arc::new(object_store::memory::InMemory::new());
+            config.runtime_env.register_object_store(
+                &url::Url::parse("memory://").unwrap(),
+                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
+            );
+
+            let log_store = deltalake::logstore::logstore_with(
+                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
+                &url::Url::parse("memory:///").unwrap(),
+                deltalake::logstore::StorageConfig::default().with_io_runtime(
+                    deltalake::logstore::IORuntime::RT(tokio::runtime::Handle::current()),
+                ),
+            )
+            .unwrap();
+
             let delta_storage = DeltaQuadStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::String)
+                .with_log_store(log_store)
                 .build()
                 .await
                 .unwrap();

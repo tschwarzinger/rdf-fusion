@@ -17,6 +17,10 @@ fn run_plan_assertions(assertions: impl FnOnce()) {
     // also shorter uuids. We assume that more than 12 leading zeroes are very unlikely for random
     // uuids and that, on the other hand, 20 characters long hex numbers are also unlikely in LPs.
     settings.add_filter(r"\b[0-9a-fA-F]{20,32}\b", "<uuid>");
+    settings.add_filter(
+        r"part-[0-9a-f-]+\.zstd\.parquet",
+        "delta-parquet-file.zstd.parquet",
+    );
 
     settings.bind(assertions);
 }

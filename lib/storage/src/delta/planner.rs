@@ -1,6 +1,5 @@
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::objectids::EncodeAsObjectIdDeltaExec;
-use crate::delta::scan::DeltaQuadStorageScanExec;
 use crate::delta::scan_plan_builder::DeltaQuadStorageScanPlanBuilder;
 use crate::delta::snapshot::DeltaQuadStorageSnapshot;
 use async_trait::async_trait;
@@ -8,10 +7,7 @@ use datafusion::common::plan_err;
 use datafusion::error::DataFusionError;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
-use datafusion::physical_expr::PhysicalExpr;
-use datafusion::physical_expr::expressions::Column as PhysicalColumn;
 use datafusion::physical_plan::ExecutionPlan;
-use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_logical::encoding::object_id::EncodeAsObjectIdNode;
@@ -44,46 +40,14 @@ impl DeltaQuadStoragePlanner {
         )
         .with_best_index(self.snapshot.indexes())?
         .with_changeset_for_log(self.snapshot.log(), Some(self.snapshot.version()))
-        .await?;
+        .await?
+        .with_projection_indices(node.projection.clone());
 
         if let Some(transactional) = self.snapshot.transactional_changeset() {
             builder = builder.with_changeset(Arc::clone(transactional));
         }
 
-        let scan_planning_result = builder.build().await?;
-
-        let mut exec: Arc<dyn ExecutionPlan> =
-            Arc::new(DeltaQuadStorageScanExec::try_new(
-                Arc::clone(self.snapshot.log()),
-                node.quad_pattern().clone(),
-                scan_planning_result.changeset_version_range,
-                scan_planning_result.scan,
-                scan_planning_result.chosen_index.map(|idx| idx.to_string()),
-            )?);
-
-        if let Some(projection) = &node.projection {
-            let schema = exec.schema();
-            let exprs = projection
-                .iter()
-                .map(|&i| {
-                    let field = schema.field(i);
-                    (
-                        Arc::new(PhysicalColumn::new(field.name(), i))
-                            as Arc<dyn PhysicalExpr>,
-                        field.name().to_string(),
-                    )
-                })
-                .collect::<Vec<_>>();
-
-            let projection_exec = ProjectionExec::try_new(exprs, Arc::clone(&exec))?;
-            if let Some(pushed) = exec.try_swapping_with_projection(&projection_exec)? {
-                exec = pushed;
-            } else {
-                exec = Arc::new(projection_exec);
-            }
-        }
-
-        Ok(exec)
+        builder.build().await.map(|r| r.scan)
     }
 
     /// Tries to plan a [`QuadPatternNode`].
@@ -100,12 +64,6 @@ impl DeltaQuadStoragePlanner {
             .plan_scan(session_state, node)
             .await
             .map_err(|err| DataFusionError::Plan(err.to_string()))?;
-
-        assert_eq!(
-            node.schema().inner().as_ref(),
-            scan_plan.schema().as_ref(),
-            "Schema mismatch after planning quad pattern node"
-        );
 
         Ok(Some(scan_plan))
     }
@@ -129,12 +87,6 @@ impl DeltaQuadStoragePlanner {
             Arc::clone(mapping),
             Arc::clone(node.schema().inner()),
         )?);
-
-        assert_eq!(
-            node.schema().inner().as_ref(),
-            physical_plan.schema().as_ref(),
-            "Schema mismatch after planning quad pattern node"
-        );
 
         Ok(Some(physical_plan))
     }
@@ -193,16 +145,11 @@ mod tests {
             DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
-            (r"@\d", "@<col>"),
             (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
-                @r"
-            ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
-              DeltaScan
-                DataSourceExec: file_groups={1 group: [[]]}, projection=[predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 0, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 0 AND 0 <= subject_max@<col>, required_guarantees=[subject in (0)]
-            "
+                @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 0, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 0 AND 0 <= subject_max@2, required_guarantees=[subject in (0)]"
             )
         });
     }
@@ -216,16 +163,11 @@ mod tests {
             DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
-            (r"@\d", "@<col>"),
             (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
-                @r"
-            ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
-              DeltaScan
-                DataSourceExec: file_groups={1 group: [[]]}, projection=[predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = <https://my.at/>, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= <https://my.at/> AND <https://my.at/> <= subject_max@<col>, required_guarantees=[subject in (<https://my.at/>)]
-            "
+                @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.at/>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.at/> AND <https://my.at/> <= subject_max@2, required_guarantees=[subject in (<https://my.at/>)]"
             )
         });
     }
@@ -273,10 +215,9 @@ mod tests {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
                 @"
-            ProjectionExec: expr=[predicate@0 as p, object@1 as o]
-              ProjectionExec: expr=[predicate@2 as predicate, object@3 as object]
-                FilterExec: graph@0 IS NULL AND subject@1 = 4
-                  DataSourceExec: partitions=1, partition_sizes=[1]
+            ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+              FilterExec: graph@0 IS NULL AND subject@1 = 4
+                DataSourceExec: partitions=1, partition_sizes=[1]
             "
             )
         })
@@ -309,22 +250,19 @@ mod tests {
             DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
-            (r"@\d", "@<col>"),
             (r"part-.*\.parquet", "<file>.parquet"),
         ]}, {
                 assert_snapshot!(
                     print_scan_implementation(plan.as_ref()),
                         @"
-                ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
-                  ProjectionExec: expr=[predicate@<col> as predicate, object@<col> as object]
-                    UnionExec
-                      HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@<col>, graph@<col>), (subject@<col>, subject@<col>), (predicate@<col>, predicate@<col>), (object@<col>, object@<col>)], NullsEqual: true
-                        FilterExec: graph@<col> IS NULL AND subject@<col> = 4
-                          DataSourceExec: partitions=1, partition_sizes=[1]
-                        DeltaScan
-                          DataSourceExec: file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 4, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 4 AND 4 <= subject_max@<col>, required_guarantees=[subject in (4)]
-                      FilterExec: graph@<col> IS NULL AND subject@<col> = 4
+                ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+                  UnionExec
+                    HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
+                      FilterExec: graph@0 IS NULL AND subject@1 = 4
                         DataSourceExec: partitions=1, partition_sizes=[1]
+                      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 4, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 4 AND 4 <= subject_max@2, required_guarantees=[subject in (4)]
+                    FilterExec: graph@0 IS NULL AND subject@1 = 4
+                      DataSourceExec: partitions=1, partition_sizes=[1]
                 "
                 )
         });
@@ -358,19 +296,16 @@ mod tests {
         let plan = plan_node(&planner, &node, &session).await;
 
         insta::with_settings!({filters => vec![
-            (r"@\d", "@<col>"),
             (r"part-.*\.parquet", "<file>.parquet"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
                 @"
-            ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
-              ProjectionExec: expr=[predicate@<col> as predicate, object@<col> as object]
-                HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@<col>, graph@<col>), (subject@<col>, subject@<col>), (predicate@<col>, predicate@<col>), (object@<col>, object@<col>)], NullsEqual: true
-                  FilterExec: graph@<col> IS NULL AND subject@<col> = 4
-                    DataSourceExec: partitions=1, partition_sizes=[1]
-                  DeltaScan
-                    DataSourceExec: file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 4, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 4 AND 4 <= subject_max@<col>, required_guarantees=[subject in (4)]
+            ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+              HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
+                FilterExec: graph@0 IS NULL AND subject@1 = 4
+                  DataSourceExec: partitions=1, partition_sizes=[1]
+                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 4, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 4 AND 4 <= subject_max@2, required_guarantees=[subject in (4)]
             "
             );
         });
@@ -417,26 +352,23 @@ mod tests {
         let plan = plan_node(&planner, &node, &session).await;
 
         insta::with_settings!({filters => vec![
-            (r"@\d", "@<col>"),
             (r"part-.*\.parquet", "<file>.parquet"),
         ]}, {
             assert_snapshot!(
                 print_scan_implementation(plan.as_ref()),
                 @"
-            ProjectionExec: expr=[predicate@<col> as p, object@<col> as o]
-              ProjectionExec: expr=[predicate@<col> as predicate, object@<col> as object]
-                UnionExec
-                  HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@<col>, graph@<col>), (subject@<col>, subject@<col>), (predicate@<col>, predicate@<col>), (object@<col>, object@<col>)], NullsEqual: true
-                    CoalescePartitionsExec
-                      UnionExec
-                        FilterExec: graph@<col> IS NULL AND subject@<col> = 8
-                          DataSourceExec: partitions=1, partition_sizes=[1]
-                        FilterExec: graph@<col> IS NULL AND subject@<col> = 8
-                          DataSourceExec: partitions=1, partition_sizes=[1]
-                    DeltaScan
-                      DataSourceExec: file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@<col> IS NULL AND subject@<col> = 8, pruning_predicate=graph_null_count@<col> > 0 AND subject_null_count@<col> != row_count@<col> AND subject_min@<col> <= 8 AND 8 <= subject_max@<col>, required_guarantees=[subject in (8)]
-                  FilterExec: graph@<col> IS NULL AND subject@<col> = 8
-                    DataSourceExec: partitions=1, partition_sizes=[1]
+            ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+              UnionExec
+                HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
+                  CoalescePartitionsExec
+                    UnionExec
+                      FilterExec: graph@0 IS NULL AND subject@1 = 8
+                        DataSourceExec: partitions=1, partition_sizes=[1]
+                      FilterExec: graph@0 IS NULL AND subject@1 = 8
+                        DataSourceExec: partitions=1, partition_sizes=[1]
+                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 8, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 8 AND 8 <= subject_max@2, required_guarantees=[subject in (8)]
+                FilterExec: graph@0 IS NULL AND subject@1 = 8
+                  DataSourceExec: partitions=1, partition_sizes=[1]
             "
                     );
 
@@ -495,14 +427,8 @@ mod tests {
             .unwrap()
     }
 
-    /// Provides the inner scan plan of an [`DeltaQuadStorageScanExec`] as a string.
+    /// Provides the inner scan plan as a string.
     fn print_scan_implementation(plan: &dyn ExecutionPlan) -> String {
-        let plan = plan
-            .as_any()
-            .downcast_ref::<DeltaQuadStorageScanExec>()
-            .unwrap();
-        displayable(plan.inner_scan().as_ref())
-            .indent(false)
-            .to_string()
+        displayable(plan).indent(false).to_string()
     }
 }

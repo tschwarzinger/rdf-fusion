@@ -28,12 +28,12 @@ use std::sync::Arc;
 /// This wraps a `DataSourceExec` and prevents pushing down expensive UDF filters into Parquet
 /// scanning while allowing cheap filters (e.g., term equality) to be pushed down.
 #[derive(Debug, Clone)]
-pub struct ParquetQuadStorageScanExec {
+pub struct ParquetQuadScanExec {
     quad_pattern: QuadPattern,
     inner: Arc<DataSourceExec>,
 }
 
-impl ParquetQuadStorageScanExec {
+impl ParquetQuadScanExec {
     pub fn try_new(
         quad_pattern: QuadPattern,
         inner: Arc<DataSourceExec>,
@@ -59,16 +59,16 @@ impl ParquetQuadStorageScanExec {
     }
 }
 
-impl ExecutionPlan for ParquetQuadStorageScanExec {
+impl ExecutionPlan for ParquetQuadScanExec {
     fn name(&self) -> &str {
-        "ParquetQuadStorageScanExec"
+        "ParquetQuadScanExec"
     }
 
     fn static_name() -> &'static str
     where
         Self: Sized,
     {
-        "ParquetQuadStorageScanExec"
+        "ParquetQuadScanExec"
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -112,7 +112,7 @@ impl ExecutionPlan for ParquetQuadStorageScanExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         if !children.is_empty() {
-            return plan_err!("ParquetQuadStorageScanExec must have no children");
+            return plan_err!("ParquetQuadScanExec must have no children");
         }
         Ok(self)
     }
@@ -287,10 +287,10 @@ impl ExecutionPlan for ParquetQuadStorageScanExec {
     }
 }
 
-impl DisplayAs for ParquetQuadStorageScanExec {
+impl DisplayAs for ParquetQuadScanExec {
     fn fmt_as(&self, t: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "ParquetQuadStorageScanExec:")?;
-        write!(f, ", active_graph={}", self.quad_pattern.active_graph)?;
+        write!(f, "ParquetQuadScanExec:")?;
+        write!(f, " active_graph={}", self.quad_pattern.active_graph)?;
 
         if let Some(var) = &self.quad_pattern.graph_variable {
             write!(f, ", graph_variable={var}")?;
@@ -365,7 +365,7 @@ mod tests {
 
         assert_snapshot!(
             displayable(plan_pushed.as_ref()).indent(true),
-            @"ParquetQuadStorageScanExec:, active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[ENC_PT(subject@1) as s], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@6, required_guarantees=[object in (<http://example.org/o1>), predicate in (<http://example.org/p1>)]"
+            @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[ENC_PT(subject@1) as s], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@6, required_guarantees=[object in (<http://example.org/o1>), predicate in (<http://example.org/p1>)]"
         );
     }
 
@@ -390,9 +390,9 @@ mod tests {
         let plan_not_pushed = explanation_not_pushed.execution_plan;
 
         assert_snapshot!(displayable(plan_not_pushed.as_ref()).indent(true), @"
-        ProjectionExec: expr=[ENC_PT(subject@0) as s]
-          FilterExec: EBV(EQ(LCASE(ENC_TF(STR(ENC_PT(object@3)))), 2:{value:http://example.org/o1,language:})), projection=[subject@1]
-            ParquetQuadStorageScanExec:, active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p1>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@2, required_guarantees=[predicate in (<http://example.org/p1>)]
+        ProjectionExec: expr=[ENC_PT(s@0) as s]
+          FilterExec: EBV(EQ(LCASE(ENC_TF(STR(ENC_PT(o@1)))), 2:{value:http://example.org/o1,language:})), projection=[s@0]
+            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p1>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@2, required_guarantees=[predicate in (<http://example.org/p1>)]
         ");
     }
 

@@ -8,18 +8,57 @@ use datafusion::parquet::errors::ParquetError;
 use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
 use futures::future::BoxFuture;
+use object_store::ObjectMeta;
+use std::collections::HashMap;
 use std::ops::Range;
-use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, RwLock};
 
-/// A cache for pre-downloaded Bloom filters.
+pub type PreloadedMetadataCacheMap =
+    HashMap<object_store::path::Path, (Arc<ParquetMetaData>, ObjectMeta)>;
+
+/// Contains a list of preloaded parquet metadata for a given path.
 #[derive(Debug, Clone, Default)]
-pub struct BloomFilterCache {
+pub struct PreloadedParquetMetadata {
+    cache: Arc<RwLock<PreloadedMetadataCacheMap>>,
+}
+
+impl PreloadedParquetMetadata {
+    /// Creates a new [`PreloadedParquetMetadata`].
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Obtains the metadata for the given URL.
+    pub fn get(
+        &self,
+        path: &object_store::path::Path,
+    ) -> Option<(Arc<ParquetMetaData>, ObjectMeta)> {
+        let cache = self.cache.read().expect("poisoned lock");
+        cache.get(path).cloned()
+    }
+
+    /// Inserts the metadata for a given URL.
+    pub fn insert(
+        &self,
+        path: object_store::path::Path,
+        value: (Arc<ParquetMetaData>, ObjectMeta),
+    ) {
+        let mut cache = self.cache.write().expect("poisoned lock");
+        cache.insert(path, value);
+    }
+}
+
+/// Contains a list of preloaded parquet metadata for a given URL.
+#[derive(Debug, Clone, Default)]
+pub struct PreloadedBloomFilters {
     filters: Arc<Vec<(Range<u64>, Bytes)>>,
     hit_counter: Arc<AtomicUsize>,
 }
 
-impl BloomFilterCache {
+impl PreloadedBloomFilters {
     pub fn new(filters: Vec<(Range<u64>, Bytes)>) -> Self {
         Self {
             filters: Arc::new(filters),
@@ -54,7 +93,7 @@ impl BloomFilterCache {
 pub struct PreloadedMetadataReader {
     inner: Box<dyn AsyncFileReader + Send>,
     metadata: Arc<ParquetMetaData>,
-    bloom_filter_cache: BloomFilterCache,
+    bloom_filter_cache: PreloadedBloomFilters,
 }
 
 impl AsyncFileReader for PreloadedMetadataReader {
@@ -115,22 +154,19 @@ impl AsyncFileReader for PreloadedMetadataReader {
 #[derive(Debug, Clone)]
 pub struct PreLoadedMetadataReaderFactory {
     inner_factory: Arc<dyn ParquetFileReaderFactory>,
-    expected_path: String,
-    cached_parquet_meta: Arc<ParquetMetaData>,
-    bloom_filter_cache: BloomFilterCache,
+    cache: PreloadedParquetMetadata,
+    bloom_filter_cache: PreloadedBloomFilters,
 }
 
 impl PreLoadedMetadataReaderFactory {
     pub fn new(
         inner_factory: Arc<dyn ParquetFileReaderFactory>,
-        expected_path: String,
-        cached_parquet_meta: Arc<ParquetMetaData>,
-        bloom_filter_cache: BloomFilterCache,
+        cache: PreloadedParquetMetadata,
+        bloom_filter_cache: PreloadedBloomFilters,
     ) -> Self {
         Self {
             inner_factory,
-            expected_path,
-            cached_parquet_meta,
+            cache,
             bloom_filter_cache,
         }
     }
@@ -144,14 +180,19 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
         metadata_size_hint: Option<usize>,
         metrics: &ExecutionPlanMetricsSet,
     ) -> DFResult<Box<dyn AsyncFileReader + Send>> {
-        let requested_path = file.object_meta.location.as_ref();
-
-        if requested_path != self.expected_path {
-            return Err(DataFusionError::Execution(format!(
-                "Pre-loaded metadata reader reader expected file '{}', but was asked to open '{}'",
-                self.expected_path, requested_path
-            )));
-        }
+        let preloaded_meta = self
+            .cache
+            .get(&file.object_meta.location)
+            .map(|(meta, _)| meta);
+        let preloaded_parquet_meta = match preloaded_meta {
+            Some(meta) => meta,
+            None => {
+                return Err(DataFusionError::Execution(format!(
+                    "Pre-loaded metadata reader did not find file '{}' in cache",
+                    &file.object_meta.location
+                )));
+            }
+        };
 
         let inner_reader = self.inner_factory.create_reader(
             partition_index,
@@ -162,7 +203,7 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
 
         Ok(Box::new(PreloadedMetadataReader {
             inner: inner_reader,
-            metadata: Arc::clone(&self.cached_parquet_meta),
+            metadata: preloaded_parquet_meta,
             bloom_filter_cache: self.bloom_filter_cache.clone(),
         }))
     }

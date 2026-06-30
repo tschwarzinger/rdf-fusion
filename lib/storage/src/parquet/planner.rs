@@ -17,6 +17,7 @@ impl ParquetQuadStoragePlanner {
         Self { snapshot }
     }
 }
+
 #[async_trait]
 impl ExtensionPlanner for ParquetQuadStoragePlanner {
     async fn plan_extension(
@@ -33,7 +34,7 @@ impl ExtensionPlanner for ParquetQuadStoragePlanner {
 
         Ok(Some(self.snapshot.plan_quad_pattern(
             node.quad_pattern(),
-            node.schema(),
+            node.projection.clone(),
             session_state,
         )?))
     }

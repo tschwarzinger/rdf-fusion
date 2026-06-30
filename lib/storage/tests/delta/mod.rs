@@ -61,16 +61,25 @@ fn create_test_quads(ctx: &SessionContext, s: &str) -> datafusion::dataframe::Da
     ctx.read_batch(batch).unwrap()
 }
 
-fn create_context(storage: Arc<dyn QuadStorage>) -> SessionContext {
-    RdfFusionContextBuilder::new(storage)
+fn create_context(
+    storage: Arc<dyn QuadStorage>,
+    log_store: Arc<dyn LogStore>,
+) -> SessionContext {
+    let ctx = RdfFusionContextBuilder::new(storage)
         .build()
         .unwrap()
         .session_context()
-        .clone()
+        .clone();
+    ctx.runtime_env().register_object_store(
+        &Url::parse("memory://").unwrap(),
+        log_store.root_object_store(None),
+    );
+    ctx
 }
 
 async fn populate_storage(storage: Arc<DeltaQuadStorage>, s: &str) {
-    let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
+    let log_store = storage.log().table().read().await.log_store();
+    let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>, log_store);
     let transaction = storage.begin_transaction(&ctx.state()).await.unwrap();
     let quad = create_test_quads(&ctx, s);
     transaction.insert(quad).await.unwrap();

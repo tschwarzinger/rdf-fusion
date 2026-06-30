@@ -55,7 +55,10 @@ async fn test_reload_storage_with_index_and_optimize() {
 
         populate_storage(Arc::clone(&storage), "http://example.org/s1").await;
 
-        let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
+        let ctx = create_context(
+            Arc::clone(&storage) as Arc<dyn QuadStorage>,
+            Arc::clone(&log_store),
+        );
         storage.optimize(&ctx.state()).await.unwrap();
     }
 
@@ -69,7 +72,10 @@ async fn test_reload_storage_with_index_and_optimize() {
 
         populate_storage(Arc::clone(&storage), "http://example.org/s2").await;
 
-        let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
+        let ctx = create_context(
+            Arc::clone(&storage) as Arc<dyn QuadStorage>,
+            Arc::clone(&log_store),
+        );
         storage.optimize(&ctx.state()).await.unwrap();
         assert_eq!(storage.log().version().await, 2);
     }

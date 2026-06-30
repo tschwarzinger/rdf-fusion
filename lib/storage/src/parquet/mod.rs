@@ -1,7 +1,8 @@
 mod loader;
 mod planner;
 mod reader;
-mod scan;
+pub(crate) mod scan;
+pub(crate) mod scan_builder;
 mod snapshot;
 mod storage;
 mod writer_properties;

@@ -4954,6 +4954,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "datafusion",
+ "deltalake",
  "futures",
  "object_store",
  "oxrdfio",

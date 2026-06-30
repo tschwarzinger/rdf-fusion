@@ -4,16 +4,17 @@ use crate::delta::log::{
     DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
 use crate::index::IndexComponents;
+use crate::parquet::scan_builder::{ParquetQuadScanBuilder, PushdownProjection};
 use datafusion::catalog::Session;
 use datafusion::common::{DFSchema, JoinType, NullEquality};
-use datafusion::datasource::TableProvider;
+use datafusion::datasource::listing::PartitionedFile;
+use datafusion::datasource::physical_plan::FileGroup;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::Expr;
 use datafusion::logical_expr::utils::conjunction;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::create_physical_expr;
-use datafusion::physical_expr::expressions::{Column as PhysColumn, Column};
-use datafusion::physical_expr::projection::ProjectionExpr;
+use datafusion::physical_expr::expressions::Column as PhysColumn;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::enforce_distribution::EnforceDistribution;
 use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
@@ -25,7 +26,7 @@ use datafusion::physical_plan::joins::{HashJoinExec, PartitionMode};
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::union::UnionExec;
 use deltalake::arrow::datatypes::{Field, Schema};
-use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
+use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use deltalake::kernel::Add;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_encoding::QuadStorageEncoding;
@@ -33,8 +34,11 @@ use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::sync::Arc;
 
 pub struct QuadPatternScanPlanningResult {
-    pub scan: Arc<dyn ExecutionPlan>, // Swapped to Physical Plan
+    /// The scan implementation
+    pub scan: Arc<dyn ExecutionPlan>,
+    /// The index that was chosen to be scanned. [`None`], if no index was scanned.
     pub chosen_index: Option<IndexComponents>,
+    /// The changese version range.
     pub changeset_version_range: Option<DeltaStorageLogVersionRange>,
 }
 
@@ -45,6 +49,7 @@ pub struct DeltaQuadStorageScanPlanBuilder {
     encoding: QuadStorageEncoding,
     index: Option<DeltaQuadStorageIndexSnapshot>,
     changeset: Option<DeltaQuadStorageLogChangesetRef>,
+    projection_indices: Option<Vec<usize>>,
 }
 
 impl DeltaQuadStorageScanPlanBuilder {
@@ -59,6 +64,7 @@ impl DeltaQuadStorageScanPlanBuilder {
             encoding,
             index: None,
             changeset: None,
+            projection_indices: None,
         }
     }
 
@@ -84,6 +90,14 @@ impl DeltaQuadStorageScanPlanBuilder {
 
     pub fn with_index(mut self, index: DeltaQuadStorageIndexSnapshot) -> Self {
         self.index = Some(index);
+        self
+    }
+
+    pub fn with_projection_indices(
+        mut self,
+        projection_indices: Option<Vec<usize>>,
+    ) -> Self {
+        self.projection_indices = projection_indices;
         self
     }
 
@@ -126,23 +140,24 @@ impl DeltaQuadStorageScanPlanBuilder {
     pub async fn build(
         self,
     ) -> Result<QuadPatternScanPlanningResult, DeltaQuadStorageError> {
-        let projection = compute_projection_indices(&self.pattern);
         let filters = self.pattern.compute_filters(&self.encoding)?;
 
         let initial_plan = match (&self.index, &self.changeset) {
             (Some(index), Some(changeset)) => {
-                let base_scan = self.scan_index_physical(index, None, &filters).await?;
+                let base_scan = self
+                    .scan_index_physical(index, &filters, IndexScanProjectionPushdown::No)
+                    .await?;
                 let applied_scan = self
-                    .apply_changeset_data_physical(
-                        base_scan,
-                        changeset,
-                        &projection,
-                        &filters,
-                    )
+                    .apply_changeset_data_physical(base_scan, changeset, &filters)
                     .await?;
 
+                let scan = self.project_components_to_variables_physical(
+                    applied_scan,
+                    self.projection_indices.as_deref(),
+                )?;
+
                 Ok(QuadPatternScanPlanningResult {
-                    scan: self.rename_components_to_variables_physical(applied_scan)?,
+                    scan,
                     chosen_index: Some(index.components()),
                     changeset_version_range: Some(changeset.version_range()),
                 })
@@ -150,11 +165,14 @@ impl DeltaQuadStorageScanPlanBuilder {
 
             (Some(index), None) => {
                 let base_scan = self
-                    .scan_index_physical(index, Some(&projection), &filters)
+                    .scan_index_physical(
+                        index,
+                        &filters,
+                        IndexScanProjectionPushdown::Yes(self.projection_indices.clone()),
+                    )
                     .await?;
-
                 Ok(QuadPatternScanPlanningResult {
-                    scan: self.rename_components_to_variables_physical(base_scan)?,
+                    scan: base_scan,
                     chosen_index: Some(index.components()),
                     changeset_version_range: None,
                 })
@@ -188,16 +206,16 @@ impl DeltaQuadStorageScanPlanBuilder {
                     as Arc<dyn ExecutionPlan>;
 
                 let applied_scan = self
-                    .apply_changeset_data_physical(
-                        empty_base,
-                        changeset,
-                        &projection,
-                        &filters,
-                    )
+                    .apply_changeset_data_physical(empty_base, changeset, &filters)
                     .await?;
 
+                let scan = self.project_components_to_variables_physical(
+                    applied_scan,
+                    self.projection_indices.as_deref(),
+                )?;
+
                 Ok(QuadPatternScanPlanningResult {
-                    scan: self.rename_components_to_variables_physical(applied_scan)?,
+                    scan,
                     chosen_index: None,
                     changeset_version_range: Some(changeset.version_range()),
                 })
@@ -228,10 +246,12 @@ impl DeltaQuadStorageScanPlanBuilder {
         &self,
     ) -> Result<QuadPatternScanPlanningResult, DeltaQuadStorageError> {
         let schema = self.pattern.compute_schema(&self.encoding);
-        let empty_exec = Arc::new(EmptyExec::new(Arc::clone(schema.inner())));
-
+        let final_schema = match &self.projection_indices {
+            None => Arc::clone(schema.inner()),
+            Some(projection) => Arc::new(schema.inner().project(projection)?),
+        };
         Ok(QuadPatternScanPlanningResult {
-            scan: empty_exec,
+            scan: Arc::new(EmptyExec::new(final_schema)),
             chosen_index: None,
             changeset_version_range: None,
         })
@@ -242,7 +262,6 @@ impl DeltaQuadStorageScanPlanBuilder {
         &self,
         base_scan: Arc<dyn ExecutionPlan>,
         changeset: &DeltaQuadStorageLogChangesetRef,
-        projection: &[usize],
         filters: &[Expr],
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
         let mut current_plan = base_scan;
@@ -337,29 +356,14 @@ impl DeltaQuadStorageScanPlanBuilder {
             }
         }
 
-        // 5. Final Projection to requested columns
-        let schema = current_plan.schema();
-        let mut projections = Vec::with_capacity(projection.len());
-        for &idx in projection {
-            let field = schema.field(idx);
-            let name = field.name();
-            projections.push((
-                Arc::new(PhysColumn::new(name, idx)) as Arc<dyn PhysicalExpr>,
-                name.clone(),
-            ));
-        }
-
-        current_plan = Arc::new(ProjectionExec::try_new(projections, current_plan)?)
-            as Arc<dyn ExecutionPlan>;
-
         Ok(current_plan)
     }
 
     async fn scan_index_physical(
         &self,
         index: &DeltaQuadStorageIndexSnapshot,
-        projections: Option<&Vec<usize>>,
         filters: &[Expr],
+        projection: IndexScanProjectionPushdown,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
         let relevant_files = prune_cached_files(
             &self.encoding,
@@ -369,83 +373,35 @@ impl DeltaQuadStorageScanPlanBuilder {
             index,
         )?;
 
-        let scan_config = DeltaScanConfig::new_from_session(&self.session_state);
-        let table_provider = DeltaTableProvider::try_new(
-            index.eager_snapshot().clone(),
-            Arc::clone(index.log_store()),
-            scan_config,
-        )?
-        .with_files(relevant_files);
+        let table_uri = index.log_store().config().location().clone();
+        let table_path = object_store::path::Path::from(table_uri.path());
 
-        // This is a bit of a hack. But if parquet pushdown filters are enabled, the filters will be
-        // processed exactly by the scan. While the physical optimizer discovers this circumstance
-        // and will remove the FilterExec, the projection pushdown is not yet implemented for Delta.
-        // If the projection pushdown works for Delta, we can remove this hack and use
-        // supports_filters_pushdown() to determine if the filters are pushed down exactly.
-        let can_push_filters = match &self.encoding {
-            QuadStorageEncoding::ObjectId(_) | QuadStorageEncoding::String => true,
-            QuadStorageEncoding::PlainTerm => false,
-        };
-        let assume_filters_exact = self
-            .session_state
-            .config_options()
-            .execution
-            .parquet
-            .pushdown_filters;
+        let mut file_group = Vec::new();
+        for file in &relevant_files {
+            let full_path = table_path.clone().join(file.path.as_str()).to_string();
+            let partitioned_file = PartitionedFile::new(full_path, file.size as u64);
+            file_group.push(partitioned_file);
+        }
 
-        let initial_scan = match (can_push_filters, assume_filters_exact) {
-            (false, _) => {
-                // If filters cannot be pushed down, we make a full scan.
-                table_provider
-                    .scan(&self.session_state, None, &[], None)
-                    .await?
-            }
-            (true, true) => {
-                table_provider
-                    .scan(&self.session_state, projections, filters, None)
-                    .await?
-            }
-            (true, false) => {
-                // If filters are not exact, the projection cannot be pushed down as some filters may
-                // require them.
-                table_provider
-                    .scan(&self.session_state, None, filters, None)
-                    .await?
+        let pushdown_projection = match projection {
+            IndexScanProjectionPushdown::No => PushdownProjection::No,
+            IndexScanProjectionPushdown::Yes(projections) => {
+                PushdownProjection::Yes(projections)
             }
         };
 
-        return if can_push_filters && assume_filters_exact {
-            // Projections and filters are pushed down to the DeltaTableProvider.
-            Ok(initial_scan)
-        } else {
-            let schema = self.encoding.quad_schema();
+        let plan = ParquetQuadScanBuilder::new(
+            &self.session_state,
+            self.encoding.clone(),
+            table_uri.as_object_store_url(),
+            vec![FileGroup::new(file_group)],
+        )
+        .with_quad_pattern(self.pattern.clone())
+        .with_pushdown_projection(pushdown_projection)
+        .with_eager_pruning(false)
+        .build()?;
 
-            let filtered = if let Some(filter) = conjunction(filters.iter().cloned()) {
-                let predicate = self
-                    .session_state
-                    .create_physical_expr(filter, schema.as_ref())?;
-                Arc::new(FilterExec::try_new(predicate, initial_scan)?)
-                    as Arc<dyn ExecutionPlan>
-            } else {
-                initial_scan
-            };
-
-            let projected = if let Some(projections) = &projections {
-                let projections = projections.iter().map(|&idx| {
-                    let field = schema.field(idx);
-                    ProjectionExpr::new(
-                        Arc::new(Column::new(field.name(), idx)),
-                        field.name(),
-                    )
-                });
-                Arc::new(ProjectionExec::try_new(projections, filtered)?)
-                    as Arc<dyn ExecutionPlan>
-            } else {
-                filtered
-            };
-
-            Ok(projected)
-        };
+        return Ok(plan);
 
         /// A basic manual pruner if you want to filter the Vec<Add> before creating the scan
         fn prune_cached_files(
@@ -485,27 +441,23 @@ impl DeltaQuadStorageScanPlanBuilder {
         }
     }
 
+    // Removed pushdown_projection_into_index_scan and compute_projection_exprs
+
     /// Physically maps the output columns to their requested variable names
-    fn rename_components_to_variables_physical(
+    /// and applies projection indices if defined.
+    fn project_components_to_variables_physical(
         &self,
         plan: Arc<dyn ExecutionPlan>,
+        projection_indices: Option<&[usize]>,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
-        let mut exprs = Vec::new();
         let schema = plan.schema();
-
-        // Convert the Arrow schema to a DataFusion DFSchema for expression parsing
         let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
-
-        for (logical_expr, name) in self.pattern.compute_projection() {
-            let phys_expr = create_physical_expr(
-                &logical_expr,
-                &df_schema,
-                self.session_state.execution_props(),
-            )?;
-
-            exprs.push((phys_expr, name));
-        }
-
+        let exprs = ParquetQuadScanBuilder::compute_projection_exprs(
+            &self.session_state,
+            &self.pattern,
+            &df_schema,
+            projection_indices,
+        )?;
         Ok(Arc::new(ProjectionExec::try_new(exprs, plan)?))
     }
 
@@ -545,16 +497,10 @@ impl DeltaQuadStorageScanPlanBuilder {
     }
 }
 
-fn compute_projection_indices(pattern: &QuadPattern) -> Vec<usize> {
-    let projection_indexes = pattern
-        .compute_projected_components()
-        .into_iter()
-        .map(|(c, _)| c.gspo_index())
-        .collect::<Vec<_>>();
-
-    if projection_indexes.is_empty() {
-        vec![0]
-    } else {
-        projection_indexes
-    }
+/// Determines how the projection should be handled during the index scan.
+enum IndexScanProjectionPushdown {
+    /// No projection pushdown
+    No,
+    /// Pushdown the projection with optional additional projection indexes
+    Yes(Option<Vec<usize>>),
 }

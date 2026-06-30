@@ -14,8 +14,11 @@ use crate::w3c::syntax::W3CSparqlSyntaxTest;
 use crate::w3c::update::W3CSparqlUpdateEvaluationTest;
 use anyhow::{Context, Result, bail};
 use datafusion::execution::runtime_env::RuntimeEnv;
+use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use futures::future::BoxFuture;
 use manifest::TestManifests;
+use object_store::ObjectStore;
+use object_store::memory::InMemory;
 use rdf_fusion::common::{GraphName, NamedNode};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
@@ -108,10 +111,26 @@ impl W3CSparqlTestSuiteBuilder {
         }
 
         let store_factory = self.store_factory.unwrap_or_else(|| {
-            Arc::new(|config| {
+            Arc::new(move |config| {
                 Box::pin(async move {
+                    let memory_store = Arc::new(InMemory::new());
+                    config.runtime_env.register_object_store(
+                        &url::Url::parse("memory://").unwrap(),
+                        Arc::clone(&memory_store) as Arc<dyn ObjectStore>,
+                    );
+
+                    let log_store = logstore_with(
+                        Arc::clone(&memory_store) as Arc<dyn ObjectStore>,
+                        &url::Url::parse("memory:///").unwrap(),
+                        StorageConfig::default().with_io_runtime(IORuntime::RT(
+                            tokio::runtime::Handle::current(),
+                        )),
+                    )
+                    .unwrap();
+
                     let delta_storage = DeltaQuadStorageBuilder::new()
                         .with_encoding(QuadStorageEncodingName::ObjectId)
+                        .with_log_store(log_store)
                         .build()
                         .await
                         .unwrap();

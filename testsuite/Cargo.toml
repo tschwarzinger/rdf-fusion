@@ -13,6 +13,7 @@ rust-version.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 datafusion.workspace = true
+deltalake.workspace = true
 futures.workspace = true
 rdf-fusion.workspace = true
 object_store.workspace = true
