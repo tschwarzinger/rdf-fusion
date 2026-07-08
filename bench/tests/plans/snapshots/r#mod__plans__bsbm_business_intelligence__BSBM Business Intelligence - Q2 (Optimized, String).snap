@@ -12,6 +12,6 @@ Projection: ENC_PT(otherProduct) AS otherProduct, ENC_PT(sameFeatures) AS sameFe
         SubqueryAlias: rhs
           Projection: otherProduct, <uuid> AS sameFeatures
             Aggregate: groupBy=[[otherProduct AS otherProduct]], aggr=[[COUNT(otherFeature) AS <uuid>]]
-              BasicGraphPattern: filters=[EBV(EQ(ENC_TF(ENC_PT(feature)), ENC_TF(ENC_PT(otherFeature)))), otherProduct != Utf8("<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>")], projection=[Column { relation: None, name: "otherProduct" }, Column { relation: None, name: "otherFeature" }], 
+              BasicGraphPattern: projection=[otherProduct, otherFeature], filters=[EBV(EQ(ENC_TF(ENC_PT(feature)), ENC_TF(ENC_PT(otherFeature)))), otherProduct != Utf8("<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636>")]
                 QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
                 QuadPattern: triple_pattern=[?otherProduct <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?otherFeature]

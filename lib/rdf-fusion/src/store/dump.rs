@@ -116,7 +116,6 @@ pub(crate) async fn dump_store(
     if let Some(sort_order) = &options.sort_by {
         builder = builder.apply_rdf_sort_order(sort_order)?
     }
-
     builder = match options.encoding {
         DumpEncoding::PlainTerm => builder.with_plain_terms()?,
         DumpEncoding::String => {

@@ -12,7 +12,7 @@ LeftAnti Join: product = __correlated_sq_1.__inner__product
             QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
   SubqueryAlias: __correlated_sq_1
     Projection: product AS __inner__product
-      BasicGraphPattern: filters=[country = Struct({term_type:0,value:http://downlode.org/rdf/iso-3166/countries#US,data_type:,language_tag:})], projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "country" }], 
+      BasicGraphPattern: projection=[product, country], filters=[country = Struct({term_type:0,value:http://downlode.org/rdf/iso-3166/countries#US,data_type:,language_tag:})]
         QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
         QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor]
         QuadPattern: triple_pattern=[?vendor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]

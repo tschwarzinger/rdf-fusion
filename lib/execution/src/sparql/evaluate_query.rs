@@ -12,16 +12,13 @@ use datafusion::physical_expr_common::metrics::Time;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use itertools::izip;
-use rdf_fusion_common::Variable;
 use rdf_fusion_common::sparql::Query;
 use rdf_fusion_common::sparql::algebra::GraphPattern;
 use rdf_fusion_common::{Iri, TriplePattern};
+use rdf_fusion_common::{MeasurePoll, Variable};
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use std::time::Duration;
 
 /// Evaluates a SPARQL query and returns the results along with execution information.
@@ -233,22 +230,4 @@ fn create_variables(schema: &Schema) -> Arc<[Variable]> {
         .map(|f| Variable::new(f.name()).expect("Variables already checked."))
         .collect::<Vec<_>>()
         .into()
-}
-
-/// A wrapper that measures strictly the CPU time spent actively polling.
-struct MeasurePoll<F> {
-    inner: Pin<Box<F>>,
-    time_metric: Time,
-}
-
-impl<F: Future> Future for MeasurePoll<F> {
-    type Output = F::Output;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let cloned_inner = self.time_metric.clone();
-        let handle = cloned_inner.timer();
-        let result = self.inner.as_mut().poll(cx);
-        drop(handle);
-        result
-    }
 }

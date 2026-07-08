@@ -11,4 +11,5 @@
 extern crate core;
 
 pub mod bgp;
+pub mod object_id;
 pub mod paths;

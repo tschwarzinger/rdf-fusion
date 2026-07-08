@@ -136,7 +136,7 @@ impl W3CSparqlEvaluationTest {
 
         ensure!(
             are_query_results_isomorphic(&expected_results, actual_results).await,
-            "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{:?}\n\nExecution Plan:\n{}\n",
+            "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{:?}\n\nOptimized Logical Plan:\n{}\n\nExecution Plan:\n{}\n",
             results_diff(expected_results, store.query(query.clone()).await?).await,
             RdfFusionQuery::parse(
                 &self.runtime.read_file_to_string(query_file).await?,
@@ -150,6 +150,7 @@ impl W3CSparqlEvaluationTest {
                 }
                 data
             },
+            explanation.optimized_logical_plan,
             displayable(explanation.execution_plan.as_ref()).indent(false),
         );
         Ok(())

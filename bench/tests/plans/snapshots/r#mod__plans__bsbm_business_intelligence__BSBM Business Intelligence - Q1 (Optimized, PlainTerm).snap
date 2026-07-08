@@ -6,7 +6,7 @@ Projection: productType, ENC_PT(reviewCount) AS reviewCount
   Sort: AS_SORTABLE_BYTES(reviewCount) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(productType)) ASC NULLS FIRST, fetch=10
     Projection: productType, <uuid> AS reviewCount
       Aggregate: groupBy=[[productType AS productType]], aggr=[[COUNT(review) AS <uuid>]]
-        BasicGraphPattern: projection=[Column { relation: None, name: "productType" }, Column { relation: None, name: "review" }], 
+        BasicGraphPattern: projection=[productType, review], 
           QuadPattern: triple_pattern=[?productType <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/ProductType>]
           QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?productType]
           QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> ?producer]

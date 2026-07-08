@@ -54,7 +54,7 @@ impl DeltaQuadStorage {
             QuadStorageEncodingName::PlainTerm => (None, QuadStorageEncoding::PlainTerm),
             QuadStorageEncodingName::String => (None, QuadStorageEncoding::String),
             QuadStorageEncodingName::ObjectId => {
-                let mapping_url = base_url.join("object_ids/").unwrap();
+                let mapping_url = base_url.join("object_id/").unwrap();
                 let mapping_log_store = logstore_with(
                     base_log_store.root_object_store(None),
                     &mapping_url,
@@ -164,7 +164,7 @@ impl DeltaQuadStorage {
         } else if data_type == STRING_ENCODING.data_type() {
             (QuadStorageEncoding::String, None)
         } else if data_type == &DataType::Int64 {
-            let mapping_url = base_url.join("object_ids/").unwrap();
+            let mapping_url = base_url.join("object_id/").unwrap();
             let mapping_log_store = logstore_with(
                 base_log_store.root_object_store(None),
                 &mapping_url,

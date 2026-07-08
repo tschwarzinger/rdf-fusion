@@ -89,6 +89,7 @@ impl RdfFusionContext {
             .with_physical_optimizer_rules(physical_optimizer_rules)
             .with_runtime_env(runtime_env)
             .with_config(config)
+            .with_scalar_functions(registry.udfs())
             .build();
 
         let session_context = SessionContext::from(state);

@@ -41,7 +41,6 @@ impl WithPlainTermEncoding {
                     encodings.get_data_types(&[
                         EncodingName::PlainTerm,
                         EncodingName::TypedFamily,
-                        EncodingName::ObjectId,
                         EncodingName::String,
                     ]),
                 ),
@@ -94,20 +93,6 @@ impl ScalarUDFImpl for WithPlainTermEncoding {
             Some(DowncastEncodingArgs::String(arrays)) => {
                 let array = arrays.get(0);
                 array.as_plain_term_array()?.into_array_ref()
-            }
-            Some(DowncastEncodingArgs::ObjectId(arrays)) => {
-                match &self.encodings.object_id() {
-                    None => {
-                        return exec_err!(
-                            "Cannot from object id as no encoding is provided."
-                        );
-                    }
-                    Some(encoding) => {
-                        let array = arrays.get(0);
-                        let decoded = encoding.mapping().decode_array(array.inner())?;
-                        decoded.into_array_ref()
-                    }
-                }
             }
             _ => {
                 if args.args.is_empty() {

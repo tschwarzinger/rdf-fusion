@@ -1,5 +1,9 @@
 use crate::RdfFusionExprBuilder;
+use crate::RdfFusionLogicalPlanBuilderContext;
+use crate::join::compute_sparql_join_columns;
+use crate::logical_plan_builder::build_projections_for_encoding_alignment;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::common::ExprSchema;
 use datafusion::common::{
     Column, DFSchema, Spans, exec_datafusion_err, plan_datafusion_err, plan_err,
 };
@@ -7,7 +11,7 @@ use datafusion::functions_aggregate::count::count;
 use datafusion::logical_expr::expr::AggregateFunction;
 use datafusion::logical_expr::utils::COUNT_STAR_EXPANSION;
 use datafusion::logical_expr::{
-    Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, ScalarUDF, Subquery, and,
+    Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder, ScalarUDF, Subquery, and, col,
     exists, lit, not_exists,
 };
 use rdf_fusion_common::DFResult;
@@ -22,7 +26,6 @@ use rdf_fusion_extensions::functions::{
 };
 use std::collections::HashSet;
 use std::sync::Arc;
-
 /// An expression builder for creating SPARQL expressions.
 ///
 /// This is the builder context, which can be used to create expression builders. Each builder
@@ -222,10 +225,9 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
 
     fn exists_impl(
         self,
-        exists_plan: LogicalPlan,
+        mut exists_plan: LogicalPlan,
         is_not: bool,
     ) -> DFResult<RdfFusionExprBuilder<'context>> {
-        let exists_pattern = LogicalPlanBuilder::new(exists_plan);
         let outer_schema = self.schema();
 
         let outer_keys: HashSet<_> = outer_schema
@@ -233,7 +235,7 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
             .into_iter()
             .map(|c| c.name().to_owned())
             .collect();
-        let exists_keys: HashSet<_> = exists_pattern
+        let exists_keys: HashSet<_> = exists_plan
             .schema()
             .columns()
             .into_iter()
@@ -245,6 +247,7 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
         // TODO: Investigate why this causes issues and file an issue if necessary
         if outer_keys.is_disjoint(&exists_keys) {
             let group_expr: [Expr; 0] = [];
+            let exists_pattern = LogicalPlanBuilder::new(exists_plan);
             let count = exists_pattern.aggregate(
                 group_expr,
                 [count(Expr::Literal(COUNT_STAR_EXPANSION, None))],
@@ -258,6 +261,60 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
             return self
                 .native_boolean_as_term(Expr::ScalarSubquery(subquery).gt(lit(0)));
         }
+
+        let join_columns = compute_sparql_join_columns(
+            self.encodings(),
+            outer_schema,
+            exists_plan.schema().as_ref(),
+        )?;
+
+        let mut inner_decoded_cols = Vec::new();
+        for (col_name, encodings) in &join_columns {
+            if encodings.len() > 1 && encodings.contains(&EncodingName::ObjectId) {
+                let column = Column::new_unqualified(col_name);
+                if let Ok(field) = exists_plan.schema().field_from_column(&column) {
+                    if matches!(
+                        field.data_type(),
+                        DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+                    ) {
+                        inner_decoded_cols.push(col(column));
+                    }
+                }
+            }
+        }
+
+        if !inner_decoded_cols.is_empty() {
+            let builder_context = RdfFusionLogicalPlanBuilderContext::new(
+                self.rdf_fusion_context().clone(),
+            );
+            let exists_builder = builder_context.create(Arc::new(exists_plan));
+            let exists_builder = exists_builder.decode_for_exprs(&inner_decoded_cols)?;
+            exists_plan = exists_builder.build()?;
+        }
+
+        let join_columns = compute_sparql_join_columns(
+            self.encodings(),
+            outer_schema,
+            exists_plan.schema().as_ref(),
+        )?;
+
+        if !join_columns.is_empty() {
+            let exists_expr_builder = RdfFusionExprBuilderContext::new(
+                self.rdf_fusion_context(),
+                exists_plan.schema().as_ref(),
+            );
+            let projections = build_projections_for_encoding_alignment(
+                exists_expr_builder,
+                &join_columns,
+            )?;
+            if let Some(projections) = projections {
+                exists_plan = LogicalPlanBuilder::new(exists_plan)
+                    .project(projections)?
+                    .build()?;
+            }
+        }
+
+        let exists_pattern = LogicalPlanBuilder::new(exists_plan);
 
         // TODO: Investigate why we need this renaming and cannot refer to the unqualified column
         let projections = exists_pattern

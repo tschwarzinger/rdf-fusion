@@ -9,7 +9,7 @@ Projection: feature, ENC_PT(priceRatio) AS priceRatio
         SubqueryAlias: lhs
           Projection: feature, <uuid> AS withFeaturePrice
             Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
-              BasicGraphPattern: projection=[Column { relation: None, name: "feature" }, Column { relation: None, name: "price" }], 
+              BasicGraphPattern: projection=[feature, price], 
                 QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
                 QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
                 QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
@@ -21,10 +21,10 @@ Projection: feature, ENC_PT(priceRatio) AS priceRatio
                 LeftAnti Join: feature = __correlated_sq_1.__inner__feature, product = __correlated_sq_1.__inner__product
                   Cross Join:
                     Aggregate: groupBy=[[feature]], aggr=[[]]
-                      BasicGraphPattern: projection=[Column { relation: None, name: "feature" }], 
+                      BasicGraphPattern: projection=[feature], 
                         QuadPattern: triple_pattern=[?p <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
                         QuadPattern: triple_pattern=[?p <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
-                    BasicGraphPattern: projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "price" }], 
+                    BasicGraphPattern: projection=[product, price], 
                       QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
                       QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
                       QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]

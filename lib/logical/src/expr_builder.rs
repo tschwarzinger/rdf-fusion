@@ -823,18 +823,13 @@ impl<'root> RdfFusionExprBuilder<'root> {
     ///   first encoding in `target_encodings`.
     /// - The expression is not an RDF term and an error is returned.
     pub fn with_any_encoding(self, target_encodings: &[EncodingName]) -> DFResult<Self> {
-        if target_encodings.is_empty() {
-            return Err(plan_datafusion_err!("Target encodings are empty."));
-        }
-
         let source_encoding = self.encoding()?;
         if target_encodings.contains(&source_encoding) {
             return Ok(self);
         }
 
         let functions_to_apply =
-            Self::functions_for_encoding_change(source_encoding, target_encodings)
-                .unwrap();
+            Self::functions_for_encoding_change(source_encoding, target_encodings)?;
 
         let mut expr = self.expr;
         for function in functions_to_apply {
@@ -849,20 +844,22 @@ impl<'root> RdfFusionExprBuilder<'root> {
         source_encoding: EncodingName,
         target_encodings: &[EncodingName],
     ) -> DFResult<Vec<BuiltinName>> {
-        for target_encoding in target_encodings {
+        if source_encoding == EncodingName::ObjectId {
+            return plan_err!("The decoding of object ids should be planned separately.");
+        }
+
+        for target_encoding in target_encodings
+            .iter()
+            .filter(|e| **e != EncodingName::ObjectId)
+        {
             let functions_to_apply = match (source_encoding, target_encoding) {
                 (
-                    EncodingName::ObjectId
-                    | EncodingName::TypedFamily
-                    | EncodingName::String,
+                    EncodingName::TypedFamily | EncodingName::String,
                     EncodingName::PlainTerm,
                 ) => {
                     vec![BuiltinName::WithPlainTermEncoding]
                 }
-                (
-                    EncodingName::PlainTerm | EncodingName::ObjectId,
-                    EncodingName::TypedFamily,
-                ) => {
+                (EncodingName::PlainTerm, EncodingName::TypedFamily) => {
                     vec![BuiltinName::WithTypedFamilyEncoding]
                 }
                 (EncodingName::String, EncodingName::TypedFamily) => vec![
@@ -872,10 +869,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 (EncodingName::PlainTerm, EncodingName::String) => {
                     vec![BuiltinName::WithStringEncoding]
                 }
-                (
-                    EncodingName::ObjectId | EncodingName::TypedFamily,
-                    EncodingName::String,
-                ) => vec![
+                (EncodingName::TypedFamily, EncodingName::String) => vec![
                     BuiltinName::WithPlainTermEncoding,
                     BuiltinName::WithStringEncoding,
                 ],

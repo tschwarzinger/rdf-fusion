@@ -18,6 +18,7 @@ rdf-fusion-encoding.workspace = true
 rdf-fusion-common.workspace = true
 rdf-fusion-logical.workspace = true
 itertools.workspace = true
+datafusion-physical-expr = "53.1"
 
 [dev-dependencies]
 insta.workspace = true

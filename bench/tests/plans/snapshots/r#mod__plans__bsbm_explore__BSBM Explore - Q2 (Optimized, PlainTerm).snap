@@ -5,7 +5,7 @@ expression: "&explanation.optimized_logical_plan.to_string()"
 Left Join:
   Left Join:
     Left Join:
-      BasicGraphPattern: projection=[Column { relation: None, name: "label" }, Column { relation: None, name: "comment" }, Column { relation: None, name: "producer" }, Column { relation: None, name: "productFeature" }, Column { relation: None, name: "propertyTextual1" }, Column { relation: None, name: "propertyTextual2" }, Column { relation: None, name: "propertyTextual3" }, Column { relation: None, name: "propertyNumeric1" }, Column { relation: None, name: "propertyNumeric2" }], 
+      BasicGraphPattern: projection=[label, comment, producer, productFeature, propertyTextual1, propertyTextual2, propertyTextual3, propertyNumeric1, propertyNumeric2], 
         QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www.w3.org/2000/01/rdf-schema#label> ?label]
         QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www.w3.org/2000/01/rdf-schema#comment> ?comment]
         QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Product272> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> ?p]

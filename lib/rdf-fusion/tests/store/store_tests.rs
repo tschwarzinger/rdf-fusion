@@ -13,38 +13,8 @@ use rdf_fusion_common::{
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::error::Error;
+use tokio::fs::File;
 
-#[allow(clippy::non_ascii_literal)]
-const DATA: &str = r#"
-@prefix schema: <http://schema.org/> .
-@prefix wd: <http://www.wikidata.org/entity/> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-
-wd:Q90 a schema:City ;
-    schema:name "Paris"@fr , "la ville lumière"@fr ;
-    schema:country wd:Q142 ;
-    schema:population 2000000 ;
-    schema:startDate "-300"^^xsd:gYear ;
-    schema:url "https://www.paris.fr/"^^xsd:anyURI ;
-    schema:postalCode "75001" .
-"#;
-
-#[allow(clippy::non_ascii_literal)]
-const GRAPH_DATA: &str = r#"
-@prefix schema: <http://schema.org/> .
-@prefix wd: <http://www.wikidata.org/entity/> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-
-GRAPH <http://www.wikidata.org/wiki/Special:EntityData/Q90> {
-    wd:Q90 a schema:City ;
-        schema:name "Paris"@fr , "la ville lumière"@fr ;
-        schema:country wd:Q142 ;
-        schema:population 2000000 ;
-        schema:startDate "-300"^^xsd:gYear ;
-        schema:url "https://www.paris.fr/"^^xsd:anyURI ;
-        schema:postalCode "75001" .
-}
-"#;
 const NUMBER_OF_TRIPLES: usize = 8;
 
 fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> {
@@ -108,7 +78,7 @@ async fn test_load_graph() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     store
         .load_from_reader(
-            DATA.as_bytes(),
+            File::open("../../examples/data/paris.ttl").await.unwrap(),
             RdfFileScanOptions::with_format(RdfFormat::Turtle),
         )
         .await?;
@@ -124,7 +94,9 @@ async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     store
         .load_from_reader(
-            GRAPH_DATA.as_bytes(),
+            File::open("../../examples/data/paris-graph.ttl")
+                .await
+                .unwrap(),
             RdfFileScanOptions::with_format(RdfFormat::TriG),
         )
         .await?;

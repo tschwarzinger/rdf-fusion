@@ -61,16 +61,57 @@ impl OptimizerRule for LowerChangeEncodingRule {
                         node: Arc::new(new_node),
                     })))
                 }
-                QuadStorageEncoding::PlainTerm => self.rewrite_to_project(
-                    &input,
-                    change_encoding.target_encoding().term_type(),
-                    BuiltinName::WithPlainTermEncoding,
-                ),
-                QuadStorageEncoding::String => self.rewrite_to_project(
-                    &input,
-                    change_encoding.target_encoding().term_type(),
-                    BuiltinName::WithStringEncoding,
-                ),
+                QuadStorageEncoding::PlainTerm => {
+                    let is_input_object_id = input.schema().fields().iter().any(|f| {
+                        matches!(
+                            f.data_type(),
+                            DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+                        )
+                    });
+                    if is_input_object_id {
+                        self.rewrite_to_project(
+                            &input,
+                            change_encoding.target_encoding().term_type(),
+                            BuiltinName::DecodeTerm,
+                        )
+                    } else {
+                        self.rewrite_to_project(
+                            &input,
+                            change_encoding.target_encoding().term_type(),
+                            BuiltinName::WithPlainTermEncoding,
+                        )
+                    }
+                }
+                QuadStorageEncoding::String => {
+                    let is_input_object_id = input.schema().fields().iter().any(|f| {
+                        matches!(
+                            f.data_type(),
+                            DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+                        )
+                    });
+                    if is_input_object_id {
+                        let intermediate = self.rewrite_to_project(
+                            &input,
+                            QuadStorageEncoding::PlainTerm.term_type(),
+                            BuiltinName::DecodeTerm,
+                        )?;
+                        match intermediate {
+                            Transformed { data: intermediate_plan, .. } => {
+                                self.rewrite_to_project(
+                                    &intermediate_plan,
+                                    change_encoding.target_encoding().term_type(),
+                                    BuiltinName::WithStringEncoding,
+                                )
+                            }
+                        }
+                    } else {
+                        self.rewrite_to_project(
+                            &input,
+                            change_encoding.target_encoding().term_type(),
+                            BuiltinName::WithStringEncoding,
+                        )
+                    }
+                }
             }
         })
     }

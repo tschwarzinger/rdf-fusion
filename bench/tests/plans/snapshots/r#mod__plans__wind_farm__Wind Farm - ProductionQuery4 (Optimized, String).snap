@@ -3,7 +3,7 @@ source: bench/tests/plans/wind_farm.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: ENC_PT(site_label) AS site_label, ENC_PT(wtur_label) AS wtur_label, ENC_PT(t) AS t, ENC_PT(val) AS val
-  BasicGraphPattern: projection=[Column { relation: None, name: "site_label" }, Column { relation: None, name: "wtur_label" }, Column { relation: None, name: "t" }, Column { relation: None, name: "val" }], 
+  BasicGraphPattern: projection=[site_label, wtur_label, t, val], 
     QuadPattern: triple_pattern=[?site <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://github.com/magbak/chrontext/rds_power#Site>]
     QuadPattern: triple_pattern=[?site <http://www.w3.org/2000/01/rdf-schema#label> ?site_label]
     QuadPattern: triple_pattern=[?site <https://github.com/magbak/chrontext/rds_power#hasFunctionalAspect> ?wtur_asp]

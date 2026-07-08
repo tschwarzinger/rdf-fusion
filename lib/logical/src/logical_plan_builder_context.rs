@@ -241,8 +241,6 @@ impl RdfFusionLogicalPlanBuilderContext {
         }
 
         let mut logical_patterns = Vec::new();
-        let mut schema = None;
-
         for p in patterns {
             let pattern_builder = self.create_pattern(
                 active_graph.clone(),
@@ -250,11 +248,6 @@ impl RdfFusionLogicalPlanBuilderContext {
                 p.clone(),
             );
             let lp = pattern_builder.build()?;
-
-            match &mut schema {
-                None => schema = Some(lp.schema().as_ref().clone()),
-                Some(s) => s.merge(lp.schema()),
-            }
             logical_patterns.push(lp);
         }
 
@@ -265,8 +258,7 @@ impl RdfFusionLogicalPlanBuilderContext {
             ));
         }
 
-        let bgp_node =
-            BgpNode::new(logical_patterns, Arc::new(schema.unwrap()), vec![], None);
+        let bgp_node = BgpNode::try_new(logical_patterns, vec![], None, vec![])?;
         Ok(RdfFusionLogicalPlanBuilder::new(
             self.clone(),
             create_extension_plan(bgp_node),

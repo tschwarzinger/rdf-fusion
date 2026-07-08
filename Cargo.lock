@@ -4869,6 +4869,7 @@ name = "rdf-fusion-functions"
 version = "0.1.0"
 dependencies = [
  "arrow-string",
+ "async-trait",
  "base16ct",
  "criterion",
  "datafusion",
@@ -4899,6 +4900,7 @@ dependencies = [
  "rdf-fusion-encoding",
  "rdf-fusion-extensions",
  "rdf-fusion-functions",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4907,6 +4909,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "datafusion",
+ "datafusion-physical-expr",
  "futures",
  "insta",
  "itertools 0.14.0",

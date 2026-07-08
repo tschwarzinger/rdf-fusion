@@ -1,13 +1,13 @@
+use crate::object_id::exec::DecodeObjectIdsExec;
 use async_trait::async_trait;
+use datafusion::arrow::datatypes::Schema;
 use datafusion::common::stats::Precision;
-use datafusion::common::tree_node::{Transformed, TreeNode};
 use datafusion::common::{
     Column, DFSchema, JoinSide, JoinType, NullEquality, Result as DFResult,
-    TableReference,
 };
 use datafusion::execution::context::SessionState;
-use datafusion::logical_expr::utils::expr_to_columns;
-use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNode};
+use datafusion::logical_expr::utils::{expr_to_columns, split_conjunction};
+use datafusion::logical_expr::{Expr, LogicalPlan, ScalarUDF, UserDefinedLogicalNode};
 use datafusion::physical_expr::expressions::Column as PhysicalColumn;
 use datafusion::physical_plan::empty::EmptyExec;
 use datafusion::physical_plan::filter::FilterExec;
@@ -23,17 +23,8 @@ use rdf_fusion_logical::bgp::BgpNode;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-/// Physical planner for [`BgpNode`].
-///
-/// This planner is responsible for translating a logical BGP node into a physical execution plan
-/// consisting of joins. It performs a simple join ordering based on the estimated number of rows
-/// from each pattern, while prioritizing joins on overlapping variables to avoid cross joins.
-pub struct BgpPlanner;
-
-impl Default for BgpPlanner {
-    fn default() -> Self {
-        Self
-    }
+pub struct BgpPlanner {
+    decoding_udf: Option<Arc<ScalarUDF>>,
 }
 
 #[async_trait]
@@ -43,7 +34,7 @@ impl ExtensionPlanner for BgpPlanner {
         planner: &dyn PhysicalPlanner,
         node: &dyn UserDefinedLogicalNode,
         _logical_inputs: &[&LogicalPlan],
-        _physical_inputs: &[Arc<dyn ExecutionPlan>],
+        physical_inputs: &[Arc<dyn ExecutionPlan>],
         session_state: &SessionState,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
         let Some(bgp) = node.as_any().downcast_ref::<BgpNode>() else {
@@ -56,334 +47,350 @@ impl ExtensionPlanner for BgpPlanner {
             )))));
         }
 
-        // 1. Plan each pattern and retrieve its statistics
-        let mut physical_patterns = Vec::new();
-        let mut pending_filters = bgp.filters.clone();
+        // 1. Flatten all logical AND filters & compute required columns
+        let flat_filters: Vec<Expr> = bgp
+            .filters
+            .iter()
+            .flat_map(split_conjunction)
+            .cloned()
+            .collect();
 
-        for pattern in &bgp.patterns {
-            let mut exec = planner.create_physical_plan(pattern, session_state).await?;
+        let mut top_level_needs: HashSet<String> = bgp
+            .schema
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect();
 
-            // Try to apply filters early
-            let mut i = 0;
-            while i < pending_filters.len() {
-                let filter = &pending_filters[i];
-                let mut columns = HashSet::new();
-                expr_to_columns(filter, &mut columns)?;
-
-                let schema = exec.schema();
-                let can_apply = columns
-                    .iter()
-                    .all(|col| schema.index_of(col.name()).is_ok());
-
-                if can_apply {
-                    let phys_expr = planner.create_physical_expr(
-                        filter,
-                        pattern.schema(),
-                        session_state,
-                    )?;
-                    exec = Arc::new(FilterExec::try_new(phys_expr, exec)?);
-                    pending_filters.remove(i);
-                } else {
-                    i += 1;
-                }
+        for filter in &flat_filters {
+            let mut cols = HashSet::new();
+            if expr_to_columns(filter, &mut cols).is_ok() {
+                top_level_needs.extend(cols.into_iter().map(|c| c.name));
             }
+        }
+        top_level_needs.extend(bgp.columns_to_decode.iter().map(|c| c.name.clone()));
 
-            let stats = exec.partition_statistics(None)?;
-            if let Precision::Exact(0) = stats.num_rows {
+        let mut needed_columns = top_level_needs.clone();
+        let mut column_occurrences: HashMap<String, usize> = HashMap::new();
+
+        for exec in physical_inputs {
+            for field in exec.schema().fields() {
+                let base_name =
+                    field.name().strip_suffix("__oid").unwrap_or(field.name());
+                *column_occurrences.entry(base_name.to_string()).or_default() += 1;
+            }
+        }
+        for (col, count) in column_occurrences {
+            if count > 1 {
+                needed_columns.insert(col);
+            }
+        }
+
+        // 2. Prepare Leaf Patterns
+        let prepared = self.prepare_and_sort_patterns(
+            planner,
+            physical_inputs,
+            &flat_filters,
+            &bgp.columns_to_decode,
+            &needed_columns,
+            session_state,
+        )?;
+
+        let (mut patterns, mut pending_filters) = match prepared {
+            Some(result) => result,
+            None => {
                 return Ok(Some(Arc::new(EmptyExec::new(Arc::new(
                     bgp.schema.as_arrow().clone(),
                 )))));
             }
-
-            let rows = stats.num_rows.get_value().cloned().unwrap_or(usize::MAX);
-            physical_patterns.push((exec, rows));
-        }
-
-        // 2. Sort patterns by their estimated row count (ascending)
-        physical_patterns.sort_by_key(|(_, rows)| *rows);
-
-        // 3. Construct a physical join tree prioritizing overlapping variables
-        let (mut current_exec, _) = physical_patterns.remove(0);
-
-        while !physical_patterns.is_empty() {
-            let current_schema = current_exec.schema();
-
-            // Find the first pattern (smallest row count) that shares variables with the current plan
-            // OR has a join filter with the current plan
-            let next_idx = physical_patterns
-                .iter()
-                .position(|(exec, _)| {
-                    let pattern_schema = exec.schema();
-                    // Direct overlap
-                    if pattern_schema
-                        .fields()
-                        .iter()
-                        .any(|f| current_schema.index_of(f.name()).is_ok())
-                    {
-                        return true;
-                    }
-
-                    // Join filter overlap
-                    pending_filters.iter().any(|filter| {
-                        let mut columns = HashSet::new();
-                        let _ = expr_to_columns(filter, &mut columns);
-                        let mut touches_current = false;
-                        let mut touches_pattern = false;
-                        for col in columns {
-                            if current_schema.index_of(col.name()).is_ok() {
-                                touches_current = true;
-                            } else if pattern_schema.index_of(col.name()).is_ok() {
-                                touches_pattern = true;
-                            }
-                        }
-                        touches_current && touches_pattern
-                    })
-                })
-                .unwrap_or(0); // If no overlap exists, default to the smallest remaining pattern (cross join)
-
-            let (next_exec, _) = physical_patterns.remove(next_idx);
-
-            let is_final_join = physical_patterns.is_empty();
-            let final_projection = if is_final_join {
-                bgp.projection.as_deref()
-            } else {
-                None
-            };
-
-            current_exec = self.join_execs(
-                planner,
-                session_state,
-                current_exec,
-                next_exec,
-                final_projection,
-                &mut pending_filters,
-            )?;
-
-            // Try to apply remaining filters after join
-            let mut i = 0;
-            while i < pending_filters.len() {
-                let filter = &pending_filters[i];
-                let mut columns = HashSet::new();
-                expr_to_columns(filter, &mut columns)?;
-
-                let schema = current_exec.schema();
-                let can_apply = columns
-                    .iter()
-                    .all(|col| schema.index_of(col.name()).is_ok());
-
-                if can_apply {
-                    let current_df_schema = DFSchema::from_unqualified_fields(
-                        current_exec.schema().fields().clone(),
-                        HashMap::new(),
-                    )?;
-
-                    let phys_expr = planner.create_physical_expr(
-                        filter,
-                        &current_df_schema,
-                        session_state,
-                    )?;
-                    current_exec =
-                        Arc::new(FilterExec::try_new(phys_expr, current_exec)?);
-                    pending_filters.remove(i);
-                } else {
-                    i += 1;
-                }
-            }
-        }
-
-        // Apply any remaining filters that couldn't be applied early (e.g. they need columns from all patterns)
-        for filter in pending_filters {
-            let current_df_schema = DFSchema::from_unqualified_fields(
-                current_exec.schema().fields().clone(),
-                HashMap::new(),
-            )?;
-
-            let phys_expr = planner.create_physical_expr(
-                &filter,
-                &current_df_schema,
-                session_state,
-            )?;
-            current_exec = Arc::new(FilterExec::try_new(phys_expr, current_exec)?);
-        }
-
-        // 4. Ensure the output schema matches the logical schema's exact column order
-        let join_schema = current_exec.schema();
-        let needs_projection = join_schema.fields().len() != bgp.schema.fields().len()
-            || !bgp.schema.matches_arrow_schema(join_schema.as_ref());
-
-        let result = if needs_projection {
-            let mut projection = Vec::with_capacity(bgp.schema.fields().len());
-            for field in bgp.schema.fields() {
-                let idx = join_schema.index_of(field.name())?;
-                projection.push((
-                    Arc::new(PhysicalColumn::new(field.name(), idx)) as _,
-                    field.name().to_string(),
-                ));
-            }
-            Arc::new(ProjectionExec::try_new(projection, current_exec)?)
-        } else {
-            current_exec
         };
 
-        Ok(Some(result))
+        // 3. Build the Join Tree
+        let mut exec = patterns.remove(0);
+        while !patterns.is_empty() {
+            let next_idx = self.find_next_join_pattern(&exec, &patterns);
+            let next = patterns.remove(next_idx);
+
+            let mut needed_after_join = top_level_needs.clone();
+            for pattern in &patterns {
+                for field in pattern.schema().fields() {
+                    let base_name =
+                        field.name().strip_suffix("__oid").unwrap_or(field.name());
+                    needed_after_join.insert(base_name.to_string());
+                }
+            }
+
+            exec = self.join_execs(
+                planner,
+                exec,
+                next,
+                &needed_after_join,
+                &bgp.columns_to_decode,
+                &mut pending_filters,
+                session_state,
+            )?;
+
+            // Apply cross-column filters post-join
+            exec = self.apply_ready_filters(
+                planner,
+                exec,
+                &mut pending_filters,
+                &bgp.columns_to_decode,
+                session_state,
+            )?;
+        }
+
+        // 4. Determine filter needs
+        let mut filter_needs = HashSet::new();
+        for filter in &pending_filters {
+            let mut cols = HashSet::new();
+            if expr_to_columns(filter, &mut cols).is_ok() {
+                filter_needs.extend(cols.into_iter().map(|c| c.name));
+            }
+        }
+
+        // 5. Decode only what's needed for filters
+        exec = self.decode_columns_for_filters(exec, bgp, &top_level_needs, &filter_needs)?;
+
+        // 6. Apply any remaining filters that were waiting on decoded strings
+        exec = self.apply_ready_filters(
+            planner,
+            exec,
+            &mut pending_filters,
+            &[],
+            session_state,
+        )?;
+
+        // 7. Apply any lingering final filters using the strict logical base names
+        for filter in pending_filters {
+            let df_schema = DFSchema::from_unqualified_fields(
+                exec.schema().fields().clone(),
+                HashMap::new(),
+            )?;
+            let phys_expr =
+                planner.create_physical_expr(&filter, &df_schema, session_state)?;
+            exec = Arc::new(FilterExec::try_new(phys_expr, exec)?);
+        }
+
+        // 8. Decode remaining columns
+        exec = self.decode_final_columns(exec, bgp)?;
+
+        // 9. Final Projection to align with bgp.schema
+        let mut final_projection = Vec::with_capacity(bgp.schema.fields().len());
+        for field in bgp.schema.fields() {
+            let field_name = field.name();
+            let idx = exec
+                .schema()
+                .index_of(field_name)
+                .or_else(|_| exec.schema().index_of(&format!("{field_name}__oid")))?;
+            final_projection.push((
+                Arc::new(PhysicalColumn::new(exec.schema().field(idx).name(), idx)) as _,
+                field_name.to_string(),
+            ));
+        }
+        exec = Arc::new(ProjectionExec::try_new(final_projection, exec)?);
+
+        Ok(Some(exec))
     }
 }
 
+/// A list of prepared sort patterns, along with any remaining filters that need to be applied.
+type PreparedSortPatterns = Option<(Vec<Arc<dyn ExecutionPlan>>, Vec<Expr>)>;
+
 impl BgpPlanner {
-    /// Creates a join between two physical execution plans.
-    ///
-    /// It uses a [HashJoinExec] if there are common columns, or a [NestedLoopJoinExec] if there are
-    /// cross-side filters, otherwise a [CrossJoinExec].
-    fn join_execs(
+    pub fn new(decoding_udf: Option<Arc<ScalarUDF>>) -> Self {
+        Self { decoding_udf }
+    }
+
+    fn prepare_and_sort_patterns(
         &self,
         planner: &dyn PhysicalPlanner,
+        physical_inputs: &[Arc<dyn ExecutionPlan>],
+        filters: &[Expr],
+        columns_to_decode: &[Column],
+        needed_columns: &HashSet<String>,
         session_state: &SessionState,
-        left: Arc<dyn ExecutionPlan>,
-        right: Arc<dyn ExecutionPlan>,
-        final_projection: Option<&[Column]>,
-        pending_filters: &mut Vec<Expr>,
-    ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        let left_schema = left.schema();
-        let right_schema = right.schema();
+    ) -> DFResult<PreparedSortPatterns> {
+        let mut patterns = Vec::new();
+        let mut pending_filters = filters.to_vec();
+        let use_oids = self.decoding_udf.is_some();
 
-        let mut on: JoinOn = Vec::new();
-        // 1. Direct same-named column joins
-        for (l_idx, l_field) in left_schema.fields().iter().enumerate() {
-            if let Ok(r_idx) = right_schema.index_of(l_field.name()) {
-                on.push((
-                    Arc::new(PhysicalColumn::new(l_field.name(), l_idx)) as _,
-                    Arc::new(PhysicalColumn::new(right_schema.field(r_idx).name(), r_idx))
-                        as _,
-                ));
-            }
-        }
+        for exec in physical_inputs {
+            let mut current_exec = Arc::clone(exec);
 
-        // 2. Identify filters that reference both sides
-        let mut join_predicates = Vec::new();
-        let mut i = 0;
-        while i < pending_filters.len() {
-            let filter = &pending_filters[i];
-            let mut columns = HashSet::new();
-            expr_to_columns(filter, &mut columns)?;
-
-            let mut touches_left = false;
-            let mut touches_right = false;
-            let mut others = false;
-
-            for col in columns {
-                if left_schema.index_of(col.name()).is_ok() {
-                    touches_left = true;
-                } else if right_schema.index_of(col.name()).is_ok() {
-                    touches_right = true;
-                } else {
-                    others = true;
-                }
-            }
-
-            if touches_left && touches_right && !others {
-                join_predicates.push(pending_filters.remove(i));
-            } else {
-                i += 1;
-            }
-        }
-
-        let join_filter = if !join_predicates.is_empty() {
-            let combined_schema = {
-                let mut fields = Vec::new();
-                for f in left_schema.fields() {
-                    fields.push((Some(TableReference::bare("left")), Arc::clone(f)));
-                }
-                for f in right_schema.fields() {
-                    fields.push((Some(TableReference::bare("right")), Arc::clone(f)));
-                }
-                DFSchema::new_with_metadata(fields, HashMap::new())?
-            };
-
-            let combined_expr = join_predicates
-                .into_iter()
-                .map(|expr| {
-                    expr.transform(|e| {
-                        if let Expr::Column(col) = e {
-                            if left_schema.index_of(col.name()).is_ok() {
-                                Ok(Transformed::yes(Expr::Column(Column::new(
-                                    Some("left"),
-                                    col.name(),
-                                ))))
-                            } else if right_schema.index_of(col.name()).is_ok() {
-                                Ok(Transformed::yes(Expr::Column(Column::new(
-                                    Some("right"),
-                                    col.name(),
-                                ))))
-                            } else {
-                                Ok(Transformed::no(Expr::Column(col)))
-                            }
-                        } else {
-                            Ok(Transformed::no(e))
-                        }
-                    })
-                    .map(|t| t.data)
-                })
-                .collect::<DFResult<Vec<_>>>()?
-                .into_iter()
-                .reduce(datafusion::logical_expr::and)
-                .expect("Not empty");
-
-            let phys_expr = planner.create_physical_expr(
-                &combined_expr,
-                &combined_schema,
+            current_exec = self.apply_ready_filters(
+                planner,
+                current_exec,
+                &mut pending_filters,
+                columns_to_decode,
                 session_state,
             )?;
 
-            let mut column_indices = Vec::new();
-            for i in 0..left_schema.fields().len() {
-                column_indices.push(ColumnIndex {
-                    index: i,
-                    side: JoinSide::Left,
-                });
-            }
-            for i in 0..right_schema.fields().len() {
-                column_indices.push(ColumnIndex {
-                    index: i,
-                    side: JoinSide::Right,
-                });
-            }
+            let mut projection = Vec::new();
+            for (idx, field) in current_exec.schema().fields().iter().enumerate() {
+                let base_name =
+                    field.name().strip_suffix("__oid").unwrap_or(field.name());
+                let projected_name = if use_oids {
+                    format!("{base_name}__oid")
+                } else {
+                    base_name.to_string()
+                };
 
-            Some(JoinFilter::new(
-                phys_expr,
-                column_indices,
-                Arc::new(combined_schema.as_arrow().clone()),
-            ))
-        } else {
-            None
-        };
-
-        let left_len = left_schema.fields().len();
-        let mut projection = Vec::new();
-
-        if let Some(final_cols) = final_projection.filter(|_| pending_filters.is_empty())
-        {
-            for col in final_cols {
-                if let Ok(idx) = left_schema.index_of(col.name()) {
-                    projection.push(idx);
-                } else if let Ok(idx) = right_schema.index_of(col.name()) {
-                    projection.push(left_len + idx);
+                if needed_columns.contains(base_name) {
+                    projection.push((
+                        Arc::new(PhysicalColumn::new(field.name(), idx)) as _,
+                        projected_name,
+                    ));
                 }
             }
-        } else {
-            // Keep all columns from the left side
-            for i in 0..left_len {
-                projection.push(i);
+            current_exec = Arc::new(ProjectionExec::try_new(projection, current_exec)?);
+
+            current_exec = self.apply_ready_filters(
+                planner,
+                current_exec,
+                &mut pending_filters,
+                columns_to_decode,
+                session_state,
+            )?;
+
+            let stats = current_exec.partition_statistics(None)?;
+            if let Precision::Exact(0) = stats.num_rows {
+                return Ok(None);
             }
 
-            // Keep only the non-overlapping columns from the right side
-            for (r_idx, r_field) in right_schema.fields().iter().enumerate() {
-                if left_schema.index_of(r_field.name()).is_err() {
-                    projection.push(left_len + r_idx);
-                }
+            let rows = stats.num_rows.get_value().cloned().unwrap_or(usize::MAX);
+            patterns.push((current_exec, rows));
+        }
+
+        patterns.sort_by_key(|(_, rows)| *rows);
+        Ok(Some((
+            patterns.into_iter().map(|(exec, _)| exec).collect(),
+            pending_filters,
+        )))
+    }
+
+    fn apply_ready_filters(
+        &self,
+        planner: &dyn PhysicalPlanner,
+        mut exec: Arc<dyn ExecutionPlan>,
+        pending_filters: &mut Vec<Expr>,
+        columns_to_decode: &[Column],
+        session_state: &SessionState,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let schema = exec.schema();
+        let mut ready_filters = Vec::new();
+        let use_oids = self.decoding_udf.is_some();
+
+        pending_filters.retain(|filter| {
+            let mut cols = HashSet::new();
+            if expr_to_columns(filter, &mut cols).is_err() {
+                return true;
+            }
+
+            let all_present = cols.iter().all(|c| schema.index_of(&c.name).is_ok());
+            let needs_decode = use_oids
+                && !columns_to_decode.is_empty()
+                && cols
+                    .iter()
+                    .any(|c| columns_to_decode.iter().any(|dc| dc.name == c.name));
+
+            if all_present && !needs_decode {
+                ready_filters.push(filter.clone());
+                false
+            } else {
+                true
+            }
+        });
+
+        for filter in ready_filters {
+            let df_schema = DFSchema::from_unqualified_fields(
+                exec.schema().fields().clone(),
+                HashMap::new(),
+            )?;
+            let phys_expr =
+                planner.create_physical_expr(&filter, &df_schema, session_state)?;
+            exec = Arc::new(FilterExec::try_new(phys_expr, exec)?);
+        }
+
+        Ok(exec)
+    }
+
+    fn find_next_join_pattern(
+        &self,
+        current_exec: &Arc<dyn ExecutionPlan>,
+        patterns: &[Arc<dyn ExecutionPlan>],
+    ) -> usize {
+        let current_schema = current_exec.schema();
+        patterns
+            .iter()
+            .position(|pattern| {
+                pattern
+                    .schema()
+                    .fields()
+                    .iter()
+                    .any(|f| current_schema.index_of(f.name()).is_ok())
+            })
+            .unwrap_or(0)
+    }
+
+    fn join_execs(
+        &self,
+        planner: &dyn PhysicalPlanner,
+        left: Arc<dyn ExecutionPlan>,
+        right: Arc<dyn ExecutionPlan>,
+        needed_after_join: &HashSet<String>,
+        columns_to_decode: &[Column],
+        pending_filters: &mut Vec<Expr>,
+        session_state: &SessionState,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let left_schema = left.schema();
+        let right_schema = right.schema();
+        let mut on: JoinOn = Vec::new();
+        let use_oids = self.decoding_udf.is_some();
+
+        for l_field in left_schema.fields() {
+            let col_name = l_field.name();
+
+            if use_oids && !col_name.ends_with("__oid") {
+                continue;
+            }
+
+            if right_schema.index_of(col_name).is_ok() {
+                let l_idx = left_schema.index_of(col_name).unwrap();
+                let r_idx = right_schema.index_of(col_name).unwrap();
+
+                on.push((
+                    Arc::new(PhysicalColumn::new(col_name, l_idx)) as _,
+                    Arc::new(PhysicalColumn::new(col_name, r_idx)) as _,
+                ));
             }
         }
 
         if !on.is_empty() {
+            let left_len = left_schema.fields().len();
+            let mut projection = Vec::new();
+
+            for (i, l_field) in left_schema.fields().iter().enumerate() {
+                let base_name = l_field
+                    .name()
+                    .strip_suffix("__oid")
+                    .unwrap_or(l_field.name());
+                if needed_after_join.contains(base_name) {
+                    projection.push(i);
+                }
+            }
+            for (r_idx, r_field) in right_schema.fields().iter().enumerate() {
+                if left_schema.index_of(r_field.name()).is_err() {
+                    let base_name = r_field
+                        .name()
+                        .strip_suffix("__oid")
+                        .unwrap_or(r_field.name());
+                    if needed_after_join.contains(base_name) {
+                        projection.push(left_len + r_idx);
+                    }
+                }
+            }
+
             let partition_mode = if left.output_partitioning().partition_count() <= 1
                 && right.output_partitioning().partition_count() <= 1
             {
@@ -396,29 +403,344 @@ impl BgpPlanner {
                 left,
                 right,
                 on,
-                join_filter,
+                None,
                 &JoinType::Inner,
                 Some(projection),
                 partition_mode,
                 NullEquality::NullEqualsNothing,
                 false,
             )?))
-        } else if let Some(filter) = join_filter {
-            Ok(Arc::new(NestedLoopJoinExec::try_new(
+        } else {
+            self.optimize_cross_join(
+                planner,
                 left,
                 right,
-                Some(filter),
-                &JoinType::Inner,
-                Some(projection),
-            )?))
-        } else {
-            Ok(Arc::new(CrossJoinExec::new(left, right)))
+                needed_after_join,
+                columns_to_decode,
+                pending_filters,
+                session_state,
+            )
         }
+    }
+
+    /// Handles CrossJoin fallbacks. Promotes to a NestedLoopJoinExec if filters are present.
+    fn optimize_cross_join(
+        &self,
+        planner: &dyn PhysicalPlanner,
+        mut left: Arc<dyn ExecutionPlan>,
+        mut right: Arc<dyn ExecutionPlan>,
+        needed_after_join: &HashSet<String>,
+        columns_to_decode: &[Column],
+        pending_filters: &mut Vec<Expr>,
+        session_state: &SessionState,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let mut eligible_filters = Vec::new();
+        let mut decode_left = Vec::new();
+        let mut decode_right = Vec::new();
+        let use_oids = self.decoding_udf.is_some();
+
+        let left_schema = left.schema();
+        let right_schema = right.schema();
+
+        pending_filters.retain(|filter| {
+            let mut cols = HashSet::new();
+            if expr_to_columns(filter, &mut cols).is_err() {
+                return true;
+            }
+
+            let mut temp_decode_left = Vec::new();
+            let mut temp_decode_right = Vec::new();
+
+            for c in &cols {
+                let name = c.name.as_str();
+                let oid_name = format!("{name}__oid");
+
+                if left_schema.index_of(name).is_ok()
+                    || right_schema.index_of(name).is_ok()
+                {
+                    continue;
+                }
+
+                let is_decodable = use_oids
+                    && columns_to_decode.iter().any(|dc| {
+                        dc.name == name || format!("{}__oid", dc.name) == oid_name
+                    });
+
+                if left_schema.index_of(&oid_name).is_ok() && is_decodable {
+                    temp_decode_left.push((oid_name, name.to_string()));
+                } else if right_schema.index_of(&oid_name).is_ok() && is_decodable {
+                    temp_decode_right.push((oid_name, name.to_string()));
+                } else {
+                    return true;
+                }
+            }
+
+            decode_left.extend(temp_decode_left);
+            decode_right.extend(temp_decode_right);
+            eligible_filters.push(filter.clone());
+            false
+        });
+
+        decode_left.sort();
+        decode_left.dedup();
+        decode_right.sort();
+        decode_right.dedup();
+
+        if use_oids {
+            let decoding_udf = self.decoding_udf.clone().unwrap();
+            if !decode_left.is_empty() {
+                let mut projections = Vec::new();
+                for field in left.schema().fields() {
+                    projections.push(
+                        crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                            source_column: field.name().clone(),
+                            target_column: field.name().clone(),
+                        },
+                    );
+                }
+                for (oid_name, target_name) in &decode_left {
+                    projections.push(
+                        crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
+                            source_column: oid_name.clone(),
+                            target_column: target_name.clone(),
+                        },
+                    );
+                }
+                left = Arc::new(DecodeObjectIdsExec::try_new(
+                    left,
+                    projections,
+                    decoding_udf.clone(),
+                )?);
+            }
+            if !decode_right.is_empty() {
+                let mut projections = Vec::new();
+                for field in right.schema().fields() {
+                    projections.push(
+                        crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                            source_column: field.name().clone(),
+                            target_column: field.name().clone(),
+                        },
+                    );
+                }
+                for (oid_name, target_name) in &decode_right {
+                    projections.push(
+                        crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
+                            source_column: oid_name.clone(),
+                            target_column: target_name.clone(),
+                        },
+                    );
+                }
+                right = Arc::new(DecodeObjectIdsExec::try_new(
+                    right,
+                    projections,
+                    decoding_udf,
+                )?);
+            }
+        }
+
+        let exec: Arc<dyn ExecutionPlan> = if eligible_filters.is_empty() {
+            Arc::new(CrossJoinExec::new(left, right))
+        } else {
+            // Combine all eligible filters into a single AND expression
+            let combined_filter = eligible_filters
+                .into_iter()
+                .reduce(|a, b| a.and(b))
+                .unwrap();
+
+            // Construct the intermediate unified schema of what the cross join would produce
+            let mut combined_fields =
+                left.schema().fields().iter().cloned().collect::<Vec<_>>();
+            combined_fields.extend(right.schema().fields().iter().cloned());
+            let intermediate_schema = Arc::new(Schema::new(combined_fields));
+
+            let df_schema = DFSchema::from_unqualified_fields(
+                intermediate_schema.fields().clone(),
+                HashMap::new(),
+            )?;
+
+            let phys_expr = planner.create_physical_expr(
+                &combined_filter,
+                &df_schema,
+                session_state,
+            )?;
+
+            // Assign column indices dynamically to map left/right sources
+            let mut column_indices = Vec::new();
+            for i in 0..left.schema().fields().len() {
+                column_indices.push(ColumnIndex {
+                    index: i,
+                    side: JoinSide::Left,
+                });
+            }
+            for i in 0..right.schema().fields().len() {
+                column_indices.push(ColumnIndex {
+                    index: i,
+                    side: JoinSide::Right,
+                });
+            }
+
+            let join_filter =
+                JoinFilter::new(phys_expr, column_indices, intermediate_schema);
+
+            Arc::new(NestedLoopJoinExec::try_new(
+                left,
+                right,
+                Some(join_filter),
+                &JoinType::Inner,
+                None,
+            )?)
+        };
+
+        // Standard Deduplication Projection Output
+        let exec_schema = exec.schema();
+        let mut projection = Vec::new();
+        for (idx, field) in exec_schema.fields().iter().enumerate() {
+            let base_name = field.name().strip_suffix("__oid").unwrap_or(field.name());
+            if needed_after_join.contains(base_name) {
+                projection.push((
+                    Arc::new(PhysicalColumn::new(field.name(), idx)) as _,
+                    field.name().to_string(),
+                ));
+            }
+        }
+
+        if projection.len() < exec_schema.fields().len() {
+            Ok(Arc::new(ProjectionExec::try_new(projection, exec)?))
+        } else {
+            Ok(exec)
+        }
+    }
+
+    fn decode_columns_for_filters(
+        &self,
+        exec: Arc<dyn ExecutionPlan>,
+        bgp: &BgpNode,
+        top_level_needs: &HashSet<String>,
+        filter_needs: &HashSet<String>,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let use_oids = self.decoding_udf.is_some();
+        let join_schema = exec.schema();
+
+        if !use_oids {
+            return Ok(exec);
+        }
+
+        let decoding_udf = self.decoding_udf.clone().unwrap();
+        let mut projections = Vec::with_capacity(top_level_needs.len());
+        let columns_to_decode: HashSet<String> = bgp.columns_to_decode.iter().map(|c| c.flat_name()).collect();
+
+        let mut projected_names = HashSet::new();
+        let mut needs_decode = false;
+
+        for field in join_schema.fields() {
+            let field_name = field.name();
+            let base_name = field_name.strip_suffix("__oid").unwrap_or(field_name);
+
+            if !top_level_needs.contains(base_name) {
+                continue;
+            }
+
+            if field_name.ends_with("__oid") {
+                if columns_to_decode.contains(base_name) && filter_needs.contains(base_name) {
+                    if projected_names.insert(base_name.to_string()) {
+                        projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
+                            source_column: field_name.clone(),
+                            target_column: base_name.to_string(),
+                        });
+                        needs_decode = true;
+                    }
+                } else {
+                    if projected_names.insert(field_name.clone()) {
+                        projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                            source_column: field_name.clone(),
+                            target_column: field_name.clone(),
+                        });
+                    }
+                }
+            } else {
+                if projected_names.insert(field_name.clone()) {
+                    projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                        source_column: field_name.clone(),
+                        target_column: field_name.clone(),
+                    });
+                }
+            }
+        }
+
+        // Also if any column needed is already available but we missed it:
+        for needed in top_level_needs {
+            if !projected_names.contains(needed) && !projected_names.contains(&format!("{needed}__oid")) {
+                if let Ok(_) = join_schema.index_of(needed) {
+                    projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                        source_column: needed.clone(),
+                        target_column: needed.clone(),
+                    });
+                }
+            }
+        }
+
+        if !needs_decode {
+            return Ok(exec);
+        }
+
+        Ok(Arc::new(DecodeObjectIdsExec::try_new(
+            exec,
+            projections,
+            decoding_udf,
+        )?))
+    }
+
+    fn decode_final_columns(
+        &self,
+        exec: Arc<dyn ExecutionPlan>,
+        bgp: &BgpNode,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let use_oids = self.decoding_udf.is_some();
+        let schema = exec.schema();
+
+        if !use_oids {
+            return Ok(exec);
+        }
+
+        let decoding_udf = self.decoding_udf.clone().unwrap();
+        let mut projections = Vec::with_capacity(schema.fields().len());
+        let columns_to_decode: HashSet<String> = bgp.columns_to_decode.iter().map(|c| c.flat_name()).collect();
+        let mut needs_decode = false;
+
+        for field in schema.fields() {
+            let field_name = field.name();
+            let base_name = field_name.strip_suffix("__oid").unwrap_or(field_name);
+
+            if field_name.ends_with("__oid") && columns_to_decode.contains(base_name) {
+                projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
+                    source_column: field_name.clone(),
+                    target_column: base_name.to_string(),
+                });
+                needs_decode = true;
+            } else {
+                projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                    source_column: field_name.clone(),
+                    target_column: field_name.clone(),
+                });
+            }
+        }
+
+        if !needs_decode {
+            return Ok(exec);
+        }
+
+        Ok(Arc::new(DecodeObjectIdsExec::try_new(
+            exec,
+            projections,
+            decoding_udf,
+        )?))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    //! There are also integration tests for the BgpPlanner.
+
     use super::*;
     use datafusion::arrow::datatypes::Fields;
     use datafusion::common::DFSchema;
@@ -431,13 +753,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_empty_patterns() -> DFResult<()> {
-        let planner = BgpPlanner;
+        let planner = BgpPlanner::new(None);
         let ctx = SessionContext::new();
-        let schema = Arc::new(DFSchema::from_unqualified_fields(
-            Fields::empty(),
-            HashMap::new(),
-        )?);
-        let bgp = BgpNode::new(vec![], Arc::clone(&schema), vec![], None);
+        let bgp = BgpNode::try_new(vec![], vec![], None, vec![]).unwrap();
 
         let plan = planner
             .plan_extension(
@@ -460,7 +778,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_short_circuit_zero_rows() -> DFResult<()> {
-        let planner = BgpPlanner;
+        let planner = BgpPlanner::new(None);
         let ctx = SessionContext::new();
         let schema = Arc::new(DFSchema::from_unqualified_fields(
             Fields::empty(),
@@ -468,16 +786,25 @@ mod tests {
         )?);
 
         let lp = LogicalPlanBuilder::empty(false).build()?;
-        let bgp = BgpNode::new(vec![lp.clone()], Arc::clone(&schema), vec![], None);
+        let bgp = BgpNode::try_new(vec![lp.clone()], vec![], None, vec![]).unwrap();
 
         // EmptyExec reports Precision::Exact(0) rows
         let empty_exec = Arc::new(EmptyExec::new(Arc::new(schema.as_arrow().clone())));
 
         let mut plans = HashMap::new();
-        plans.insert(lp, empty_exec as Arc<dyn ExecutionPlan>);
+        plans.insert(
+            lp.clone(),
+            Arc::clone(&empty_exec) as Arc<dyn ExecutionPlan>,
+        );
 
         let plan = planner
-            .plan_extension(&MockPlanner { plans }, &bgp, &[], &[], &ctx.state())
+            .plan_extension(
+                &MockPlanner { plans },
+                &bgp,
+                &[&lp],
+                &[empty_exec as Arc<dyn ExecutionPlan>],
+                &ctx.state(),
+            )
             .await?
             .unwrap();
 

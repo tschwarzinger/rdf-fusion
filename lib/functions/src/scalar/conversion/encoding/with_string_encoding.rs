@@ -96,7 +96,7 @@ impl ScalarUDFImpl for WithStringEncoding {
             }
             _ => {
                 exec_err!(
-                    "Cannot convert to plain term encoding for arguments: {:?}",
+                    "Cannot convert to string encoding for arguments: {:?}",
                     args.args
                 )
             }

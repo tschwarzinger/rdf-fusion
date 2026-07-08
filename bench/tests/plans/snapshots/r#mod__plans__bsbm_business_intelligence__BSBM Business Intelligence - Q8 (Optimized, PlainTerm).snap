@@ -20,7 +20,7 @@ Projection: vendor, ENC_PT(cheapExpensiveRatio) AS cheapExpensiveRatio
                   SubqueryAlias: rhs
                     Projection: product, <uuid> AS avgPrice
                       Aggregate: groupBy=[[product AS product]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
-                        BasicGraphPattern: projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "price" }], 
+                        BasicGraphPattern: projection=[product, price], 
                           QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>]
                           QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
                           QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor], projection=[0]
@@ -28,7 +28,7 @@ Projection: vendor, ENC_PT(cheapExpensiveRatio) AS cheapExpensiveRatio
         SubqueryAlias: rhs
           Projection: vendor, <uuid> AS offerCount
             Aggregate: groupBy=[[vendor AS vendor]], aggr=[[COUNT(offer) AS <uuid>]]
-              BasicGraphPattern: projection=[Column { relation: None, name: "offer" }, Column { relation: None, name: "vendor" }], 
+              BasicGraphPattern: projection=[offer, vendor], 
                 QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>]
                 QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
                 QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor]

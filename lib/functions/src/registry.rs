@@ -9,7 +9,8 @@ use crate::scalar::comparison::{
     less_or_equal_udf, less_than_udf,
 };
 use crate::scalar::conversion::encoding::{
-    with_plain_term_encoding, with_string_encoding, with_typed_family_encoding,
+    decode_term, with_plain_term_encoding, with_string_encoding,
+    with_typed_family_encoding,
 };
 use crate::scalar::conversion::native::{
     effective_boolean_value_udf, native_boolean_as_term, native_int64_as_term,
@@ -157,6 +158,15 @@ impl RdfFusionFunctionRegistry for DefaultRdfFusionFunctionRegistry {
             .register_udaf(Arc::new(udaf))
             .expect("Cannot fail");
     }
+
+    fn udfs(&self) -> Vec<Arc<ScalarUDF>> {
+        let lock = self.inner.read().unwrap();
+        lock.registry
+            .udfs()
+            .iter()
+            .map(|name| lock.registry.udf(name).expect("Function exists"))
+            .collect()
+    }
 }
 
 /// Computes the supported encodings from the given type signature.
@@ -288,6 +298,10 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
 
     for udf in scalar_fns {
         registry.register_udf(udf);
+    }
+
+    if let Some(decode) = decode_term(registry.encodings.clone()) {
+        registry.register_udf(decode);
     }
 
     // Native conversion functions

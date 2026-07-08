@@ -2,32 +2,38 @@
 source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
-Projection: ENC_PT(feature) AS feature, ENC_PT(priceRatio) AS priceRatio
+Projection: feature, ENC_PT(priceRatio) AS priceRatio
   Sort: AS_SORTABLE_BYTES(DIV(withFeaturePrice, withoutFeaturePrice)) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(feature)) ASC NULLS FIRST, fetch=10
     Projection: lhs.feature AS feature, lhs.withFeaturePrice AS withFeaturePrice, rhs.withoutFeaturePrice AS withoutFeaturePrice, DIV(lhs.withFeaturePrice, rhs.withoutFeaturePrice) AS priceRatio
       Inner Join: lhs.feature = rhs.feature
         SubqueryAlias: lhs
-          Projection: feature, <uuid> AS withFeaturePrice
-            Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
-              BasicGraphPattern: projection=[Column { relation: None, name: "feature" }, Column { relation: None, name: "price" }], 
-                QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
-                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
-                QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
-                QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
+          DecodeObjectIds: columns=[feature]
+            Projection: feature, withFeaturePrice
+              Projection: feature, <uuid>, <uuid> AS withFeaturePrice
+                Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
+                  BasicGraphPattern: columns_to_decode=[price], 
+                    QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
+                    QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
+                    QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+                    QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
         SubqueryAlias: rhs
           Projection: feature, <uuid> AS withoutFeaturePrice
             Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
               Projection: feature, price
-                LeftAnti Join: feature = __correlated_sq_1.__inner__feature, product = __correlated_sq_1.__inner__product
-                  Cross Join:
-                    Aggregate: groupBy=[[feature]], aggr=[[]]
-                      BasicGraphPattern: projection=[Column { relation: None, name: "feature" }], 
-                        QuadPattern: triple_pattern=[?p <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
-                        QuadPattern: triple_pattern=[?p <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
-                    BasicGraphPattern: projection=[Column { relation: None, name: "product" }, Column { relation: None, name: "price" }], 
-                      QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
-                      QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
-                      QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
-                  SubqueryAlias: __correlated_sq_1
-                    Projection: product AS __inner__product, feature AS __inner__feature
-                      QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
+                DecodeObjectIds: columns=[price]
+                  LeftAnti Join: feature = __correlated_sq_1.__inner__feature, product = __correlated_sq_1.__inner__product
+                    DecodeObjectIds: columns=[feature, product]
+                      Projection: feature, product, offer, price
+                        Cross Join:
+                          Aggregate: groupBy=[[feature]], aggr=[[]]
+                            BasicGraphPattern: projection=[feature], 
+                              QuadPattern: triple_pattern=[?p <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
+                              QuadPattern: triple_pattern=[?p <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
+                          BasicGraphPattern: 
+                            QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType48>]
+                            QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+                            QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
+                    SubqueryAlias: __correlated_sq_1
+                      Projection: product AS __inner__product, feature AS __inner__feature
+                        DecodeObjectIds: columns=[feature, product]
+                          QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]

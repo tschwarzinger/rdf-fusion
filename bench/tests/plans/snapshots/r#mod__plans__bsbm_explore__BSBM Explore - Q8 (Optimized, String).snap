@@ -16,7 +16,7 @@ Projection: ENC_PT(title) AS title, ENC_PT(text) AS text, ENC_PT(reviewDate) AS 
                       Projection: lhs.review AS review, lhs.title AS title, lhs.text AS text, lhs.reviewDate AS reviewDate, lhs.reviewer AS reviewer, lhs.reviewerName AS reviewerName, rhs.rating1 AS rating1
                         Left Join: lhs.review = rhs.review
                           SubqueryAlias: lhs
-                            BasicGraphPattern: filters=[EBV(LANGMATCHES(ENC_TF(LANG(ENC_PT(text))), Union 2:{value:EN,language:}))], 
+                            BasicGraphPattern: filters=[EBV(LANGMATCHES(ENC_TF(LANG(ENC_PT(text))), Union 2:{value:EN,language:}))]
                               QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product578>]
                               QuadPattern: triple_pattern=[?review <http://purl.org/dc/elements/1.1/title> ?title]
                               QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#text> ?text]

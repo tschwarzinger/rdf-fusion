@@ -9,8 +9,10 @@ use datafusion::physical_planner::{
 };
 use rdf_fusion_common::{DFResult, StorageError};
 use rdf_fusion_extensions::RdfFusionContextView;
+use rdf_fusion_extensions::functions::{BuiltinName, FunctionName};
 use rdf_fusion_extensions::storage::{QuadStorage, QuadStorageSnapshot};
 use rdf_fusion_physical::bgp::BgpPlanner;
+use rdf_fusion_physical::object_id::DecodeObjectIdsPlanner;
 use rdf_fusion_physical::paths::KleenePlusPathPlanner;
 use rdf_fusion_storage::rdf_files::RdfFilePlanner;
 use std::fmt::Debug;
@@ -65,11 +67,22 @@ impl QueryPlanner for RdfFusionPlanner {
             .await
             .map_err(|err| DataFusionError::External(Box::new(err)))?;
 
+        let decoding_udf = self
+            .context
+            .functions()
+            .udf(&FunctionName::Builtin(BuiltinName::DecodeTerm))
+            .ok();
+
         let mut planners: Vec<Arc<dyn ExtensionPlanner + Send + Sync>> = vec![
-            Arc::new(BgpPlanner),
+            Arc::new(BgpPlanner::new(decoding_udf.clone())),
             Arc::new(KleenePlusPathPlanner),
             Arc::new(RdfFilePlanner),
         ];
+
+        if let Some(decoding_udf) = decoding_udf {
+            planners.push(Arc::new(DecodeObjectIdsPlanner::new(decoding_udf)))
+        }
+
         planners.extend(snapshot.planners(&self.context).await);
 
         let planner = DefaultPhysicalPlanner::with_extension_planners(planners);

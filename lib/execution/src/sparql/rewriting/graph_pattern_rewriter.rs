@@ -102,7 +102,8 @@ impl GraphPatternRewriter {
             }
             GraphPattern::Filter { inner, expr } => {
                 let inner = self.rewrite_graph_pattern(inner.as_ref())?;
-                let expr = self.rewrite_to_boolean_expression(inner.schema(), expr)?;
+                let expr =
+                    self.rewrite_to_boolean_expression(inner.decoded_schema(), expr)?;
                 inner.filter(expr)
             }
             GraphPattern::Extend {
@@ -111,7 +112,7 @@ impl GraphPatternRewriter {
                 variable,
             } => {
                 let inner = self.rewrite_graph_pattern(inner)?;
-                let expr = self.rewrite_expression(inner.schema(), expression)?;
+                let expr = self.rewrite_expression(inner.decoded_schema(), expression)?;
                 inner.extend(variable.clone(), expr)
             }
             GraphPattern::Values {
@@ -131,8 +132,8 @@ impl GraphPatternRewriter {
                 let lhs = self.rewrite_graph_pattern(left)?;
                 let rhs = self.rewrite_graph_pattern(right)?;
 
-                let mut join_schema = lhs.schema().as_ref().clone();
-                join_schema.merge(rhs.schema());
+                let mut join_schema = lhs.decoded_schema().as_ref().clone();
+                join_schema.merge(rhs.decoded_schema());
 
                 let filter = expression
                     .as_ref()
@@ -159,7 +160,7 @@ impl GraphPatternRewriter {
 
                 let sort_exprs = sort_exprs
                     .iter()
-                    .map(|e| self.rewrite_order_expression(inner.schema(), e))
+                    .map(|e| self.rewrite_order_expression(inner.decoded_schema(), e))
                     .collect::<Result<Vec<_>, _>>()?;
                 inner.distinct_with_sort(sort_exprs)
             }
@@ -171,9 +172,9 @@ impl GraphPatternRewriter {
                 let inner = self.rewrite_graph_pattern(inner)?;
                 let sort_exprs = expression
                     .iter()
-                    .map(|e| self.rewrite_order_expression(inner.schema(), e))
+                    .map(|e| self.rewrite_order_expression(inner.decoded_schema(), e))
                     .collect::<Result<Vec<_>, _>>()?;
-                inner.order_by(sort_exprs)
+                inner.sort(sort_exprs)
             }
             GraphPattern::Union { left, right } => {
                 let lhs = self.rewrite_graph_pattern(left)?;
@@ -224,7 +225,7 @@ impl GraphPatternRewriter {
                 let aggregate_exprs = aggregates
                     .iter()
                     .map(|(var, aggregate)| {
-                        self.rewrite_aggregate(inner.schema(), aggregate)
+                        self.rewrite_aggregate(inner.decoded_schema(), aggregate)
                             .map(|a| (var.clone(), a))
                     })
                     .collect::<DFResult<Vec<_>>>()?;

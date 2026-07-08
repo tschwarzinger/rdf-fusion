@@ -10,6 +10,7 @@ use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion::common::{ScalarValue, SchemaExt};
 use datafusion::dataframe::DataFrame;
+use datafusion::execution::FunctionRegistry;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::{ExprSchemable, Extension, LogicalPlan, col};
 use datafusion::physical_plan::collect;
@@ -22,10 +23,11 @@ use deltalake::writer::{DeltaWriter, RecordBatchWriter};
 use futures::StreamExt;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{NamedOrBlankNodeRef, StorageError};
+use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageGraphTarget, QuadStorageSnapshot, QuadStorageTransaction,
 };
-use rdf_fusion_logical::encoding::change::ChangeEncodingNode;
+use rdf_fusion_logical::encoding::object_id::EncodeAsObjectIdNode;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -291,11 +293,32 @@ impl DeltaQuadStorageTransaction {
     }
 
     /// Encodes the quads using object ids, if necessary.
-    async fn encode_quads_if_necessary(
+    async fn prepare_inserted_quads(
         &self,
         quads: DataFrame,
     ) -> Result<DataFrame, StorageError> {
         let quads_schema = quads.schema();
+
+        let expected_stream_schema = self
+            .table_schema
+            .project(&[2, 3, 4, 5])
+            .expect("Valid projection");
+
+        let names_match = quads_schema.inner().fields().len()
+            == expected_stream_schema.fields().len()
+            && quads_schema
+                .inner()
+                .fields()
+                .iter()
+                .zip(expected_stream_schema.fields().iter())
+                .all(|(f1, f2)| f1.name() == f2.name());
+
+        if !names_match {
+            return Err(DeltaQuadStorageError::InvalidSchema(Arc::clone(
+                quads_schema.inner(),
+            ))
+            .into());
+        }
 
         // If schema matches, no encoding is necessary
         if quads_schema.inner().equivalent_names_and_types(
@@ -308,15 +331,90 @@ impl DeltaQuadStorageTransaction {
             return Ok(quads);
         };
 
-        let (state, logical_plan) = quads.into_parts();
+        let target_encoding = self.storage.encoding();
+        match target_encoding {
+            rdf_fusion_encoding::QuadStorageEncoding::ObjectId(encoding) => {
+                let (state, logical_plan) = quads.into_parts();
+                let node = EncodeAsObjectIdNode::try_new(
+                    logical_plan,
+                    encoding.object_id_data_type(),
+                )?;
+                Ok(DataFrame::new(
+                    state,
+                    LogicalPlan::Extension(Extension {
+                        node: Arc::new(node),
+                    }),
+                ))
+            }
+            rdf_fusion_encoding::QuadStorageEncoding::PlainTerm => {
+                let context = SessionContext::new_with_state(self.state.clone());
+                let enc_pt_udf = context.udf("ENC_PT")?;
+                let target_type =
+                    (**rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING).data_type();
 
-        let encoded = ChangeEncodingNode::try_new(logical_plan, self.storage.encoding())?;
-        Ok(DataFrame::new(
-            state,
-            LogicalPlan::Extension(Extension {
-                node: Arc::new(encoded),
-            }),
-        ))
+                let mut decode_udf = None;
+                let mut proj_exprs = Vec::new();
+                for field in quads_schema.fields() {
+                    let col_expr = col(field.name().clone());
+                    if matches!(
+                        field.data_type(),
+                        DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+                    ) {
+                        let udf = match decode_udf.as_ref() {
+                            Some(udf) => udf,
+                            None => {
+                                decode_udf = Some(context.udf("DECODE_PT")?);
+                                decode_udf.as_ref().unwrap()
+                            }
+                        };
+                        proj_exprs
+                            .push(udf.call(vec![col_expr]).alias(field.name().clone()));
+                    } else if field.data_type() != target_type {
+                        proj_exprs.push(
+                            enc_pt_udf.call(vec![col_expr]).alias(field.name().clone()),
+                        );
+                    } else {
+                        proj_exprs.push(col_expr);
+                    }
+                }
+                Ok(quads.select(proj_exprs)?)
+            }
+            rdf_fusion_encoding::QuadStorageEncoding::String => {
+                let context = SessionContext::new_with_state(self.state.clone());
+                let enc_str_udf = context.udf("ENC_STR")?;
+                let target_type =
+                    (**rdf_fusion_encoding::string::STRING_ENCODING).data_type();
+
+                let mut decode_udf = None;
+                let mut proj_exprs = Vec::new();
+                for field in quads_schema.fields() {
+                    let col_expr = col(field.name().clone());
+                    if matches!(
+                        field.data_type(),
+                        DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+                    ) {
+                        let udf = match decode_udf.as_ref() {
+                            Some(udf) => udf,
+                            None => {
+                                decode_udf = Some(context.udf("DECODE_PT")?);
+                                decode_udf.as_ref().unwrap()
+                            }
+                        };
+                        let decoded = udf.call(vec![col_expr]);
+                        proj_exprs.push(
+                            enc_str_udf.call(vec![decoded]).alias(field.name().clone()),
+                        );
+                    } else if field.data_type() != target_type {
+                        proj_exprs.push(
+                            enc_str_udf.call(vec![col_expr]).alias(field.name().clone()),
+                        );
+                    } else {
+                        proj_exprs.push(col_expr);
+                    }
+                }
+                Ok(quads.select(proj_exprs)?)
+            }
+        }
     }
 
     /// Handles clear or drop graph operation.
@@ -481,7 +579,7 @@ impl QuadStorageTransaction for DeltaQuadStorageTransaction {
     }
 
     async fn insert(&self, quads: DataFrame) -> Result<Option<usize>, StorageError> {
-        let quads = self.encode_quads_if_necessary(quads).await?;
+        let quads = self.prepare_inserted_quads(quads).await?;
         self.append_quads(quads)
             .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;
@@ -489,7 +587,7 @@ impl QuadStorageTransaction for DeltaQuadStorageTransaction {
     }
 
     async fn remove(&self, quads: DataFrame) -> Result<Option<bool>, StorageError> {
-        let quads = self.encode_quads_if_necessary(quads).await?;
+        let quads = self.prepare_inserted_quads(quads).await?;
         self.remove_quads(quads)
             .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;

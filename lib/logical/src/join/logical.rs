@@ -42,7 +42,7 @@ impl Display for SparqlJoinType {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SparqlJoinNode {
     encodings: RdfFusionEncodings,
     lhs: LogicalPlan,
@@ -136,12 +136,6 @@ impl SparqlJoinNode {
     /// A tuple containing the left plan, right plan, optional filter, and join type
     pub fn destruct(self) -> (LogicalPlan, LogicalPlan, Option<Expr>, SparqlJoinType) {
         (self.lhs, self.rhs, self.filter, self.join_type)
-    }
-}
-
-impl fmt::Debug for SparqlJoinNode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        UserDefinedLogicalNodeCore::fmt_for_explain(self, f)
     }
 }
 

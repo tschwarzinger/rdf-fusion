@@ -37,4 +37,7 @@ pub trait RdfFusionFunctionRegistry: Debug + Send + Sync {
 
     /// Register a [AggregateUDF].
     fn register_udaf(&self, udaf: AggregateUDF);
+
+    /// Returns all registered ScalarUDFs.
+    fn udfs(&self) -> Vec<Arc<ScalarUDF>>;
 }

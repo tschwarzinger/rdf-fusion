@@ -84,23 +84,6 @@ impl ScalarUDFImpl for WithTypedFamilyEncoding {
             Some(DowncastEncodingArgs::TypedFamily(arrays)) => {
                 Arc::clone(arrays.get(0).inner())
             }
-            Some(DowncastEncodingArgs::ObjectId(arrays)) => {
-                match &self.encodings.object_id() {
-                    None => {
-                        return exec_err!(
-                            "Cannot from object id as no encoding is provided."
-                        );
-                    }
-                    Some(encoding) => {
-                        let array = arrays.get(0);
-                        let decoded = encoding.mapping().decode_array_to_typed_family(
-                            self.encodings.typed_family(),
-                            array.inner(),
-                        )?;
-                        decoded.into_array_ref()
-                    }
-                }
-            }
             _ => {
                 return exec_err!(
                     "Cannot convert to typed family encoding for arguments: {:?}",

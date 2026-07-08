@@ -10,6 +10,7 @@ RDF Fusion Functions
 """
 
 [dependencies]
+async-trait.workspace = true
 base16ct.workspace = true
 datafusion.workspace = true
 arrow-string.workspace = true

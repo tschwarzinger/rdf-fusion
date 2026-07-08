@@ -1,21 +1,27 @@
-use crate::encoding::change::ChangeEncodingNode;
+use crate::encoding::object_id::{DecodeObjectIdsNode, EncodeAsObjectIdNode};
 use crate::extend::ExtendNode;
-use crate::join::{SparqlJoinNode, SparqlJoinType, compute_sparql_join_columns};
+use crate::join::{compute_sparql_join_columns, SparqlJoinNode, SparqlJoinType};
 use crate::logical_plan_builder_context::RdfFusionLogicalPlanBuilderContext;
 use crate::minus::MinusNode;
 use crate::patterns::PatternNode;
 use crate::{RdfFusionExprBuilder, RdfFusionExprBuilderContext};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::common::{Column, DFSchemaRef, plan_datafusion_err, plan_err};
+use datafusion::common::{plan_datafusion_err, plan_err, Column, DFSchema, DFSchemaRef};
+
+use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion::common::ExprSchema;
 use datafusion::logical_expr::{
-    Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort, SortExpr,
-    UserDefinedLogicalNode, col,
+    col, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort,
+    SortExpr, UserDefinedLogicalNode,
 };
+use itertools::Itertools;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{DFResult, TermPattern};
 use rdf_fusion_common::{RdfSortOrder, Variable};
-use rdf_fusion_encoding::{EncodingName, QuadStorageEncoding};
-use std::collections::{HashMap, HashSet};
+use rdf_fusion_encoding::object_id::ObjectIdEncoding;
+use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::{EncodingName, TermEncoding};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 /// A convenient builder for programmatically creating SPARQL queries.
@@ -75,21 +81,37 @@ pub struct RdfFusionLogicalPlanBuilder {
     /// We do not use [LogicalPlan] directly as we want to leverage the convenience (and validation)
     /// that the [LogicalPlanBuilder] provides.
     plan_builder: LogicalPlanBuilder,
+    /// Contains the decoded schema of the current logical plan.
+    decoded_schema: DFSchemaRef,
     /// The context for the builder.
     context: RdfFusionLogicalPlanBuilderContext,
 }
 
 impl RdfFusionLogicalPlanBuilder {
+    /// Creates a new [`RdfFusionLogicalPlanBuilder`] ensuring that the decoded schema is consistent
+    /// with the current plan's schema.
+    fn new_with_builder(
+        context: RdfFusionLogicalPlanBuilderContext,
+        plan_builder: LogicalPlanBuilder,
+    ) -> Self {
+        let decoded_schema = create_decoded_schema(
+            plan_builder.schema(),
+            context.encodings().object_id().map(|v| v.as_ref()),
+        );
+        Self {
+            plan_builder,
+            decoded_schema,
+            context,
+        }
+    }
+
     /// Creates a new [RdfFusionLogicalPlanBuilder] with an existing `plan`.
     pub(crate) fn new(
         context: RdfFusionLogicalPlanBuilderContext,
         plan: Arc<LogicalPlan>,
     ) -> Self {
         let plan_builder = LogicalPlanBuilder::new_from_arc(plan);
-        Self {
-            plan_builder,
-            context,
-        }
+        Self::new_with_builder(context, plan_builder)
     }
 
     /// Projects the current plan to a new set of variables.
@@ -99,10 +121,7 @@ impl RdfFusionLogicalPlanBuilder {
                 .iter()
                 .map(|v| col(Column::new_unqualified(v.as_str()))),
         )?;
-        Ok(Self {
-            context: self.context.clone(),
-            plan_builder,
-        })
+        Ok(Self::new_with_builder(self.context.clone(), plan_builder))
     }
 
     /// Applies a filter using `expression`.
@@ -116,20 +135,18 @@ impl RdfFusionLogicalPlanBuilder {
     /// # Relevant Resources
     /// - [SPARQL 1.1 - Effective Boolean Value (EBV)](https://www.w3.org/TR/sparql11-query/#ebv)
     pub fn filter(self, expression: Expr) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let field = expression.to_field(self.schema())?.1;
+        let decoded = self.decode_for_exprs(std::slice::from_ref(&expression))?;
+        let (_, field) = expression.to_field(decoded.schema())?;
         let expression = match field.data_type() {
-            // If the expression already evaluates to a Boolean, we can use it directly.
             DataType::Boolean => expression,
-            // Otherwise, obtain the EBV. This will trigger an error on an unknown encoding.
-            _ => self
+            _ => decoded
                 .expr_builder(expression)?
                 .build_effective_boolean_value()?,
         };
-
-        Ok(Self {
-            context: self.context.clone(),
-            plan_builder: self.plan_builder.filter(expression)?,
-        })
+        Ok(Self::new_with_builder(
+            decoded.context.clone(),
+            decoded.plan_builder.filter(expression)?,
+        ))
     }
 
     /// Extends the current plan with a new variable binding.
@@ -138,12 +155,13 @@ impl RdfFusionLogicalPlanBuilder {
         variable: Variable,
         expr: Expr,
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let inner = self.plan_builder.build()?;
+        let decoded = self.decode_for_exprs(std::slice::from_ref(&expr))?;
+        let inner = decoded.plan_builder.build()?;
         let extend_node = ExtendNode::try_new(inner, variable, expr)?;
-        Ok(Self {
-            context: self.context.clone(),
-            plan_builder: create_extension_plan(extend_node),
-        })
+        Ok(Self::new_with_builder(
+            decoded.context.clone(),
+            create_extension_plan(extend_node),
+        ))
     }
 
     /// Creates a join node of two logical plans that contain encoded RDF Terms.
@@ -157,8 +175,20 @@ impl RdfFusionLogicalPlanBuilder {
         filter: Option<Expr>,
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
         let context = self.context.clone();
+        let mut lhs = self;
+        let mut rhs = rhs;
+        let filter = filter;
 
-        let (lhs, rhs) = self.align_encodings_of_common_columns(rhs)?;
+        if let Some(f) = &filter {
+            let lhs_decoded = lhs.decode_for_exprs(std::slice::from_ref(f))?;
+            lhs = lhs_decoded;
+
+            let rhs_builder = context.create(Arc::new(rhs));
+            let rhs_decoded = rhs_builder.decode_for_exprs(std::slice::from_ref(f))?;
+            rhs = rhs_decoded.build()?;
+        }
+
+        let (lhs, rhs) = lhs.align_encodings_of_common_columns(rhs)?;
         let join_node = SparqlJoinNode::try_new(
             context.encodings().clone(),
             lhs.build()?,
@@ -166,12 +196,13 @@ impl RdfFusionLogicalPlanBuilder {
             filter,
             join_type,
         )?;
-        Ok(Self {
+
+        Ok(Self::new_with_builder(
             context,
-            plan_builder: LogicalPlanBuilder::new(LogicalPlan::Extension(Extension {
+            LogicalPlanBuilder::new(LogicalPlan::Extension(Extension {
                 node: Arc::new(join_node),
             })),
-        })
+        ))
     }
 
     /// Creates a limit node that applies skip (`start`) and fetch (`length`) to `inner`.
@@ -180,25 +211,28 @@ impl RdfFusionLogicalPlanBuilder {
         start: usize,
         length: Option<usize>,
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        Ok(Self {
-            context: self.context.clone(),
-            plan_builder: self.plan_builder.limit(start, length)?,
-        })
+        Ok(Self::new_with_builder(
+            self.context.clone(),
+            self.plan_builder.limit(start, length)?,
+        ))
     }
 
     /// Sorts the current plan by a given set of expressions.
-    pub fn order_by(self, expr: Vec<SortExpr>) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let context = self.context.clone();
+    pub fn sort(self, expr: Vec<SortExpr>) -> DFResult<RdfFusionLogicalPlanBuilder> {
+        let all_columns: Vec<_> = self.schema().columns().into_iter().map(col).collect();
+        let decoded = self.decode_for_exprs(&all_columns)?;
+
+        let context = decoded.context.clone();
         let plan = LogicalPlan::Sort(Sort {
-            input: Arc::new(self.build()?),
+            input: Arc::new(decoded.build()?),
             expr,
             fetch: None,
         });
 
-        Ok(Self {
+        Ok(Self::new_with_builder(
             context,
-            plan_builder: LogicalPlanBuilder::new(plan),
-        })
+            LogicalPlanBuilder::new(plan),
+        ))
     }
 
     /// Creates a union of the current plan and another plan.
@@ -206,19 +240,20 @@ impl RdfFusionLogicalPlanBuilder {
         let context = self.context.clone();
 
         let (lhs, rhs) = self.align_encodings_of_common_columns(rhs)?;
-        Ok(Self {
+        Ok(Self::new_with_builder(
             context,
-            plan_builder: lhs.plan_builder.union_by_name(rhs)?,
-        })
+            lhs.plan_builder.union_by_name(rhs)?,
+        ))
     }
 
     /// Subtracts the results of another plan from the current plan.
     pub fn minus(self, rhs: LogicalPlan) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let minus_node = MinusNode::new(self.plan_builder.build()?, rhs);
-        Ok(Self {
-            context: self.context,
-            plan_builder: create_extension_plan(minus_node),
-        })
+        let (lhs, rhs) = self.align_encodings_of_common_columns(rhs)?;
+        let minus_node = MinusNode::new(lhs.plan_builder.build()?, rhs);
+        Ok(Self::new_with_builder(
+            lhs.context,
+            create_extension_plan(minus_node),
+        ))
     }
 
     /// Groups the current plan by a set of variables and applies aggregate expressions.
@@ -227,19 +262,22 @@ impl RdfFusionLogicalPlanBuilder {
         variables: &[Variable],
         aggregates: &[(Variable, Expr)],
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
+        let decode_exprs = aggregates.iter().map(|(_, e)| e.clone()).collect_vec();
+        let decoded = self.decode_for_exprs(&decode_exprs)?;
+
         let group_expr = variables
             .iter()
-            .map(|v| self.create_group_expr(v))
+            .map(|v| decoded.create_group_expr(v))
             .collect::<DFResult<Vec<_>>>()?;
         let aggr_expr = aggregates
             .iter()
             .map(|(v, e)| e.clone().alias(v.as_str()))
             .collect::<Vec<_>>();
 
-        Ok(Self {
-            context: self.context,
-            plan_builder: self.plan_builder.aggregate(group_expr, aggr_expr)?,
-        })
+        Ok(Self::new_with_builder(
+            decoded.context,
+            decoded.plan_builder.aggregate(group_expr, aggr_expr)?,
+        ))
     }
 
     /// Creates an [Expr] that ensures that the grouped values uses an [EncodingName::PlainTerm]
@@ -274,23 +312,33 @@ impl RdfFusionLogicalPlanBuilder {
         self,
         sorts: Vec<SortExpr>,
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
+        let input = if sorts.is_empty() {
+            self
+        } else {
+            let all_columns: Vec<_> =
+                self.schema().columns().into_iter().map(col).collect();
+            self.decode_for_exprs(&all_columns)?
+        };
+
         if sorts.is_empty() {
-            return Ok(Self {
-                context: self.context,
-                plan_builder: self.plan_builder.distinct()?,
-            });
+            return Ok(Self::new_with_builder(
+                input.context,
+                input.plan_builder.distinct()?,
+            ));
         }
 
-        let schema = self.plan_builder.schema();
+        let schema = input.plan_builder.schema();
         let (on_expr, sorts) =
-            create_distinct_on_expressions(self.expr_builder_root(), sorts)?;
+            create_distinct_on_expressions(input.expr_builder_root(), sorts)?;
         let select_expr = schema.columns().into_iter().map(col).collect();
         let sorts = if sorts.is_empty() { None } else { Some(sorts) };
 
-        Ok(Self {
-            context: self.context,
-            plan_builder: self.plan_builder.distinct_on(on_expr, select_expr, sorts)?,
-        })
+        Ok(Self::new_with_builder(
+            input.context,
+            input
+                .plan_builder
+                .distinct_on(on_expr, select_expr, sorts)?,
+        ))
     }
 
     /// Removes duplicate solutions from the current plan.
@@ -299,12 +347,12 @@ impl RdfFusionLogicalPlanBuilder {
         pattern: Vec<Option<TermPattern>>,
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
         let pattern_node = PatternNode::try_new(self.plan_builder.build()?, pattern)?;
-        Ok(Self {
-            context: self.context,
-            plan_builder: LogicalPlanBuilder::from(LogicalPlan::Extension(Extension {
+        Ok(Self::new_with_builder(
+            self.context,
+            LogicalPlanBuilder::from(LogicalPlan::Extension(Extension {
                 node: Arc::new(pattern_node),
             })),
-        })
+        ))
     }
 
     /// Ensures all columns are encoded as the given encoding.
@@ -312,27 +360,50 @@ impl RdfFusionLogicalPlanBuilder {
         self,
         encoding_name: EncodingName,
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
-        let quad_encoding = match encoding_name {
-            EncodingName::PlainTerm => QuadStorageEncoding::PlainTerm,
-            EncodingName::String => QuadStorageEncoding::String,
-            EncodingName::ObjectId => {
-                let object_id_encoding =
-                    self.context.encodings().object_id().ok_or_else(|| {
-                        plan_datafusion_err!("Object ID encoding not configured")
-                    })?;
-                QuadStorageEncoding::ObjectId(Arc::clone(object_id_encoding))
-            }
-            EncodingName::TypedFamily => {
-                return plan_err!("TypedFamily encoding is not supported for quads");
-            }
-        };
+        if encoding_name == EncodingName::ObjectId {
+            let object_id_encoding =
+                self.context.encodings().object_id().ok_or_else(|| {
+                    plan_datafusion_err!("Object ID encoding not configured")
+                })?;
+            let node = EncodeAsObjectIdNode::try_new(
+                self.plan_builder.build()?,
+                object_id_encoding.object_id_data_type(),
+            )?;
+            return Ok(Self::new_with_builder(
+                self.context.clone(),
+                create_extension_plan(node),
+            ));
+        }
 
-        let change_encoding_node =
-            ChangeEncodingNode::try_new(self.plan_builder.build()?, quad_encoding)?;
-        Ok(Self {
-            context: self.context.clone(),
-            plan_builder: create_extension_plan(change_encoding_node),
-        })
+        let columns = self.schema().columns();
+        let exprs: Vec<Expr> = columns.iter().map(|c| col(c.clone())).collect();
+        let builder = self.decode_for_exprs(&exprs)?;
+
+        let schema = builder.schema();
+        let mut proj_exprs = Vec::new();
+        let mut needs_projection = false;
+        for column in schema.columns() {
+            let expr = builder
+                .expr_builder(col(column.clone()))?
+                .with_encoding(encoding_name)?
+                .build()?;
+
+            let is_column = matches!(&expr, Expr::Column(_));
+            if !is_column {
+                needs_projection = true;
+            }
+
+            proj_exprs.push(expr.alias(column.name.clone()));
+        }
+
+        if needs_projection {
+            Ok(Self::new_with_builder(
+                builder.context.clone(),
+                builder.plan_builder.project(proj_exprs)?,
+            ))
+        } else {
+            Ok(builder)
+        }
     }
 
     /// Ensures all columns are encoded as plain terms.
@@ -356,7 +427,7 @@ impl RdfFusionLogicalPlanBuilder {
                     .iter()
                     .map(|c| SortExpr::new(col(c.column_name()), true, true))
                     .collect();
-                Ok(self.order_by(sort_exprs)?)
+                Ok(self.sort(sort_exprs)?)
             }
             RdfSortOrder::NativeOrder(components) => {
                 let sort_exprs: Vec<_> = components
@@ -384,6 +455,11 @@ impl RdfFusionLogicalPlanBuilder {
         self.plan_builder.schema()
     }
 
+    /// Returns the schema of the current plan.
+    pub fn decoded_schema(&self) -> &DFSchemaRef {
+        &self.decoded_schema
+    }
+
     /// Returns the builder context.
     pub fn context(&self) -> &RdfFusionLogicalPlanBuilderContext {
         &self.context
@@ -401,7 +477,7 @@ impl RdfFusionLogicalPlanBuilder {
 
     /// Returns a new [RdfFusionExprBuilderContext].
     pub fn expr_builder_root(&self) -> RdfFusionExprBuilderContext<'_> {
-        let schema = self.schema().as_ref();
+        let schema = self.decoded_schema().as_ref();
         self.context.expr_builder_context_with_schema(schema)
     }
 
@@ -413,8 +489,8 @@ impl RdfFusionLogicalPlanBuilder {
     /// Aligns all the encodings of the overlapping column (i.e., join columns) of the current
     /// graph pattern and `rhs`.
     fn align_encodings_of_common_columns(
-        self,
-        rhs: LogicalPlan,
+        mut self,
+        mut rhs: LogicalPlan,
     ) -> DFResult<(Self, LogicalPlan)> {
         let join_columns = compute_sparql_join_columns(
             self.context.encodings(),
@@ -424,6 +500,58 @@ impl RdfFusionLogicalPlanBuilder {
 
         if join_columns.is_empty() {
             return Ok((self, rhs));
+        }
+
+        // Before doing alignment projections, decode any ObjectId column if it is mixed
+        // with other encodings.
+        let mut lhs_decoded_cols = Vec::new();
+        let mut rhs_decoded_cols = Vec::new();
+
+        for (col_name, encodings) in &join_columns {
+            if encodings.len() > 1 && encodings.contains(&EncodingName::ObjectId) {
+                let column = Column::new_unqualified(col_name);
+                // Check LHS
+                if let Ok(field) = self.schema().field_from_column(&column) {
+                    if matches!(
+                        field.data_type(),
+                        DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+                    ) {
+                        lhs_decoded_cols.push(col(column.clone()));
+                    }
+                }
+                // Check RHS
+                if let Ok(field) = rhs.schema().field_from_column(&column) {
+                    if matches!(
+                        field.data_type(),
+                        DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+                    ) {
+                        rhs_decoded_cols.push(col(column));
+                    }
+                }
+            }
+        }
+
+        if !lhs_decoded_cols.is_empty() {
+            let new_self = self.decode_for_exprs(&lhs_decoded_cols)?;
+            self = new_self;
+        }
+        if !rhs_decoded_cols.is_empty() {
+            let rhs_builder = self.context.create(Arc::new(rhs));
+            let rhs_builder = rhs_builder.decode_for_exprs(&rhs_decoded_cols)?;
+            rhs = rhs_builder.build()?;
+        }
+
+        // Recompute join_columns since we might have changed the encodings
+        let join_columns = compute_sparql_join_columns(
+            self.context.encodings(),
+            self.schema().as_ref(),
+            rhs.schema().as_ref(),
+        )?;
+
+        if join_columns.is_empty() {
+            let context = self.context.clone();
+            let lhs = self.plan_builder.build()?;
+            return Ok((Self::new(context, Arc::new(lhs)), rhs));
         }
 
         let lhs_expr_builder =
@@ -450,12 +578,52 @@ impl RdfFusionLogicalPlanBuilder {
         let context = self.context.clone();
         Ok((Self::new(context, Arc::new(lhs)), rhs))
     }
+
+    /// Decodes all columns that are still Object IDs if they are needed in `exprs`,
+    /// and returns the updated plan builder.
+    pub fn decode_for_exprs(self, exprs: &[Expr]) -> DFResult<Self> {
+        let Some(encoding) = self.context.encodings().object_id() else {
+            return Ok(self);
+        };
+
+        // Collect referenced columns from the given expressions.
+        let mut referenced_columns = BTreeSet::new();
+        for expr in exprs {
+            collect_referenced_columns(expr, &mut referenced_columns)?;
+        }
+
+        // Determine which of those columns are ObjectId typed.
+        let schema = self.schema();
+        let mut columns_to_decode = Vec::new();
+        for col in referenced_columns {
+            if let Ok(field) = schema.field_from_column(&col) {
+                if field.data_type() == encoding.data_type() {
+                    columns_to_decode.push(col);
+                }
+            }
+        }
+
+        if columns_to_decode.is_empty() {
+            return Ok(self);
+        }
+
+        let decode_node =
+            DecodeObjectIdsNode::try_new(self.plan_builder.build()?, columns_to_decode)?;
+        let new_builder = Self::new_with_builder(
+            self.context.clone(),
+            LogicalPlanBuilder::new(LogicalPlan::Extension(Extension {
+                node: Arc::new(decode_node),
+            })),
+        );
+
+        Ok(new_builder)
+    }
 }
 
 /// Creates new [Expr] that ensures that the encodings of the `join_column` align. If a join column
 /// does not align, both columns in the left and right side are converted into the
 /// [`PlainTermEncoding`](rdf_fusion_encoding::plain_term::PlainTermEncoding).
-fn build_projections_for_encoding_alignment(
+pub(crate) fn build_projections_for_encoding_alignment(
     expr_builder_root: RdfFusionExprBuilderContext<'_>,
     join_columns: &HashMap<String, HashSet<EncodingName>>,
 ) -> DFResult<Option<Vec<Expr>>> {
@@ -521,4 +689,86 @@ fn create_extension_plan(
     LogicalPlanBuilder::new(LogicalPlan::Extension(Extension {
         node: Arc::new(node),
     }))
+}
+
+/// Creates the decoded schema, replacing the object id type with the plain term encoding type.
+fn create_decoded_schema(
+    schema: &DFSchemaRef,
+    object_id_encoding: Option<&ObjectIdEncoding>,
+) -> DFSchemaRef {
+    let Some(encoding) = object_id_encoding else {
+        return Arc::clone(schema);
+    };
+
+    let mut fields = Vec::new();
+    let mut modified = false;
+    for (qualifier, field) in schema.iter() {
+        if field.data_type() == encoding.data_type() {
+            let decoded_type = PLAIN_TERM_ENCODING.data_type();
+            fields.push((
+                qualifier.cloned(),
+                Arc::new(field.as_ref().clone().with_data_type(decoded_type.clone())),
+            ));
+            modified = true;
+        } else {
+            fields.push((qualifier.cloned(), Arc::clone(field)));
+        }
+    }
+
+    if modified {
+        Arc::new(
+            DFSchema::new_with_metadata(fields, DFSchema::metadata(schema).clone())
+                .expect("Failed to create decoded schema"),
+        )
+    } else {
+        Arc::clone(schema)
+    }
+}
+
+fn collect_referenced_columns(
+    expr: &Expr,
+    columns: &mut BTreeSet<Column>,
+) -> DFResult<()> {
+    expr.apply(|e| {
+        match e {
+            Expr::Column(c) => {
+                columns.insert(c.clone());
+            }
+            Expr::OuterReferenceColumn(_, c) => {
+                columns.insert(c.clone());
+            }
+            Expr::Exists(datafusion::logical_expr::expr::Exists { subquery, .. }) => {
+                collect_referenced_columns_in_plan(&subquery.subquery, columns)?;
+            }
+            Expr::InSubquery(datafusion::logical_expr::expr::InSubquery {
+                expr,
+                subquery,
+                ..
+            }) => {
+                collect_referenced_columns(expr, columns)?;
+                collect_referenced_columns_in_plan(&subquery.subquery, columns)?;
+            }
+            Expr::ScalarSubquery(datafusion::logical_expr::Subquery {
+                subquery, ..
+            }) => {
+                collect_referenced_columns_in_plan(subquery, columns)?;
+            }
+            _ => {}
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    Ok(())
+}
+
+fn collect_referenced_columns_in_plan(
+    plan: &LogicalPlan,
+    columns: &mut BTreeSet<Column>,
+) -> DFResult<()> {
+    plan.apply(|node| {
+        for expr in node.expressions() {
+            collect_referenced_columns(&expr, columns)?;
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    Ok(())
 }

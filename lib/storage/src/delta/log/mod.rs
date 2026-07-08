@@ -595,7 +595,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "The given stream has an invalid schema. Found schema: Field { \"SomeCol\": nullable Struct(\"term_type\": non-null Int8, \"value\": non-null Utf8, \"data_type\": Utf8, \"language_tag\": Utf8) }"
+            "The given stream has an invalid schema. Found schema: Field { \"SomeCol\": nullable Null }"
         );
 
         /// Creates a new [`DataFrame`] with a wrong schema.

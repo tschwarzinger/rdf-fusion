@@ -21,8 +21,9 @@ use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
 use datafusion::physical_optimizer::topk_aggregation::TopKAggregation;
 use datafusion::physical_optimizer::update_aggr_exprs::OptimizeAggregateOrder;
 use rdf_fusion_extensions::RdfFusionContextView;
-use rdf_fusion_logical::bgp::rewrite::{BgpFilterAbsorbRule, BgpProjectionPushdownRule};
-use rdf_fusion_logical::encoding::change::LowerChangeEncodingRule;
+use rdf_fusion_logical::bgp::{
+    BgpDecodePushdownRule, BgpFilterPushdownRule, BgpProjectionPushdownRule,
+};
 use rdf_fusion_logical::expr::SimplifySparqlExpressionsRule;
 use rdf_fusion_logical::extend::ExtendLoweringRule;
 use rdf_fusion_logical::join::SparqlJoinLoweringRule;
@@ -37,16 +38,14 @@ pub fn create_optimizer_rules(
     optimization_level: OptimizationLevel,
 ) -> Vec<Arc<dyn OptimizerRule + Send + Sync>> {
     let lowering_rules: Vec<Arc<dyn OptimizerRule + Send + Sync>> = vec![
-        Arc::new(BgpFilterAbsorbRule),
+        Arc::new(BgpDecodePushdownRule),
+        Arc::new(BgpFilterPushdownRule),
         Arc::new(BgpProjectionPushdownRule),
         Arc::new(MinusLoweringRule::new(context.clone())),
         Arc::new(ExtendLoweringRule::new()),
         Arc::new(PropertyPathLoweringRule::new(context.clone())),
         Arc::new(SparqlJoinLoweringRule::new(context.clone())),
         Arc::new(PatternLoweringRule::new(context.clone())),
-        Arc::new(LowerChangeEncodingRule::new(Arc::clone(
-            context.functions(),
-        ))),
     ];
 
     match optimization_level {

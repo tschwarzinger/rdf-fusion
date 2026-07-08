@@ -10,6 +10,7 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::common::ScalarValue;
 use rdf_fusion_common::DFResult;
 use std::clone::Clone;
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -71,7 +72,7 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 /// Currently, this id is fixed to being a 32-bit integer. However, we have an
 /// [issue](https://github.com/tobixdev/rdf-fusion/issues/50) that tracks the progress on limiting
 /// this limitation.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ObjectIdEncoding {
     /// The data type of the object ids.
     data_type: ObjectIdDataType,
@@ -147,6 +148,15 @@ impl TermEncoding for ObjectIdEncoding {
 
     fn try_new_scalar(self: &Arc<Self>, scalar: ScalarValue) -> DFResult<Self::Scalar> {
         ObjectIdScalar::try_new(Arc::clone(self), scalar)
+    }
+}
+
+impl Debug for ObjectIdEncoding {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ObjectIdEncoding")
+            .field("data_type", &self.data_type)
+            .field("arrow_data_type", &self.arrow_data_type)
+            .finish()
     }
 }
 

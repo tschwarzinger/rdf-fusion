@@ -1,0 +1,13 @@
+@prefix schema: <http://schema.org/> .
+@prefix wd: <http://www.wikidata.org/entity/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+GRAPH <http://www.wikidata.org/wiki/Special:EntityData/Q90> {
+    wd:Q90 a schema:City ;
+        schema:name "Paris"@fr , "la ville lumière"@fr ;
+        schema:country wd:Q142 ;
+        schema:population 2000000 ;
+        schema:startDate "-300"^^xsd:gYear ;
+        schema:url "https://www.paris.fr/"^^xsd:anyURI ;
+        schema:postalCode "75001" .
+}

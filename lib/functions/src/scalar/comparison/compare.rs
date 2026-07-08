@@ -124,7 +124,6 @@ impl Debug for CompareSparqlUdf {
         f.debug_struct("CompareSparqlUdf")
             .field("name", &self.name)
             .field("op", &self.op)
-            .field("encodings", &self.encodings)
             .finish()
     }
 }

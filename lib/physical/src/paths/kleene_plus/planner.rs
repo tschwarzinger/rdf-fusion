@@ -29,23 +29,19 @@ impl ExtensionPlanner for KleenePlusPathPlanner {
         physical_inputs: &[Arc<dyn ExecutionPlan>],
         _session_state: &SessionState,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
-        // Try to downcast the logical node to our KleenePlusPathNode
-        if let Some(node) = node.as_any().downcast_ref::<KleenePlusClosureNode>() {
-            // Verify we have exactly one input
-            if logical_inputs.len() != 1 || physical_inputs.len() != 1 {
-                return plan_err!("KleenePlusPath node must have exactly one input");
-            }
+        let Some(node) = node.as_any().downcast_ref::<KleenePlusClosureNode>() else {
+            return Ok(None);
+        };
 
-            // Create the physical execution plan
-            let physical_plan = KleenePlusClosureExec::try_new(
-                Arc::clone(&physical_inputs[0]),
-                !node.disallow_cross_graph_paths(),
-            )?;
-
-            Ok(Some(Arc::new(physical_plan)))
-        } else {
-            // This planner doesn't handle this type of node
-            Ok(None)
+        if logical_inputs.len() != 1 || physical_inputs.len() != 1 {
+            return plan_err!("KleenePlusPath node must have exactly one input");
         }
+
+        let physical_plan = KleenePlusClosureExec::try_new(
+            Arc::clone(&physical_inputs[0]),
+            !node.disallow_cross_graph_paths(),
+        )?;
+
+        Ok(Some(Arc::new(physical_plan)))
     }
 }
