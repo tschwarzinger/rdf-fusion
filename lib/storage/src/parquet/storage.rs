@@ -3,10 +3,7 @@ use crate::parquet::snapshot::ParquetQuadStorageSnapshot;
 use async_trait::async_trait;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::context::SessionState;
-use datafusion::parquet::arrow::ParquetRecordBatchStreamBuilder;
-use datafusion::parquet::arrow::arrow_reader::ArrowReaderOptions;
-use datafusion::parquet::arrow::async_reader::ParquetObjectReader;
-use datafusion::parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
+use datafusion::parquet::file::metadata::ParquetMetaData;
 use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStoreExt};
 use rdf_fusion_common::StorageError;
@@ -56,42 +53,17 @@ impl ParquetQuadStorage {
             .await
             .map_err(|e| StorageError::Other(e.to_string().into()))?;
 
-        let reader = ParquetObjectReader::new(Arc::clone(&object_store), path.clone())
-            .with_file_size(object_meta.size);
-        let options =
-            ArrowReaderOptions::new().with_page_index_policy(PageIndexPolicy::Optional);
-        let builder = ParquetRecordBatchStreamBuilder::new_with_options(reader, options)
+        let (parquet_meta, bloom_filters) =
+            crate::parquet::reader::load_parquet_metadata_and_bloom_filters(
+                Arc::clone(&object_store),
+                path.clone(),
+                object_meta.clone(),
+            )
             .await
             .map_err(|e| StorageError::Other(e.to_string().into()))?;
 
-        let parquet_meta = Arc::clone(builder.metadata());
-        let mut bloom_filter_ranges = Vec::new();
-        for rg in parquet_meta.row_groups() {
-            for col in rg.columns() {
-                if let Some(offset) = col.bloom_filter_offset() {
-                    if let Some(length) = col.bloom_filter_length() {
-                        bloom_filter_ranges
-                            .push(offset as u64..(offset as u64 + length as u64));
-                    }
-                }
-            }
-        }
-
-        let bloom_filter_bytes = if bloom_filter_ranges.is_empty() {
-            Vec::new()
-        } else {
-            object_store
-                .get_ranges(&path, &bloom_filter_ranges)
-                .await
-                .map_err(|e| StorageError::Other(e.to_string().into()))?
-        };
-
-        let bloom_filter_cache = PreloadedBloomFilters::new(
-            bloom_filter_ranges
-                .into_iter()
-                .zip(bloom_filter_bytes)
-                .collect(),
-        );
+        let bloom_filter_cache = PreloadedBloomFilters::new();
+        bloom_filter_cache.insert(path, bloom_filters);
 
         Ok(Self {
             url,

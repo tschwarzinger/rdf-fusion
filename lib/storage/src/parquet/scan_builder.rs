@@ -270,6 +270,19 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             ParquetQuadScanReaderFactoryType::Preloaded(cache, _) => cache,
         };
 
+        let total_file_count: usize =
+            self.file_groups.iter().map(|fg| fg.files().len()).sum();
+        if total_file_count == 0 {
+            let stats = Statistics {
+                num_rows: Precision::Exact(0),
+                total_byte_size: Precision::Exact(0),
+                column_statistics: Statistics::unknown_column(
+                    self.encoding.quad_schema().inner(),
+                ),
+            };
+            return Ok((self.file_groups.clone(), Some(stats)));
+        }
+
         let mut total_rows = 0;
         let mut all_exact = true;
         let mut some_pruned = false;
@@ -459,9 +472,21 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         let mut has_matching_row_group = false;
 
         for (i, rg) in parquet_meta.row_groups().iter().enumerate() {
-            if access_plan.inner()[i] != RowGroupAccess::Skip {
-                row_count += rg.num_rows();
-                has_matching_row_group = true;
+            match access_plan.inner()[i] {
+                RowGroupAccess::Skip => {}
+                RowGroupAccess::Scan => {
+                    if rg.num_rows() > 0 {
+                        row_count += rg.num_rows();
+                        has_matching_row_group = true;
+                    }
+                }
+                RowGroupAccess::Selection(ref selection) => {
+                    let count = selection.row_count();
+                    if count > 0 {
+                        row_count += count as i64;
+                        has_matching_row_group = true;
+                    }
+                }
             }
         }
 

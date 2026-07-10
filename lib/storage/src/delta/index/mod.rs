@@ -7,6 +7,7 @@ use crate::delta::index::update::DeltaStorageQuadIndexUpdater;
 use crate::delta::index::validation::validate_index;
 use crate::delta::log::DeltaQuadStorageLogChangesetRef;
 use crate::index::IndexComponents;
+use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use datafusion::execution::SessionState;
 use datafusion::parquet::basic::Encoding;
 use datafusion::parquet::file::properties::WriterProperties;
@@ -21,6 +22,8 @@ use deltalake::parquet::file::properties::EnabledStatistics;
 use deltalake::parquet::schema::types::ColumnPath;
 use deltalake::{DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField};
 use futures::TryStreamExt;
+use object_store::ObjectStoreExt;
+use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{BlankNodeMatchingMode, NamedNodePattern, TermPattern};
 use rdf_fusion_encoding::QuadStorageEncoding;
@@ -43,6 +46,10 @@ struct IndexTableState {
     table: DeltaTable,
     /// The active files in the index.
     active_files: Arc<Vec<Add>>,
+    /// Preloaded parquet metadata.
+    parquet_metadata: PreloadedParquetMetadata,
+    /// Preloaded bloom filters.
+    bloom_filters: PreloadedBloomFilters,
     /// The log transaction version of the index.
     log_transaction_version: u64,
 }
@@ -52,11 +59,15 @@ impl IndexTableState {
     fn new(
         table: DeltaTable,
         active_files: Arc<Vec<Add>>,
+        parquet_metadata: PreloadedParquetMetadata,
+        bloom_filters: PreloadedBloomFilters,
         log_transaction_version: u64,
     ) -> Self {
         Self {
             table,
             active_files,
+            parquet_metadata,
+            bloom_filters,
             log_transaction_version,
         }
     }
@@ -115,6 +126,8 @@ impl DeltaQuadStorageIndex {
             table: Arc::new(RwLock::new(IndexTableState::new(
                 table,
                 Arc::new(vec![]),
+                PreloadedParquetMetadata::new(),
+                PreloadedBloomFilters::new(),
                 0,
             ))),
             components,
@@ -142,18 +155,28 @@ impl DeltaQuadStorageIndex {
                     #[allow(deprecated)]
                     file.add_action().clone()
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
         );
         let log_transaction_version = snapshot
             .transaction_version(log_store.as_ref(), Self::APP_ID)
             .await?
             .unwrap_or(0) as u64;
 
+        let (parquet_metadata, bloom_filters) = load_parquet_metadata_for_files(
+            log_store.as_ref(),
+            &active_files,
+            None,
+            None,
+        )
+        .await?;
+
         Ok(Self {
             storage_encoding,
             table: Arc::new(RwLock::new(IndexTableState::new(
                 table,
                 active_files,
+                parquet_metadata,
+                bloom_filters,
                 log_transaction_version,
             ))),
             components,
@@ -179,6 +202,8 @@ impl DeltaQuadStorageIndex {
             guard.table.snapshot()?.snapshot().clone(),
             guard.table.log_store(),
             Arc::clone(&guard.active_files),
+            guard.parquet_metadata.clone(),
+            guard.bloom_filters.clone(),
             self.components,
             guard.log_transaction_version,
         ))
@@ -198,7 +223,7 @@ impl DeltaQuadStorageIndex {
             self.create_write_properties_for_update(),
         );
 
-        let (new_table, new_version) = updater.apply_update().await?;
+        let (new_table, new_version) = Box::pin(updater.apply_update()).await?;
         self.update_table_state(new_table, new_version).await?;
 
         Ok(())
@@ -231,9 +256,19 @@ impl DeltaQuadStorageIndex {
             .try_collect::<Vec<_>>()
             .await?;
 
+        let (parquet_metadata, bloom_filters) = load_parquet_metadata_for_files(
+            new_table.log_store().as_ref(),
+            &active_files,
+            Some(table_lock.parquet_metadata.clone()),
+            Some(table_lock.bloom_filters.clone()),
+        )
+        .await?;
+
         *table_lock = IndexTableState::new(
             new_table,
             Arc::new(active_files),
+            parquet_metadata,
+            bloom_filters,
             log_transaction_version,
         );
         Ok(())
@@ -276,6 +311,55 @@ impl DeltaQuadStorageIndex {
 
         writer_properties_builder.build()
     }
+}
+
+async fn load_parquet_metadata_for_files(
+    log_store: &dyn deltalake::logstore::LogStore,
+    active_files: &[Add],
+    existing_meta: Option<PreloadedParquetMetadata>,
+    existing_bloom: Option<PreloadedBloomFilters>,
+) -> Result<(PreloadedParquetMetadata, PreloadedBloomFilters), DeltaQuadStorageError> {
+    let object_store = log_store.object_store(None);
+    let base_path = Path::from(log_store.config().location().path());
+    let new_meta = PreloadedParquetMetadata::new();
+    let new_bloom = PreloadedBloomFilters::new();
+
+    for add in active_files {
+        let relative_path = Path::from(add.path.as_str());
+        let absolute_path = base_path.clone().join(add.path.as_str());
+
+        if let (Some(meta_cache), Some(bloom_cache)) = (&existing_meta, &existing_bloom) {
+            if let (Some(meta), Some(bloom)) = (
+                meta_cache.get(&absolute_path),
+                bloom_cache.get_all(&absolute_path),
+            ) {
+                new_meta.insert(absolute_path.clone(), meta);
+                new_bloom.insert_arc(absolute_path, bloom);
+                continue;
+            }
+        }
+
+        let mut object_meta = object_store
+            .head(&relative_path)
+            .await
+            .map_err(|e| DeltaQuadStorageError::Other(e.to_string()))?;
+
+        let (parquet_meta, bloom_filters) =
+            crate::parquet::reader::load_parquet_metadata_and_bloom_filters(
+                Arc::clone(&object_store),
+                relative_path.clone(),
+                object_meta.clone(),
+            )
+            .await
+            .map_err(|e| DeltaQuadStorageError::Other(e.to_string()))?;
+
+        object_meta.location = absolute_path.clone();
+
+        new_meta.insert(absolute_path.clone(), (parquet_meta, object_meta));
+        new_bloom.insert(absolute_path, bloom_filters);
+    }
+
+    Ok((new_meta, new_bloom))
 }
 
 fn is_term_bound(pattern: TermPattern, mode: BlankNodeMatchingMode) -> bool {

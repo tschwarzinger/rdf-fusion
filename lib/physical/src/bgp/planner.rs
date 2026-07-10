@@ -216,6 +216,14 @@ impl BgpPlanner {
         let mut pending_filters = filters.to_vec();
         let use_oids = self.decoding_udf.is_some();
 
+        // Check if any input is guaranteed to have no rows, and return early if so.
+        for exec in physical_inputs {
+            let stats = exec.partition_statistics(None)?;
+            if let Precision::Exact(0) = stats.num_rows {
+                return Ok(None);
+            }
+        }
+
         for exec in physical_inputs {
             let mut current_exec = Arc::clone(exec);
 
@@ -254,11 +262,7 @@ impl BgpPlanner {
                 session_state,
             )?;
 
-            let stats = current_exec.partition_statistics(None)?;
-            if let Precision::Exact(0) = stats.num_rows {
-                return Ok(None);
-            }
-
+            let stats = exec.partition_statistics(None)?;
             let rows = stats.num_rows.get_value().cloned().unwrap_or(usize::MAX);
             patterns.push((current_exec, rows));
         }

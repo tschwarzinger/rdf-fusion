@@ -1,6 +1,6 @@
 mod loader;
 mod planner;
-mod reader;
+pub(crate) mod reader;
 pub(crate) mod scan;
 pub(crate) mod scan_builder;
 mod snapshot;

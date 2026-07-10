@@ -348,8 +348,7 @@ impl QuadStorage for DeltaQuadStorage {
         let changeset = self.log.compute_changeset(state, version_range).await?;
 
         for index in &self.indexes {
-            index
-                .update(state, Arc::clone(&changeset))
+            Box::pin(index.update(state, Arc::clone(&changeset)))
                 .await
                 .map_err(|e| StorageError::Other(Box::new(e)))?;
         }

@@ -281,39 +281,46 @@ impl Stream for DecodingStream {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        loop {
+        let poll = loop {
             if let Some(mut fut) = self.decoding_future.take() {
-                return match fut.as_mut().poll(cx) {
-                    Poll::Ready(result) => Poll::Ready(Some(result)),
+                match fut.as_mut().poll(cx) {
+                    Poll::Ready(result) => break Poll::Ready(Some(result)),
                     Poll::Pending => {
                         self.decoding_future = Some(fut);
-                        Poll::Pending
+                        break Poll::Pending;
                     }
-                };
+                }
             }
 
             if self.is_exhausted {
-                self.coalescer.finish_buffered_batch()?;
+                match self.coalescer.finish_buffered_batch() {
+                    Ok(_) => {}
+                    Err(e) => break Poll::Ready(Some(Err(e.into()))),
+                }
                 if let Some(final_batch) = self.coalescer.next_completed_batch() {
                     self.spawn_decode_task(final_batch);
                     continue; // Process the newly spawned task
                 }
-                return Poll::Ready(None);
+                break Poll::Ready(None);
             }
 
             match ready!(Pin::new(&mut self.input).poll_next(cx)) {
                 Some(Ok(batch)) => {
-                    self.coalescer.push_batch(batch)?;
+                    match self.coalescer.push_batch(batch) {
+                        Ok(_) => {}
+                        Err(e) => break Poll::Ready(Some(Err(e.into()))),
+                    }
                     if let Some(coalesced_batch) = self.coalescer.next_completed_batch() {
                         self.spawn_decode_task(coalesced_batch);
                     }
                 }
-                Some(Err(e)) => return Poll::Ready(Some(Err(e))),
+                Some(Err(e)) => break Poll::Ready(Some(Err(e))),
                 None => {
                     self.is_exhausted = true;
                 }
             }
-        }
+        };
+        self.baseline_metrics.record_poll(poll)
     }
 }
 

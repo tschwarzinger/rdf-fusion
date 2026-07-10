@@ -1,5 +1,6 @@
 use crate::delta::index::{is_named_node_bound, is_term_bound};
 use crate::index::IndexComponents;
+use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use deltalake::kernel::{Add, EagerSnapshot};
 use deltalake::logstore::LogStoreRef;
 use rdf_fusion_common::{BlankNodeMatchingMode, QuadComponent, TriplePattern};
@@ -22,6 +23,10 @@ pub struct DeltaQuadStorageIndexSnapshot {
     snapshot: EagerSnapshot,
     /// The active files of the index table.
     active_files: Arc<Vec<Add>>,
+    /// Preloaded parquet metadata.
+    parquet_metadata: PreloadedParquetMetadata,
+    /// Preloaded bloom filters.
+    bloom_filters: PreloadedBloomFilters,
     /// The components of the index.
     components: IndexComponents,
     /// The log version that this snapshot represents.
@@ -31,11 +36,14 @@ pub struct DeltaQuadStorageIndexSnapshot {
 impl DeltaQuadStorageIndexSnapshot {
     /// Creates a new [`DeltaQuadStorageIndexSnapshot`]. The snapshot and the log store are
     /// expected to belong to the same Delta table.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         storage_encoding: QuadStorageEncoding,
         snapshot: EagerSnapshot,
         log_store: LogStoreRef,
         active_files: Arc<Vec<Add>>,
+        parquet_metadata: PreloadedParquetMetadata,
+        bloom_filters: PreloadedBloomFilters,
         components: IndexComponents,
         log_version: u64,
     ) -> Self {
@@ -44,6 +52,8 @@ impl DeltaQuadStorageIndexSnapshot {
             snapshot,
             active_files,
             log_store,
+            parquet_metadata,
+            bloom_filters,
             components,
             log_version,
         }
@@ -52,6 +62,16 @@ impl DeltaQuadStorageIndexSnapshot {
     /// Returns the encoding used for storing quads.
     pub fn encoding(&self) -> QuadStorageEncoding {
         self.storage_encoding.clone()
+    }
+
+    /// Returns the preloaded parquet metadata cache.
+    pub fn parquet_metadata(&self) -> &PreloadedParquetMetadata {
+        &self.parquet_metadata
+    }
+
+    /// Returns the preloaded bloom filters cache.
+    pub fn bloom_filters(&self) -> &PreloadedBloomFilters {
+        &self.bloom_filters
     }
 
     /// Returns the current version of the quad storage database that this index snapshot reflects.

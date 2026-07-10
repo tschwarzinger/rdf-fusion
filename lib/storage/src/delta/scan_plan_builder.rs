@@ -4,8 +4,9 @@ use crate::delta::log::{
     DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
 use crate::index::IndexComponents;
-use crate::parquet::scan_builder::{ParquetQuadScanBuilder, PushdownProjection};
-use datafusion::catalog::Session;
+use crate::parquet::scan_builder::{
+    ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
+};
 use datafusion::common::{DFSchema, JoinType, NullEquality};
 use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::physical_plan::FileGroup;
@@ -18,7 +19,6 @@ use datafusion::physical_expr::expressions::Column as PhysColumn;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::enforce_distribution::EnforceDistribution;
 use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
-use datafusion::physical_optimizer::pruning::PruningPredicate;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::empty::EmptyExec;
 use datafusion::physical_plan::filter::FilterExec;
@@ -27,7 +27,6 @@ use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::union::UnionExec;
 use deltalake::arrow::datatypes::{Field, Schema};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
-use deltalake::kernel::Add;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
@@ -145,7 +144,7 @@ impl DeltaQuadStorageScanPlanBuilder {
         let initial_plan = match (&self.index, &self.changeset) {
             (Some(index), Some(changeset)) => {
                 let base_scan = self
-                    .scan_index_physical(index, &filters, IndexScanProjectionPushdown::No)
+                    .scan_index_physical(index, IndexScanProjectionPushdown::No)
                     .await?;
                 let applied_scan = self
                     .apply_changeset_data_physical(base_scan, changeset, &filters)
@@ -167,7 +166,6 @@ impl DeltaQuadStorageScanPlanBuilder {
                 let base_scan = self
                     .scan_index_physical(
                         index,
-                        &filters,
                         IndexScanProjectionPushdown::Yes(self.projection_indices.clone()),
                     )
                     .await?;
@@ -362,22 +360,13 @@ impl DeltaQuadStorageScanPlanBuilder {
     async fn scan_index_physical(
         &self,
         index: &DeltaQuadStorageIndexSnapshot,
-        filters: &[Expr],
         projection: IndexScanProjectionPushdown,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
-        let relevant_files = prune_cached_files(
-            &self.encoding,
-            &self.session_state,
-            index.active_files().as_ref(),
-            filters,
-            index,
-        )?;
-
         let table_uri = index.log_store().config().location().clone();
         let table_path = object_store::path::Path::from(table_uri.path());
 
         let mut file_group = Vec::new();
-        for file in &relevant_files {
+        for file in index.active_files().as_ref() {
             let full_path = table_path.clone().join(file.path.as_str()).to_string();
             let partitioned_file = PartitionedFile::new(full_path, file.size as u64);
             file_group.push(partitioned_file);
@@ -390,6 +379,11 @@ impl DeltaQuadStorageScanPlanBuilder {
             }
         };
 
+        let custom_factory = ParquetQuadScanReaderFactoryType::Preloaded(
+            index.parquet_metadata().clone(),
+            index.bloom_filters().clone(),
+        );
+
         let plan = ParquetQuadScanBuilder::new(
             &self.session_state,
             self.encoding.clone(),
@@ -398,47 +392,11 @@ impl DeltaQuadStorageScanPlanBuilder {
         )
         .with_quad_pattern(self.pattern.clone())
         .with_pushdown_projection(pushdown_projection)
-        .with_eager_pruning(false)
+        .with_reader_factory_type(custom_factory)
+        .with_eager_pruning(true)
         .build()?;
 
-        return Ok(plan);
-
-        /// A basic manual pruner if you want to filter the Vec<Add> before creating the scan
-        fn prune_cached_files(
-            encoding: &QuadStorageEncoding,
-            session: &dyn Session,
-            files: &[Add],
-            filters: &[Expr],
-            index: &DeltaQuadStorageIndexSnapshot,
-        ) -> Result<Vec<Add>, DeltaQuadStorageError> {
-            // The pruning predicate currently does not handle structs / nested data structures.
-            if matches!(encoding, QuadStorageEncoding::PlainTerm) {
-                return Ok(files.to_vec());
-            }
-
-            let Some(filters) = conjunction(filters.iter().cloned()) else {
-                return Ok(files.to_vec());
-            };
-
-            let schema = encoding.quad_schema();
-            let predicate = session.create_physical_expr(filters, schema.as_ref())?;
-            let pruning_predicate =
-                PruningPredicate::try_new(predicate, Arc::clone(schema.inner()))?;
-            let mask = pruning_predicate.prune(index.eager_snapshot())?;
-
-            assert_eq!(
-                files.len(),
-                mask.len(),
-                "Files and mask should have equal length"
-            );
-
-            let result = files
-                .iter()
-                .zip(mask.iter())
-                .flat_map(|(file, mask)| mask.then(|| file.clone()))
-                .collect();
-            Ok(result)
-        }
+        Ok(plan)
     }
 
     // Removed pushdown_projection_into_index_scan and compute_projection_exprs

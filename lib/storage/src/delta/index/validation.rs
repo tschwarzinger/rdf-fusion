@@ -146,6 +146,8 @@ mod tests {
             snapshot,
             log_store,
             Arc::new(vec![]),
+            crate::parquet::reader::PreloadedParquetMetadata::new(),
+            crate::parquet::reader::PreloadedBloomFilters::new(),
             components,
             0,
         )
