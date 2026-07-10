@@ -2,6 +2,7 @@ use crate::object_id::ObjectIdDataType;
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray, PlainTermScalar};
 use crate::typed_family::{TypedFamilyArray, TypedFamilyEncodingRef, TypedFamilyScalar};
 use crate::{EncodingArray, EncodingScalar};
+use async_trait::async_trait;
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
@@ -13,9 +14,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 use thiserror::Error;
 
-/// Indicates an error that occurred while working with the [ObjectIdMapping].
+/// Indicates an error that occurred while working with the [ObjectIdDictionary].
 #[derive(Error, Debug)]
-pub enum ObjectIdMappingError {
+pub enum ObjectIdDictionaryError {
     #[error("An error occurred while encoding the result. {0}")]
     ArrowError(ArrowError),
     #[error("Corruption. {0}")]
@@ -32,35 +33,35 @@ pub enum ObjectIdMappingError {
 #[error("An unknown object ID was encountered in an unexpected place.")]
 pub struct UnknownObjectIdError;
 
-impl From<ArrowError> for ObjectIdMappingError {
+impl From<ArrowError> for ObjectIdDictionaryError {
     fn from(value: ArrowError) -> Self {
-        ObjectIdMappingError::ArrowError(value)
+        ObjectIdDictionaryError::ArrowError(value)
     }
 }
 
-impl From<DataFusionError> for ObjectIdMappingError {
+impl From<DataFusionError> for ObjectIdDictionaryError {
     fn from(value: DataFusionError) -> Self {
         match value {
-            DataFusionError::ArrowError(e, _) => ObjectIdMappingError::ArrowError(*e),
-            _ => ObjectIdMappingError::Storage(Box::new(value)),
+            DataFusionError::ArrowError(e, _) => ObjectIdDictionaryError::ArrowError(*e),
+            _ => ObjectIdDictionaryError::Storage(Box::new(value)),
         }
     }
 }
 
-impl From<ObjectIdMappingError> for DataFusionError {
-    fn from(value: ObjectIdMappingError) -> Self {
+impl From<ObjectIdDictionaryError> for DataFusionError {
+    fn from(value: ObjectIdDictionaryError) -> Self {
         DataFusionError::External(Box::new(value))
     }
 }
 
-impl From<ObjectIdMappingError> for StorageError {
-    fn from(value: ObjectIdMappingError) -> Self {
+impl From<ObjectIdDictionaryError> for StorageError {
+    fn from(value: ObjectIdDictionaryError) -> Self {
         StorageError::Corruption(CorruptionError::new(value))
     }
 }
 
-/// A cheaply cloneable reference to a [`ObjectIdMapping`].
-pub type ObjectIdMappingRef = Arc<dyn ObjectIdMapping>;
+/// A cheaply cloneable reference to a [`ObjectIdDictionary`].
+pub type ObjectIdDictionaryRef = Arc<dyn ObjectIdDictionary>;
 
 /// The object id mapping is responsible for mapping between object ids and RDF terms in the
 /// [`ObjectIdEncoding`](crate::object_id::ObjectIdEncoding).
@@ -79,7 +80,8 @@ pub type ObjectIdMappingRef = Arc<dyn ObjectIdMapping>;
 /// Note that some storage implementations might still use a special byte sequence (e.g., all
 /// bytes zero) to represent the default graph internally. However, this byte sequence needs then
 /// needs to be mapped for implementing this trait.
-pub trait ObjectIdMapping: Debug + Send + Sync {
+#[async_trait]
+pub trait ObjectIdDictionary: Debug + Send + Sync {
     /// Returns the [`ObjectIdDataType`] of the mapped ids.
     fn object_id_data_type(&self) -> ObjectIdDataType;
 
@@ -87,52 +89,52 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
     ///
     /// This method *does not* automatically create a mapping. See [Self::encode_scalar] for this
     /// functionality.
-    fn try_get_object_id(
+    async fn try_get_object_id(
         &self,
         term: &PlainTermScalar,
-    ) -> Result<Option<ScalarValue>, ObjectIdMappingError>;
+    ) -> Result<Option<ScalarValue>, ObjectIdDictionaryError>;
 
     /// Encodes the entire `array` as an array of object ids. The [`Self::object_id_data_type`]
     /// determined which array type is used.
     ///
     /// Automatically creates a mapping for a fresh object id if a term is not yet mapped.
-    fn encode_array(
+    async fn encode_array(
         &self,
         array: &PlainTermArray,
-    ) -> Result<ArrayRef, ObjectIdMappingError>;
+    ) -> Result<ArrayRef, ObjectIdDictionaryError>;
 
     /// Encodes a single `term` as an [`ScalarValue`]. Automatically creates a mapping for a
     /// fresh object id if the term is not yet mapped.
-    fn encode_scalar(
+    async fn encode_scalar(
         &self,
         term: &PlainTermScalar,
-    ) -> Result<ScalarValue, ObjectIdMappingError> {
+    ) -> Result<ScalarValue, ObjectIdDictionaryError> {
         let array = term
             .to_array(1)
             .expect("Data type is supported for to_array");
-        let encoded = self.encode_array(&array)?;
+        let encoded = self.encode_array(&array).await?;
         let scalar_value = ScalarValue::try_from_array(encoded.as_ref(), 0)?;
         Ok(scalar_value)
     }
 
     /// Decodes the entire `array` as a [`PlainTermArray`].
-    fn decode_array(
+    async fn decode_array(
         &self,
         array: &ArrayRef,
-    ) -> Result<PlainTermArray, ObjectIdMappingError>;
+    ) -> Result<PlainTermArray, ObjectIdDictionaryError>;
 
     /// Decodes the entire `array` as a [`TypedFamilyArray`].
-    fn decode_array_to_typed_family(
+    async fn decode_array_to_typed_family(
         &self,
         encoding: &TypedFamilyEncodingRef,
         array: &ArrayRef,
-    ) -> Result<TypedFamilyArray, ObjectIdMappingError>;
+    ) -> Result<TypedFamilyArray, ObjectIdDictionaryError>;
 
     /// Decodes a single `scalar` as a [`PlainTermScalar`].
-    fn decode_scalar(
+    async fn decode_scalar(
         &self,
         scalar: &ScalarValue,
-    ) -> Result<PlainTermScalar, ObjectIdMappingError> {
+    ) -> Result<PlainTermScalar, ObjectIdDictionaryError> {
         if scalar.is_null() {
             return Ok(PLAIN_TERM_ENCODING
                 .encode_term(ThinError::expected())
@@ -143,16 +145,16 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
             .to_array()
             .expect("Data type is supported for to_array");
 
-        let encoded = self.decode_array(&array)?;
+        let encoded = self.decode_array(&array).await?;
         Ok(encoded.try_as_scalar(0).expect("Row 0 always exists"))
     }
 
     /// Decodes a single `scalar` as a [`TypedFamilyScalar`].
-    fn decode_scalar_to_typed_family(
+    async fn decode_scalar_to_typed_family(
         &self,
         encoding: &TypedFamilyEncodingRef,
         scalar: &ScalarValue,
-    ) -> Result<TypedFamilyScalar, ObjectIdMappingError> {
+    ) -> Result<TypedFamilyScalar, ObjectIdDictionaryError> {
         if scalar.is_null() {
             return Ok(encoding.create_scalar_null());
         }
@@ -161,43 +163,45 @@ pub trait ObjectIdMapping: Debug + Send + Sync {
             .to_array()
             .expect("Data type is supported for to_array");
 
-        let decoded = self.decode_array_to_typed_family(encoding, &array)?;
+        let decoded = self.decode_array_to_typed_family(encoding, &array).await?;
         Ok(decoded.try_as_scalar(0).expect("Row 0 always exists"))
     }
 }
 
-/// A collection of blanked implementation for [`ObjectIdMapping`].
-pub trait ObjectIdMappingExtensions {
+/// A collection of blanked implementation for [`ObjectIdDictionary`].
+#[async_trait]
+pub trait ObjectIdDictionaryExtensions {
     /// Tries to get an object id for a term. Returns the default graph id if the graph is the
     /// default graph.
-    fn try_get_object_id_for_graph(
+    async fn try_get_object_id_for_graph(
         &self,
         graph_name: GraphNameRef<'_>,
-    ) -> Result<Option<ScalarValue>, ObjectIdMappingError>;
+    ) -> Result<Option<ScalarValue>, ObjectIdDictionaryError>;
 
     /// Encodes the given `graph_name`, simply returning the default graph id if the graph is the
     /// default graph.
-    fn encode_graph_name(
+    async fn encode_graph_name(
         &self,
         graph_name: GraphNameRef<'_>,
-    ) -> Result<ScalarValue, ObjectIdMappingError>;
+    ) -> Result<ScalarValue, ObjectIdDictionaryError>;
 }
 
-impl<T, U> ObjectIdMappingExtensions for T
+#[async_trait]
+impl<T, U> ObjectIdDictionaryExtensions for T
 where
-    T: Deref<Target = U>,
-    U: ObjectIdMapping + ?Sized,
+    T: Deref<Target = U> + Send + Sync,
+    U: ObjectIdDictionary + ?Sized,
 {
-    fn try_get_object_id_for_graph(
+    async fn try_get_object_id_for_graph(
         &self,
         graph_name: GraphNameRef<'_>,
-    ) -> Result<Option<ScalarValue>, ObjectIdMappingError> {
+    ) -> Result<Option<ScalarValue>, ObjectIdDictionaryError> {
         match graph_name {
             GraphNameRef::NamedNode(nn) => {
-                self.try_get_object_id(&PlainTermScalar::from(nn))
+                self.try_get_object_id(&PlainTermScalar::from(nn)).await
             }
             GraphNameRef::BlankNode(bnode) => {
-                self.try_get_object_id(&PlainTermScalar::from(bnode))
+                self.try_get_object_id(&PlainTermScalar::from(bnode)).await
             }
             GraphNameRef::DefaultGraph => {
                 let data_type = datafusion::arrow::datatypes::DataType::from(
@@ -208,14 +212,16 @@ where
         }
     }
 
-    fn encode_graph_name(
+    async fn encode_graph_name(
         &self,
         graph_name: GraphNameRef<'_>,
-    ) -> Result<ScalarValue, ObjectIdMappingError> {
+    ) -> Result<ScalarValue, ObjectIdDictionaryError> {
         match graph_name {
-            GraphNameRef::NamedNode(nn) => self.encode_scalar(&PlainTermScalar::from(nn)),
+            GraphNameRef::NamedNode(nn) => {
+                self.encode_scalar(&PlainTermScalar::from(nn)).await
+            }
             GraphNameRef::BlankNode(bnode) => {
-                self.encode_scalar(&PlainTermScalar::from(bnode))
+                self.encode_scalar(&PlainTermScalar::from(bnode)).await
             }
             GraphNameRef::DefaultGraph => {
                 let data_type = datafusion::arrow::datatypes::DataType::from(

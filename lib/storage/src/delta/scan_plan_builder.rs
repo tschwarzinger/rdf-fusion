@@ -139,7 +139,7 @@ impl DeltaQuadStorageScanPlanBuilder {
     pub async fn build(
         self,
     ) -> Result<QuadPatternScanPlanningResult, DeltaQuadStorageError> {
-        let filters = self.pattern.compute_filters(&self.encoding)?;
+        let filters = self.pattern.compute_filters(&self.encoding).await?;
 
         let initial_plan = match (&self.index, &self.changeset) {
             (Some(index), Some(changeset)) => {
@@ -394,7 +394,8 @@ impl DeltaQuadStorageScanPlanBuilder {
         .with_pushdown_projection(pushdown_projection)
         .with_reader_factory_type(custom_factory)
         .with_eager_pruning(true)
-        .build()?;
+        .build()
+        .await?;
 
         Ok(plan)
     }

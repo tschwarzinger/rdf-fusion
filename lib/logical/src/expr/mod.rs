@@ -17,9 +17,8 @@ pub fn unwrap_encoding_changes(expr: &Expr) -> &Expr {
             match function_name {
                 BuiltinName::WithPlainTermEncoding
                 | BuiltinName::WithTypedFamilyEncoding
-                | BuiltinName::WithSortableEncoding => {
-                    unwrap_encoding_changes(&sf.args[0])
-                }
+                | BuiltinName::WithSortableEncoding
+                | BuiltinName::WithStringEncoding => unwrap_encoding_changes(&sf.args[0]),
                 _ => expr,
             }
         }

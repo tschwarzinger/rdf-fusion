@@ -1,4 +1,5 @@
 use crate::index::IndexComponents;
+use crate::local_object_ids::LocalObjectIdError;
 use datafusion::arrow::datatypes::{DataType, SchemaRef};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
@@ -11,6 +12,8 @@ use thiserror::Error;
 pub enum DeltaQuadStorageError {
     #[error(transparent)]
     DeltaError(#[from] DeltaTableError),
+    #[error(transparent)]
+    LocalObjectIdDictionary(#[from] LocalObjectIdError),
     #[error(transparent)]
     DataFusion(#[from] DataFusionError),
     #[error(transparent)]

@@ -10,10 +10,19 @@ use std::time::Duration;
 pub struct RdfFusionOptions {
     /// Storage configuration.
     pub storage: StorageOptions,
+    /// Local configuration.
+    pub local: LocalOptions,
 }
 
 impl ConfigExtension for RdfFusionOptions {
     const PREFIX: &'static str = "rdf_fusion";
+}
+
+/// Local configuration for RDF Fusion.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct LocalOptions {
+    /// Local workspace directory for storing cache/DB files.
+    pub work_dir: Option<String>,
 }
 
 /// Storage configuration for RDF Fusion.
@@ -93,6 +102,9 @@ impl ExtensionOptions for RdfFusionOptions {
 
                 self.storage.rdf_files.assume_quads_unique_in_single_file = value;
             }
+            "local.work_dir" => {
+                self.local.work_dir = Some(value.to_string());
+            }
             _ => {
                 return Err(DataFusionError::Configuration(format!(
                     "Unknown configuration key: {key}"
@@ -137,6 +149,11 @@ impl ExtensionOptions for RdfFusionOptions {
                 ),
                 description: "Sets whether the query engine should assume that the quads within a single file are unique.",
             },
+            ConfigEntry {
+                key: format!("{}.local.work_dir", Self::PREFIX),
+                value: self.local.work_dir.clone(),
+                description: "Local workspace directory for storing cache/DB files.",
+            },
         ]
     }
 }
@@ -163,6 +180,9 @@ impl RdfFusionOptions {
             std::env::var("RDF_FUSION_STORAGE_RDF_ASSUME_QUADS_UNIQUE_IN_SINGLE_FILE")
         {
             config.set("storage.rdf.assume_quads_unique_in_single_file", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_LOCAL_WORK_DIR") {
+            config.set("local.work_dir", &val)?;
         }
         Ok(config)
     }
@@ -225,6 +245,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 3);
+        assert_eq!(entries.len(), 4);
     }
 }

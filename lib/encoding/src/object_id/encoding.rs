@@ -1,8 +1,8 @@
 use crate::EncodingName;
 use crate::encoding::TermEncoding;
 use crate::object_id::{
-    ObjectIdArray, ObjectIdDataType, ObjectIdMapping, ObjectIdMappingError,
-    ObjectIdMappingRef, ObjectIdScalar,
+    ObjectIdArray, ObjectIdDataType, ObjectIdDictionary, ObjectIdDictionaryError,
+    ObjectIdDictionaryRef, ObjectIdScalar,
 };
 use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use datafusion::arrow::array::ArrayRef;
@@ -36,7 +36,7 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 ///
 /// The mapping implementation depends on the storage layer that is being used. For example, an
 /// in-memory RDF store will use a different implementation as an on-disk RDF store. The
-/// [`ObjectIdMapping`] trait defines the contract.
+/// [`ObjectIdDictionary`] trait defines the contract.
 ///
 /// # Default Graph
 ///
@@ -60,7 +60,7 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 /// For queries that spend little time on join operations, the cost of decoding the object ids can
 /// outweigh the benefits of using the object id encoding.
 ///
-/// Furthermore, the encoding introduces the necessity of maintaining the [`ObjectIdMapping`], which
+/// Furthermore, the encoding introduces the necessity of maintaining the [`ObjectIdDictionary`], which
 /// can be non-trivial.
 ///
 /// # Equality
@@ -79,12 +79,12 @@ pub struct ObjectIdEncoding {
     /// The arrow data type of the object ids.
     arrow_data_type: DataType,
     /// The mapping that is used to encode and decode object ids.
-    mapping: Arc<dyn ObjectIdMapping>,
+    mapping: Arc<dyn ObjectIdDictionary>,
 }
 
 impl ObjectIdEncoding {
     /// Creates a new [ObjectIdEncoding].
-    pub fn new(mapping: Arc<dyn ObjectIdMapping>) -> Self {
+    pub fn new(mapping: Arc<dyn ObjectIdDictionary>) -> Self {
         let data_type = mapping.object_id_data_type();
         let arrow_data_type = DataType::from(data_type);
 
@@ -101,31 +101,32 @@ impl ObjectIdEncoding {
     }
 
     /// Returns the mapping that is used to encode and decode object ids.
-    pub fn mapping(&self) -> &ObjectIdMappingRef {
+    pub fn mapping(&self) -> &ObjectIdDictionaryRef {
         &self.mapping
     }
 
     /// Encodes a [`PlainTermScalar`] into an [`ObjectIdScalar`].
     ///
-    /// See also [`ObjectIdMapping::encode_scalar`].
-    pub fn encode_scalar(
+    /// See also [`ObjectIdDictionary::encode_scalar`].
+    pub async fn encode_scalar(
         self: &Arc<Self>,
         term: &PlainTermScalar,
-    ) -> Result<ObjectIdScalar, ObjectIdMappingError> {
-        let scalar = self.mapping.encode_scalar(term)?;
+    ) -> Result<ObjectIdScalar, ObjectIdDictionaryError> {
+        let scalar = self.mapping.encode_scalar(term).await?;
         ObjectIdScalar::try_new(Arc::clone(self), scalar)
-            .map_err(|e| ObjectIdMappingError::IllegalArgument(e.to_string()))
+            .map_err(|e| ObjectIdDictionaryError::IllegalArgument(e.to_string()))
     }
 
     /// Encodes a [`PlainTermArray`] into an [`ObjectIdArray`].
     ///
-    /// See also [`ObjectIdMapping::encode_array`].
-    pub fn encode_array(
+    /// See also [`ObjectIdDictionary::encode_array`].
+    pub async fn encode_array(
         self: &Arc<Self>,
         array: &PlainTermArray,
-    ) -> Result<ObjectIdArray, ObjectIdMappingError> {
+    ) -> Result<ObjectIdArray, ObjectIdDictionaryError> {
         self.mapping
             .encode_array(array)
+            .await
             .map(|oids| ObjectIdArray::try_new(Arc::clone(self), oids).unwrap())
     }
 }

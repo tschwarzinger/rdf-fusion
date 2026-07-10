@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use rdf_fusion_common::StorageError;
 use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_encoding::object_id::ObjectIdMapping;
+use rdf_fusion_encoding::object_id::ObjectIdDictionary;
 use std::sync::Arc;
 
 #[async_trait]
@@ -11,8 +11,8 @@ pub trait QuadStorage: Send + Sync {
     /// Returns the quad storage encoding.
     fn encoding(&self) -> QuadStorageEncoding;
 
-    /// Returns a reference to the used [ObjectIdMapping].
-    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdMapping>>;
+    /// Returns a reference to the used [ObjectIdDictionary].
+    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdDictionary>>;
 
     /// Returns a snapshot reflecting the current version of this storage.
     async fn snapshot(&self) -> Result<Arc<dyn QuadStorageSnapshot>, StorageError>;

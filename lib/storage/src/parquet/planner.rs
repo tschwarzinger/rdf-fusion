@@ -32,10 +32,14 @@ impl ExtensionPlanner for ParquetQuadStoragePlanner {
             return Ok(None);
         };
 
-        Ok(Some(self.snapshot.plan_quad_pattern(
-            node.quad_pattern(),
-            node.projection.clone(),
-            session_state,
-        )?))
+        Ok(Some(
+            self.snapshot
+                .plan_quad_pattern(
+                    node.quad_pattern(),
+                    node.projection.clone(),
+                    session_state,
+                )
+                .await?,
+        ))
     }
 }

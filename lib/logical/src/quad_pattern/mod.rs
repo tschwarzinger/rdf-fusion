@@ -101,7 +101,7 @@ impl QuadPattern {
     }
 
     /// Computes the filter expressions over a quad table for this pattern.
-    pub fn compute_filters(
+    pub async fn compute_filters(
         &self,
         storage_encoding: &QuadStorageEncoding,
     ) -> DFResult<Vec<Expr>> {
@@ -116,11 +116,13 @@ impl QuadPattern {
             Some(self.triple_pattern.object.clone()),
         ];
 
-        if let Some(active_graph_filter) = self.filter_active_graph(storage_encoding)? {
+        if let Some(active_graph_filter) =
+            self.filter_active_graph(storage_encoding).await?
+        {
             filters.push(active_graph_filter);
         }
 
-        let term_filters = self.filter_by_terms(storage_encoding, &patterns)?;
+        let term_filters = self.filter_by_terms(storage_encoding, &patterns).await?;
         filters.extend(term_filters);
 
         let variable_filters = self.filters_on_repeated_variables(patterns)?;
@@ -187,7 +189,7 @@ impl QuadPattern {
     }
 
     /// Computes the filters for the active graph.
-    fn filter_active_graph(
+    async fn filter_active_graph(
         &self,
         storage_encoding: &QuadStorageEncoding,
     ) -> DFResult<Option<Expr>> {
@@ -205,14 +207,14 @@ impl QuadPattern {
                 for g in graphs {
                     match g.as_ref() {
                         GraphNameRef::NamedNode(nn) => {
-                            literals.push(lit(
-                                storage_encoding.encode_term_scalar(nn.into())?
-                            ));
+                            literals.push(lit(storage_encoding
+                                .encode_term_scalar(nn.into())
+                                .await?));
                         }
                         GraphNameRef::BlankNode(bn) => {
-                            literals.push(lit(
-                                storage_encoding.encode_term_scalar(bn.into())?
-                            ));
+                            literals.push(lit(storage_encoding
+                                .encode_term_scalar(bn.into())
+                                .await?));
                         }
                         GraphNameRef::DefaultGraph => include_default = true,
                     };
@@ -239,7 +241,7 @@ impl QuadPattern {
     }
 
     /// Computes filter expressions for fixed terms in a quad pattern.
-    fn filter_by_terms(
+    async fn filter_by_terms(
         &self,
         storage_encoding: &QuadStorageEncoding,
         patterns: &[Option<TermPattern>; 4],
@@ -262,7 +264,7 @@ impl QuadPattern {
                 if let Some(term) = term {
                     result.push(
                         col(*col_name)
-                            .eq(lit(storage_encoding.encode_term_scalar(term)?)),
+                            .eq(lit(storage_encoding.encode_term_scalar(term).await?)),
                     );
                 }
             }

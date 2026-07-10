@@ -10,10 +10,8 @@ RDF Fusion Storage Layers
 """
 
 [dependencies]
-ahash.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
-hashbrown.workspace = true
 futures.workspace = true
 object_store.workspace = true
 oxrdfio.workspace = true
@@ -22,14 +20,15 @@ rdf-fusion-common.workspace = true
 datafusion.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-logical.workspace = true
+redb.workspace = true
 moka.workspace = true
 serde_json.workspace = true
 deltalake.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
 tracing.workspace = true
 url.workspace = true
+md-5.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -41,5 +40,5 @@ rdf-fusion-execution.workspace = true
 workspace = true
 
 [[bench]]
-name = "delta_object_id_mapping"
+name = "local_object_id_mapping"
 harness = false

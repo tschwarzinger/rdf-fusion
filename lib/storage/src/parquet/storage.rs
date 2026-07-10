@@ -7,7 +7,7 @@ use datafusion::parquet::file::metadata::ParquetMetaData;
 use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStoreExt};
 use rdf_fusion_common::StorageError;
-use rdf_fusion_encoding::object_id::ObjectIdMapping;
+use rdf_fusion_encoding::object_id::ObjectIdDictionary;
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
@@ -95,7 +95,7 @@ impl QuadStorage for ParquetQuadStorage {
         self.encoding.clone()
     }
 
-    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdMapping>> {
+    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdDictionary>> {
         None
     }
 

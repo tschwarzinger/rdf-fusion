@@ -63,7 +63,6 @@ ahash = "0.8"
 arrow-string = "58.1"
 datafusion = "53.1"
 deltalake = { version = "0.32", features = ["datafusion", "datafusion-ext"] }
-hashbrown = "0.16.1"
 tokio = { version = "1.51", features = ["rt", "rt-multi-thread", "fs"] }
 
 # Logging / Tracing
@@ -88,6 +87,7 @@ assert_cmd = "2.2"
 criterion = "0.8"
 insta = { version = "1.47", features = ["filters"] }
 prettytable-rs = "0.10"
+redb = "4.1"
 text-diff = "0.4"
 tempfile = "3.10"
 tokio-test = "0.4"

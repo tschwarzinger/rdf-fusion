@@ -140,14 +140,15 @@ impl QuadStorageEncoding {
     }
 
     /// Encodes the given term into a [ScalarValue] that can be used for filtering.
-    pub fn encode_term_scalar(&self, term: TermRef<'_>) -> DFResult<ScalarValue> {
+    pub async fn encode_term_scalar(&self, term: TermRef<'_>) -> DFResult<ScalarValue> {
         match self {
             QuadStorageEncoding::PlainTerm => Ok(PLAIN_TERM_ENCODING
                 .encode_term(Ok(term))?
                 .into_scalar_value()),
             QuadStorageEncoding::ObjectId(enc) => {
                 let pt_scalar = PLAIN_TERM_ENCODING.encode_term(Ok(term))?;
-                Ok(enc.encode_scalar(&pt_scalar)?.into_scalar_value())
+                let val = enc.encode_scalar(&pt_scalar).await?;
+                Ok(val.into_scalar_value())
             }
             QuadStorageEncoding::String => {
                 Ok(STRING_ENCODING.encode_term(Ok(term))?.into_scalar_value())

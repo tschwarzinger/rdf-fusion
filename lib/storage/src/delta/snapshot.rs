@@ -2,7 +2,7 @@ use crate::delta::index::DeltaQuadStorageIndexSnapshot;
 use crate::delta::log::{
     DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
-use crate::delta::objectids::DeltaObjectIdMapping;
+use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::planner::DeltaQuadStoragePlanner;
 use crate::delta::scan_plan_builder::DeltaQuadStorageScanPlanBuilder;
 use async_trait::async_trait;
@@ -28,7 +28,7 @@ pub struct DeltaQuadStorageSnapshot {
     log: Arc<DeltaQuadStorageLog>,
     indexes: Vec<DeltaQuadStorageIndexSnapshot>,
     encoding: QuadStorageEncoding,
-    object_id_mapping: Option<Arc<DeltaObjectIdMapping>>,
+    object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
     version: u64,
     transactional_changeset: Option<DeltaQuadStorageLogChangesetRef>,
 }
@@ -39,7 +39,7 @@ impl DeltaQuadStorageSnapshot {
         log: Arc<DeltaQuadStorageLog>,
         indexes: Vec<DeltaQuadStorageIndexSnapshot>,
         encoding: QuadStorageEncoding,
-        object_id_mapping: Option<Arc<DeltaObjectIdMapping>>,
+        object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
         version: u64,
     ) -> Self {
         Self {
@@ -64,7 +64,7 @@ impl DeltaQuadStorageSnapshot {
         &self.encoding
     }
 
-    pub fn object_id_mapping(&self) -> Option<&Arc<DeltaObjectIdMapping>> {
+    pub fn object_id_mapping(&self) -> Option<&Arc<DeltaObjectIdDictionary>> {
         self.object_id_mapping.as_ref()
     }
 

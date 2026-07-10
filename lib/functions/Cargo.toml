@@ -26,6 +26,8 @@ rand.workspace = true
 regex.workspace = true
 thiserror.workspace = true
 uuid = { workspace = true, features = ["v4"] }
+futures.workspace = true
+tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }

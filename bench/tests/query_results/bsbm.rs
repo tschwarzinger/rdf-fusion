@@ -27,17 +27,17 @@ use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProdu
 use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn bsbm_1000_test_results_plain_term() {
     run_bsbm_1000_test_results(QuadStorageEncodingName::PlainTerm).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn bsbm_1000_test_results_object_id() {
     run_bsbm_1000_test_results(QuadStorageEncodingName::ObjectId).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn bsbm_1000_test_results_string() {
     run_bsbm_1000_test_results(QuadStorageEncodingName::String).await;
 }

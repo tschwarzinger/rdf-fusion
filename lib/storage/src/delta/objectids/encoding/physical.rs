@@ -1,4 +1,4 @@
-use crate::delta::objectids::DeltaObjectIdMapping;
+use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::objectids::encoding::stream::ObjectIdEncodingStream;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::exec_datafusion_err;
@@ -18,7 +18,7 @@ pub struct EncodeAsObjectIdDeltaExec {
     /// The physical plan of the input DataFrame
     input: Arc<dyn ExecutionPlan>,
     /// The mapping used for encoding
-    mapping: Arc<DeltaObjectIdMapping>,
+    mapping: Arc<DeltaObjectIdDictionary>,
     /// The schema of the result
     output_schema: SchemaRef,
     /// The properties of the plan
@@ -30,7 +30,7 @@ pub struct EncodeAsObjectIdDeltaExec {
 impl EncodeAsObjectIdDeltaExec {
     pub fn try_new(
         input: Arc<dyn ExecutionPlan>,
-        mapping: Arc<DeltaObjectIdMapping>,
+        mapping: Arc<DeltaObjectIdDictionary>,
         output_schema: SchemaRef,
     ) -> DFResult<Self> {
         let eq_properties = EquivalenceProperties::new(Arc::clone(&output_schema));

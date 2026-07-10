@@ -7,7 +7,7 @@ use datafusion::logical_expr::{
     Signature, TypeSignature, Volatility,
 };
 use rdf_fusion_common::DFResult;
-use rdf_fusion_encoding::object_id::ObjectIdMapping;
+use rdf_fusion_encoding::object_id::ObjectIdDictionary;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
@@ -35,12 +35,15 @@ struct DecodeTermUDF {
     /// The registered encodings
     encodings: RdfFusionEncodings,
     /// Mapping for object ID decoding
-    mapping: Arc<dyn ObjectIdMapping>,
+    mapping: Arc<dyn ObjectIdDictionary>,
 }
 
 impl DecodeTermUDF {
     /// Creates a new [`DecodeTermUDF`] with full encodings and mapping.
-    pub fn new(encodings: RdfFusionEncodings, mapping: Arc<dyn ObjectIdMapping>) -> Self {
+    pub fn new(
+        encodings: RdfFusionEncodings,
+        mapping: Arc<dyn ObjectIdDictionary>,
+    ) -> Self {
         Self {
             name: BuiltinName::DecodeTerm.to_string(),
             signature: Signature::new(
@@ -81,7 +84,23 @@ impl ScalarUDFImpl for DecodeTermUDF {
         )))
     }
 
-    fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
+    fn invoke_with_args(&self, _args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
+        exec_err!("This function should not be called. See invoke_async_with_args.")
+    }
+}
+
+impl Debug for DecodeTermUDF {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DecodeTermUDF").finish()
+    }
+}
+
+#[async_trait::async_trait]
+impl AsyncScalarUDFImpl for DecodeTermUDF {
+    async fn invoke_async_with_args(
+        &self,
+        args: ScalarFunctionArgs,
+    ) -> DFResult<ColumnarValue> {
         let was_scalar =
             !args.args.is_empty() && matches!(args.args[0], ColumnarValue::Scalar(_));
 
@@ -91,7 +110,7 @@ impl ScalarUDFImpl for DecodeTermUDF {
         let result_array = match sparql_args.downcast_arrays() {
             Some(DowncastEncodingArgs::ObjectId(arrays)) => {
                 let array = arrays.get(0);
-                let decoded = self.mapping.decode_array(array.inner())?;
+                let decoded = self.mapping.decode_array(array.inner()).await?;
                 decoded.into_array_ref()
             }
             _ => {
@@ -108,22 +127,6 @@ impl ScalarUDFImpl for DecodeTermUDF {
         } else {
             Ok(ColumnarValue::Array(result_array))
         }
-    }
-}
-
-impl Debug for DecodeTermUDF {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DecodeTermUDF").finish()
-    }
-}
-
-#[async_trait::async_trait]
-impl AsyncScalarUDFImpl for DecodeTermUDF {
-    async fn invoke_async_with_args(
-        &self,
-        args: ScalarFunctionArgs,
-    ) -> DFResult<ColumnarValue> {
-        self.invoke_with_args(args)
     }
 }
 

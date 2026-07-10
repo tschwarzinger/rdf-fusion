@@ -1,7 +1,7 @@
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::index::{DeltaQuadStorageIndex, DeltaQuadStorageIndexSnapshot};
 use crate::delta::log::{DeltaQuadStorageLog, DeltaStorageLogVersionRange};
-use crate::delta::objectids::DeltaObjectIdMapping;
+use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::refresh::DeltaTableRefresher;
 use crate::delta::snapshot::DeltaQuadStorageSnapshot;
 use crate::delta::{DeltaQuadStorageBuilder, DeltaQuadStorageTransaction};
@@ -14,8 +14,9 @@ use deltalake::logstore::{LogStoreRef, logstore_with};
 use futures::StreamExt;
 use object_store::path::Path;
 use rdf_fusion_common::StorageError;
+use rdf_fusion_common::config::RdfFusionOptions;
 use rdf_fusion_common::quads::COL_GRAPH;
-use rdf_fusion_encoding::object_id::{ObjectIdEncoding, ObjectIdMapping};
+use rdf_fusion_encoding::object_id::{ObjectIdDictionary, ObjectIdEncoding};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName, TermEncoding};
@@ -35,7 +36,7 @@ pub struct DeltaQuadStorage {
     /// The indexes of the storage
     indexes: Vec<Arc<DeltaQuadStorageIndex>>,
     /// The object id mapping used for encoding object ids, if necessary.
-    object_id_mapping: Option<Arc<DeltaObjectIdMapping>>,
+    object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
     /// Manages periodic refreshes of the delta table.
     refresher: Arc<DeltaTableRefresher>,
 }
@@ -43,11 +44,12 @@ pub struct DeltaQuadStorage {
 impl DeltaQuadStorage {
     /// Creates a new [`DeltaQuadStorage`] at the given `base_location`.
     pub async fn new_at_location(
+        options: &RdfFusionOptions,
         encoding: QuadStorageEncodingName,
         index_configurations: Vec<IndexComponents>,
         base_log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadStorageError> {
-        let options = base_log_store.config().options().clone();
+        let storage_config = base_log_store.config().options().clone();
         let base_url = base_log_store.config().location().clone();
 
         let (object_id_mapping, storage_encoding) = match encoding {
@@ -58,15 +60,19 @@ impl DeltaQuadStorage {
                 let mapping_log_store = logstore_with(
                     base_log_store.root_object_store(None),
                     &mapping_url,
-                    options.clone(),
+                    storage_config.clone(),
                 )
                 .map_err(DeltaQuadStorageError::from)?;
 
                 let mapping = Arc::new(
-                    DeltaObjectIdMapping::try_new_at_location(mapping_log_store).await?,
+                    DeltaObjectIdDictionary::try_new_at_location(
+                        options,
+                        mapping_log_store,
+                    )
+                    .await?,
                 );
                 let encoding = ObjectIdEncoding::new(
-                    Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>
+                    Arc::clone(&mapping) as Arc<dyn ObjectIdDictionary>
                 );
 
                 (
@@ -80,7 +86,7 @@ impl DeltaQuadStorage {
         let log_log_store = logstore_with(
             base_log_store.root_object_store(None),
             &log_url,
-            options.clone(),
+            storage_config.clone(),
         )
         .map_err(DeltaQuadStorageError::from)?;
 
@@ -96,7 +102,7 @@ impl DeltaQuadStorage {
             let index_log_store = logstore_with(
                 base_log_store.root_object_store(None),
                 &index_url,
-                options.clone(),
+                storage_config.clone(),
             )
             .map_err(DeltaQuadStorageError::from)?;
 
@@ -157,36 +163,36 @@ impl DeltaQuadStorage {
         })?;
         let data_type = graph_column.1.data_type();
 
-        let (storage_encoding, object_id_mapping) = if data_type
-            == PLAIN_TERM_ENCODING.data_type()
-        {
-            (QuadStorageEncoding::PlainTerm, None)
-        } else if data_type == STRING_ENCODING.data_type() {
-            (QuadStorageEncoding::String, None)
-        } else if data_type == &DataType::Int64 {
-            let mapping_url = base_url.join("object_id/").unwrap();
-            let mapping_log_store = logstore_with(
-                base_log_store.root_object_store(None),
-                &mapping_url,
-                options.clone(),
-            )
-            .map_err(DeltaQuadStorageError::from)?;
+        let (storage_encoding, object_id_mapping) =
+            if data_type == PLAIN_TERM_ENCODING.data_type() {
+                (QuadStorageEncoding::PlainTerm, None)
+            } else if data_type == STRING_ENCODING.data_type() {
+                (QuadStorageEncoding::String, None)
+            } else if data_type == &DataType::Int64 {
+                let mapping_url = base_url.join("object_id/").unwrap();
+                let mapping_log_store = logstore_with(
+                    base_log_store.root_object_store(None),
+                    &mapping_url,
+                    options.clone(),
+                )
+                .map_err(DeltaQuadStorageError::from)?;
 
-            let mapping =
-                DeltaObjectIdMapping::try_load(state, mapping_log_store).await?;
-            let mapping = Arc::new(mapping);
-            let encoding =
-                ObjectIdEncoding::new(Arc::clone(&mapping) as Arc<dyn ObjectIdMapping>);
+                let mapping =
+                    DeltaObjectIdDictionary::try_load(state, mapping_log_store).await?;
+                let mapping = Arc::new(mapping);
+                let encoding = ObjectIdEncoding::new(
+                    Arc::clone(&mapping) as Arc<dyn ObjectIdDictionary>
+                );
 
-            (
-                QuadStorageEncoding::ObjectId(Arc::new(encoding)),
-                Some(mapping),
-            )
-        } else {
-            return Err(DeltaQuadStorageError::Other(format!(
-                "Loading for data type {data_type} not supported."
-            )));
-        };
+                (
+                    QuadStorageEncoding::ObjectId(Arc::new(encoding)),
+                    Some(mapping),
+                )
+            } else {
+                return Err(DeltaQuadStorageError::Other(format!(
+                    "Loading for data type {data_type} not supported."
+                )));
+            };
 
         let mut indexes = Vec::new();
         let object_store = base_log_store.root_object_store(None);
@@ -255,7 +261,7 @@ impl DeltaQuadStorage {
     }
 
     /// Returns the object id mapping used by this storage, if any.
-    pub fn delta_object_id_mapping(&self) -> Option<Arc<DeltaObjectIdMapping>> {
+    pub fn delta_object_id_mapping(&self) -> Option<Arc<DeltaObjectIdDictionary>> {
         self.object_id_mapping.clone()
     }
 
@@ -296,7 +302,7 @@ impl QuadStorage for DeltaQuadStorage {
         self.storage_encoding.clone()
     }
 
-    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdMapping>> {
+    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdDictionary>> {
         self.storage_encoding
             .object_id_encoding()
             .map(|enc| Arc::clone(enc.mapping()))

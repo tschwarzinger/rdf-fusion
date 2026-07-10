@@ -15,13 +15,13 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
 };
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
-use futures::Stream;
 use futures::future::BoxFuture;
-use rdf_fusion_common::{DFResult, MeasurePoll};
+use futures::Stream;
+use rdf_fusion_common::DFResult;
 use std::any::Any;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll, ready};
+use std::task::{ready, Context, Poll};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObjectIdDecodingExecProjection {
@@ -355,6 +355,7 @@ async fn decode_batch(
     config_options: Arc<ConfigOptions>,
     timer: Time,
 ) -> DFResult<RecordBatch> {
+    let timer = timer.timer();
     let mut final_arrays: Vec<ArrayRef> = Vec::with_capacity(decode_tasks.len());
 
     for task in decode_tasks {
@@ -379,20 +380,14 @@ async fn decode_batch(
 
                 let result = match decoding_udf.as_async() {
                     None => decoding_udf.invoke_with_args(args)?,
-                    Some(async_udf) => {
-                        let future = async_udf.invoke_async_with_args(args);
-                        MeasurePoll {
-                            inner: Box::pin(future),
-                            time_metric: timer.clone(),
-                        }
-                        .await?
-                    }
+                    Some(async_udf) => async_udf.invoke_async_with_args(args).await?,
                 };
 
                 final_arrays.push(result.into_array(batch.num_rows())?);
             }
         }
     }
+    drop(timer);
 
     RecordBatch::try_new(schema_captured, final_arrays).map_err(|e| e.into())
 }

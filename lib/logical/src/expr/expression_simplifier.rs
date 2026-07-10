@@ -74,13 +74,16 @@ impl SimplifySparqlExpressionsRule {
             BuiltinName::IsCompatible => {
                 try_replace_is_compatible_with_equality(scalar_function, input_schema)
             }
-            BuiltinName::Equal => try_replace_equality_with_same_term(
-                &self.encodings,
-                self.function_registry.as_ref(),
-                input_schema,
-                scalar_function,
-                is_bgp_node,
-            ),
+            BuiltinName::Equal => {
+                let future = try_replace_equality_with_same_term(
+                    &self.encodings,
+                    self.function_registry.as_ref(),
+                    input_schema,
+                    scalar_function,
+                    is_bgp_node,
+                );
+                futures::executor::block_on(future)
+            }
             BuiltinName::EffectiveBooleanValue => {
                 try_replace_boolean_round_trip(scalar_function)
             }
@@ -172,7 +175,7 @@ fn try_replace_is_compatible_with_equality(
 /// - `?country = <Austria>` -> `sameTerm(?country, <Austria>)`
 /// - `?value = "1"^^xsd:integer`, no optimization opportunity, as, for example, `"01"^^xsd:integer`
 ///   is also equal to the literal
-fn try_replace_equality_with_same_term(
+async fn try_replace_equality_with_same_term(
     encodings: &RdfFusionEncodings,
     registry: &dyn RdfFusionFunctionRegistry,
     schema: &DFSchema,
@@ -214,12 +217,13 @@ fn try_replace_equality_with_same_term(
         other_expression,
         is_bgp_node,
     )
+    .await
 }
 
 /// Execute the replacement for [try_replace_equality_with_same_term] when all preconditions are
 /// met. May swap the order of the arguments, but this is fine due to the commutativity of `=` and
 /// `sameTerm`.
-fn replace_equality_with_same_term(
+async fn replace_equality_with_same_term(
     encodings: &RdfFusionEncodings,
     registry: &dyn RdfFusionFunctionRegistry,
     schema: &DFSchema,
@@ -240,7 +244,10 @@ fn replace_equality_with_same_term(
                 return plan_err!("No Object ID mapping registerd.");
             };
 
-            match encoding.encode_scalar(&PlainTermScalar::from(term.as_ref())) {
+            match encoding
+                .encode_scalar(&PlainTermScalar::from(term.as_ref()))
+                .await
+            {
                 Ok(scalar) => scalar.into_scalar_value(),
                 Err(err) => plan_err!("Failed to encode term: {}", err)?,
             }
@@ -275,11 +282,13 @@ fn replace_equality_with_same_term(
         let Some(encoding) = encodings.object_id() else {
             return plan_err!("No Object ID mapping registerd.");
         };
-        let oid_scalar =
-            match encoding.encode_scalar(&PlainTermScalar::from(term.as_ref())) {
-                Ok(s) => s.into_scalar_value(),
-                Err(err) => plan_err!("Failed to encode term: {}", err)?,
-            };
+        let oid_scalar = match encoding
+            .encode_scalar(&PlainTermScalar::from(term.as_ref()))
+            .await
+        {
+            Ok(s) => s.into_scalar_value(),
+            Err(err) => plan_err!("Failed to encode term: {}", err)?,
+        };
 
         Ok(Transformed::yes(
             boolean_as_term.call(vec![lit(oid_scalar).eq(new_expr)]),

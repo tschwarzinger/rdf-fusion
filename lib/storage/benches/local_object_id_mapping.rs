@@ -3,7 +3,7 @@ use datafusion::arrow::array::{ArrayRef, Int64Array};
 use rand::prelude::SliceRandom;
 use rdf_fusion_common::{Literal, NamedNode, Term};
 use rdf_fusion_encoding::QuadStorageEncodingName;
-use rdf_fusion_encoding::object_id::ObjectIdMapping;
+use rdf_fusion_encoding::object_id::ObjectIdDictionary;
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use rdf_fusion_encoding::typed_family::{TypedFamilyEncoding, TypedFamilyEncodingRef};
 use rdf_fusion_extensions::storage::QuadStorage;
@@ -24,9 +24,11 @@ fn bench_decode_array(c: &mut Criterion) {
         let name = term_type.unwrap_or("mixed");
 
         group.bench_function(format!("decode_{name}_10k"), |b| {
-            b.iter(|| {
-                let decoded =
-                    mapping.decode_array(black_box(&shuffled_id_array)).unwrap();
+            b.to_async(&rt).iter(async || {
+                let decoded = mapping
+                    .decode_array(black_box(&shuffled_id_array))
+                    .await
+                    .unwrap();
                 black_box(decoded);
             })
         });
@@ -47,12 +49,13 @@ fn bench_decode_array_to_typed_family(c: &mut Criterion) {
         let name = term_type.unwrap_or("mixed");
 
         group.bench_function(format!("decode_to_typed_family_{name}_10k"), |b| {
-            b.iter(|| {
+            b.to_async(&rt).iter(async || {
                 let decoded = mapping
                     .decode_array_to_typed_family(
                         &encoding,
                         black_box(&shuffled_id_array),
                     )
+                    .await
                     .unwrap();
                 black_box(decoded);
             })
@@ -71,6 +74,7 @@ fn bench_encode_array_existing(c: &mut Criterion) {
 
         mapping
             .encode_array(&plain_term_array)
+            .await
             .expect("Failed to encode plain term array");
 
         (mapping, plain_term_array)
@@ -78,8 +82,11 @@ fn bench_encode_array_existing(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("ObjectIdMapping_Encode");
     group.bench_function("encode_array_existing_10k_terms", |b| {
-        b.iter(|| {
-            let decoded = mapping.encode_array(black_box(&plain_term_array)).unwrap();
+        b.to_async(&rt).iter(async || {
+            let decoded = mapping
+                .encode_array(black_box(&plain_term_array))
+                .await
+                .unwrap();
             black_box(decoded);
         })
     });
@@ -93,12 +100,13 @@ fn bench_encode_array_non_existing(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("ObjectIdMapping_Encode");
     group.bench_function("encode_array_non_existing_10k_terms", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                let mapping = create_mapping().await;
-                let decoded = mapping.encode_array(black_box(&plain_term_array)).unwrap();
-                black_box(decoded);
-            })
+        b.to_async(&rt).iter(async || {
+            let mapping = create_mapping().await;
+            let decoded = mapping
+                .encode_array(black_box(&plain_term_array))
+                .await
+                .unwrap();
+            black_box(decoded);
         })
     });
     group.finish();
@@ -113,7 +121,7 @@ criterion_group!(
 );
 criterion_main!(benches);
 
-async fn create_mapping() -> Arc<dyn ObjectIdMapping> {
+async fn create_mapping() -> Arc<dyn ObjectIdDictionary> {
     let storage = DeltaQuadStorageBuilder::new()
         .with_encoding(QuadStorageEncodingName::ObjectId)
         .build()
@@ -161,12 +169,13 @@ fn generate_term_array(num_terms: usize, term_type: Option<&str>) -> PlainTermAr
 async fn setup_encoded_shuffled_array(
     num_terms: usize,
     term_type: Option<&str>,
-) -> (Arc<dyn ObjectIdMapping>, ArrayRef) {
+) -> (Arc<dyn ObjectIdDictionary>, ArrayRef) {
     let mapping = create_mapping().await;
     let plain_term_array = generate_term_array(num_terms, term_type);
 
     let sequential_id_array = mapping
         .encode_array(&plain_term_array)
+        .await
         .expect("Failed to encode plain term array");
 
     let int_array = sequential_id_array

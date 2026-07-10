@@ -37,7 +37,9 @@ impl<'root> RdfFusionExprBuilder<'root> {
             context: root,
             expr,
         };
+
         result.encoding()?;
+
         Ok(result)
     }
 
@@ -1013,9 +1015,10 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 None => {
                     return plan_err!("The context has not ObjectID encoding registered");
                 }
-                Some(encoding) => encoding
-                    .encode_scalar(&PlainTermScalar::from(scalar))?
-                    .into_scalar_value(),
+                Some(encoding) => futures::executor::block_on(
+                    encoding.encode_scalar(&PlainTermScalar::from(scalar)),
+                )?
+                .into_scalar_value(),
             },
             EncodingName::String => {
                 let turtle = scalar.to_string(); // This should ideally be proper Turtle

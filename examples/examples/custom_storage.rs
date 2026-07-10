@@ -17,7 +17,7 @@ use rdf_fusion::api::storage::{
 };
 use rdf_fusion::common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion::common::{GraphName, NamedNode, Quad, StorageError, TermPattern};
-use rdf_fusion::encoding::object_id::ObjectIdMapping;
+use rdf_fusion::encoding::object_id::ObjectIdDictionary;
 use rdf_fusion::encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion::encoding::{EncodingArray, QuadStorageEncoding};
@@ -95,7 +95,7 @@ impl QuadStorage for VecQuadStorage {
         QuadStorageEncoding::PlainTerm
     }
 
-    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdMapping>> {
+    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdDictionary>> {
         // We do not have an object ID mapping.
         None
     }

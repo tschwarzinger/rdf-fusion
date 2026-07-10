@@ -1,5 +1,5 @@
-use crate::delta::objectids::DeltaObjectIdMapping;
-use datafusion::arrow::array::{ArrayRef, RecordBatch};
+use crate::delta::objectids::DeltaObjectIdDictionary;
+use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{DataType, Fields, SchemaRef};
 use datafusion::common::{DataFusionError, exec_datafusion_err};
 use datafusion::physical_plan::{RecordBatchStream, SendableRecordBatchStream};
@@ -7,7 +7,7 @@ use deltalake::arrow::datatypes::Schema;
 use futures::future::BoxFuture;
 use futures::{Stream, StreamExt, ready};
 use rdf_fusion_common::DFResult;
-use rdf_fusion_encoding::object_id::ObjectIdMapping;
+use rdf_fusion_encoding::object_id::ObjectIdDictionary;
 use rdf_fusion_encoding::plain_term::PlainTermArray;
 use rdf_fusion_encoding::string::StringTermArray;
 use std::pin::Pin;
@@ -19,6 +19,8 @@ use std::task::{Context, Poll};
 enum EncoderStreamState {
     /// Encode the inner stream and pass it to the consumers.
     EncodeStream,
+    /// Holds the future for encoding a batch
+    Encoding(BoxFuture<'static, DFResult<RecordBatch>>),
     /// Holds the future for flushing the dictionary to Delta Lake
     Flushing(BoxFuture<'static, DFResult<()>>),
     /// The stream is done, no more data will be produced.
@@ -30,7 +32,7 @@ pub struct ObjectIdEncodingStream {
     /// The inner stream that provides the plain term or string arrays.
     input: SendableRecordBatchStream,
     /// The mapping used for encoding.
-    mapping: Arc<DeltaObjectIdMapping>,
+    mapping: Arc<DeltaObjectIdDictionary>,
     /// The number of partitions in the plan
     num_running_streams: Arc<AtomicI64>,
     /// The schema of the result
@@ -43,7 +45,7 @@ impl ObjectIdEncodingStream {
     /// Creates a new [`ObjectIdEncodingStream`].
     pub fn new(
         input: SendableRecordBatchStream,
-        mapping: Arc<DeltaObjectIdMapping>,
+        mapping: Arc<DeltaObjectIdDictionary>,
         num_running_streams: Arc<AtomicI64>,
     ) -> Self {
         let encoded_type = mapping.object_id_data_type().term_type();
@@ -76,24 +78,24 @@ impl Stream for ObjectIdEncodingStream {
                 EncoderStreamState::EncodeStream => {
                     match ready!(self.input.poll_next_unpin(cx)) {
                         Some(Ok(batch)) => {
-                            // Extract arrays from your batch and encode them.
-                            // Assuming column order: [graphs, subjects, predicates, objects]
-
-                            let encoded_arrays: Result<Vec<ArrayRef>, _> = (0..4)
-                                .map(|i| {
+                            let mapping = Arc::clone(&self.mapping);
+                            let schema = Arc::clone(&self.schema);
+                            let encoding_future = Box::pin(async move {
+                                let mut encoded_columns =
+                                    Vec::with_capacity(batch.num_columns());
+                                for i in 0..batch.num_columns() {
                                     let column = batch.column(i);
-                                    let plain_array = if column.data_type() == &DataType::Utf8
+                                    let plain_array = if column.data_type()
+                                        == &DataType::Utf8
                                     {
-                                        StringTermArray::new_unchecked(Arc::clone(
-                                            column,
-                                        ))
-                                        .as_plain_term_array()
-                                        .map_err(|e| {
-                                            exec_datafusion_err!(
-                                                "Failed to convert String to PlainTerm: {}",
-                                                e
-                                            )
-                                        })?
+                                        StringTermArray::new_unchecked(Arc::clone(column))
+                                            .as_plain_term_array()
+                                            .map_err(|e| {
+                                                exec_datafusion_err!(
+                                                    "Failed to convert String to PlainTerm: {}",
+                                                    e
+                                                )
+                                            })?
                                     } else {
                                         PlainTermArray::try_from(Arc::clone(column))
                                             .map_err(|e| {
@@ -103,23 +105,24 @@ impl Stream for ObjectIdEncodingStream {
                                                 )
                                             })?
                                     };
-
-                                    self.mapping.encode_array(&plain_array).map_err(|e| {
-                                        exec_datafusion_err!("Encoding failed: {}", e)
-                                    })
-                                })
-                                .collect();
-
-                            return match encoded_arrays {
-                                Ok(arrays) => {
-                                    let encoded_batch = RecordBatch::try_new(
-                                        Arc::clone(&self.schema),
-                                        arrays,
-                                    )?;
-                                    Poll::Ready(Some(Ok(encoded_batch)))
+                                    let encoded = mapping
+                                        .encode_array(&plain_array)
+                                        .await
+                                        .map_err(|e| {
+                                            exec_datafusion_err!("Encoding failed: {}", e)
+                                        })?;
+                                    encoded_columns.push(encoded);
                                 }
-                                Err(e) => Poll::Ready(Some(Err(e))),
-                            };
+                                RecordBatch::try_new(schema, encoded_columns).map_err(
+                                    |e| {
+                                        exec_datafusion_err!(
+                                            "Batch creation failed: {}",
+                                            e
+                                        )
+                                    },
+                                )
+                            });
+                            self.state = EncoderStreamState::Encoding(encoding_future);
                         }
                         Some(Err(e)) => return Poll::Ready(Some(Err(e))),
                         None => {
@@ -142,6 +145,11 @@ impl Stream for ObjectIdEncodingStream {
                             }
                         }
                     }
+                }
+                EncoderStreamState::Encoding(fut) => {
+                    let res = ready!(fut.as_mut().poll(cx));
+                    self.state = EncoderStreamState::EncodeStream;
+                    return Poll::Ready(Some(res));
                 }
                 EncoderStreamState::Flushing(fut) => {
                     // Poll the flush future until it completes

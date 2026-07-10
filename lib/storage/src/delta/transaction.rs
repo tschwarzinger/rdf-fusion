@@ -428,7 +428,8 @@ impl DeltaQuadStorageTransaction {
                 let scalar_value = self
                     .storage
                     .storage_encoding()
-                    .encode_term_scalar(graph_name.as_ref().into())?;
+                    .encode_term_scalar(graph_name.as_ref().into())
+                    .await?;
                 self.append_graph_operation(op, scalar_value)
                     .await
                     .map_err(|e| StorageError::Other(Box::new(e)))?;
@@ -437,7 +438,8 @@ impl DeltaQuadStorageTransaction {
                 let scalar_value = self
                     .storage
                     .storage_encoding()
-                    .encode_term_scalar(blank_node.as_ref().into())?;
+                    .encode_term_scalar(blank_node.as_ref().into())
+                    .await?;
                 self.append_graph_operation(op, scalar_value)
                     .await
                     .map_err(|e| StorageError::Other(Box::new(e)))?;
@@ -601,7 +603,8 @@ impl QuadStorageTransaction for DeltaQuadStorageTransaction {
         let graph_batch = self
             .storage
             .storage_encoding()
-            .encode_term_scalar(graph_name.into())?;
+            .encode_term_scalar(graph_name.into())
+            .await?;
         self.append_graph_operation(DeltaStorageLogOperation::CreateGraph, graph_batch)
             .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;

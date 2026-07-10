@@ -6,6 +6,7 @@ use deltalake::logstore::{IORuntime, LogStoreRef, StorageConfig, logstore_with};
 use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::path::Path;
+use rdf_fusion_common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use std::sync::Arc;
 use std::time::Duration;
@@ -119,9 +120,21 @@ impl DeltaQuadStorageBuilder {
                 &log_store.to_uri(&prefix_path)
             );
 
-            let result =
-                DeltaQuadStorage::new_at_location(self.encoding, self.indexes, log_store)
-                    .await?;
+            let session = match &self.load_mode {
+                LoadMode::Load(session) => Some(session.as_ref()),
+                LoadMode::NoLoading => None,
+            };
+            let options = session
+                .map(|s| s.config().rdf_fusion_options_or_from_env())
+                .unwrap_or_else(RdfFusionOptions::from_env)?;
+
+            let result = DeltaQuadStorage::new_at_location(
+                &options,
+                self.encoding,
+                self.indexes,
+                log_store,
+            )
+            .await?;
             result.set_transaction_max_age(self.log_max_age).await;
             Ok(result)
         }

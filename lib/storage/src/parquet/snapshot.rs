@@ -61,7 +61,7 @@ impl ParquetQuadStorageSnapshot {
     }
 
     /// Plans a [`QuadPattern`].
-    pub fn plan_quad_pattern(
+    pub async fn plan_quad_pattern(
         &self,
         pattern: &QuadPattern,
         projection: Option<Vec<usize>>,
@@ -90,7 +90,8 @@ impl ParquetQuadStorageSnapshot {
         .with_reader_factory_type(custom_factory)
         .with_eager_pruning(true)
         .with_pushdown_projection(PushdownProjection::Yes(projection))
-        .build()?;
+        .build()
+        .await?;
 
         Ok(plan)
     }
@@ -123,6 +124,7 @@ impl QuadStorageSnapshot for ParquetQuadStorageSnapshot {
         let pattern = QuadPattern::all_quads();
         let plan = self
             .plan_quad_pattern(&pattern, None, state)
+            .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;
 
         let graph_col_idx = plan
@@ -160,6 +162,7 @@ impl QuadStorageSnapshot for ParquetQuadStorageSnapshot {
         let pattern = QuadPattern::all_quads();
         let plan = self
             .plan_quad_pattern(&pattern, None, state)
+            .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;
 
         let count = count_rows(plan, state.task_ctx())

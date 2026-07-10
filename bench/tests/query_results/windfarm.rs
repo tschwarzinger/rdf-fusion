@@ -11,17 +11,17 @@ use rdf_fusion_bench::benchmarks::windfarm::{NumTurbines, WindFarmBenchmark};
 use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn wind_farm_4_test_results_plain_term() {
     run_wind_farm_4_test_results(QuadStorageEncodingName::PlainTerm).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn wind_farm_4_test_results_object_id() {
     run_wind_farm_4_test_results(QuadStorageEncodingName::ObjectId).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 pub async fn wind_farm_4_test_results_string() {
     run_wind_farm_4_test_results(QuadStorageEncodingName::String).await;
 }

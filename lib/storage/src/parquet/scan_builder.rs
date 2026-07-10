@@ -117,11 +117,11 @@ impl<'a> ParquetQuadScanBuilder<'a> {
     }
 
     /// Builds the Parquet scan.
-    pub fn build(self) -> DFResult<Arc<dyn ExecutionPlan>> {
+    pub async fn build(self) -> DFResult<Arc<dyn ExecutionPlan>> {
         let base_schema = self.encoding.quad_schema();
 
         let combined_logical_filter = if let Some(pattern) = &self.pattern {
-            conjunction(pattern.compute_filters(&self.encoding)?)
+            conjunction(pattern.compute_filters(&self.encoding).await?)
         } else {
             None
         };

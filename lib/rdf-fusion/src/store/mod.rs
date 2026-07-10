@@ -751,6 +751,7 @@ impl Store {
                 QuadStorageEncoding::ObjectId(encoding) => encoding
                     .mapping()
                     .decode_array(column)
+                    .await
                     .map_err(|e| StorageError::Other(Box::new(e)))?,
                 QuadStorageEncoding::String => STRING_ENCODING
                     .try_new_array(Arc::clone(column))
@@ -806,7 +807,9 @@ impl Store {
         let state = self.context.session_context().state();
         let graph_name = graph_name.into();
         let storage_encoding = self.context.storage().encoding();
-        let scalar = storage_encoding.encode_term_scalar(graph_name.into())?;
+        let scalar = storage_encoding
+            .encode_term_scalar(graph_name.into())
+            .await?;
 
         let snapshot = self.context.storage().snapshot().await?;
         let graphs = snapshot.named_graphs(&state).await?;
