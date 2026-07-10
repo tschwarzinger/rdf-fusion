@@ -8,9 +8,9 @@ ProjectionExec: expr=[first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(la
       ProjectionExec: expr=[AS_SORTABLE_BYTES(ENC_TF(label@1)) as __common_expr_1, product@0 as product, label@1 as label]
         SortExec: expr=[AS_SORTABLE_BYTES(ENC_TF(label@1)) ASC], preserve_partitioning=[false]
           ProjectionExec: expr=[product@0 as product, label@1 as label]
-            DecodeObjectIdsExec: projections=[product__oid -> product, label__oid -> label, value1]
+            DecodeObjectIdsExec: projections=[decode(product__oid) as product, decode(label__oid) as label, value1]
               FilterExec: EBV(GT(ENC_TF(value1@2), 4:4:136))
-                DecodeObjectIdsExec: projections=[product__oid, label__oid, value1__oid -> value1]
+                DecodeObjectIdsExec: projections=[product__oid, label__oid, decode(value1__oid) as value1]
                   HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1, value1__oid@3]
                     HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1]
                       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1]

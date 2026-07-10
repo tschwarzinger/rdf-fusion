@@ -3,7 +3,7 @@ source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[deliveryDays@7 as deliveryDays, offerURL@5 as offerURL, price@6 as price, productURI@0 as productURI, productlabel@1 as productlabel, validTo@8 as validTo, vendorURI@2 as vendorURI, vendorhomepage@4 as vendorhomepage, vendorname@3 as vendorname]
-  DecodeObjectIdsExec: projections=[productURI__oid -> productURI, productlabel__oid -> productlabel, vendorURI__oid -> vendorURI, vendorname__oid -> vendorname, vendorhomepage__oid -> vendorhomepage, offerURL__oid -> offerURL, price__oid -> price, deliveryDays__oid -> deliveryDays, validTo__oid -> validTo]
+  DecodeObjectIdsExec: projections=[decode(productURI__oid) as productURI, decode(productlabel__oid) as productlabel, decode(vendorURI__oid) as vendorURI, decode(vendorname__oid) as vendorname, decode(vendorhomepage__oid) as vendorhomepage, decode(offerURL__oid) as offerURL, decode(price__oid) as price, decode(deliveryDays__oid) as deliveryDays, decode(validTo__oid) as validTo]
     CrossJoinExec
       CrossJoinExec
         CrossJoinExec

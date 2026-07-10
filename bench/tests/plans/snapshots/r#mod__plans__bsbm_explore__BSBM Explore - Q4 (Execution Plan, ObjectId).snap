@@ -10,11 +10,11 @@ ProjectionExec: expr=[first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(la
           SortPreservingMergeExec: [AS_SORTABLE_BYTES(ENC_TF(label@1)) ASC]
             SortExec: expr=[AS_SORTABLE_BYTES(ENC_TF(label@1)) ASC], preserve_partitioning=[true]
               ProjectionExec: expr=[product@0 as product, label@1 as label, propertyTextual@2 as propertyTextual]
-                DecodeObjectIdsExec: projections=[product -> product, label -> label, propertyTextual -> propertyTextual, p1, p2]
+                DecodeObjectIdsExec: projections=[decode(product) as product, decode(label) as label, decode(propertyTextual) as propertyTextual, p1, p2]
                   UnionExec
                     ProjectionExec: expr=[product__oid@0 as product, label__oid@1 as label, propertyTextual__oid@2 as propertyTextual, p1@3 as p1, NULL as p2]
                       FilterExec: EBV(GT(ENC_TF(p1@3), 4:4:457))
-                        DecodeObjectIdsExec: projections=[product__oid, label__oid, propertyTextual__oid, p1__oid -> p1]
+                        DecodeObjectIdsExec: projections=[product__oid, label__oid, propertyTextual__oid, decode(p1__oid) as p1]
                           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1, propertyTextual__oid@2, p1__oid@4]
                             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1, propertyTextual__oid@3]
                               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1]
@@ -28,7 +28,7 @@ ProjectionExec: expr=[first_value(product) ORDER BY [AS_SORTABLE_BYTES(ENC_TF(la
                             ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?p1], blank_node_mode=Variable, file_groups={1 group: [[databases/bsbm-1000/GPOS/delta-parquet-file.zstd.parquet]]}, projection=[subject@1 as product__oid, object@3 as p1__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 14905 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 14905 AND 14905 <= predicate_max@2, required_guarantees=[predicate in (14905)]
                     ProjectionExec: expr=[product__oid@0 as product, label__oid@1 as label, propertyTextual__oid@2 as propertyTextual, NULL as p1, p2@3 as p2]
                       FilterExec: EBV(GT(ENC_TF(p2@3), 4:4:488))
-                        DecodeObjectIdsExec: projections=[product__oid, label__oid, propertyTextual__oid, p2__oid -> p2]
+                        DecodeObjectIdsExec: projections=[product__oid, label__oid, propertyTextual__oid, decode(p2__oid) as p2]
                           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1, propertyTextual__oid@2, p2__oid@4]
                             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1, propertyTextual__oid@3]
                               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product__oid@0, product__oid@0)], projection=[product__oid@0, label__oid@1]

@@ -6,7 +6,7 @@ use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNode};
 use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
 use std::sync::Arc;
 
-/// A rule that absorbs [DecodeObjectIds] nodes into a [BgpNode].
+/// A rule that absorbs [`DecodeObjectIdsNode`] nodes into a [BgpNode].
 #[derive(Debug)]
 pub struct BgpDecodePushdownRule;
 

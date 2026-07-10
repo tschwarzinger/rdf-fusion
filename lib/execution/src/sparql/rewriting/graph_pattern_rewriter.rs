@@ -102,9 +102,19 @@ impl GraphPatternRewriter {
             }
             GraphPattern::Filter { inner, expr } => {
                 let inner = self.rewrite_graph_pattern(inner.as_ref())?;
-                let expr =
+
+                // First pass: Build expression with fully decoded schema to find referenced columns
+                let temp_expr =
                     self.rewrite_to_boolean_expression(inner.decoded_schema(), expr)?;
-                inner.filter(expr)
+
+                // Explicitly decode the columns needed by the filter (excluding subqueries)
+                let inner = inner.decode_for_exprs(std::slice::from_ref(&temp_expr))?;
+
+                // Second pass: Build expression with the actual partially decoded schema (exists_schema)
+                let final_expr =
+                    self.rewrite_to_boolean_expression(inner.schema(), expr)?;
+
+                inner.filter(final_expr)
             }
             GraphPattern::Extend {
                 inner,
@@ -112,8 +122,16 @@ impl GraphPatternRewriter {
                 variable,
             } => {
                 let inner = self.rewrite_graph_pattern(inner)?;
-                let expr = self.rewrite_expression(inner.decoded_schema(), expression)?;
-                inner.extend(variable.clone(), expr)
+
+                // First pass
+                let temp_expr =
+                    self.rewrite_expression(inner.decoded_schema(), expression)?;
+                let inner = inner.decode_for_exprs(std::slice::from_ref(&temp_expr))?;
+
+                // Second pass
+                let final_expr = self.rewrite_expression(inner.schema(), expression)?;
+
+                inner.extend(variable.clone(), final_expr)
             }
             GraphPattern::Values {
                 variables,
@@ -129,18 +147,31 @@ impl GraphPatternRewriter {
                 right,
                 expression,
             } => {
-                let lhs = self.rewrite_graph_pattern(left)?;
-                let rhs = self.rewrite_graph_pattern(right)?;
+                let mut lhs = self.rewrite_graph_pattern(left)?;
+                let mut rhs = self.rewrite_graph_pattern(right)?;
 
-                let mut join_schema = lhs.decoded_schema().as_ref().clone();
-                join_schema.merge(rhs.decoded_schema());
+                let mut join_decoded_schema = lhs.decoded_schema().as_ref().clone();
+                join_decoded_schema.merge(rhs.decoded_schema());
 
-                let filter = expression
+                let temp_filter = expression
+                    .as_ref()
+                    .map(|f| self.rewrite_to_boolean_expression(&join_decoded_schema, f))
+                    .transpose()?;
+
+                if let Some(f) = &temp_filter {
+                    lhs = lhs.decode_for_exprs(std::slice::from_ref(f))?;
+                    rhs = rhs.decode_for_exprs(std::slice::from_ref(f))?;
+                }
+
+                let mut join_schema = lhs.schema().as_ref().clone();
+                join_schema.merge(rhs.schema());
+
+                let final_filter = expression
                     .as_ref()
                     .map(|f| self.rewrite_to_boolean_expression(&join_schema, f))
                     .transpose()?;
 
-                lhs.join(rhs.build()?, SparqlJoinType::Left, filter)
+                lhs.join(rhs.build()?, SparqlJoinType::Left, final_filter)
             }
             GraphPattern::Slice {
                 inner,

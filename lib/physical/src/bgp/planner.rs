@@ -1,4 +1,4 @@
-use crate::object_id::exec::DecodeObjectIdsExec;
+use crate::object_id::exec::{DecodeObjectIdsExec, ObjectIdDecodingExecProjection};
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::stats::Precision;
@@ -150,7 +150,8 @@ impl ExtensionPlanner for BgpPlanner {
         }
 
         // 5. Decode only what's needed for filters
-        exec = self.decode_columns_for_filters(exec, bgp, &top_level_needs, &filter_needs)?;
+        exec =
+            self.decode_columns_for_filters(exec, bgp, &top_level_needs, &filter_needs)?;
 
         // 6. Apply any remaining filters that were waiting on decoded strings
         exec = self.apply_ready_filters(
@@ -333,6 +334,7 @@ impl BgpPlanner {
             .unwrap_or(0)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn join_execs(
         &self,
         planner: &dyn PhysicalPlanner,
@@ -424,6 +426,7 @@ impl BgpPlanner {
     }
 
     /// Handles CrossJoin fallbacks. Promotes to a NestedLoopJoinExec if filters are present.
+    #[allow(clippy::too_many_arguments)]
     fn optimize_cross_join(
         &self,
         planner: &dyn PhysicalPlanner,
@@ -491,44 +494,36 @@ impl BgpPlanner {
             if !decode_left.is_empty() {
                 let mut projections = Vec::new();
                 for field in left.schema().fields() {
-                    projections.push(
-                        crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
-                            source_column: field.name().clone(),
-                            target_column: field.name().clone(),
-                        },
-                    );
+                    projections.push(ObjectIdDecodingExecProjection::Column {
+                        source_column: field.name().clone(),
+                        target_column: field.name().clone(),
+                    });
                 }
                 for (oid_name, target_name) in &decode_left {
-                    projections.push(
-                        crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
-                            source_column: oid_name.clone(),
-                            target_column: target_name.clone(),
-                        },
-                    );
+                    projections.push(ObjectIdDecodingExecProjection::Decode {
+                        source_column: oid_name.clone(),
+                        target_column: target_name.clone(),
+                    });
                 }
                 left = Arc::new(DecodeObjectIdsExec::try_new(
                     left,
                     projections,
-                    decoding_udf.clone(),
+                    Arc::clone(&decoding_udf),
                 )?);
             }
             if !decode_right.is_empty() {
                 let mut projections = Vec::new();
                 for field in right.schema().fields() {
-                    projections.push(
-                        crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
-                            source_column: field.name().clone(),
-                            target_column: field.name().clone(),
-                        },
-                    );
+                    projections.push(ObjectIdDecodingExecProjection::Column {
+                        source_column: field.name().clone(),
+                        target_column: field.name().clone(),
+                    });
                 }
                 for (oid_name, target_name) in &decode_right {
-                    projections.push(
-                        crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
-                            source_column: oid_name.clone(),
-                            target_column: target_name.clone(),
-                        },
-                    );
+                    projections.push(ObjectIdDecodingExecProjection::Decode {
+                        source_column: oid_name.clone(),
+                        target_column: target_name.clone(),
+                    });
                 }
                 right = Arc::new(DecodeObjectIdsExec::try_new(
                     right,
@@ -627,7 +622,11 @@ impl BgpPlanner {
 
         let decoding_udf = self.decoding_udf.clone().unwrap();
         let mut projections = Vec::with_capacity(top_level_needs.len());
-        let columns_to_decode: HashSet<String> = bgp.columns_to_decode.iter().map(|c| c.flat_name()).collect();
+        let columns_to_decode: HashSet<String> = bgp
+            .columns_to_decode
+            .iter()
+            .map(|c| c.flat_name())
+            .collect();
 
         let mut projected_names = HashSet::new();
         let mut needs_decode = false;
@@ -641,9 +640,11 @@ impl BgpPlanner {
             }
 
             if field_name.ends_with("__oid") {
-                if columns_to_decode.contains(base_name) && filter_needs.contains(base_name) {
+                if columns_to_decode.contains(base_name)
+                    && filter_needs.contains(base_name)
+                {
                     if projected_names.insert(base_name.to_string()) {
-                        projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
+                        projections.push(ObjectIdDecodingExecProjection::Decode {
                             source_column: field_name.clone(),
                             target_column: base_name.to_string(),
                         });
@@ -651,7 +652,7 @@ impl BgpPlanner {
                     }
                 } else {
                     if projected_names.insert(field_name.clone()) {
-                        projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                        projections.push(ObjectIdDecodingExecProjection::Column {
                             source_column: field_name.clone(),
                             target_column: field_name.clone(),
                         });
@@ -659,7 +660,7 @@ impl BgpPlanner {
                 }
             } else {
                 if projected_names.insert(field_name.clone()) {
-                    projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                    projections.push(ObjectIdDecodingExecProjection::Column {
                         source_column: field_name.clone(),
                         target_column: field_name.clone(),
                     });
@@ -669,13 +670,14 @@ impl BgpPlanner {
 
         // Also if any column needed is already available but we missed it:
         for needed in top_level_needs {
-            if !projected_names.contains(needed) && !projected_names.contains(&format!("{needed}__oid")) {
-                if let Ok(_) = join_schema.index_of(needed) {
-                    projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
-                        source_column: needed.clone(),
-                        target_column: needed.clone(),
-                    });
-                }
+            if !projected_names.contains(needed)
+                && !projected_names.contains(&format!("{needed}__oid"))
+                && join_schema.index_of(needed).is_ok()
+            {
+                projections.push(ObjectIdDecodingExecProjection::Column {
+                    source_column: needed.clone(),
+                    target_column: needed.clone(),
+                });
             }
         }
 
@@ -704,7 +706,11 @@ impl BgpPlanner {
 
         let decoding_udf = self.decoding_udf.clone().unwrap();
         let mut projections = Vec::with_capacity(schema.fields().len());
-        let columns_to_decode: HashSet<String> = bgp.columns_to_decode.iter().map(|c| c.flat_name()).collect();
+        let columns_to_decode: HashSet<String> = bgp
+            .columns_to_decode
+            .iter()
+            .map(|c| c.flat_name())
+            .collect();
         let mut needs_decode = false;
 
         for field in schema.fields() {
@@ -712,13 +718,13 @@ impl BgpPlanner {
             let base_name = field_name.strip_suffix("__oid").unwrap_or(field_name);
 
             if field_name.ends_with("__oid") && columns_to_decode.contains(base_name) {
-                projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
+                projections.push(ObjectIdDecodingExecProjection::Decode {
                     source_column: field_name.clone(),
                     target_column: base_name.to_string(),
                 });
                 needs_decode = true;
             } else {
-                projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                projections.push(ObjectIdDecodingExecProjection::Column {
                     source_column: field_name.clone(),
                     target_column: field_name.clone(),
                 });

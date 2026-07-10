@@ -3,9 +3,9 @@ source: bench/tests/plans/wind_farm.rs
 expression: "&string"
 ---
 ProjectionExec: expr=[site_label@0 as site_label, wtur_label@1 as wtur_label, t@3 as t, val@2 as val]
-  DecodeObjectIdsExec: projections=[site_label, wtur_label, val__oid -> val, t__oid -> t]
+  DecodeObjectIdsExec: projections=[site_label, wtur_label, decode(val__oid) as val, decode(t__oid) as t]
     FilterExec: EBV(EQ(ENC_TF(site_label@0), 2:{value:Wind Mountain,language:})) AND (EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A1,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A2,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A3,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A4,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A5,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A6,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A7,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A8,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A9,language:})) OR EBV(EQ(ENC_TF(wtur_label@1), 2:{value:A10,language:})))
-      DecodeObjectIdsExec: projections=[site_label__oid -> site_label, wtur_label__oid -> wtur_label, val__oid, t__oid]
+      DecodeObjectIdsExec: projections=[decode(site_label__oid) as site_label, decode(wtur_label__oid) as wtur_label, val__oid, t__oid]
         HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(dp__oid@2, dp__oid@0)], projection=[site_label__oid@0, wtur_label__oid@1, val__oid@3, t__oid@5]
           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(dp__oid@2, dp__oid@0)], projection=[site_label__oid@0, wtur_label__oid@1, dp__oid@2, val__oid@4]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(ts__oid@2, ts__oid@0)], projection=[site_label__oid@0, wtur_label__oid@1, dp__oid@4]

@@ -2,7 +2,7 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-DecodeObjectIdsExec: projections=[label -> label, comment -> comment, producer -> producer, productFeature -> productFeature, propertyTextual1 -> propertyTextual1, propertyTextual2 -> propertyTextual2, propertyTextual3 -> propertyTextual3, propertyNumeric1 -> propertyNumeric1, propertyNumeric2 -> propertyNumeric2, propertyTextual4 -> propertyTextual4, propertyTextual5 -> propertyTextual5, propertyNumeric4 -> propertyNumeric4]
+DecodeObjectIdsExec: projections=[decode(label) as label, decode(comment) as comment, decode(producer) as producer, decode(productFeature) as productFeature, decode(propertyTextual1) as propertyTextual1, decode(propertyTextual2) as propertyTextual2, decode(propertyTextual3) as propertyTextual3, decode(propertyNumeric1) as propertyNumeric1, decode(propertyNumeric2) as propertyNumeric2, decode(propertyTextual4) as propertyTextual4, decode(propertyTextual5) as propertyTextual5, decode(propertyNumeric4) as propertyNumeric4]
   NestedLoopJoinExec: join_type=Left
     NestedLoopJoinExec: join_type=Left
       NestedLoopJoinExec: join_type=Left

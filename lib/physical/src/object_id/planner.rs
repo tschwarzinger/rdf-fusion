@@ -1,6 +1,6 @@
 use crate::object_id::exec::DecodeObjectIdsExec;
 use async_trait::async_trait;
-use datafusion::common::{plan_err, DataFusionError};
+use datafusion::common::{DataFusionError, plan_err};
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::{LogicalPlan, ScalarUDF, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
@@ -43,26 +43,30 @@ impl ExtensionPlanner for DecodeObjectIdsPlanner {
         }
 
         let input_exec = Arc::clone(&physical_inputs[0]);
-        
+
         let mut projections = Vec::new();
         let decode_set: std::collections::HashSet<String> = decode_node
             .columns_to_decode()
             .iter()
             .map(|c| c.flat_name())
             .collect();
-            
+
         for field in input_exec.schema().fields() {
             let name = field.name().clone();
             if decode_set.contains(&name) {
-                projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
-                    source_column: name.clone(),
-                    target_column: name,
-                });
+                projections.push(
+                    crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
+                        source_column: name.clone(),
+                        target_column: name,
+                    },
+                );
             } else {
-                projections.push(crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
-                    source_column: name.clone(),
-                    target_column: name,
-                });
+                projections.push(
+                    crate::object_id::exec::ObjectIdDecodingExecProjection::Column {
+                        source_column: name.clone(),
+                        target_column: name,
+                    },
+                );
             }
         }
 

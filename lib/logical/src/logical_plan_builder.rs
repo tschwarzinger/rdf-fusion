@@ -1,18 +1,18 @@
 use crate::encoding::object_id::{DecodeObjectIdsNode, EncodeAsObjectIdNode};
 use crate::extend::ExtendNode;
-use crate::join::{compute_sparql_join_columns, SparqlJoinNode, SparqlJoinType};
+use crate::join::{SparqlJoinNode, SparqlJoinType, compute_sparql_join_columns};
 use crate::logical_plan_builder_context::RdfFusionLogicalPlanBuilderContext;
 use crate::minus::MinusNode;
 use crate::patterns::PatternNode;
 use crate::{RdfFusionExprBuilder, RdfFusionExprBuilderContext};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::common::{plan_datafusion_err, plan_err, Column, DFSchema, DFSchemaRef};
+use datafusion::common::{Column, DFSchema, DFSchemaRef, plan_datafusion_err, plan_err};
 
-use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion::common::ExprSchema;
+use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion::logical_expr::{
-    col, Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort,
-    SortExpr, UserDefinedLogicalNode,
+    Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort, SortExpr,
+    UserDefinedLogicalNode, col,
 };
 use itertools::Itertools;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -737,36 +737,14 @@ fn collect_referenced_columns(
             Expr::OuterReferenceColumn(_, c) => {
                 columns.insert(c.clone());
             }
-            Expr::Exists(datafusion::logical_expr::expr::Exists { subquery, .. }) => {
-                collect_referenced_columns_in_plan(&subquery.subquery, columns)?;
-            }
+            Expr::Exists(_) => {}
             Expr::InSubquery(datafusion::logical_expr::expr::InSubquery {
-                expr,
-                subquery,
-                ..
+                expr, ..
             }) => {
                 collect_referenced_columns(expr, columns)?;
-                collect_referenced_columns_in_plan(&subquery.subquery, columns)?;
             }
-            Expr::ScalarSubquery(datafusion::logical_expr::Subquery {
-                subquery, ..
-            }) => {
-                collect_referenced_columns_in_plan(subquery, columns)?;
-            }
+            Expr::ScalarSubquery(_) => {}
             _ => {}
-        }
-        Ok(TreeNodeRecursion::Continue)
-    })?;
-    Ok(())
-}
-
-fn collect_referenced_columns_in_plan(
-    plan: &LogicalPlan,
-    columns: &mut BTreeSet<Column>,
-) -> DFResult<()> {
-    plan.apply(|node| {
-        for expr in node.expressions() {
-            collect_referenced_columns(&expr, columns)?;
         }
         Ok(TreeNodeRecursion::Continue)
     })?;

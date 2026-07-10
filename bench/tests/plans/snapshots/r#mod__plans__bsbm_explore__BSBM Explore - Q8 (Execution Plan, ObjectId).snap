@@ -4,9 +4,9 @@ expression: "&string"
 ---
 SortExec: TopK(fetch=20), expr=[AS_SORTABLE_BYTES(ENC_TF(reviewDate@2)) DESC], preserve_partitioning=[false]
   ProjectionExec: expr=[title@1 as title, text@2 as text, reviewDate@3 as reviewDate, reviewer@4 as reviewer, reviewerName@5 as reviewerName, rating1@6 as rating1, rating2@7 as rating2, rating3@8 as rating3, rating4@9 as rating4]
-    DecodeObjectIdsExec: projections=[review -> review, title -> title, text, reviewDate -> reviewDate, reviewer -> reviewer, reviewerName -> reviewerName, rating1 -> rating1, rating2 -> rating2, rating3 -> rating3, rating4 -> rating4]
+    DecodeObjectIdsExec: projections=[decode(review) as review, decode(title) as title, text, decode(reviewDate) as reviewDate, decode(reviewer) as reviewer, decode(reviewerName) as reviewerName, decode(rating1) as rating1, decode(rating2) as rating2, decode(rating3) as rating3, decode(rating4) as rating4]
       FilterExec: EBV(LANGMATCHES(ENC_TF(LANG(text@2)), 2:{value:EN,language:}))
-        DecodeObjectIdsExec: projections=[review, title, text -> text, reviewDate, reviewer, reviewerName, rating1, rating2, rating3, rating4]
+        DecodeObjectIdsExec: projections=[review, title, decode(text) as text, reviewDate, reviewer, reviewerName, rating1, rating2, rating3, rating4]
           HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@7, rating3@8, rating4@10]
             HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@7, rating3@9]
               HashJoinExec: mode=CollectLeft, join_type=Left, on=[(review@0, review@0)], projection=[review@0, title@1, text@2, reviewDate@3, reviewer@4, reviewerName@5, rating1@6, rating2@8]

@@ -2,13 +2,13 @@
 source: bench/tests/plans/bsbm_explore.rs
 expression: "&string"
 ---
-DecodeObjectIdsExec: projections=[productLabel -> productLabel, offer -> offer, price -> price, vendor -> vendor, vendorTitle -> vendorTitle, review -> review, revTitle -> revTitle, reviewer -> reviewer, revName -> revName, rating1 -> rating1, rating2 -> rating2]
+DecodeObjectIdsExec: projections=[decode(productLabel) as productLabel, decode(offer) as offer, decode(price) as price, decode(vendor) as vendor, decode(vendorTitle) as vendorTitle, decode(review) as review, decode(revTitle) as revTitle, decode(reviewer) as reviewer, decode(revName) as revName, decode(rating1) as rating1, decode(rating2) as rating2]
   NestedLoopJoinExec: join_type=Left
     NestedLoopJoinExec: join_type=Left
       ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801> <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel], blank_node_mode=Variable, file_groups={1 group: [[databases/bsbm-1000/GSPO/delta-parquet-file.zstd.parquet]]}, projection=[object@3 as productLabel], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 21381 AND predicate@2 = 1610, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 21381 AND 21381 <= subject_max@2 AND predicate_null_count@7 != row_count@4 AND predicate_min@5 <= 1610 AND 1610 <= predicate_max@6, required_guarantees=[predicate in (1610), subject in (21381)]
       ProjectionExec: expr=[offer__oid@0 as offer, price__oid@1 as price, vendor__oid@2 as vendor, vendorTitle__oid@3 as vendorTitle]
         FilterExec: EBV(GT(ENC_TF(date@4), 5:{date_time_type:0,value:63349516800.000000000000000000,offset:})), projection=[offer__oid@0, price__oid@1, vendor__oid@2, vendorTitle__oid@3]
-          DecodeObjectIdsExec: projections=[offer__oid, price__oid, vendor__oid, vendorTitle__oid, date__oid -> date]
+          DecodeObjectIdsExec: projections=[offer__oid, price__oid, vendor__oid, vendorTitle__oid, decode(date__oid) as date]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer__oid@0, offer__oid@0)], projection=[offer__oid@0, price__oid@1, vendor__oid@2, vendorTitle__oid@3, date__oid@5]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer__oid@0, offer__oid@0), (vendor__oid@2, vendor__oid@1)], projection=[offer__oid@0, price__oid@1, vendor__oid@2, vendorTitle__oid@3]
                 HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(vendor__oid@2, vendor__oid@0)], projection=[offer__oid@0, price__oid@1, vendor__oid@2, vendorTitle__oid@3]

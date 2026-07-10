@@ -15,13 +15,13 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
 };
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
-use futures::future::BoxFuture;
 use futures::Stream;
+use futures::future::BoxFuture;
 use rdf_fusion_common::{DFResult, MeasurePoll};
 use std::any::Any;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObjectIdDecodingExecProjection {
@@ -140,14 +140,14 @@ impl DisplayAs for DecodeObjectIdsExec {
                     if source_column_name == target_column_name {
                         source_column_name.clone()
                     } else {
-                        format!("{source_column_name} -> {target_column_name}")
+                        format!("{source_column_name} as {target_column_name}")
                     }
                 }
                 ObjectIdDecodingExecProjection::Decode {
                     source_column: source_column_name,
                     target_column: target_column_name,
                 } => {
-                    format!("{source_column_name} -> {target_column_name}")
+                    format!("decode({source_column_name}) as {target_column_name}")
                 }
             })
             .collect::<Vec<_>>()
@@ -205,13 +205,15 @@ impl ExecutionPlan for DecodeObjectIdsExec {
         for (dest_idx, proj) in self.projections.iter().enumerate() {
             match proj {
                 ObjectIdDecodingExecProjection::Column {
-                    source_column: source_column_name, ..
+                    source_column: source_column_name,
+                    ..
                 } => {
                     let src_idx = input_schema.index_of(source_column_name).unwrap();
                     decode_tasks.push(DecodeBatchTask::Retain { src_idx });
                 }
                 ObjectIdDecodingExecProjection::Decode {
-                    source_column: source_column_name, ..
+                    source_column: source_column_name,
+                    ..
                 } => {
                     let src_idx = input_schema.index_of(source_column_name).unwrap();
                     let dest_field = Arc::new(self.schema.field(dest_idx).clone());
