@@ -15,13 +15,13 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
 };
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
-use futures::future::BoxFuture;
 use futures::Stream;
+use futures::future::BoxFuture;
 use rdf_fusion_common::DFResult;
 use std::any::Any;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObjectIdDecodingExecProjection {

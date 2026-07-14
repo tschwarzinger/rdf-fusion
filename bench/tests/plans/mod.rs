@@ -8,7 +8,6 @@ use insta::Settings;
 
 mod bsbm_business_intelligence;
 mod bsbm_explore;
-mod wind_farm;
 
 fn run_plan_assertions(assertions: impl FnOnce()) {
     let mut settings = Settings::default();

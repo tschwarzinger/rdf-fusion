@@ -60,16 +60,28 @@ fn create_test_quads(ctx: &SessionContext, s: &str) -> datafusion::dataframe::Da
     ctx.read_batch(batch).unwrap()
 }
 
-fn create_context(storage: Arc<dyn QuadStorage>) -> SessionContext {
-    RdfFusionContextBuilder::new(storage)
+fn create_context(
+    storage: Arc<dyn QuadStorage>,
+    log_store: Arc<dyn LogStore>,
+) -> SessionContext {
+    let ctx = RdfFusionContextBuilder::new(storage)
         .build()
         .unwrap()
         .session_context()
-        .clone()
+        .clone();
+    ctx.runtime_env().register_object_store(
+        &Url::parse("memory://").unwrap(),
+        log_store.root_object_store(None),
+    );
+    ctx
 }
 
-async fn populate_storage(storage: Arc<DeltaQuadStorage>, s: &str) {
-    let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
+async fn populate_storage(
+    storage: Arc<DeltaQuadStorage>,
+    log_store: Arc<dyn LogStore>,
+    s: &str,
+) {
+    let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>, log_store);
     let transaction = storage.begin_transaction(&ctx.state()).await.unwrap();
     let quad = create_test_quads(&ctx, s);
     transaction.insert(quad).await.unwrap();
@@ -91,7 +103,7 @@ async fn test_reload_storage_plain_term() {
                 .unwrap(),
         );
 
-        populate_storage(storage, "http://example.org/s1").await;
+        populate_storage(storage, Arc::clone(&log_store), "http://example.org/s1").await;
     }
 
     // 2. Reload and verify
@@ -121,9 +133,17 @@ async fn test_reload_storage_with_index_and_optimize() {
                 .unwrap(),
         );
 
-        populate_storage(Arc::clone(&storage), "http://example.org/s1").await;
+        populate_storage(
+            Arc::clone(&storage),
+            Arc::clone(&log_store),
+            "http://example.org/s1",
+        )
+        .await;
 
-        let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
+        let ctx = create_context(
+            Arc::clone(&storage) as Arc<dyn QuadStorage>,
+            Arc::clone(&log_store),
+        );
         storage.optimize(&ctx.state()).await.unwrap();
     }
 
@@ -136,9 +156,17 @@ async fn test_reload_storage_with_index_and_optimize() {
                 .unwrap(),
         );
 
-        populate_storage(Arc::clone(&storage), "http://example.org/s2").await;
+        populate_storage(
+            Arc::clone(&storage),
+            Arc::clone(&log_store),
+            "http://example.org/s2",
+        )
+        .await;
 
-        let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
+        let ctx = create_context(
+            Arc::clone(&storage) as Arc<dyn QuadStorage>,
+            Arc::clone(&log_store),
+        );
         storage.optimize(&ctx.state()).await.unwrap();
         assert_eq!(storage.log().version().await, 2);
     }
@@ -159,7 +187,12 @@ async fn test_reload_storage_object_id() {
                 .unwrap(),
         );
 
-        populate_storage(Arc::clone(&storage), "http://example.org/s1").await;
+        populate_storage(
+            Arc::clone(&storage),
+            Arc::clone(&log_store),
+            "http://example.org/s1",
+        )
+        .await;
 
         storage
             .delta_object_id_mapping()

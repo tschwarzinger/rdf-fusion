@@ -6,7 +6,6 @@ use rdf_fusion::store::Store;
 use serde_json::Value;
 
 mod bsbm;
-mod windfarm;
 
 async fn run_select_query(store: &Store, query: &str) -> String {
     let result = store.query(query).await.unwrap();

@@ -4,7 +4,6 @@ use std::path::Path;
 
 pub mod bsbm;
 mod name;
-pub mod windfarm;
 
 use crate::environment::BenchmarkContext;
 use crate::report::BenchmarkReport;

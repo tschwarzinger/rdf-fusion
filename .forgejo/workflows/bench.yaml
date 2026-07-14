@@ -47,8 +47,12 @@ jobs:
 
       - name: Compute Main Baselines (On Cache Miss)
         if: steps.cache-main-benches.outputs.cache-hit != 'true'
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
           echo "No cached main benchmarks found. Computing them now..."
+          
+          cp misc/run_ci_benches.sh /tmp/run_ci_benches.sh
           
           # 1. Switch to the commit on main that this PR targets
           git checkout ${{ github.event.pull_request.base.sha }}
@@ -56,12 +60,7 @@ jobs:
           
           # 2. Run benches for main
           just prepare-benches
-          cargo bench --bench scalar -- --save-baseline main-scalar
-          cargo bench --bench scalar_binary -- --save-baseline main-scalar_binary
-          cargo bench --bench store -- --save-baseline main-store
-          cargo bench --bench bsbm_explore -- --save-baseline main-bsbm_explore
-          cargo bench --bench bsbm_business_intelligence -- --save-baseline main-bsbm_business_intelligence
-          cargo bench --bench wind_farm -- --save-baseline main-wind_farm
+          /tmp/run_ci_benches.sh main "$PR_LABELS"
           
           # 3. Switch back to the PR merge commit to continue
           git checkout ${{ github.sha }} 
@@ -73,19 +72,13 @@ jobs:
           just prepare-benches
 
       - name: Run Benchmarks Candidate Branch
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          cargo bench --bench scalar -- --save-baseline candidate-scalar
-          cargo bench --bench scalar_binary -- --save-baseline candidate-scalar_binary
-          cargo bench --bench store -- --save-baseline candidate-store
-          cargo bench --bench bsbm_explore -- --save-baseline candidate-bsbm_explore
-          cargo bench --bench bsbm_business_intelligence -- --save-baseline candidate-bsbm_business_intelligence
-          cargo bench --bench wind_farm -- --save-baseline candidate-wind_farm
+          ./misc/run_ci_benches.sh candidate "$PR_LABELS"
 
       - name: Compare Benchmarks
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          critcmp main-scalar candidate-scalar
-          critcmp main-scalar_binary candidate-scalar_binary
-          critcmp main-store candidate-store
-          critcmp main-bsbm_explore candidate-bsbm_explore
-          critcmp main-bsbm_business_intelligence candidate-bsbm_business_intelligence
-          critcmp main-wind_farm candidate-wind_farm
+          ./misc/run_ci_benches.sh compare "$PR_LABELS"

@@ -20,7 +20,6 @@ doc = false
 anyhow.workspace = true
 async-trait.workspace = true
 bzip2.workspace = true
-chrono.workspace = true
 clap = { workspace = true, features = ["derive"] }
 csv.workspace = true
 bytes.workspace = true
@@ -30,8 +29,6 @@ futures.workspace = true
 object_store.workspace = true
 oxrdfio.workspace = true
 prettytable-rs.workspace = true
-rand.workspace = true
-rand_distr.workspace = true
 rdf-fusion.workspace = true
 reqwest.workspace = true
 serde_json.workspace = true
@@ -56,10 +53,6 @@ harness = false
 
 [[bench]]
 name = "bsbm_business_intelligence"
-harness = false
-
-[[bench]]
-name = "wind_farm"
 harness = false
 
 [[bench]]

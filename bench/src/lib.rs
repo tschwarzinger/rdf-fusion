@@ -3,7 +3,6 @@
 use crate::benchmarks::bsbm::{
     BsbmBenchmark, BusinessIntelligenceUseCase, ExploreUseCase,
 };
-use crate::benchmarks::windfarm::WindFarmBenchmark;
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::{BenchmarkContext, RdfFusionBenchContext};
 use clap::ValueEnum;
@@ -126,9 +125,6 @@ fn create_benchmark_instance(
             dataset_size,
             query_size,
         )?),
-        BenchmarkName::WindFarm { num_turbines } => {
-            Box::new(WindFarmBenchmark::try_new(context, num_turbines)?)
-        }
     };
     Ok(benchmark)
 }
