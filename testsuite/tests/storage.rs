@@ -2,7 +2,7 @@ use anyhow::{Error, Result};
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::api::storage::QuadStorage;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::storage::delta::DeltaQuadStorage;
+use rdf_fusion::storage::delta::DeltaQuadsStorage;
 use rdf_fusion::storage::index::IndexComponents;
 use rdf_fusion_testsuite::storage::StorageTestSuiteBuilder;
 use std::sync::Arc;
@@ -107,7 +107,7 @@ async fn create_delta_storage_with_plain_term_encoding(
     config.options_mut().execution.target_partitions = 1;
 
     let storage =
-        DeltaQuadStorage::new_in_memory(QuadStorageEncodingName::PlainTerm, indexes)
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::PlainTerm, indexes)
             .await;
     Ok(Arc::new(storage) as Arc<dyn QuadStorage>)
 }
@@ -116,7 +116,8 @@ async fn create_delta_storage_with_object_id(
     indexes: Vec<IndexComponents>,
 ) -> Result<Arc<dyn QuadStorage>, Error> {
     let storage =
-        DeltaQuadStorage::new_in_memory(QuadStorageEncodingName::ObjectId, indexes).await;
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::ObjectId, indexes)
+            .await;
     Ok(Arc::new(storage) as Arc<dyn QuadStorage>)
 }
 
@@ -124,6 +125,6 @@ async fn create_delta_storage_with_string(
     indexes: Vec<IndexComponents>,
 ) -> Result<Arc<dyn QuadStorage>, Error> {
     let storage =
-        DeltaQuadStorage::new_in_memory(QuadStorageEncodingName::String, indexes).await;
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::String, indexes).await;
     Ok(Arc::new(storage) as Arc<dyn QuadStorage>)
 }

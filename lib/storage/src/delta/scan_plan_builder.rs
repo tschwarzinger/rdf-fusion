@@ -1,7 +1,7 @@
-use crate::delta::error::DeltaQuadStorageError;
-use crate::delta::index::DeltaQuadStorageIndexSnapshot;
+use crate::delta::error::DeltaQuadsStorageError;
+use crate::delta::index::DeltaQuadsStorageIndexSnapshot;
 use crate::delta::log::{
-    DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
+    DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
 use crate::index::IndexComponents;
 use crate::parquet::scan_builder::{
@@ -42,16 +42,16 @@ pub struct QuadPatternScanPlanningResult {
 }
 
 /// A builder for constructing scan plans from an optional index and an optional manual changeset.
-pub struct DeltaQuadStorageScanPlanBuilder {
+pub struct DeltaQuadsStorageScanPlanBuilder {
     session_state: SessionState,
     pattern: QuadPattern,
     encoding: QuadStorageEncoding,
-    index: Option<DeltaQuadStorageIndexSnapshot>,
-    changeset: Option<DeltaQuadStorageLogChangesetRef>,
+    index: Option<DeltaQuadsStorageIndexSnapshot>,
+    changeset: Option<DeltaQuadsStorageLogChangesetRef>,
     projection_indices: Option<Vec<usize>>,
 }
 
-impl DeltaQuadStorageScanPlanBuilder {
+impl DeltaQuadsStorageScanPlanBuilder {
     pub fn new(
         session_state: SessionState,
         pattern: QuadPattern,
@@ -69,8 +69,8 @@ impl DeltaQuadStorageScanPlanBuilder {
 
     pub fn with_best_index(
         self,
-        indexes: &[DeltaQuadStorageIndexSnapshot],
-    ) -> Result<Self, DeltaQuadStorageError> {
+        indexes: &[DeltaQuadsStorageIndexSnapshot],
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let best_index = indexes
             .iter()
             .max_by_key(|idx| {
@@ -87,7 +87,7 @@ impl DeltaQuadStorageScanPlanBuilder {
         }
     }
 
-    pub fn with_index(mut self, index: DeltaQuadStorageIndexSnapshot) -> Self {
+    pub fn with_index(mut self, index: DeltaQuadsStorageIndexSnapshot) -> Self {
         self.index = Some(index);
         self
     }
@@ -102,9 +102,9 @@ impl DeltaQuadStorageScanPlanBuilder {
 
     pub async fn with_changeset_for_log(
         self,
-        log: &DeltaQuadStorageLog,
+        log: &DeltaQuadsStorageLog,
         target_version: Option<u64>,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let target_version = match target_version {
             None => log.version().await,
             Some(target_version) => target_version,
@@ -115,7 +115,7 @@ impl DeltaQuadStorageScanPlanBuilder {
         };
 
         if target_version < index_version {
-            return Err(DeltaQuadStorageError::VersionError(
+            return Err(DeltaQuadsStorageError::VersionError(
                 "The target version is older than the index version".to_string(),
             ));
         }
@@ -131,14 +131,14 @@ impl DeltaQuadStorageScanPlanBuilder {
         }
     }
 
-    pub fn with_changeset(mut self, changeset: DeltaQuadStorageLogChangesetRef) -> Self {
+    pub fn with_changeset(mut self, changeset: DeltaQuadsStorageLogChangesetRef) -> Self {
         self.changeset = Some(changeset);
         self
     }
 
     pub async fn build(
         self,
-    ) -> Result<QuadPatternScanPlanningResult, DeltaQuadStorageError> {
+    ) -> Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError> {
         let filters = self.pattern.compute_filters(&self.encoding).await?;
 
         let initial_plan = match (&self.index, &self.changeset) {
@@ -242,7 +242,7 @@ impl DeltaQuadStorageScanPlanBuilder {
 
     fn build_empty_scan_physical(
         &self,
-    ) -> Result<QuadPatternScanPlanningResult, DeltaQuadStorageError> {
+    ) -> Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError> {
         let schema = self.pattern.compute_schema(&self.encoding);
         let final_schema = match &self.projection_indices {
             None => Arc::clone(schema.inner()),
@@ -259,9 +259,9 @@ impl DeltaQuadStorageScanPlanBuilder {
     async fn apply_changeset_data_physical(
         &self,
         base_scan: Arc<dyn ExecutionPlan>,
-        changeset: &DeltaQuadStorageLogChangesetRef,
+        changeset: &DeltaQuadsStorageLogChangesetRef,
         filters: &[Expr],
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
         let mut current_plan = base_scan;
 
         // 1. Handle Cleared Graphs (LeftAnti Join on COL_GRAPH)
@@ -359,9 +359,9 @@ impl DeltaQuadStorageScanPlanBuilder {
 
     async fn scan_index_physical(
         &self,
-        index: &DeltaQuadStorageIndexSnapshot,
+        index: &DeltaQuadsStorageIndexSnapshot,
         projection: IndexScanProjectionPushdown,
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
         let table_uri = index.log_store().config().location().clone();
         let table_path = object_store::path::Path::from(table_uri.path());
 
@@ -408,7 +408,7 @@ impl DeltaQuadStorageScanPlanBuilder {
         &self,
         plan: Arc<dyn ExecutionPlan>,
         projection_indices: Option<&[usize]>,
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
         let schema = plan.schema();
         let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
         let exprs = ParquetQuadScanBuilder::compute_projection_exprs(
@@ -426,7 +426,7 @@ impl DeltaQuadStorageScanPlanBuilder {
         plan: Arc<dyn ExecutionPlan>,
         projections: Option<&[usize]>,
         filters: &[Expr],
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
         let mut current_plan = plan;
 
         if let Some(filter_expr) = conjunction(filters.iter().cloned()) {

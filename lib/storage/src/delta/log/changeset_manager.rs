@@ -1,4 +1,4 @@
-use crate::delta::log::DeltaQuadStorageLogChangesetRef;
+use crate::delta::log::DeltaQuadsStorageLogChangesetRef;
 use crate::delta::log::DeltaStorageLogVersionRange;
 use quick_cache::Weighter;
 use quick_cache::sync::Cache;
@@ -6,23 +6,23 @@ use quick_cache::sync::Cache;
 #[derive(Clone, Copy, Debug, Default)]
 struct ChangeSetWeighter;
 
-impl Weighter<DeltaStorageLogVersionRange, DeltaQuadStorageLogChangesetRef>
+impl Weighter<DeltaStorageLogVersionRange, DeltaQuadsStorageLogChangesetRef>
     for ChangeSetWeighter
 {
     fn weight(
         &self,
         _key: &DeltaStorageLogVersionRange,
-        val: &DeltaQuadStorageLogChangesetRef,
+        val: &DeltaQuadsStorageLogChangesetRef,
     ) -> u64 {
         val.size() as u64
     }
 }
 
-/// Manages changesets for the [`DeltaQuadStorageLog`](crate::delta::log::DeltaQuadStorageLog).
+/// Manages changesets for the [`DeltaQuadsStorageLog`](crate::delta::log::DeltaQuadsStorageLog).
 pub struct ChangesetManager {
     cache: Cache<
         DeltaStorageLogVersionRange,
-        DeltaQuadStorageLogChangesetRef,
+        DeltaQuadsStorageLogChangesetRef,
         ChangeSetWeighter,
     >,
 }
@@ -39,7 +39,7 @@ impl ChangesetManager {
     pub async fn get(
         &self,
         version_range: &DeltaStorageLogVersionRange,
-    ) -> Option<DeltaQuadStorageLogChangesetRef> {
+    ) -> Option<DeltaQuadsStorageLogChangesetRef> {
         self.cache.get(version_range)
     }
 
@@ -47,7 +47,7 @@ impl ChangesetManager {
     pub async fn insert(
         &self,
         version_range: DeltaStorageLogVersionRange,
-        changeset: DeltaQuadStorageLogChangesetRef,
+        changeset: DeltaQuadsStorageLogChangesetRef,
     ) {
         self.cache.insert(version_range, changeset);
     }

@@ -1,4 +1,4 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use datafusion::common::instant::Instant;
 use deltalake::DeltaTable;
 use std::sync::Arc;
@@ -35,7 +35,7 @@ impl DeltaTableRefresher {
         &self,
         arrival_time: Instant,
         table_ref: &Arc<RwLock<DeltaTable>>,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         let max_age = *self.max_age.read().await;
         let Some(max_age) = max_age else {
             return Ok(());

@@ -9,7 +9,7 @@ fn setup_delta_lake() -> (TempDir, String) {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "load",
@@ -26,7 +26,7 @@ fn test_cli_query_spiderman() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "query",
@@ -53,7 +53,7 @@ fn test_cli_query_explain() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "query",
@@ -73,7 +73,7 @@ fn test_cli_query_explain_analyze() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "query",
@@ -94,7 +94,7 @@ fn test_cli_query_analyze_without_explain_fails() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "query",

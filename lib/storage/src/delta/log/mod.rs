@@ -12,7 +12,7 @@ pub(crate) use changeset_eager::*;
 pub(crate) use changeset_manager::*;
 pub(crate) use compute_log_changes::*;
 
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::add_only_changeset::LazyInsertionOnlyChangeset;
 use crate::delta::log::operation_log_file::OperationLogFile;
 use crate::delta::log::operations_changeset_stream::OperationsChangesetStream;
@@ -64,7 +64,7 @@ pub(crate) const COL_OPERATION_SEQ_ID: &str = "operation_seq_id";
 /// The column of the delta commit version
 pub(crate) const COL_COMMIT_VERSION: &str = "_commit_version";
 
-/// A syntactically valid range of [`DeltaQuadStorageLog`] version numbers, guaranteeing that the ending
+/// A syntactically valid range of [`DeltaQuadsStorageLog`] version numbers, guaranteeing that the ending
 /// version is not before the starting version.
 ///
 /// This does not guarantee that the versions exist in the underlying table.
@@ -206,7 +206,7 @@ impl DeltaStorageLogOperation {
 /// return [`None`].
 ///
 /// [`QuadStorage`]: rdf_fusion_extensions::storage::QuadStorage
-pub struct DeltaQuadStorageLog {
+pub struct DeltaQuadsStorageLog {
     /// The underlying delta table.
     table: Arc<RwLock<DeltaTable>>,
     /// The schema of the delta table.
@@ -215,7 +215,7 @@ pub struct DeltaQuadStorageLog {
     changeset_manager: ChangesetManager,
 }
 
-impl Debug for DeltaQuadStorageLog {
+impl Debug for DeltaQuadsStorageLog {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeltaStorageLog")
             .field("table", &self.table)
@@ -224,16 +224,16 @@ impl Debug for DeltaQuadStorageLog {
     }
 }
 
-impl DeltaQuadStorageLog {
-    /// Tries to create a new [`DeltaQuadStorageLog`] ensuring that the given encoding exists.
+impl DeltaQuadsStorageLog {
+    /// Tries to create a new [`DeltaQuadsStorageLog`] ensuring that the given encoding exists.
     pub async fn try_new_at_location(
         quad_storage_encoding: QuadStorageEncoding,
         log_store: LogStoreRef,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let data_type = quad_storage_encoding.term_type().clone();
         let delta_data_type =
             DeltaDataType::try_from_arrow(&data_type).map_err(|_| {
-                DeltaQuadStorageError::UnsupportedArrowType(data_type.clone())
+                DeltaQuadsStorageError::UnsupportedArrowType(data_type.clone())
             })?;
 
         let delta_columns = vec![
@@ -270,8 +270,10 @@ impl DeltaQuadStorageLog {
         })
     }
 
-    /// Tries to load a [`DeltaQuadStorageLog`] from the given location.
-    pub async fn try_load(log_store: LogStoreRef) -> Result<Self, DeltaQuadStorageError> {
+    /// Tries to load a [`DeltaQuadsStorageLog`] from the given location.
+    pub async fn try_load(
+        log_store: LogStoreRef,
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let mut table = DeltaTable::new(log_store, DeltaTableConfig::default());
         table.load().await?;
 
@@ -307,7 +309,7 @@ impl DeltaQuadStorageLog {
         &self,
         state: &SessionState,
         version_range: DeltaStorageLogVersionRange,
-    ) -> Result<DeltaQuadStorageLogChangesetRef, DeltaQuadStorageError> {
+    ) -> Result<DeltaQuadsStorageLogChangesetRef, DeltaQuadsStorageError> {
         if let Some(changeset) = self.changeset_manager.get(&version_range).await {
             return Ok(changeset);
         }
@@ -315,7 +317,7 @@ impl DeltaQuadStorageLog {
         let table = self.table.read().await.clone();
 
         let table_state = table.state.as_ref().ok_or_else(|| {
-            DeltaQuadStorageError::Other("Table not loaded".to_string())
+            DeltaQuadsStorageError::Other("Table not loaded".to_string())
         })?;
         let table_schema: Schema = table_state.schema().as_ref().try_into_arrow()?;
 
@@ -332,7 +334,7 @@ impl DeltaQuadStorageLog {
             self.changeset_manager
                 .insert(
                     version_range,
-                    Arc::clone(&changeset) as Arc<dyn DeltaQuadStorageLogChangeset>,
+                    Arc::clone(&changeset) as Arc<dyn DeltaQuadsStorageLogChangeset>,
                 )
                 .await;
             return Ok(changeset);
@@ -356,7 +358,7 @@ impl DeltaQuadStorageLog {
         self.changeset_manager
             .insert(
                 version_range,
-                Arc::clone(&changeset) as Arc<dyn DeltaQuadStorageLogChangeset>,
+                Arc::clone(&changeset) as Arc<dyn DeltaQuadsStorageLogChangeset>,
             )
             .await;
         return Ok(changeset);
@@ -365,7 +367,7 @@ impl DeltaQuadStorageLog {
         async fn load_added_files_between(
             log_table: &DeltaTable,
             version_range: DeltaStorageLogVersionRange,
-        ) -> Result<Vec<OperationLogFile>, DeltaQuadStorageError> {
+        ) -> Result<Vec<OperationLogFile>, DeltaQuadsStorageError> {
             let start = version_range.starting_version();
             let end = version_range.ending_version();
             let log_store = log_table.log_store();
@@ -376,7 +378,7 @@ impl DeltaQuadStorageLog {
                 let commit_bytes = log_store
                     .read_commit_entry(version)
                     .await
-                    .map_err(DeltaQuadStorageError::from)?;
+                    .map_err(DeltaQuadsStorageError::from)?;
 
                 let Some(commit_bytes) = commit_bytes else {
                     continue;
@@ -385,7 +387,7 @@ impl DeltaQuadStorageLog {
 
                 for line in commit_str.lines() {
                     let action: Action = serde_json::from_str(line).map_err(|err| {
-                        DeltaQuadStorageError::Other(format!(
+                        DeltaQuadsStorageError::Other(format!(
                             "Cannot parse commit metadata: {err}"
                         ))
                     })?;
@@ -405,7 +407,7 @@ impl DeltaQuadStorageLog {
         /// TODO
         fn files_only_contain_appends(
             files: &[OperationLogFile],
-        ) -> Result<bool, DeltaQuadStorageError> {
+        ) -> Result<bool, DeltaQuadsStorageError> {
             for file in files {
                 let contains_only_quad_insertions =
                     file.only_contains_quad_insertions()?;
@@ -435,7 +437,7 @@ impl DeltaQuadStorageLog {
             table: &DeltaTableState,
             files: &[OperationLogFile],
             object_store: Arc<dyn ObjectStore>,
-        ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+        ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
             let mut partitioned_files = Vec::with_capacity(files.len());
             for op_file in files {
                 let mut p_file = PartitionedFile::new(
@@ -453,7 +455,7 @@ impl DeltaQuadStorageLog {
                 .schema()
                 .as_ref()
                 .try_into_arrow()
-                .map_err(|e| DeltaQuadStorageError::Other(e.to_string()))?;
+                .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
             let partition_cols = vec![Arc::new(Field::new(
                 COL_COMMIT_VERSION,
                 DataType::Int64,
@@ -520,7 +522,7 @@ impl DeltaQuadStorageLog {
         fn create_changeset_plan(
             state: &SessionState,
             cdf_scan: Arc<dyn ExecutionPlan>,
-        ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+        ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
             let last_change_per_quad =
                 ComputeLogChangesetExec::try_new(cdf_scan).expect("Valid CDF");
 
@@ -542,8 +544,8 @@ impl DeltaQuadStorageLog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delta::DeltaQuadStorage;
-    use crate::delta::log::changeset::DeltaQuadStorageLogChangeset;
+    use crate::delta::DeltaQuadsStorage;
+    use crate::delta::log::changeset::DeltaQuadsStorageLogChangeset;
     use datafusion::arrow::array::{NullArray, RecordBatch};
     use datafusion::arrow::datatypes::{Field, Schema};
     use datafusion::dataframe::DataFrame;
@@ -618,7 +620,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_remove_quads_plain_term() -> Result<(), DeltaQuadStorageError> {
+    async fn test_remove_quads_plain_term() -> Result<(), DeltaQuadsStorageError> {
         let session = create_session();
         let storage = create_storage().await;
         let transaction = storage.begin_transaction(&session.state()).await.unwrap();
@@ -639,8 +641,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_compute_changeset_with_add_changes() -> Result<(), DeltaQuadStorageError>
-    {
+    async fn test_compute_changeset_with_add_changes()
+    -> Result<(), DeltaQuadsStorageError> {
         let session = create_session();
         let storage = create_storage().await;
         let transaction = storage.begin_transaction(&session.state()).await.unwrap();
@@ -673,7 +675,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_compute_changeset_with_duplicate_add()
-    -> Result<(), DeltaQuadStorageError> {
+    -> Result<(), DeltaQuadsStorageError> {
         let session = create_session();
         let storage = create_storage().await;
         let transaction = storage.begin_transaction(&session.state()).await.unwrap();
@@ -704,13 +706,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_compute_changeset_with_add_and_then_remove()
-    -> Result<(), DeltaQuadStorageError> {
+    -> Result<(), DeltaQuadsStorageError> {
         let session = create_session();
         let storage = create_storage().await;
         let transaction = storage
             .begin_transaction(&session.state())
             .await
-            .map_err(|e| DeltaQuadStorageError::from(e.to_string()))?;
+            .map_err(|e| DeltaQuadsStorageError::from(e.to_string()))?;
 
         let a_quads = create_plain_term_quads_with_postfix(&session, "A");
 
@@ -737,7 +739,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_changeset_caching() -> Result<(), DeltaQuadStorageError> {
+    async fn test_changeset_caching() -> Result<(), DeltaQuadsStorageError> {
         let session = create_session();
         let storage = create_storage().await;
         let transaction = storage.begin_transaction(&session.state()).await.unwrap();
@@ -762,8 +764,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_changeset_caching_different_ranges() -> Result<(), DeltaQuadStorageError>
-    {
+    async fn test_changeset_caching_different_ranges()
+    -> Result<(), DeltaQuadsStorageError> {
         let session = create_session();
         let storage = create_storage().await;
 
@@ -798,7 +800,7 @@ mod tests {
 
     async fn print_removed_quads(
         state: &SessionState,
-        changeset: &dyn DeltaQuadStorageLogChangeset,
+        changeset: &dyn DeltaQuadsStorageLogChangeset,
     ) -> String {
         let plan = changeset
             .removed_quads(state)
@@ -823,8 +825,8 @@ mod tests {
     }
 
     /// Helper: Create the Delta Storage
-    async fn create_storage() -> DeltaQuadStorage {
-        DeltaQuadStorage::new_in_memory(QuadStorageEncodingName::PlainTerm, vec![]).await
+    async fn create_storage() -> DeltaQuadsStorage {
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::PlainTerm, vec![]).await
     }
 
     /// Generate a mocked stream of Quads with a postfix to make the quad unique
@@ -877,7 +879,7 @@ mod tests {
     }
 
     /// Helper: Read the delta table and return a formatted snapshot string
-    async fn collect_table_snapshot(log: &DeltaQuadStorageLog) -> String {
+    async fn collect_table_snapshot(log: &DeltaQuadsStorageLog) -> String {
         let ctx = SessionContext::new();
 
         // Lock the table properly to read its state
@@ -898,7 +900,7 @@ mod tests {
 
     async fn print_added_quads(
         state: &SessionState,
-        changeset: &dyn DeltaQuadStorageLogChangeset,
+        changeset: &dyn DeltaQuadsStorageLogChangeset,
     ) -> String {
         let plan = changeset
             .added_quads(state)

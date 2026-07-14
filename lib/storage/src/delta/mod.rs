@@ -10,5 +10,5 @@ mod snapshot;
 mod storage;
 mod transaction;
 
-pub use builder::{DeltaQuadStorageBuilder, LoadMode};
-pub use storage::DeltaQuadStorage;
+pub use builder::{DeltaQuadsStorageBuilder, LoadMode};
+pub use storage::DeltaQuadsStorage;

@@ -1,5 +1,5 @@
-use crate::delta::DeltaQuadStorage;
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::DeltaQuadsStorage;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::index::IndexComponents;
 use datafusion::execution::SessionState;
 use deltalake::logstore::{IORuntime, LogStoreRef, StorageConfig, logstore_with};
@@ -24,7 +24,7 @@ pub enum LoadMode {
 
 /// Builder for the Delta storage.
 #[derive(Clone)]
-pub struct DeltaQuadStorageBuilder {
+pub struct DeltaQuadsStorageBuilder {
     load_mode: LoadMode,
     log_store: Option<LogStoreRef>,
     options: Option<RdfFusionOptions>,
@@ -33,8 +33,8 @@ pub struct DeltaQuadStorageBuilder {
     log_max_age: Option<Duration>,
 }
 
-impl DeltaQuadStorageBuilder {
-    /// Creates a new [`DeltaQuadStorageBuilder`].
+impl DeltaQuadsStorageBuilder {
+    /// Creates a new [`DeltaQuadsStorageBuilder`].
     pub fn new() -> Self {
         Self {
             load_mode: LoadMode::NoLoading,
@@ -87,7 +87,7 @@ impl DeltaQuadStorageBuilder {
     }
 
     /// Tries to create the builder.
-    pub async fn build(self) -> Result<DeltaQuadStorage, DeltaQuadStorageError> {
+    pub async fn build(self) -> Result<DeltaQuadsStorage, DeltaQuadsStorageError> {
         let log_store = self.log_store.unwrap_or_else(|| {
             use object_store::memory::InMemory;
             let store = Arc::new(InMemory::new());
@@ -104,11 +104,15 @@ impl DeltaQuadStorageBuilder {
 
         let prefix_path = Path::from(log_store.root_url().path());
         let mut list_stream = log_store.root_object_store(None).list(Some(&prefix_path));
-        let exists = list_stream.next().await.is_some();
+        let exists = match list_stream.next().await {
+            Some(Ok(_)) => true,
+            Some(Err(e)) => return Err(DeltaQuadsStorageError::Other(e.to_string())),
+            None => false,
+        };
 
         if exists {
             match self.load_mode {
-                LoadMode::NoLoading => Err(DeltaQuadStorageError::Other(
+                LoadMode::NoLoading => Err(DeltaQuadsStorageError::Other(
                     "Table already exists.".to_string(),
                 )),
                 LoadMode::Load(session) => {
@@ -119,7 +123,8 @@ impl DeltaQuadStorageBuilder {
 
                     let options = self.options.unwrap_or_default();
                     let result =
-                        DeltaQuadStorage::try_load(&session, &options, log_store).await?;
+                        DeltaQuadsStorage::try_load(&session, &options, log_store)
+                            .await?;
                     result.set_transaction_max_age(self.log_max_age).await;
                     Ok(result)
                 }
@@ -138,7 +143,7 @@ impl DeltaQuadStorageBuilder {
                 .map(|s| s.config().rdf_fusion_options_or_from_env())
                 .unwrap_or_else(RdfFusionOptions::from_env)?;
 
-            let result = DeltaQuadStorage::new_at_location(
+            let result = DeltaQuadsStorage::new_at_location(
                 &options,
                 self.encoding,
                 self.indexes,
@@ -151,7 +156,7 @@ impl DeltaQuadStorageBuilder {
     }
 }
 
-impl Default for DeltaQuadStorageBuilder {
+impl Default for DeltaQuadsStorageBuilder {
     fn default() -> Self {
         Self::new()
     }

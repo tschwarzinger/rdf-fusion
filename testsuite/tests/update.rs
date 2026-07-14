@@ -3,7 +3,7 @@
 use anyhow::Result;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion::store::Store;
 use rdf_fusion_testsuite::w3c::files::W3CTestRuntime;
 use rdf_fusion_testsuite::w3c::utils::W3CTestUtils;
@@ -62,7 +62,7 @@ async fn w3c_sparql11_update_testsuite_string() -> Result<()> {
 fn plain_term_store_factory() -> StoreFactory {
     Arc::new(|store_config| {
         Box::pin(async move {
-            let delta_storage = DeltaQuadStorageBuilder::new()
+            let delta_storage = DeltaQuadsStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
                 .build()
                 .await?;
@@ -97,7 +97,7 @@ fn plain_term_store_factory() -> StoreFactory {
 fn string_store_factory() -> StoreFactory {
     Arc::new(|store_config| {
         Box::pin(async move {
-            let delta_storage = DeltaQuadStorageBuilder::new()
+            let delta_storage = DeltaQuadsStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::String)
                 .build()
                 .await?;

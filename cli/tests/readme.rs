@@ -12,7 +12,7 @@ fn test_readme_example_load_delta() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &db_path,
         "load",
@@ -30,7 +30,7 @@ fn test_readme_example_serve_delta() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &db_path,
         "load",
@@ -42,7 +42,7 @@ fn test_readme_example_serve_delta() {
         std::process::Command::new(assert_cmd::cargo::cargo_bin("rdf-fusion"))
             .args([
                 "--storage-type",
-                "delta-lake",
+                "delta-quads",
                 "--location",
                 &db_path,
                 "serve",
@@ -83,7 +83,7 @@ fn test_readme_example_dump_delta() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &db_path,
         "load",
@@ -96,7 +96,7 @@ fn test_readme_example_dump_delta() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &db_path,
         "dump",

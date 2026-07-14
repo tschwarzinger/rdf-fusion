@@ -1,13 +1,14 @@
 # RDF Fusion
 
 > **Warning:** RDF Fusion is currently **experimental**. Everything, including the APIs, encodings, and storage formats
-> are subject to breaking changes. It is not yet recommended for production use. 
+> are subject to breaking changes. It is not yet recommended for production use.
 
 <p align="center">
   <img src="misc/logo/logo.png" width="128" alt="RDF Fusion Logo" align="right">
 </p>
 
-RDF Fusion is an embeddable [SPARQL](https://www.w3.org/TR/sparql11-overview/) engine based on [Apache DataFusion](https://datafusion.apache.org/).
+RDF Fusion is an embeddable [SPARQL](https://www.w3.org/TR/sparql11-overview/) engine based
+on [Apache DataFusion](https://datafusion.apache.org/).
 
 A primary goal of RDF Fusion is to preserve the strengths of DataFusion and make them available to the Semantic Web
 community.
@@ -57,10 +58,10 @@ For more detailed information about the commands, please consult the manual or o
 
 **Build a Delta Lake database from RDF files:**
 
-Creates a new database at the location `file:///tmp/my-db` using the `delta-lake` storage backend.
+Creates a new database at the location `file:///tmp/my-db` using the `delta-quads` storage backend.
 
 ```bash
-rdf-fusion --storage-type delta-lake --location file:///tmp/my-db load ./examples/data/spiderman.ttl
+rdf-fusion --storage-type delta-quads --location file:///tmp/my-db load ./examples/data/spiderman.ttl
 ```
 
 **Serve a SPARQL HTTP server from a Delta Lake database:**
@@ -68,7 +69,7 @@ rdf-fusion --storage-type delta-lake --location file:///tmp/my-db load ./example
 Serves the database created in the example above at the default endpoint.
 
 ```bash
-rdf-fusion --storage-type delta-lake --location file:///tmp/my-db serve
+rdf-fusion --storage-type delta-quads --location file:///tmp/my-db serve
 ```
 
 **Query a Parquet file:**
@@ -82,15 +83,16 @@ rdf-fusion --storage-type parquet --location ./examples/data/spiderman.parquet q
 
 **Dump a Delta Lake database into a sorted N-Quads file:**
 
-Dumps the current snapshot of a database to an RDF serialization format, such as N-Quads. 
+Dumps the current snapshot of a database to an RDF serialization format, such as N-Quads.
 
 ```bash
-rdf-fusion --storage-type delta-lake --location file:///tmp/my-db dump ./dump.nq --format nq --sort-by GSPO
+rdf-fusion --storage-type delta-quads --location file:///tmp/my-db dump ./dump.nq --format nq --sort-by GSPO
 ```
 
 ### Using RDF Fusion in your Project
 
-Documentation for using RDF Fusion from another Rust project can be found in the main crate's [documentation](https://docs.rs/rdf-fusion).
+Documentation for using RDF Fusion from another Rust project can be found in the main
+crate's [documentation](https://docs.rs/rdf-fusion).
 Examples of using RDF Fusion can be found in the [examples](./examples) directory.
 
 ## Missing Feature?

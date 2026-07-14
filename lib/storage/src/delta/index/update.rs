@@ -1,9 +1,9 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::index::{
-    DeltaQuadStorageIndex, DeltaQuadStorageIndexSnapshot, FILE_ROW_COUNT,
+    DeltaQuadsStorageIndex, DeltaQuadsStorageIndexSnapshot, FILE_ROW_COUNT,
 };
-use crate::delta::log::DeltaQuadStorageLogChangesetRef;
-use crate::delta::scan_plan_builder::DeltaQuadStorageScanPlanBuilder;
+use crate::delta::log::DeltaQuadsStorageLogChangesetRef;
+use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::execution::SessionState;
@@ -23,14 +23,14 @@ use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Implements the updating process for a [`DeltaQuadStorageIndex`].
+/// Implements the updating process for a [`DeltaQuadsStorageIndex`].
 pub struct DeltaStorageQuadIndexUpdater {
     /// The index to update.
-    index: DeltaQuadStorageIndexSnapshot,
+    index: DeltaQuadsStorageIndexSnapshot,
     /// The delta table to update.
     index_table: DeltaTable,
     /// The target version to update to.
-    changeset: DeltaQuadStorageLogChangesetRef,
+    changeset: DeltaQuadsStorageLogChangesetRef,
     /// The session state to use.
     state: SessionState,
     /// The writer properties to use.
@@ -40,9 +40,9 @@ pub struct DeltaStorageQuadIndexUpdater {
 impl DeltaStorageQuadIndexUpdater {
     /// Creates a new [`DeltaStorageQuadIndexUpdater`].
     pub fn new(
-        index: DeltaQuadStorageIndexSnapshot,
+        index: DeltaQuadsStorageIndexSnapshot,
         index_table: DeltaTable,
-        changeset: DeltaQuadStorageLogChangesetRef,
+        changeset: DeltaQuadsStorageLogChangesetRef,
         state: SessionState,
         writer_properties: WriterProperties,
     ) -> Self {
@@ -58,15 +58,17 @@ impl DeltaStorageQuadIndexUpdater {
     /// Applies the update to the index.
     pub async fn apply_update(
         mut self,
-    ) -> Result<(DeltaTable, u64), DeltaQuadStorageError> {
+    ) -> Result<(DeltaTable, u64), DeltaQuadsStorageError> {
         // Currently, we only support full rewrites.
         self.full_rewrite().await
     }
 
     /// Starts a full rewrite of the index, removing all existing files while adding the newly
     /// written files.
-    async fn full_rewrite(&mut self) -> Result<(DeltaTable, u64), DeltaQuadStorageError> {
-        let plan_result = DeltaQuadStorageScanPlanBuilder::new(
+    async fn full_rewrite(
+        &mut self,
+    ) -> Result<(DeltaTable, u64), DeltaQuadsStorageError> {
+        let plan_result = DeltaQuadsStorageScanPlanBuilder::new(
             self.state.clone(),
             QuadPattern::all_quads(),
             self.index.encoding(),
@@ -92,7 +94,7 @@ impl DeltaStorageQuadIndexUpdater {
     fn sort_for_index(
         &self,
         plan: Arc<dyn ExecutionPlan>,
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
         let schema = plan.schema();
         let mut sort_exprs = Vec::new();
 
@@ -101,7 +103,7 @@ impl DeltaStorageQuadIndexUpdater {
 
             // Look up the physical index of the column in the schema
             let col_idx = schema.index_of(col_name).map_err(|e| {
-                DeltaQuadStorageError::Other(format!(
+                DeltaQuadsStorageError::Other(format!(
                     "Column {col_name} not found in schema for sorting: {e}"
                 ))
             })?;
@@ -132,9 +134,9 @@ impl DeltaStorageQuadIndexUpdater {
     async fn write_new_files(
         &self,
         quads: Arc<dyn ExecutionPlan>,
-    ) -> Result<Vec<Action>, DeltaQuadStorageError> {
+    ) -> Result<Vec<Action>, DeltaQuadsStorageError> {
         if quads.output_partitioning().partition_count() != 1 {
-            return Err(DeltaQuadStorageError::Other(
+            return Err(DeltaQuadsStorageError::Other(
                 "Index update requires a single partition".to_string(),
             ));
         }
@@ -178,10 +180,10 @@ impl DeltaStorageQuadIndexUpdater {
     }
 
     /// Removes all files from the current snapshot of the table.
-    fn remove_all_files(&self) -> Result<Vec<Action>, DeltaQuadStorageError> {
+    fn remove_all_files(&self) -> Result<Vec<Action>, DeltaQuadsStorageError> {
         let deletion_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|e| DeltaQuadStorageError::Other(e.to_string()))?
+            .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?
             .as_millis() as i64;
 
         let remove_actions: Vec<Action> = self
@@ -213,7 +215,7 @@ impl DeltaStorageQuadIndexUpdater {
     async fn commit_transaction(
         &mut self,
         actions: Vec<Action>,
-    ) -> Result<DeltaTable, DeltaQuadStorageError> {
+    ) -> Result<DeltaTable, DeltaQuadsStorageError> {
         let log_store = self.index_table.log_store();
         let snapshot = self.index_table.snapshot()?;
 
@@ -224,7 +226,7 @@ impl DeltaStorageQuadIndexUpdater {
         };
 
         let sync_txn = Transaction {
-            app_id: DeltaQuadStorageIndex::APP_ID.to_string(),
+            app_id: DeltaQuadsStorageIndex::APP_ID.to_string(),
             version: self.changeset.version_range().ending_version() as i64,
             last_updated: None,
         };

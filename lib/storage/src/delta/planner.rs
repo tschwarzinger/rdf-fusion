@@ -1,7 +1,7 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::objectids::EncodeAsObjectIdDeltaExec;
-use crate::delta::scan_plan_builder::DeltaQuadStorageScanPlanBuilder;
-use crate::delta::snapshot::DeltaQuadStorageSnapshot;
+use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
+use crate::delta::snapshot::DeltaQuadsStorageSnapshot;
 use async_trait::async_trait;
 use datafusion::common::plan_err;
 use datafusion::error::DataFusionError;
@@ -15,15 +15,15 @@ use rdf_fusion_logical::quad_pattern::QuadPatternNode;
 use std::sync::Arc;
 
 /// A planner for converting logical quad scans into physical plans that are realized with the
-/// [`DeltaQuadStorageSnapshot`].
-pub struct DeltaQuadStoragePlanner {
+/// [`DeltaQuadsStorageSnapshot`].
+pub struct DeltaQuadsStoragePlanner {
     /// The storage snapshot
-    snapshot: DeltaQuadStorageSnapshot,
+    snapshot: DeltaQuadsStorageSnapshot,
 }
 
-impl DeltaQuadStoragePlanner {
-    /// Creates a new [`DeltaQuadStoragePlanner`].
-    pub fn new(snapshot: DeltaQuadStorageSnapshot) -> Self {
+impl DeltaQuadsStoragePlanner {
+    /// Creates a new [`DeltaQuadsStoragePlanner`].
+    pub fn new(snapshot: DeltaQuadsStorageSnapshot) -> Self {
         Self { snapshot }
     }
 
@@ -32,8 +32,8 @@ impl DeltaQuadStoragePlanner {
         &self,
         session_state: &SessionState,
         node: &QuadPatternNode,
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
-        let mut builder = DeltaQuadStorageScanPlanBuilder::new(
+    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
+        let mut builder = DeltaQuadsStorageScanPlanBuilder::new(
             session_state.clone(),
             node.quad_pattern().clone(),
             self.snapshot.encoding().clone(),
@@ -97,7 +97,7 @@ impl DeltaQuadStoragePlanner {
 }
 
 #[async_trait]
-impl ExtensionPlanner for DeltaQuadStoragePlanner {
+impl ExtensionPlanner for DeltaQuadsStoragePlanner {
     async fn plan_extension(
         &self,
         _planner: &dyn PhysicalPlanner,
@@ -126,7 +126,7 @@ impl ExtensionPlanner for DeltaQuadStoragePlanner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delta::storage::DeltaQuadStorage;
+    use crate::delta::storage::DeltaQuadsStorage;
     use crate::index::IndexComponents;
     use datafusion::physical_plan::displayable;
     use datafusion::physical_planner::DefaultPhysicalPlanner;
@@ -146,7 +146,7 @@ mod tests {
         )
         .await;
         let planner =
-            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
+            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
             (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
@@ -164,7 +164,7 @@ mod tests {
             setup(QuadStorageEncodingName::String, vec![IndexComponents::GSPO]).await;
 
         let planner =
-            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
+            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
             (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
@@ -181,7 +181,7 @@ mod tests {
         let (session, storage, node) =
             setup(QuadStorageEncodingName::ObjectId, vec![]).await;
         let planner =
-            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
+            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
 
         assert_snapshot!(
@@ -210,7 +210,7 @@ mod tests {
         transaction.commit().await.unwrap();
 
         let planner =
-            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
+            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
 
         let mut settings = Settings::default();
@@ -251,7 +251,7 @@ mod tests {
         transaction.commit().await.unwrap();
 
         let planner =
-            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
+            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
         insta::with_settings!({filters => vec![
             (r"part-.*\.parquet", "<file>.parquet"),
@@ -296,7 +296,7 @@ mod tests {
         transaction.commit().await.unwrap();
 
         let planner =
-            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
+            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
 
         insta::with_settings!({filters => vec![
@@ -352,7 +352,7 @@ mod tests {
         transaction.commit().await.unwrap();
 
         let planner =
-            DeltaQuadStoragePlanner::new(storage.snapshot_impl().await.unwrap());
+            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
         let plan = plan_node(&planner, &node, &session).await;
 
         insta::with_settings!({filters => vec![
@@ -382,13 +382,13 @@ mod tests {
     async fn setup(
         encoding: QuadStorageEncodingName,
         indexes: Vec<IndexComponents>,
-    ) -> (SessionContext, Arc<DeltaQuadStorage>, QuadPatternNode) {
+    ) -> (SessionContext, Arc<DeltaQuadsStorage>, QuadPatternNode) {
         let mut config = SessionConfig::new().with_target_partitions(1);
         let options = config.options_mut();
         options.optimizer.enable_dynamic_filter_pushdown = true;
         options.execution.parquet.pushdown_filters = true;
 
-        let storage = Arc::new(DeltaQuadStorage::new_in_memory(encoding, indexes).await);
+        let storage = Arc::new(DeltaQuadsStorage::new_in_memory(encoding, indexes).await);
 
         let storage = Arc::clone(&storage);
         let context =
@@ -414,7 +414,7 @@ mod tests {
     }
 
     async fn plan_node(
-        planner: &DeltaQuadStoragePlanner,
+        planner: &DeltaQuadsStoragePlanner,
         node: &QuadPatternNode,
         session: &SessionContext,
     ) -> Arc<dyn ExecutionPlan> {

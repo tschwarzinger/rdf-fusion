@@ -1,5 +1,5 @@
-use crate::delta::error::DeltaQuadStorageError;
-use crate::delta::log::changeset::DeltaQuadStorageLogChangeset;
+use crate::delta::error::DeltaQuadsStorageError;
+use crate::delta::log::changeset::DeltaQuadsStorageLogChangeset;
 use crate::delta::log::operations_changeset_stream::OperationsChangesetStream;
 use crate::delta::log::{
     COL_COMMIT_VERSION, COL_OPERATION, COL_OPERATION_SEQ_ID, ComputeLogChangesetExec,
@@ -24,9 +24,9 @@ use rdf_fusion_common::AResult;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::sync::Arc;
 
-/// Represents a changeset between two versions of the [`DeltaQuadStorageLog`].
+/// Represents a changeset between two versions of the [`DeltaQuadsStorageLog`].
 ///
-/// [`DeltaQuadStorageLog`]: crate::delta::log::DeltaQuadStorageLog
+/// [`DeltaQuadsStorageLog`]: crate::delta::log::DeltaQuadsStorageLog
 #[derive(Clone)]
 pub struct EagerChangeset {
     session_context: SessionContext,
@@ -45,7 +45,7 @@ impl EagerChangeset {
         state: &SessionState,
         version_range: DeltaStorageLogVersionRange,
         operations: OperationsChangesetStream,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         partition_changeset_operations(state, version_range, operations).await
     }
 
@@ -55,7 +55,7 @@ impl EagerChangeset {
         state: &SessionState,
         new_version_range: DeltaStorageLogVersionRange,
         new_operations_plan: Arc<dyn ExecutionPlan>,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         // 1. Collect existing and new operations in-memory
         let mut all_ops = self.to_operations()?;
         let new_ops = collect(new_operations_plan, state.task_ctx()).await?;
@@ -107,7 +107,7 @@ impl EagerChangeset {
     }
 
     /// Reconstructs the original operations from the partitioned batches.
-    pub fn to_operations(&self) -> Result<Vec<RecordBatch>, DeltaQuadStorageError> {
+    pub fn to_operations(&self) -> Result<Vec<RecordBatch>, DeltaQuadsStorageError> {
         let mut result = Vec::new();
 
         self.append_category_to_ops(
@@ -144,7 +144,7 @@ impl EagerChangeset {
         ops: &mut Vec<RecordBatch>,
         batches: &[RecordBatch],
         operation: DeltaStorageLogOperation,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         if batches.is_empty() {
             return Ok(());
         }
@@ -201,7 +201,7 @@ async fn partition_changeset_operations(
     state: &SessionState,
     version_range: DeltaStorageLogVersionRange,
     operations: OperationsChangesetStream,
-) -> Result<EagerChangeset, DeltaQuadStorageError> {
+) -> Result<EagerChangeset, DeltaQuadsStorageError> {
     let operation_schema = operations.inner().schema();
 
     let quad_proj = vec![
@@ -255,7 +255,7 @@ async fn partition_changeset_operations(
         for row in 0..batch.num_rows() {
             let op = DeltaStorageLogOperation::from_stored(ops.value(row)).ok_or_else(
                 || {
-                    DeltaQuadStorageError::Other(format!(
+                    DeltaQuadsStorageError::Other(format!(
                         "Invalid operation: {}",
                         ops.value(row)
                     ))
@@ -267,7 +267,7 @@ async fn partition_changeset_operations(
                 !sub_col.is_null(row) && !pred_col.is_null(row) && !obj_col.is_null(row);
 
             let row_u64 = u64::try_from(row).map_err(|_| {
-                DeltaQuadStorageError::Other(
+                DeltaQuadsStorageError::Other(
                     "Batch size could not be converted to u64.".to_string(),
                 )
             })?;
@@ -292,13 +292,13 @@ async fn partition_changeset_operations(
                 }
                 DeltaStorageLogOperation::RemoveQuad => {
                     if !quad_valid {
-                        return Err(DeltaQuadStorageError::Corruption("Invalid remove quad operation: missing subject, predicate, or object".to_string()));
+                        return Err(DeltaQuadsStorageError::Corruption("Invalid remove quad operation: missing subject, predicate, or object".to_string()));
                     }
                     removed_quads_idx.append_value(row_u64);
                 }
                 DeltaStorageLogOperation::InsertQuad => {
                     if !quad_valid {
-                        return Err(DeltaQuadStorageError::Corruption("Invalid remove quad operation: missing subject, predicate, or object".to_string()));
+                        return Err(DeltaQuadsStorageError::Corruption("Invalid remove quad operation: missing subject, predicate, or object".to_string()));
                     }
 
                     added_quads_idx.append_value(row_u64);
@@ -416,7 +416,7 @@ fn enforce_non_nullable(
 }
 
 #[async_trait]
-impl DeltaQuadStorageLogChangeset for EagerChangeset {
+impl DeltaQuadsStorageLogChangeset for EagerChangeset {
     fn version_range(&self) -> DeltaStorageLogVersionRange {
         self.version_range
     }
@@ -424,42 +424,42 @@ impl DeltaQuadStorageLogChangeset for EagerChangeset {
     async fn cleared_graphs(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.cleared_graphs).await
     }
 
     async fn removed_quads(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.removed_quads).await
     }
 
     async fn added_quads(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.added_quads).await
     }
 
     async fn added_named_graphs(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.added_named_graphs).await
     }
 
     async fn dropped_named_graphs(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.dropped_named_graphs).await
     }
 
     async fn as_eager_changeset(
         &self,
         _state: &SessionState,
-    ) -> Result<EagerChangeset, DeltaQuadStorageError> {
+    ) -> Result<EagerChangeset, DeltaQuadsStorageError> {
         Ok(self.clone())
     }
 
@@ -495,7 +495,7 @@ impl DeltaQuadStorageLogChangeset for EagerChangeset {
 async fn create_result(
     session_context: &SessionContext,
     batches: &[RecordBatch],
-) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
     if batches.is_empty() {
         return Ok(None);
     }

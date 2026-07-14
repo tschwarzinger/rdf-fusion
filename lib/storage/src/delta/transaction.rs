@@ -1,10 +1,10 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::{
     COL_COMMIT_VERSION, COL_OPERATION, COL_OPERATION_SEQ_ID, DeltaStorageLogOperation,
     DeltaStorageLogVersionRange,
 };
-use crate::delta::snapshot::DeltaQuadStorageSnapshot;
-use crate::delta::storage::DeltaQuadStorage;
+use crate::delta::snapshot::DeltaQuadsStorageSnapshot;
+use crate::delta::storage::DeltaQuadsStorage;
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
@@ -36,10 +36,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
 use tracing::info;
 
-/// A transaction on a [`DeltaQuadStorage`].
-pub struct DeltaQuadStorageTransaction {
+/// A transaction on a [`DeltaQuadsStorage`].
+pub struct DeltaQuadsStorageTransaction {
     /// The storage
-    storage: Arc<DeltaQuadStorage>,
+    storage: Arc<DeltaQuadsStorage>,
     /// The session context.
     state: SessionState,
     /// The target table of the transaction.
@@ -47,7 +47,7 @@ pub struct DeltaQuadStorageTransaction {
     /// The schema of the table.
     table_schema: SchemaRef,
     /// The base snapshot of the transaction.
-    base_snapshot: Arc<DeltaQuadStorageSnapshot>,
+    base_snapshot: Arc<DeltaQuadsStorageSnapshot>,
     /// The individual parts of the transaction. When the transaction is executed, all parts are
     /// evaluated and their results are written to disk. Then, the resulting files are appended to
     /// the log table.
@@ -57,14 +57,14 @@ pub struct DeltaQuadStorageTransaction {
     may_depend_on_database_state: AtomicBool,
 }
 
-impl DeltaQuadStorageTransaction {
-    /// Creates a new [`DeltaQuadStorageTransaction`].
+impl DeltaQuadsStorageTransaction {
+    /// Creates a new [`DeltaQuadsStorageTransaction`].
     pub fn new(
-        storage: Arc<DeltaQuadStorage>,
+        storage: Arc<DeltaQuadsStorage>,
         state: SessionState,
         table: Arc<RwLock<DeltaTable>>,
         table_schema: SchemaRef,
-        base_snapshot: Arc<DeltaQuadStorageSnapshot>,
+        base_snapshot: Arc<DeltaQuadsStorageSnapshot>,
     ) -> Self {
         Self {
             storage,
@@ -83,7 +83,7 @@ impl DeltaQuadStorageTransaction {
     pub async fn append_quads(
         &self,
         quads: DataFrame,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         self.append_quads_with_operation(quads, DeltaStorageLogOperation::InsertQuad)
             .await
     }
@@ -94,7 +94,7 @@ impl DeltaQuadStorageTransaction {
     pub async fn remove_quads(
         &self,
         quads: DataFrame,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         self.append_quads_with_operation(quads, DeltaStorageLogOperation::RemoveQuad)
             .await
     }
@@ -110,7 +110,7 @@ impl DeltaQuadStorageTransaction {
         &self,
         quads: DataFrame,
         operation: DeltaStorageLogOperation,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         validate_data_frame_schema(&self.table_schema, quads.schema().inner())?;
 
         let mut parts = self.parts.write().await;
@@ -125,14 +125,14 @@ impl DeltaQuadStorageTransaction {
         fn validate_data_frame_schema(
             output_schema: &SchemaRef,
             actual: &SchemaRef,
-        ) -> Result<(), DeltaQuadStorageError> {
+        ) -> Result<(), DeltaQuadsStorageError> {
             let expected_stream_schema = output_schema
                 .project(&[2, 3, 4, 5])
                 .expect("Valid projection");
 
             // Don't use equality because the expected_stream_schema is nullable
             if !expected_stream_schema.equivalent_names_and_types(actual.as_ref()) {
-                return Err(DeltaQuadStorageError::InvalidSchema(Arc::clone(actual)));
+                return Err(DeltaQuadsStorageError::InvalidSchema(Arc::clone(actual)));
             }
 
             Ok(())
@@ -166,7 +166,7 @@ impl DeltaQuadStorageTransaction {
         &self,
         operation: DeltaStorageLogOperation,
         graph: ScalarValue,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         let (index, _) = self
             .table_schema
             .fields()
@@ -197,7 +197,7 @@ impl DeltaQuadStorageTransaction {
         &self,
         operation: DeltaStorageLogOperation,
         graphs: DataFrame,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         let mut parts = self.parts.write().await;
         let seq_id = parts.len() as i64;
         let null_lit = self.storage.storage_encoding().create_null_scalar()?;
@@ -220,8 +220,8 @@ impl DeltaQuadStorageTransaction {
 
     /// Executes the transaction, writing the commits to the storage backend and changing the table
     /// state.
-    pub async fn execute(self) -> Result<(), DeltaQuadStorageError> {
-        let DeltaQuadStorageTransaction {
+    pub async fn execute(self) -> Result<(), DeltaQuadsStorageError> {
+        let DeltaQuadsStorageTransaction {
             storage: _,
             base_snapshot: _,
             parts,
@@ -316,7 +316,7 @@ impl DeltaQuadStorageTransaction {
                 .all(|(f1, f2)| f1.name() == f2.name());
 
         if !names_match {
-            return Err(DeltaQuadStorageError::InvalidSchema(Arc::clone(
+            return Err(DeltaQuadsStorageError::InvalidSchema(Arc::clone(
                 quads_schema.inner(),
             ))
             .into());
@@ -490,14 +490,14 @@ impl DeltaQuadStorageTransaction {
 /// lock will not be automatically promoted to a write lock.
 async fn create_record_batch_writer(
     table: &RwLock<DeltaTable>,
-) -> Result<RecordBatchWriter, DeltaQuadStorageError> {
+) -> Result<RecordBatchWriter, DeltaQuadsStorageError> {
     let table = table.read().await;
     let writer = RecordBatchWriter::for_table(&table)?;
     Ok(writer)
 }
 
 #[async_trait]
-impl QuadStorageTransaction for DeltaQuadStorageTransaction {
+impl QuadStorageTransaction for DeltaQuadsStorageTransaction {
     async fn snapshot(&self) -> Result<Arc<dyn QuadStorageSnapshot>, StorageError> {
         self.may_depend_on_database_state
             .store(true, Ordering::Relaxed);
@@ -641,7 +641,7 @@ impl QuadStorageTransaction for DeltaQuadStorageTransaction {
     }
 }
 
-impl Debug for DeltaQuadStorageTransaction {
+impl Debug for DeltaQuadsStorageTransaction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeltaStorageLogTransaction")
             .field("table", &self.table)

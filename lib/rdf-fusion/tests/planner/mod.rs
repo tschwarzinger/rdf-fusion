@@ -5,7 +5,7 @@ use rdf_fusion::store::Store;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_execution::sparql::QueryExplanation;
-use rdf_fusion_storage::delta::DeltaQuadStorage;
+use rdf_fusion_storage::delta::DeltaQuadsStorage;
 use rdf_fusion_storage::index::IndexComponents;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::sync::Arc;
@@ -29,9 +29,9 @@ async fn assert_query_explanation(
     settings.bind(move || assert(explanation));
 }
 
-/// Helper function to create an in-memory Delta-Lake store loaded with specific quads.
+/// Helper function to create an in-memory DeltaQuads store loaded with specific quads.
 async fn setup_store(quads: Vec<Quad>) -> Store {
-    let storage = DeltaQuadStorage::new_in_memory(
+    let storage = DeltaQuadsStorage::new_in_memory(
         QuadStorageEncodingName::ObjectId,
         vec![IndexComponents::GPOS],
     )

@@ -46,12 +46,12 @@ impl Display for BenchmarkStorageConfig {
 pub fn benchmark_storage_configs() -> Vec<BenchmarkStorageConfig> {
     vec![
         BenchmarkStorageConfig {
-            storage_type: BenchQuadStorageTypeArg::Delta,
+            storage_type: BenchQuadStorageTypeArg::DeltaQuads,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::ObjectId,
         },
         BenchmarkStorageConfig {
-            storage_type: BenchQuadStorageTypeArg::Delta,
+            storage_type: BenchQuadStorageTypeArg::DeltaQuads,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::String,
         },

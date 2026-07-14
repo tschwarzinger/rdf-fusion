@@ -15,7 +15,7 @@ use object_store::aws::AmazonS3Builder;
 use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::{RdfFusionContext, RdfFusionContextBuilder};
-use rdf_fusion::storage::delta::{DeltaQuadStorageBuilder, LoadMode};
+use rdf_fusion::storage::delta::{DeltaQuadsStorageBuilder, LoadMode};
 use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::store::Store;
 use rdf_fusion_extensions::storage::QuadStorage;
@@ -178,7 +178,7 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
     Ok(Store::new(context))
 }
 
-/// Helper to create a `DeltaQuadStorage` instance.
+/// Helper to create a `DeltaQuadsStorage` instance.
 async fn create_delta_storage(
     location: &Url,
     encoding: QuadStorageEncodingName,
@@ -204,7 +204,7 @@ async fn create_delta_storage(
         .build();
 
     Ok(Arc::new(
-        DeltaQuadStorageBuilder::new()
+        DeltaQuadsStorageBuilder::new()
             .with_log_store(log_store)
             .with_load_mode(LoadMode::Load(Box::new(loading_state)))
             .with_encoding(encoding)
@@ -334,13 +334,11 @@ fn register_s3_store(
         .domain()
         .context("The S3 URL does not contain a domain")?;
 
-    // Extract the bucket name from the s3_domain
-    // [bucket].[endpoint]
-    let s3_bucket_index = s3_domain
-        .find(".")
-        .context("The S3 doamin does not contain a bucket name")?;
-    let s3_bucket = &s3_domain[..s3_bucket_index];
-    let s3_endpoint = &s3_domain[s3_bucket_index + 1..];
+    let (s3_bucket, s3_endpoint) = if let Some(index) = s3_domain.find('.') {
+        (&s3_domain[..index], Some(&s3_domain[index + 1..]))
+    } else {
+        (s3_domain, None)
+    };
 
     let client_options = ClientOptions::new()
         .with_timeout(Duration::from_secs(15 * 60))
@@ -354,12 +352,19 @@ fn register_s3_store(
         warn!("AWS_SECRET_ACCESS_KEY not set, using default credentials")
     }
 
-    let s3_builder = AmazonS3Builder::from_env()
+    let mut s3_builder = AmazonS3Builder::from_env()
         .with_bucket_name(s3_bucket)
-        .with_endpoint(format!("https://{s3_endpoint}"))
-        .with_client_options(client_options)
-        .build();
-    if let Ok(s3) = s3_builder {
+        .with_client_options(client_options);
+
+    if s3_bucket.ends_with("--x-s3") || s3_bucket.ends_with("--xa-s3") {
+        s3_builder = s3_builder.with_s3_express(true);
+    }
+
+    if let Some(endpoint) = s3_endpoint {
+        s3_builder = s3_builder.with_endpoint(format!("https://{endpoint}"));
+    }
+
+    if let Ok(s3) = s3_builder.build() {
         registry.register_store(&s3_url, Arc::new(s3));
     } else {
         warn!(

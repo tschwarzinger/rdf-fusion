@@ -13,8 +13,8 @@ use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::DeltaQuadStorage;
-use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion_storage::delta::DeltaQuadsStorage;
+use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::index::IndexComponents;
 use std::sync::Arc;
 use url::Url;
@@ -26,7 +26,7 @@ async fn test_reload_storage_object_id() {
     // 1. Create and populate storage
     {
         let storage = Arc::new(
-            DeltaQuadStorageBuilder::new()
+            DeltaQuadsStorageBuilder::new()
                 .with_log_store(Arc::clone(&log_store))
                 .with_encoding(QuadStorageEncodingName::ObjectId)
                 .build()
@@ -47,7 +47,7 @@ async fn test_reload_storage_object_id() {
     // 2. Reload and verify
     {
         let ctx = SessionContext::new();
-        let storage = DeltaQuadStorage::try_load(
+        let storage = DeltaQuadsStorage::try_load(
             &ctx.state(),
             &RdfFusionOptions::default(),
             Arc::clone(&log_store),
@@ -68,7 +68,7 @@ async fn test_reload_storage_plain_term() {
     // 1. Create and populate storage
     {
         let storage = Arc::new(
-            DeltaQuadStorageBuilder::new()
+            DeltaQuadsStorageBuilder::new()
                 .with_log_store(Arc::clone(&log_store))
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
                 .build()
@@ -81,7 +81,7 @@ async fn test_reload_storage_plain_term() {
 
     // 2. Reload and verify
     {
-        let storage = DeltaQuadStorage::try_load(
+        let storage = DeltaQuadsStorage::try_load(
             &session,
             &RdfFusionOptions::default(),
             Arc::clone(&log_store),
@@ -101,7 +101,7 @@ async fn test_reload_storage_with_index_and_optimize() {
     // 1. Create storage with indexes
     {
         let storage = Arc::new(
-            DeltaQuadStorageBuilder::new()
+            DeltaQuadsStorageBuilder::new()
                 .with_log_store(Arc::clone(&log_store))
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
                 .with_indexes(vec![IndexComponents::GSPO])
@@ -122,7 +122,7 @@ async fn test_reload_storage_with_index_and_optimize() {
     // 2. Reload, add more data, and optimize again
     {
         let storage = Arc::new(
-            DeltaQuadStorage::try_load(
+            DeltaQuadsStorage::try_load(
                 &session,
                 &RdfFusionOptions::default(),
                 Arc::clone(&log_store),
@@ -150,7 +150,7 @@ async fn test_load_storage_object_id() {
     // 1. Create and populate storage
     {
         let storage = Arc::new(
-            DeltaQuadStorageBuilder::new()
+            DeltaQuadsStorageBuilder::new()
                 .with_log_store(Arc::clone(&log_store))
                 .with_encoding(QuadStorageEncodingName::ObjectId)
                 .build()
@@ -170,7 +170,7 @@ async fn test_load_storage_object_id() {
 
     // 2. Reload and verify
     {
-        let storage = DeltaQuadStorage::try_load(
+        let storage = DeltaQuadsStorage::try_load(
             &session,
             &RdfFusionOptions::default(),
             Arc::clone(&log_store),
@@ -197,7 +197,7 @@ async fn test_concurrent_dictionary_inserts() {
     )
     .unwrap();
     let storage_1 = Arc::new(
-        DeltaQuadStorageBuilder::new()
+        DeltaQuadsStorageBuilder::new()
             .with_log_store(log_store_1)
             .with_encoding(QuadStorageEncodingName::ObjectId)
             .build()
@@ -224,7 +224,7 @@ async fn test_concurrent_dictionary_inserts() {
             .unwrap();
             let ctx = SessionContext::new();
             let storage = Arc::new(
-                DeltaQuadStorage::try_load(
+                DeltaQuadsStorage::try_load(
                     &ctx.state(),
                     &RdfFusionOptions::default(),
                     Arc::clone(&log_store),
@@ -259,10 +259,13 @@ async fn test_concurrent_dictionary_inserts() {
     )
     .unwrap();
     let ctx = SessionContext::new();
-    let storage =
-        DeltaQuadStorage::try_load(&ctx.state(), &RdfFusionOptions::default(), log_store)
-            .await
-            .unwrap();
+    let storage = DeltaQuadsStorage::try_load(
+        &ctx.state(),
+        &RdfFusionOptions::default(),
+        log_store,
+    )
+    .await
+    .unwrap();
 
     let mapping = storage.delta_object_id_mapping().unwrap();
     mapping.flush().await.unwrap();

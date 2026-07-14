@@ -14,7 +14,7 @@ fn test_cli_dump_spiderman() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "dump",
@@ -44,7 +44,7 @@ fn test_cli_dump_spiderman_graph() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "dump",
@@ -76,7 +76,7 @@ fn test_cli_dump_spiderman_sorted() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "dump",
@@ -104,7 +104,7 @@ fn test_cli_dump_spiderman_sorted_osp() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "dump",
@@ -132,7 +132,7 @@ fn test_cli_dump_spiderman_sorted_native() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "dump",
@@ -160,7 +160,7 @@ fn test_cli_dump_spiderman_sorted_native_osp() {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "dump",
@@ -184,7 +184,7 @@ fn setup_delta_lake() -> (TempDir, String) {
     let mut cmd = Command::cargo_bin("rdf-fusion").unwrap();
     cmd.args([
         "--storage-type",
-        "delta-lake",
+        "delta-quads",
         "--location",
         &location,
         "load",

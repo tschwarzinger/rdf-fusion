@@ -10,7 +10,7 @@ fn temp_db_path(name: &str) -> String {
 
 #[test]
 fn test_cli_load_delta() {
-    run_cli_load_and_query_test("test_cli_load_delta_lake", "delta-lake");
+    run_cli_load_and_query_test("test_cli_load_delta_lake", "delta-quads");
 }
 
 #[test]

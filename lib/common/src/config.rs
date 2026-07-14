@@ -219,7 +219,7 @@ impl ExtensionOptions for RdfFusionOptions {
             ConfigEntry {
                 key: format!("{}.storage.delta.assume_single_node", Self::PREFIX),
                 value: Some(self.storage.delta.assume_single_node.to_string()),
-                description: "Whether the node can assume that no other node is currently working on the DeltaQuads database.",
+                description: "Whether the node can assume that no other node is currently working on the DeltaQuadss database.",
             },
             ConfigEntry {
                 key: format!("{}.storage.parquet.sort_order", Self::PREFIX),

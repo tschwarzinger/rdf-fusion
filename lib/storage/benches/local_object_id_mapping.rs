@@ -7,7 +7,7 @@ use rdf_fusion_encoding::object_id::ObjectIdDictionary;
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use rdf_fusion_encoding::typed_family::{TypedFamilyEncoding, TypedFamilyEncodingRef};
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use std::hint::black_box;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -122,7 +122,7 @@ criterion_group!(
 criterion_main!(benches);
 
 async fn create_mapping() -> Arc<dyn ObjectIdDictionary> {
-    let storage = DeltaQuadStorageBuilder::new()
+    let storage = DeltaQuadsStorageBuilder::new()
         .with_encoding(QuadStorageEncodingName::ObjectId)
         .build()
         .await

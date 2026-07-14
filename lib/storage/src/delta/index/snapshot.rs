@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// Note that we assume that no cleanup job (i.e., vacuuming) is cleaning up the files that are
 /// referenced by this snapshot.
 #[derive(Debug, Clone)]
-pub struct DeltaQuadStorageIndexSnapshot {
+pub struct DeltaQuadsStorageIndexSnapshot {
     /// The encoding used for storing quads.
     storage_encoding: QuadStorageEncoding,
     /// The log store of the index table.
@@ -33,8 +33,8 @@ pub struct DeltaQuadStorageIndexSnapshot {
     log_version: u64,
 }
 
-impl DeltaQuadStorageIndexSnapshot {
-    /// Creates a new [`DeltaQuadStorageIndexSnapshot`]. The snapshot and the log store are
+impl DeltaQuadsStorageIndexSnapshot {
+    /// Creates a new [`DeltaQuadsStorageIndexSnapshot`]. The snapshot and the log store are
     /// expected to belong to the same Delta table.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -139,8 +139,8 @@ impl DeltaQuadStorageIndexSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delta::DeltaQuadStorage;
-    use crate::delta::index::DeltaQuadStorageIndex;
+    use crate::delta::DeltaQuadsStorage;
+    use crate::delta::index::DeltaQuadsStorageIndex;
     use crate::index::IndexComponents;
     use datafusion::prelude::{SessionConfig, SessionContext};
     use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
@@ -263,7 +263,7 @@ mod tests {
             Arc::new(InMemory::new()),
         );
 
-        let storage = DeltaQuadStorage::new_in_memory(
+        let storage = DeltaQuadsStorage::new_in_memory(
             QuadStorageEncodingName::PlainTerm,
             vec![IndexComponents::GSPO],
         )
@@ -303,7 +303,7 @@ mod tests {
         assert_quad_count(session_context, index, 2).await;
     }
 
-    async fn create_test_index(components: IndexComponents) -> DeltaQuadStorageIndex {
+    async fn create_test_index(components: IndexComponents) -> DeltaQuadsStorageIndex {
         let memory_store = Arc::new(InMemory::new());
         let url = Url::parse("memory://").unwrap();
         let log_store = logstore_with(
@@ -312,7 +312,7 @@ mod tests {
             StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
         )
         .unwrap();
-        DeltaQuadStorageIndex::try_new(
+        DeltaQuadsStorageIndex::try_new(
             QuadStorageEncoding::PlainTerm,
             log_store,
             components,
@@ -339,7 +339,7 @@ mod tests {
 
     async fn assert_quad_count(
         session_context: SessionContext,
-        index: Arc<DeltaQuadStorageIndex>,
+        index: Arc<DeltaQuadsStorageIndex>,
         expected_count: usize,
     ) {
         let index = index.snapshot().await.unwrap();

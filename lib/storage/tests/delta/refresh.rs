@@ -4,7 +4,7 @@ use crate::delta::{create_test_log_store, populate_storage};
 use datafusion::execution::SessionStateBuilder;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::{DeltaQuadStorage, DeltaQuadStorageBuilder, LoadMode};
+use rdf_fusion_storage::delta::{DeltaQuadsStorage, DeltaQuadsStorageBuilder, LoadMode};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -89,11 +89,11 @@ async fn test_disabled_refresh() {
 /// Helper function to create two connected storage nodes sharing a log store.
 async fn setup_test_storages(
     max_age_second_storage: Option<Duration>,
-) -> (Arc<DeltaQuadStorage>, Arc<DeltaQuadStorage>) {
+) -> (Arc<DeltaQuadsStorage>, Arc<DeltaQuadsStorage>) {
     let log_store = create_test_log_store();
 
     let storage1 = Arc::new(
-        DeltaQuadStorageBuilder::new()
+        DeltaQuadsStorageBuilder::new()
             .with_log_store(Arc::clone(&log_store))
             .with_encoding(QuadStorageEncodingName::PlainTerm)
             .build()
@@ -102,7 +102,7 @@ async fn setup_test_storages(
     );
 
     let storage2 = Arc::new(
-        DeltaQuadStorageBuilder::new()
+        DeltaQuadsStorageBuilder::new()
             .with_log_store(Arc::clone(&log_store))
             .with_encoding(QuadStorageEncodingName::PlainTerm)
             .with_load_mode(LoadMode::Load(Box::new(SessionStateBuilder::new().build())))

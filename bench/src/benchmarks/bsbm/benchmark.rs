@@ -188,7 +188,7 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
         print_info: bool,
     ) -> anyhow::Result<Store> {
         match &ctx.parent().options().storage_type {
-            BenchQuadStorageTypeArg::Delta => {
+            BenchQuadStorageTypeArg::DeltaQuads => {
                 self.prepare_delta_store(ctx, print_info).await
             }
             BenchQuadStorageTypeArg::Parquet => {

@@ -22,7 +22,7 @@ use object_store::memory::InMemory;
 use rdf_fusion::common::{GraphName, NamedNode};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 use rdf_fusion::store::Store;
 use std::sync::Arc;
@@ -128,7 +128,7 @@ impl W3CSparqlTestSuiteBuilder {
                     )
                     .unwrap();
 
-                    let delta_storage = DeltaQuadStorageBuilder::new()
+                    let delta_storage = DeltaQuadsStorageBuilder::new()
                         .with_encoding(QuadStorageEncodingName::ObjectId)
                         .with_log_store(log_store)
                         .build()

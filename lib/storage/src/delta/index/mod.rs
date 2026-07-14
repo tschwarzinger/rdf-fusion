@@ -2,10 +2,10 @@ mod snapshot;
 mod update;
 mod validation;
 
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::index::update::DeltaStorageQuadIndexUpdater;
 use crate::delta::index::validation::validate_index;
-use crate::delta::log::DeltaQuadStorageLogChangesetRef;
+use crate::delta::log::DeltaQuadsStorageLogChangesetRef;
 use crate::index::IndexComponents;
 use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use datafusion::execution::SessionState;
@@ -27,7 +27,7 @@ use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{BlankNodeMatchingMode, NamedNodePattern, TermPattern};
 use rdf_fusion_encoding::QuadStorageEncoding;
-pub use snapshot::DeltaQuadStorageIndexSnapshot;
+pub use snapshot::DeltaQuadsStorageIndexSnapshot;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -76,7 +76,7 @@ impl IndexTableState {
 /// Represents a mutable index for the Delta storage.
 ///
 /// An index is a Delta table that stores a full snapshot of the quads at a specific log version.
-pub struct DeltaQuadStorageIndex {
+pub struct DeltaQuadsStorageIndex {
     /// The encodings used for storing quads
     storage_encoding: QuadStorageEncoding,
     /// The underlying delta table (guarded for concurrent mutable updates).
@@ -85,19 +85,19 @@ pub struct DeltaQuadStorageIndex {
     components: IndexComponents,
 }
 
-impl DeltaQuadStorageIndex {
+impl DeltaQuadsStorageIndex {
     /// The application id used to store the log version in delta transactions.
     const APP_ID: &'static str = "rdf_fusion.index_updater";
 
-    /// Tries to create a new [`DeltaQuadStorageIndex`].
+    /// Tries to create a new [`DeltaQuadsStorageIndex`].
     pub async fn try_new(
         storage_encoding: QuadStorageEncoding,
         log_store: LogStoreRef,
         components: IndexComponents,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let data_type = storage_encoding.term_type().clone();
         let delta_data_type = DeltaDataType::try_from_arrow(&data_type)
-            .map_err(|_| DeltaQuadStorageError::UnsupportedArrowType(data_type))?;
+            .map_err(|_| DeltaQuadsStorageError::UnsupportedArrowType(data_type))?;
 
         let delta_columns = vec![
             StructField::new(COL_GRAPH, delta_data_type.clone(), true),
@@ -141,7 +141,7 @@ impl DeltaQuadStorageIndex {
         storage_encoding: QuadStorageEncoding,
         log_store: LogStoreRef,
         components: IndexComponents,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let mut table =
             DeltaTable::new(Arc::clone(&log_store), DeltaTableConfig::default());
         table.load().await?;
@@ -195,9 +195,9 @@ impl DeltaQuadStorageIndex {
     /// another process (vacuuming).
     pub async fn snapshot(
         &self,
-    ) -> Result<DeltaQuadStorageIndexSnapshot, DeltaQuadStorageError> {
+    ) -> Result<DeltaQuadsStorageIndexSnapshot, DeltaQuadsStorageError> {
         let guard = self.table.read().await;
-        Ok(DeltaQuadStorageIndexSnapshot::new(
+        Ok(DeltaQuadsStorageIndexSnapshot::new(
             self.storage_encoding.clone(),
             guard.table.snapshot()?.snapshot().clone(),
             guard.table.log_store(),
@@ -213,8 +213,8 @@ impl DeltaQuadStorageIndex {
     pub async fn update(
         &self,
         state: &SessionState,
-        changeset: DeltaQuadStorageLogChangesetRef,
-    ) -> Result<(), DeltaQuadStorageError> {
+        changeset: DeltaQuadsStorageLogChangesetRef,
+    ) -> Result<(), DeltaQuadsStorageError> {
         let updater = DeltaStorageQuadIndexUpdater::new(
             self.snapshot().await?,
             self.table.read().await.table.clone(),
@@ -234,7 +234,7 @@ impl DeltaQuadStorageIndex {
     pub async fn validate(
         &self,
         state: &SessionState,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         let snapshot = self.snapshot().await?;
         validate_index(state, &snapshot).await
     }
@@ -244,7 +244,7 @@ impl DeltaQuadStorageIndex {
         &self,
         new_table: DeltaTable,
         log_transaction_version: u64,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         let mut table_lock = self.table.write().await;
         let snapshot = new_table.snapshot()?.snapshot().clone();
         let active_files = snapshot
@@ -292,21 +292,22 @@ impl DeltaQuadStorageIndex {
         let mut writer_properties_builder = WriterProperties::builder()
             .set_max_row_group_row_count(Some(ROW_GROUP_ROW_COUNT))
             .set_data_page_row_count_limit(PAGE_ROW_COUNT)
-            .set_bloom_filter_enabled(false)
+            .set_bloom_filter_enabled(true)
             .set_column_bloom_filter_enabled(last_component.clone(), true)
             .set_sorting_columns(Some(sorting_columns))
-            .set_compression(Compression::ZSTD(ZstdLevel::default()))
             .set_column_dictionary_enabled(last_component.clone(), false)
             .set_statistics_enabled(EnabledStatistics::Page);
 
         if self.storage_encoding.term_type().is_primitive() {
             writer_properties_builder = writer_properties_builder
-                .set_column_encoding(last_component, Encoding::PLAIN);
+                .set_column_encoding(last_component, Encoding::PLAIN)
+                .set_compression(Compression::UNCOMPRESSED)
         } else {
             writer_properties_builder = writer_properties_builder
                 .set_encoding(Encoding::DELTA_LENGTH_BYTE_ARRAY) // Good for common prefixes
                 .set_statistics_truncate_length(Some(256)) // IRIs might be long
                 .set_column_index_truncate_length(Some(256)) // IRIs might be long;
+                .set_compression(Compression::ZSTD(ZstdLevel::default()))
         }
 
         writer_properties_builder.build()
@@ -318,7 +319,7 @@ async fn load_parquet_metadata_for_files(
     active_files: &[Add],
     existing_meta: Option<PreloadedParquetMetadata>,
     existing_bloom: Option<PreloadedBloomFilters>,
-) -> Result<(PreloadedParquetMetadata, PreloadedBloomFilters), DeltaQuadStorageError> {
+) -> Result<(PreloadedParquetMetadata, PreloadedBloomFilters), DeltaQuadsStorageError> {
     let object_store = log_store.object_store(None);
     let base_path = Path::from(log_store.config().location().path());
     let new_meta = PreloadedParquetMetadata::new();
@@ -342,7 +343,7 @@ async fn load_parquet_metadata_for_files(
         let mut object_meta = object_store
             .head(&relative_path)
             .await
-            .map_err(|e| DeltaQuadStorageError::Other(e.to_string()))?;
+            .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
 
         let (parquet_meta, bloom_filters) =
             crate::parquet::reader::load_parquet_metadata_and_bloom_filters(
@@ -351,7 +352,7 @@ async fn load_parquet_metadata_for_files(
                 object_meta.clone(),
             )
             .await
-            .map_err(|e| DeltaQuadStorageError::Other(e.to_string()))?;
+            .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
 
         object_meta.location = absolute_path.clone();
 

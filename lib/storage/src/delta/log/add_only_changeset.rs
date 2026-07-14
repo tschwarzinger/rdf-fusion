@@ -1,8 +1,8 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::operation_log_file::OperationLogFile;
 use crate::delta::log::operations_changeset_stream::OperationsChangesetStream;
 use crate::delta::log::{
-    COL_OPERATION, DeltaQuadStorageLogChangeset, DeltaStorageLogOperation,
+    COL_OPERATION, DeltaQuadsStorageLogChangeset, DeltaStorageLogOperation,
     DeltaStorageLogVersionRange, EagerChangeset,
 };
 use crate::exec::VerifyNotNullExec;
@@ -30,7 +30,7 @@ use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT
 use std::mem::size_of;
 use std::sync::Arc;
 
-/// This is an optimized [`DeltaQuadStorageLogChangeset`] for changesets that only add quads into
+/// This is an optimized [`DeltaQuadsStorageLogChangeset`] for changesets that only add quads into
 /// the database.
 pub struct LazyInsertionOnlyChangeset {
     table_schema: SchemaRef,
@@ -61,7 +61,7 @@ impl LazyInsertionOnlyChangeset {
     fn scan_all_files(
         &self,
         projection_indices: Vec<usize>,
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadStorageError> {
+    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
         let mut file_group = Vec::new();
         for file in &self.files {
             let partitioned_file =
@@ -88,7 +88,7 @@ impl LazyInsertionOnlyChangeset {
 }
 
 #[async_trait]
-impl DeltaQuadStorageLogChangeset for LazyInsertionOnlyChangeset {
+impl DeltaQuadsStorageLogChangeset for LazyInsertionOnlyChangeset {
     fn version_range(&self) -> DeltaStorageLogVersionRange {
         self.version_range
     }
@@ -96,21 +96,21 @@ impl DeltaQuadStorageLogChangeset for LazyInsertionOnlyChangeset {
     async fn cleared_graphs(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         Ok(None)
     }
 
     async fn removed_quads(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         Ok(None)
     }
 
     async fn added_quads(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         let scan_plan = self.scan_all_files(vec![2, 3, 4, 5])?;
 
         let group_by = PhysicalGroupBy::new_single(vec![
@@ -148,7 +148,7 @@ impl DeltaQuadStorageLogChangeset for LazyInsertionOnlyChangeset {
     async fn added_named_graphs(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         let scan_plan = self.scan_all_files(vec![2])?;
         let filtered = FilterExec::try_new(
             is_not_null(col(COL_GRAPH, scan_plan.schema().as_ref())?)?,
@@ -176,14 +176,14 @@ impl DeltaQuadStorageLogChangeset for LazyInsertionOnlyChangeset {
     async fn dropped_named_graphs(
         &self,
         _state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         Ok(None)
     }
 
     async fn as_eager_changeset(
         &self,
         state: &SessionState,
-    ) -> Result<EagerChangeset, DeltaQuadStorageError> {
+    ) -> Result<EagerChangeset, DeltaQuadsStorageError> {
         let operations = self
             .added_quads(state)
             .await?
@@ -227,7 +227,7 @@ impl DeltaQuadStorageLogChangeset for LazyInsertionOnlyChangeset {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delta::DeltaQuadStorageBuilder;
+    use crate::delta::DeltaQuadsStorageBuilder;
     use datafusion::physical_plan::collect;
     use rdf_fusion_common::{GraphName, NamedNode, Quad};
     use rdf_fusion_encoding::quads_to_plain_term_dataframe;
@@ -238,7 +238,7 @@ mod tests {
     #[tokio::test]
     async fn test_as_eager_changeset_conversion() -> Result<(), Box<dyn std::error::Error>>
     {
-        let storage = Arc::new(DeltaQuadStorageBuilder::new().build().await?);
+        let storage = Arc::new(DeltaQuadsStorageBuilder::new().build().await?);
         let context =
             RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
                 .build()?;

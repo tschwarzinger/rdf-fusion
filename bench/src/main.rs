@@ -50,7 +50,7 @@ pub struct RdfFusionBenchArgs {
     #[arg(long, default_value = "on-disk")]
     pub storage_location: QuadStorageLocationArg,
     /// Defines how to store the database.
-    #[arg(long, default_value = "delta")]
+    #[arg(long, default_value = "delta-quads")]
     pub storage_type: BenchQuadStorageTypeArg,
     /// Defines which encoding to use for the database.
     #[arg(long, default_value = "object-id")]

@@ -1,4 +1,4 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::objectids::{DeltaObjectIdClaimer, ObjectIdClaimerPutMode};
 use crate::local_object_ids::{LocalObjectIdDictionary, LocalObjectIdTransaction};
 use async_trait::async_trait;
@@ -82,7 +82,7 @@ impl DeltaObjectIdDictionary {
     pub async fn try_new_at_location(
         options: &RdfFusionOptions,
         log_store: LogStoreRef,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let delta_columns = vec![
             StructField::new("id", DeltaDataType::LONG, false),
             StructField::new(
@@ -132,7 +132,7 @@ impl DeltaObjectIdDictionary {
     pub async fn try_load(
         session: &SessionState,
         log_store: LogStoreRef,
-    ) -> Result<Self, DeltaQuadStorageError> {
+    ) -> Result<Self, DeltaQuadsStorageError> {
         let mut table =
             DeltaTable::new(Arc::clone(&log_store), DeltaTableConfig::default());
         table.load().await?;
@@ -186,7 +186,7 @@ impl DeltaObjectIdDictionary {
         Arc::clone(&self.local_mapping)
     }
 
-    pub async fn update_local_dictionary(&self) -> Result<(), DeltaQuadStorageError> {
+    pub async fn update_local_dictionary(&self) -> Result<(), DeltaQuadsStorageError> {
         let mut table = self.table.write().await;
         table.load().await?;
 
@@ -227,7 +227,7 @@ impl DeltaObjectIdDictionary {
     }
 
     /// Flushes the object id table to disk.
-    pub async fn flush(&self) -> Result<(), DeltaQuadStorageError> {
+    pub async fn flush(&self) -> Result<(), DeltaQuadsStorageError> {
         Ok(())
     }
 
@@ -236,7 +236,7 @@ impl DeltaObjectIdDictionary {
     pub async fn commit_dictionary_transaction_to_delta(
         &self,
         txn: &LocalObjectIdTransaction,
-    ) -> Result<bool, DeltaQuadStorageError> {
+    ) -> Result<bool, DeltaQuadsStorageError> {
         let pending_count = txn.pending_ids().len();
         if pending_count == 0 {
             return Ok(true);

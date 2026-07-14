@@ -50,7 +50,7 @@ pub enum QuadStorageLocationArg {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
 pub enum BenchQuadStorageTypeArg {
     /// Uses a storage based on Delta Lake.
-    Delta,
+    DeltaQuads,
     /// The storage type is a single parquet file.
     Parquet,
 }
@@ -213,7 +213,7 @@ impl Default for BenchmarkingConfig {
             verbose_results: false,
             memory_limit: None,
             storage_location: QuadStorageLocationArg::OnDisk,
-            storage_type: BenchQuadStorageTypeArg::Delta,
+            storage_type: BenchQuadStorageTypeArg::DeltaQuads,
             storage_encoding: QuadStorageEncodingName::ObjectId,
             max_parallel_tasks: 1,
             results_postfix: None,

@@ -4,7 +4,7 @@ use anyhow::Result;
 use rdf_fusion::common::RdfInput;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion::storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
 use rdf_fusion::store::Store;
 use rdf_fusion_testsuite::w3c::files::W3CTestRuntime;
@@ -371,7 +371,7 @@ fn plain_term_store_factory() -> StoreFactory {
             )
             .unwrap();
 
-            let delta_storage = DeltaQuadStorageBuilder::new()
+            let delta_storage = DeltaQuadsStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
                 .with_log_store(log_store)
                 .build()
@@ -422,7 +422,7 @@ fn string_store_factory() -> StoreFactory {
             )
             .unwrap();
 
-            let delta_storage = DeltaQuadStorageBuilder::new()
+            let delta_storage = DeltaQuadsStorageBuilder::new()
                 .with_encoding(QuadStorageEncodingName::String)
                 .with_log_store(log_store)
                 .build()
@@ -460,7 +460,7 @@ fn parquet_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory {
             let output_url = url::Url::parse("memory:///dataset.parquet").unwrap();
 
             let delta_storage =
-                Arc::new(DeltaQuadStorageBuilder::new().build().await.unwrap());
+                Arc::new(DeltaQuadsStorageBuilder::new().build().await.unwrap());
             let context = RdfFusionContextBuilder::new(delta_storage)
                 .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
                 .with_single_partition_session_config()

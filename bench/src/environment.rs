@@ -13,7 +13,7 @@ use rdf_fusion::common::config::RdfFusionSessionConfigExt;
 use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::storage::parquet::RdfParquetLoader;
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
@@ -117,7 +117,7 @@ impl RdfFusionBenchContext {
 
         let options = BenchmarkingConfig::new_for_criterion()
             .with_storage_encoding(storage_encoding)
-            .with_storage_type(BenchQuadStorageTypeArg::Delta)
+            .with_storage_type(BenchQuadStorageTypeArg::DeltaQuads)
             .with_data_fusion_config(config);
 
         RdfFusionBenchContextBuilder::new(
@@ -288,7 +288,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
         let mut rdf_fusion_config = self.get_rdf_fusion_config();
         rdf_fusion_config.storage.parquet.sort_order = sort_order;
 
-        let delta_storage = Arc::new(DeltaQuadStorageBuilder::new().build().await?);
+        let delta_storage = Arc::new(DeltaQuadsStorageBuilder::new().build().await?);
         let runtime_env = self.create_runtime_env().await;
 
         let mut session_config = self.context.config.data_fusion_config.clone();
@@ -339,7 +339,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
         let storage_backend: Arc<dyn rdf_fusion::api::storage::QuadStorage> =
             match self.context.config.storage_type {
-                BenchQuadStorageTypeArg::Delta => {
+                BenchQuadStorageTypeArg::DeltaQuads => {
                     let url = Url::parse(&base_url).unwrap();
                     let object_store_url =
                         ObjectStoreUrl::parse(&object_store_url).unwrap();
@@ -356,13 +356,13 @@ impl<'ctx> BenchmarkContext<'ctx> {
                     .expect("Failed to create log store");
 
                     Arc::new(
-                        DeltaQuadStorageBuilder::new()
+                        DeltaQuadsStorageBuilder::new()
                             .with_log_store(log_store)
                             .with_encoding(self.context.config.storage_encoding)
                             .with_log_max_age(rdf_fusion_config.storage.delta.log_max_age)
                             .build()
                             .await
-                            .expect("Failed to create DeltaQuadStorage"),
+                            .expect("Failed to create DeltaQuadsStorage"),
                     )
                 }
                 BenchQuadStorageTypeArg::Parquet => {
@@ -406,7 +406,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
         };
 
         match self.context.config.storage_type {
-            BenchQuadStorageTypeArg::Delta => {
+            BenchQuadStorageTypeArg::DeltaQuads => {
                 if full_path.exists() {
                     std::fs::remove_dir_all(&full_path)
                         .expect("Failed to remove existing directory");

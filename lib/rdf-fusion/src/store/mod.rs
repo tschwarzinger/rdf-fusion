@@ -71,7 +71,7 @@ use rdf_fusion_execution::sparql::{
 };
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
-use rdf_fusion_storage::delta::DeltaQuadStorageBuilder;
+use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
@@ -135,7 +135,7 @@ impl Store {
     ///
     /// For more control over the query engine and the storage backend, see [`Self::new`] and
     /// [`RdfFusionContextBuilder`] and the implementation of the used quad storage (e.g.
-    /// [`DeltaQuadStorageBuilder`]).
+    /// [`DeltaQuadsStorageBuilder`]).
     pub async fn new_in_memory() -> Store {
         let memory_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
         let registry = DefaultObjectStoreRegistry::new();
@@ -158,7 +158,7 @@ impl Store {
         )
         .expect("Valid log store");
 
-        let delta_storage = DeltaQuadStorageBuilder::new()
+        let delta_storage = DeltaQuadsStorageBuilder::new()
             .with_log_store(log_store)
             .build()
             .await

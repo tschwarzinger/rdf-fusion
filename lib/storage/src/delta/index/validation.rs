@@ -1,5 +1,5 @@
-use crate::delta::error::DeltaQuadStorageError;
-use crate::delta::index::snapshot::DeltaQuadStorageIndexSnapshot;
+use crate::delta::error::DeltaQuadsStorageError;
+use crate::delta::index::snapshot::DeltaQuadsStorageIndexSnapshot;
 use crate::index::IndexComponents;
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
@@ -8,11 +8,11 @@ use datafusion::prelude::SessionContext;
 use deltalake::delta_datafusion::DeltaTableProvider;
 use std::sync::Arc;
 
-/// Implements validation of a single [`DeltaQuadStorageIndexSnapshot`].
+/// Implements validation of a single [`DeltaQuadsStorageIndexSnapshot`].
 pub async fn validate_index(
     state: &SessionState,
-    snapshot: &DeltaQuadStorageIndexSnapshot,
-) -> Result<(), DeltaQuadStorageError> {
+    snapshot: &DeltaQuadsStorageIndexSnapshot,
+) -> Result<(), DeltaQuadsStorageError> {
     let provider = DeltaTableProvider::try_new(
         snapshot.eager_snapshot().clone(),
         Arc::clone(snapshot.log_store()),
@@ -29,7 +29,7 @@ pub async fn validate_index(
     async fn check_duplicates(
         df: DataFrame,
         components: &IndexComponents,
-    ) -> Result<(), DeltaQuadStorageError> {
+    ) -> Result<(), DeltaQuadsStorageError> {
         let total_count = df.clone().count().await?;
 
         let component_cols: Vec<_> = components
@@ -41,7 +41,7 @@ pub async fn validate_index(
         let distinct_count = df.select(component_cols)?.distinct()?.count().await?;
 
         if total_count != distinct_count {
-            return Err(DeltaQuadStorageError::Other(format!(
+            return Err(DeltaQuadsStorageError::Other(format!(
                 "Validation failed: Index contains duplicates. Total: {total_count}, Distinct: {distinct_count}"
             )));
         }
@@ -112,11 +112,11 @@ mod tests {
     }
 
     /// Creates an in-memory Delta table from the provided RecordBatch and wraps it in a
-    /// [`DeltaQuadStorageIndexSnapshot`].
+    /// [`DeltaQuadsStorageIndexSnapshot`].
     async fn create_snapshot(
         batch: RecordBatch,
         components: IndexComponents,
-    ) -> DeltaQuadStorageIndexSnapshot {
+    ) -> DeltaQuadsStorageIndexSnapshot {
         let fields = batch
             .schema()
             .fields()
@@ -141,7 +141,7 @@ mod tests {
             .clone();
 
         // The encoding doesn't match the given input. This may break in the future.
-        DeltaQuadStorageIndexSnapshot::new(
+        DeltaQuadsStorageIndexSnapshot::new(
             QuadStorageEncoding::PlainTerm,
             snapshot,
             log_store,

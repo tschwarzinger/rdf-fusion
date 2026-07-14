@@ -10,7 +10,7 @@ use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::DeltaQuadStorage;
+use rdf_fusion_storage::delta::DeltaQuadsStorage;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use url::Url;
@@ -78,7 +78,7 @@ fn create_context(
     ctx
 }
 
-async fn populate_storage(storage: Arc<DeltaQuadStorage>, s: &str) {
+async fn populate_storage(storage: Arc<DeltaQuadsStorage>, s: &str) {
     let log_store = storage.log().table().read().await.log_store();
     let ctx = create_context(Arc::clone(&storage) as Arc<dyn QuadStorage>, log_store);
     let transaction = storage.begin_transaction(&ctx.state()).await.unwrap();

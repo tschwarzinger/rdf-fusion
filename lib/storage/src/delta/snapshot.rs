@@ -1,10 +1,10 @@
-use crate::delta::index::DeltaQuadStorageIndexSnapshot;
+use crate::delta::index::DeltaQuadsStorageIndexSnapshot;
 use crate::delta::log::{
-    DeltaQuadStorageLog, DeltaQuadStorageLogChangesetRef, DeltaStorageLogVersionRange,
+    DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
 use crate::delta::objectids::DeltaObjectIdDictionary;
-use crate::delta::planner::DeltaQuadStoragePlanner;
-use crate::delta::scan_plan_builder::DeltaQuadStorageScanPlanBuilder;
+use crate::delta::planner::DeltaQuadsStoragePlanner;
+use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
 use async_trait::async_trait;
 use datafusion::common::Result as DFResult;
 use datafusion::common::stats::Precision;
@@ -23,23 +23,23 @@ use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::sync::Arc;
 
-/// A snapshot of a [`DeltaQuadStorage`](crate::delta::DeltaQuadStorage).
+/// A snapshot of a [`DeltaQuadsStorage`](crate::delta::DeltaQuadsStorage).
 #[derive(Clone)]
-pub struct DeltaQuadStorageSnapshot {
-    log: Arc<DeltaQuadStorageLog>,
-    indexes: Vec<DeltaQuadStorageIndexSnapshot>,
+pub struct DeltaQuadsStorageSnapshot {
+    log: Arc<DeltaQuadsStorageLog>,
+    indexes: Vec<DeltaQuadsStorageIndexSnapshot>,
     encoding: QuadStorageEncoding,
     object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
     version: u64,
     options: DeltaStorageOptions,
-    transactional_changeset: Option<DeltaQuadStorageLogChangesetRef>,
+    transactional_changeset: Option<DeltaQuadsStorageLogChangesetRef>,
 }
 
-impl DeltaQuadStorageSnapshot {
-    /// Creates a new [`DeltaQuadStorageSnapshot`].
+impl DeltaQuadsStorageSnapshot {
+    /// Creates a new [`DeltaQuadsStorageSnapshot`].
     pub fn new(
-        log: Arc<DeltaQuadStorageLog>,
-        indexes: Vec<DeltaQuadStorageIndexSnapshot>,
+        log: Arc<DeltaQuadsStorageLog>,
+        indexes: Vec<DeltaQuadsStorageIndexSnapshot>,
         encoding: QuadStorageEncoding,
         object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
         options: DeltaStorageOptions,
@@ -56,11 +56,11 @@ impl DeltaQuadStorageSnapshot {
         }
     }
 
-    pub fn log(&self) -> &Arc<DeltaQuadStorageLog> {
+    pub fn log(&self) -> &Arc<DeltaQuadsStorageLog> {
         &self.log
     }
 
-    pub fn indexes(&self) -> &[DeltaQuadStorageIndexSnapshot] {
+    pub fn indexes(&self) -> &[DeltaQuadsStorageIndexSnapshot] {
         &self.indexes
     }
 
@@ -80,13 +80,13 @@ impl DeltaQuadStorageSnapshot {
         self.version
     }
 
-    pub fn transactional_changeset(&self) -> Option<&DeltaQuadStorageLogChangesetRef> {
+    pub fn transactional_changeset(&self) -> Option<&DeltaQuadsStorageLogChangesetRef> {
         self.transactional_changeset.as_ref()
     }
 
     pub fn with_transactional_changeset(
         mut self,
-        changeset: DeltaQuadStorageLogChangesetRef,
+        changeset: DeltaQuadsStorageLogChangesetRef,
     ) -> Self {
         self.transactional_changeset = Some(changeset);
         self
@@ -94,13 +94,13 @@ impl DeltaQuadStorageSnapshot {
 }
 
 #[async_trait]
-impl QuadStorageSnapshot for DeltaQuadStorageSnapshot {
+impl QuadStorageSnapshot for DeltaQuadsStorageSnapshot {
     async fn planners(
         &self,
         _context: &RdfFusionContextView,
     ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
         let snapshot = self.clone();
-        let planner = DeltaQuadStoragePlanner::new(snapshot);
+        let planner = DeltaQuadsStoragePlanner::new(snapshot);
         vec![Arc::new(planner)]
     }
 
@@ -128,7 +128,7 @@ impl QuadStorageSnapshot for DeltaQuadStorageSnapshot {
     }
 
     async fn len(&self, state: &SessionState) -> Result<usize, StorageError> {
-        let mut builder = DeltaQuadStorageScanPlanBuilder::new(
+        let mut builder = DeltaQuadsStorageScanPlanBuilder::new(
             state.clone(),
             QuadPattern::all_quads(),
             self.encoding.clone(),

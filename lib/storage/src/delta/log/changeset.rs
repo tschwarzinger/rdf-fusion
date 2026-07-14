@@ -1,14 +1,14 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::{DeltaStorageLogVersionRange, EagerChangeset};
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
 
-/// A reference to a [`DeltaQuadStorageLogChangeset`].
-pub type DeltaQuadStorageLogChangesetRef = Arc<dyn DeltaQuadStorageLogChangeset>;
+/// A reference to a [`DeltaQuadsStorageLogChangeset`].
+pub type DeltaQuadsStorageLogChangesetRef = Arc<dyn DeltaQuadsStorageLogChangeset>;
 
-/// Trait for a changeset between two versions of the [`DeltaQuadStorageLog`].
+/// Trait for a changeset between two versions of the [`DeltaQuadsStorageLog`].
 ///
 /// This behavior is encapsulated in a trait to allow for two implementations:
 /// - [`EagerChangeset`]: An eagerly compute changeset that is held in-memory and can be shared by
@@ -26,10 +26,10 @@ pub type DeltaQuadStorageLogChangesetRef = Arc<dyn DeltaQuadStorageLogChangeset>
 /// All functions return the *effective change* between two versions. For example, adding a quad and
 /// removing the same quad only contains an entry in the removed quads list.
 ///
-/// [`DeltaQuadStorageLog`]: crate::delta::log::DeltaQuadStorageLog
+/// [`DeltaQuadsStorageLog`]: crate::delta::log::DeltaQuadsStorageLog
 /// [`LazyInsertionOnlyChangeset`]: crate::delta::log::LazyInsertionOnlyChangeset
 #[async_trait]
-pub trait DeltaQuadStorageLogChangeset: Send + Sync {
+pub trait DeltaQuadsStorageLogChangeset: Send + Sync {
     /// Returns the version range that this changeset reflects.
     fn version_range(&self) -> DeltaStorageLogVersionRange;
 
@@ -39,19 +39,19 @@ pub trait DeltaQuadStorageLogChangeset: Send + Sync {
     async fn cleared_graphs(
         &self,
         state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError>;
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
     /// Returns a list of removed quads.
     async fn removed_quads(
         &self,
         state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError>;
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
     /// Returns a list of added quads.
     async fn added_quads(
         &self,
         state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError>;
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
     /// Returns a list of (explicitly or implicitly) added named graphs.
     ///
@@ -59,7 +59,7 @@ pub trait DeltaQuadStorageLogChangeset: Send + Sync {
     async fn added_named_graphs(
         &self,
         state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError>;
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
     /// Returns a list of dropped named graphs.
     ///
@@ -67,14 +67,14 @@ pub trait DeltaQuadStorageLogChangeset: Send + Sync {
     async fn dropped_named_graphs(
         &self,
         state: &SessionState,
-    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadStorageError>;
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
     /// Returns the current changeset as an [`EagerChangeset`]. This is necessary for updating the
     /// changeset during transactions.
     async fn as_eager_changeset(
         &self,
         state: &SessionState,
-    ) -> Result<EagerChangeset, DeltaQuadStorageError>;
+    ) -> Result<EagerChangeset, DeltaQuadsStorageError>;
 
     /// Returns the size of the changeset in bytes.
     fn size(&self) -> usize;

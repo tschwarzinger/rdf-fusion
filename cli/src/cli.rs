@@ -32,7 +32,7 @@ pub struct StorageConfigArgs {
     /// The location of the storage.
     ///
     /// The semantics of this setting differ depending on the chosen storage type. For example,
-    /// a `delta-lake` storage requires a single location to directory, while a `rdf-file` storage
+    /// a `delta-quads` storage requires a single location to directory, while a `rdf-file` storage
     /// requires a list of locations that point to individual RDF files.
     ///
     /// Supported locations:

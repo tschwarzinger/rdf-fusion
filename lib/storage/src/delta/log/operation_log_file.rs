@@ -1,4 +1,4 @@
-use crate::delta::error::DeltaQuadStorageError;
+use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::{COL_OPERATION, DeltaStorageLogOperation};
 use deltalake::kernel::Add;
 
@@ -30,9 +30,9 @@ impl OperationLogFile {
     /// statistics are invalid.
     pub fn only_contains_quad_insertions(
         &self,
-    ) -> Result<Option<bool>, DeltaQuadStorageError> {
+    ) -> Result<Option<bool>, DeltaQuadsStorageError> {
         let parsed_stats = self.file.get_stats().map_err(|e| {
-            DeltaQuadStorageError::Other(format!("Failed to parse stats: {e}"))
+            DeltaQuadsStorageError::Other(format!("Failed to parse stats: {e}"))
         })?;
 
         if let Some(stats) = parsed_stats {

@@ -9,7 +9,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 #[error("Error while interacting with the delta storage: {0}")]
-pub enum DeltaQuadStorageError {
+pub enum DeltaQuadsStorageError {
     #[error(transparent)]
     DeltaError(#[from] DeltaTableError),
     #[error(transparent)]
@@ -32,20 +32,20 @@ pub enum DeltaQuadStorageError {
     Other(String),
 }
 
-impl From<StorageError> for DeltaQuadStorageError {
+impl From<StorageError> for DeltaQuadsStorageError {
     fn from(value: StorageError) -> Self {
-        DeltaQuadStorageError::Other(value.to_string())
+        DeltaQuadsStorageError::Other(value.to_string())
     }
 }
 
-impl From<String> for DeltaQuadStorageError {
+impl From<String> for DeltaQuadsStorageError {
     fn from(value: String) -> Self {
-        DeltaQuadStorageError::Other(value)
+        DeltaQuadsStorageError::Other(value)
     }
 }
 
-impl From<DeltaQuadStorageError> for StorageError {
-    fn from(value: DeltaQuadStorageError) -> Self {
+impl From<DeltaQuadsStorageError> for StorageError {
+    fn from(value: DeltaQuadsStorageError) -> Self {
         StorageError::Other(Box::new(value))
     }
 }
