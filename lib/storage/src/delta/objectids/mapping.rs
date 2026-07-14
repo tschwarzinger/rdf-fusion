@@ -1,36 +1,37 @@
 use crate::delta::error::DeltaQuadStorageError;
-use crate::local_object_ids::LocalObjectIdDictionary;
+use crate::delta::objectids::{DeltaObjectIdClaimer, ObjectIdClaimerPutMode};
+use crate::local_object_ids::{LocalObjectIdDictionary, LocalObjectIdTransaction};
 use async_trait::async_trait;
-use datafusion::arrow::array::{Array, ArrayRef, Int64Array};
+use datafusion::arrow::array::{Array, ArrayRef, Int64Array, Int64Builder, RecordBatch};
 use datafusion::arrow::datatypes::{Field, SchemaRef};
-use datafusion::catalog::TableProvider;
 use datafusion::common::ScalarValue;
-use datafusion::common::stats::Precision;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::col;
-use datafusion::prelude::{SessionContext, lit};
+use datafusion::prelude::SessionContext;
 use deltalake::arrow::datatypes::Schema;
 use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
 use deltalake::kernel::Action;
 use deltalake::kernel::engine::arrow_conversion::{TryFromArrow, TryFromKernel};
-use deltalake::kernel::transaction::{CommitBuilder, TableReference};
+use deltalake::kernel::transaction::{CommitBuilder, TableReference, TransactionError};
 use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
 use deltalake::protocol::{DeltaOperation, SaveMode};
 use deltalake::writer::{DeltaWriter, RecordBatchWriter};
-use deltalake::{DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField};
+use deltalake::{
+    DataType as DeltaDataType, DeltaTable, DeltaTableConfig, DeltaTableError, StructField,
+};
 use futures::StreamExt;
 use rdf_fusion_common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
+use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_encoding::object_id::{
     ObjectIdDataType, ObjectIdDictionary, ObjectIdDictionaryError,
 };
 use rdf_fusion_encoding::plain_term::{
-    PLAIN_TERM_ENCODING, PlainTermArray, PlainTermScalar,
+    PLAIN_TERM_ENCODING, PlainTermArray, PlainTermArrayElementBuilder, PlainTermScalar,
 };
 use rdf_fusion_encoding::typed_family::{TypedFamilyArray, TypedFamilyEncodingRef};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::info;
 
 fn get_redb_path(
@@ -74,8 +75,6 @@ pub struct DeltaObjectIdDictionary {
     table: Arc<tokio::sync::RwLock<DeltaTable>>,
     /// The schema of the table.
     table_schema: SchemaRef,
-    /// Tracks the highest ID that has been durably written to Delta Table.
-    flush_lock: Arc<Mutex<i64>>,
 }
 
 impl DeltaObjectIdDictionary {
@@ -98,23 +97,35 @@ impl DeltaObjectIdDictionary {
             .collect::<Vec<_>>();
 
         let table = CreateBuilder::new()
-            .with_log_store(log_store)
+            .with_log_store(Arc::clone(&log_store))
             .with_columns(delta_columns)
             .await?;
         let table_schema = Arc::new(Schema::new(arrow_columns));
 
         let db_path = get_redb_path(options, table.log_store().config().location());
-        let in_memory_mapping = LocalObjectIdDictionary::try_new(db_path)?;
+        let put_mode = match options.storage.delta.assume_single_node {
+            true => ObjectIdClaimerPutMode::AlwaysOverwrite,
+            false => ObjectIdClaimerPutMode::EnsureVersion,
+        };
+        let claimer = Arc::new(DeltaObjectIdClaimer::new(
+            Arc::clone(&log_store),
+            options.storage.delta.object_id_claim_size,
+            put_mode,
+        ));
+        let in_memory_mapping = LocalObjectIdDictionary::try_new(
+            db_path,
+            options.storage.delta.object_id_cache_size,
+            claimer,
+        )?;
 
-        in_memory_mapping
-            .set_synced_version(table.version().unwrap_or(0))
-            .await?;
+        let mut txn = in_memory_mapping.transaction().await?;
+        txn.set_synced_version(table.version().unwrap_or(0))?;
+        txn.commit()?;
 
         Ok(Self {
             local_mapping: Arc::new(in_memory_mapping),
             table: Arc::new(tokio::sync::RwLock::new(table)),
             table_schema,
-            flush_lock: Arc::new(Mutex::new(0)),
         })
     }
 
@@ -122,7 +133,8 @@ impl DeltaObjectIdDictionary {
         session: &SessionState,
         log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadStorageError> {
-        let mut table = DeltaTable::new(log_store, DeltaTableConfig::default());
+        let mut table =
+            DeltaTable::new(Arc::clone(&log_store), DeltaTableConfig::default());
         table.load().await?;
 
         let delta_columns = [
@@ -143,63 +155,30 @@ impl DeltaObjectIdDictionary {
 
         let options = session.config().rdf_fusion_options_or_from_env()?;
         let db_path = get_redb_path(&options, table.log_store().config().location());
-        let in_memory_mapping = LocalObjectIdDictionary::try_new(db_path)?;
+        let put_mode = match options.storage.delta.assume_single_node {
+            true => ObjectIdClaimerPutMode::AlwaysOverwrite,
+            false => ObjectIdClaimerPutMode::EnsureVersion,
+        };
+        let claimer = Arc::new(DeltaObjectIdClaimer::new(
+            Arc::clone(&log_store),
+            options.storage.delta.object_id_claim_size,
+            put_mode,
+        ));
+        let in_memory_mapping = LocalObjectIdDictionary::try_new(
+            db_path,
+            options.storage.delta.object_id_cache_size,
+            claimer,
+        )?;
 
-        let version_on_disk = in_memory_mapping.get_synced_version().await?;
-        let table_version = table.version().unwrap_or(0) as i64;
-
-        let mut needs_sync = true;
-        if let Some(v_on_disk) = version_on_disk {
-            if v_on_disk as i64 >= table_version {
-                info!(
-                    "Local object ID dictionary is already synced to version {}",
-                    table_version
-                );
-                needs_sync = false;
-            }
-        }
-
-        if needs_sync {
-            let start_id = in_memory_mapping.next_id();
-            info!(
-                "Syncing local dictionary from version {:?} to Delta table version {} (loading IDs >= {})...",
-                version_on_disk, table_version, start_id
-            );
-
-            let session_ctx = SessionContext::new_with_state(session.clone());
-            let table_provider = DeltaTableProvider::try_new(
-                table.snapshot()?.eager_snapshot().clone(),
-                table.log_store(),
-                DeltaScanConfig::default(),
-            )?;
-
-            if let Some(stats) = table_provider.statistics() {
-                if let Precision::Exact(num_rows) = stats.num_rows {
-                    info!("Length of dictionary: {} rows", num_rows)
-                }
-            }
-
-            let df = session_ctx.read_table(Arc::new(table_provider))?;
-            let df = df.filter(col("id").gt_eq(lit(start_id)))?;
-            let df = df.sort(vec![col("id").sort(true, false)])?;
-
-            let mut stream = df.execute_stream().await?;
-            while let Some(batch) = stream.next().await {
-                in_memory_mapping.add_batch(&batch?).await?;
-            }
-
-            in_memory_mapping
-                .set_synced_version(table_version as u64)
-                .await?;
-        }
-
-        let highest_flushed_id = in_memory_mapping.next_id().saturating_sub(1);
-        Ok(Self {
+        let mapping = Self {
             local_mapping: Arc::new(in_memory_mapping),
             table: Arc::new(tokio::sync::RwLock::new(table)),
             table_schema,
-            flush_lock: Arc::new(Mutex::new(highest_flushed_id)),
-        })
+        };
+
+        mapping.update_local_dictionary().await?;
+
+        Ok(mapping)
     }
 
     /// Returns a reference to the underlying dictionary.
@@ -207,48 +186,95 @@ impl DeltaObjectIdDictionary {
         Arc::clone(&self.local_mapping)
     }
 
-    /// Flushes the object id table to disk.
-    pub async fn flush(&self) -> Result<(), DeltaQuadStorageError> {
-        let mut guard = self.flush_lock.lock().await;
-        let last_flushed = *guard;
+    pub async fn update_local_dictionary(&self) -> Result<(), DeltaQuadStorageError> {
+        let mut table = self.table.write().await;
+        table.load().await?;
 
-        let (batches, new_flushed) = {
-            let current_id = self.local_mapping.next_id();
+        let version_on_disk = self.local_mapping.snapshot()?.get_synced_version()?;
+        let table_version = table.version().unwrap_or(0);
 
-            // Nothing to flush, we're done
-            if current_id <= last_flushed {
+        if let Some(v_on_disk) = version_on_disk {
+            if v_on_disk >= table_version {
                 return Ok(());
             }
-
-            let b = self
-                .local_mapping
-                .read_batches_since_id(last_flushed, &self.table_schema)
-                .await?;
-            (b, current_id)
-        };
-
-        let table = self.table.read().await;
-
-        let mut actions = Vec::new();
-        let mut pending_rows = 0;
-        let mut writer = RecordBatchWriter::for_table(&table)?;
-        for batch in batches {
-            pending_rows += batch.num_rows();
-            writer.write(batch).await?;
-
-            if pending_rows >= 1_000_000 {
-                info!("Flushing ~1M object ids ...");
-                actions.extend(writer.flush().await?);
-                pending_rows = 0;
-            }
         }
-        actions.extend(writer.flush().await?);
-        info!("Object id data files flushed.");
 
-        let result = CommitBuilder::default()
-            .with_actions(actions.into_iter().map(Action::Add).collect())
+        info!(
+            "Syncing local dictionary from version {:?} to Delta table version {}...",
+            version_on_disk, table_version
+        );
+
+        let session_ctx = SessionContext::new();
+        let table_provider = DeltaTableProvider::try_new(
+            table.snapshot()?.eager_snapshot().clone(),
+            table.log_store(),
+            DeltaScanConfig::default(),
+        )?;
+
+        let df = session_ctx.read_table(Arc::new(table_provider))?;
+        let df = df.sort(vec![col("id").sort(true, false)])?;
+
+        let mut stream = df.execute_stream().await?;
+        let mut txn = self.local_mapping.transaction().await?;
+        while let Some(batch) = stream.next().await {
+            txn.add_global_batch(&batch?).await?;
+        }
+
+        txn.set_synced_version(table_version as u64)?;
+        txn.commit()?;
+
+        Ok(())
+    }
+
+    /// Flushes the object id table to disk.
+    pub async fn flush(&self) -> Result<(), DeltaQuadStorageError> {
+        Ok(())
+    }
+
+    /// Flushes the current transaction to Delta Lake. Returns Ok(true) if successful, Ok(false) on
+    /// conflict.
+    pub async fn commit_dictionary_transaction_to_delta(
+        &self,
+        txn: &LocalObjectIdTransaction,
+    ) -> Result<bool, DeltaQuadStorageError> {
+        let pending_count = txn.pending_ids().len();
+        if pending_count == 0 {
+            return Ok(true);
+        }
+
+        let mut table = self.table.write().await;
+
+        let mut id_builder = Int64Builder::with_capacity(pending_count);
+        let mut term_builder = PlainTermArrayElementBuilder::new();
+
+        for (id, term) in txn.pending_ids() {
+            id_builder.append_value(*id);
+            term_builder.append_raw(
+                term.0,
+                &term.1,
+                term.2.as_deref(),
+                term.3.as_deref(),
+            );
+        }
+
+        let term_array = term_builder.finish().into_array_ref();
+        let id_array = Arc::new(id_builder.finish()) as ArrayRef;
+        let batch = RecordBatch::try_new(
+            Arc::clone(&self.table_schema),
+            vec![id_array, term_array],
+        )?;
+
+        let mut writer = RecordBatchWriter::for_table(&table)?;
+        writer.write(batch).await?;
+        let add_actions = writer.flush().await?;
+
+        let table_state = table.state.as_ref().expect("Table state loaded");
+
+        let commit_result = CommitBuilder::default()
+            .with_actions(add_actions.into_iter().map(Action::Add).collect())
+            .with_max_retries(0)
             .build(
-                Some(table.snapshot()?),
+                Some(table_state),
                 table.log_store(),
                 DeltaOperation::Write {
                     mode: SaveMode::Append,
@@ -256,23 +282,19 @@ impl DeltaObjectIdDictionary {
                     predicate: None,
                 },
             )
-            .await?;
-        drop(table);
+            .await;
 
-        let mut table = self.table.write().await;
-        table.state = Some(result.snapshot);
-
-        info!(
-            "New object id table version committed. Txn id: {}",
-            result.version
-        );
-
-        self.local_mapping
-            .set_synced_version(result.version as u64)
-            .await?;
-
-        *guard = new_flushed;
-        Ok(())
+        match commit_result {
+            Ok(_) => {
+                table.load().await?;
+                Ok(true)
+            }
+            Err(DeltaTableError::VersionAlreadyExists(_)) => Ok(false),
+            Err(DeltaTableError::Transaction {
+                source: TransactionError::MaxCommitAttempts(_),
+            }) => Ok(false),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -286,7 +308,11 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         &self,
         term: &PlainTermScalar,
     ) -> Result<Option<ScalarValue>, ObjectIdDictionaryError> {
-        if let Some(id) = self.local_mapping.get_id_by_term(term).await {
+        let snapshot = self
+            .local_mapping
+            .snapshot()
+            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
+        if let Some(id) = snapshot.get_id_by_term(term) {
             Ok(Some(ScalarValue::Int64(Some(id))))
         } else {
             Ok(None)
@@ -297,10 +323,16 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         &self,
         array: &PlainTermArray,
     ) -> Result<ArrayRef, ObjectIdDictionaryError> {
-        let ids_array = self
+        let mut txn = self
             .local_mapping
+            .transaction()
+            .await
+            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
+        let ids_array = txn
             .encode_array(array)
             .await
+            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
+        txn.commit()
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
 
         Ok(Arc::new(ids_array) as ArrayRef)
@@ -319,8 +351,9 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
 
         let term_col = self
             .local_mapping
+            .snapshot()
+            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
             .resolve_plain_terms(id_array)
-            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
 
         let result =
@@ -342,8 +375,9 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
 
         let typed_value_col = self
             .local_mapping
+            .snapshot()
+            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
             .resolve_plain_terms(id_array)
-            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
 
         let plain_terms = PLAIN_TERM_ENCODING

@@ -1,10 +1,11 @@
+use crate::delta::DeltaQuadStorageBuilder;
 use crate::delta::error::DeltaQuadStorageError;
 use crate::delta::index::{DeltaQuadStorageIndex, DeltaQuadStorageIndexSnapshot};
 use crate::delta::log::{DeltaQuadStorageLog, DeltaStorageLogVersionRange};
 use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::refresh::DeltaTableRefresher;
 use crate::delta::snapshot::DeltaQuadStorageSnapshot;
-use crate::delta::{DeltaQuadStorageBuilder, DeltaQuadStorageTransaction};
+use crate::delta::transaction::DeltaQuadStorageTransaction;
 use crate::index::IndexComponents;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::DataType;
@@ -14,7 +15,7 @@ use deltalake::logstore::{LogStoreRef, logstore_with};
 use futures::StreamExt;
 use object_store::path::Path;
 use rdf_fusion_common::StorageError;
-use rdf_fusion_common::config::RdfFusionOptions;
+use rdf_fusion_common::config::{DeltaStorageOptions, RdfFusionOptions};
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::object_id::{ObjectIdDictionary, ObjectIdEncoding};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
@@ -39,6 +40,8 @@ pub struct DeltaQuadStorage {
     object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
     /// Manages periodic refreshes of the delta table.
     refresher: Arc<DeltaTableRefresher>,
+    /// Options
+    options: DeltaStorageOptions,
 }
 
 impl DeltaQuadStorage {
@@ -122,6 +125,7 @@ impl DeltaQuadStorage {
             indexes,
             object_id_mapping,
             refresher: Arc::new(DeltaTableRefresher::new(None)),
+            options: options.storage.delta.clone(),
         })
     }
 
@@ -141,16 +145,17 @@ impl DeltaQuadStorage {
     /// Tries to load an existing [`DeltaQuadStorage`] based on the given `base_location`.
     pub async fn try_load(
         state: &SessionState,
+        options: &RdfFusionOptions,
         base_log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadStorageError> {
-        let options = base_log_store.config().options().clone();
+        let log_storage_config = base_log_store.config().options().clone();
         let base_url = base_log_store.config().location().clone();
 
         let log_url = base_url.join("log/").unwrap();
         let log_log_store = logstore_with(
             base_log_store.root_object_store(None),
             &log_url,
-            options.clone(),
+            log_storage_config.clone(),
         )
         .map_err(DeltaQuadStorageError::from)?;
 
@@ -173,7 +178,7 @@ impl DeltaQuadStorage {
                 let mapping_log_store = logstore_with(
                     base_log_store.root_object_store(None),
                     &mapping_url,
-                    options.clone(),
+                    log_storage_config.clone(),
                 )
                 .map_err(DeltaQuadStorageError::from)?;
 
@@ -209,7 +214,7 @@ impl DeltaQuadStorage {
             let index_log_store = logstore_with(
                 base_log_store.root_object_store(None),
                 &index_url,
-                options.clone(),
+                log_storage_config.clone(),
             )
             .map_err(DeltaQuadStorageError::from)?;
 
@@ -228,6 +233,7 @@ impl DeltaQuadStorage {
             indexes,
             object_id_mapping,
             refresher: Arc::new(DeltaTableRefresher::new(None)),
+            options: options.storage.delta.clone(),
         })
     }
 
@@ -291,6 +297,7 @@ impl DeltaQuadStorage {
             index_snapshots,
             self.storage_encoding.clone(),
             self.object_id_mapping.clone(),
+            self.options.clone(),
             version,
         ))
     }

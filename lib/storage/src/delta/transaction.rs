@@ -23,7 +23,9 @@ use deltalake::writer::{DeltaWriter, RecordBatchWriter};
 use futures::StreamExt;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{NamedOrBlankNodeRef, StorageError};
-use rdf_fusion_encoding::TermEncoding;
+use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::string::STRING_ENCODING;
+use rdf_fusion_encoding::{QuadStorageEncoding, TermEncoding};
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageGraphTarget, QuadStorageSnapshot, QuadStorageTransaction,
 };
@@ -333,7 +335,7 @@ impl DeltaQuadStorageTransaction {
 
         let target_encoding = self.storage.encoding();
         match target_encoding {
-            rdf_fusion_encoding::QuadStorageEncoding::ObjectId(encoding) => {
+            QuadStorageEncoding::ObjectId(encoding) => {
                 let (state, logical_plan) = quads.into_parts();
                 let node = EncodeAsObjectIdNode::try_new(
                     logical_plan,
@@ -346,11 +348,10 @@ impl DeltaQuadStorageTransaction {
                     }),
                 ))
             }
-            rdf_fusion_encoding::QuadStorageEncoding::PlainTerm => {
+            QuadStorageEncoding::PlainTerm => {
                 let context = SessionContext::new_with_state(self.state.clone());
                 let enc_pt_udf = context.udf("ENC_PT")?;
-                let target_type =
-                    (**rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING).data_type();
+                let target_type = PLAIN_TERM_ENCODING.data_type();
 
                 let mut decode_udf = None;
                 let mut proj_exprs = Vec::new();
@@ -379,11 +380,10 @@ impl DeltaQuadStorageTransaction {
                 }
                 Ok(quads.select(proj_exprs)?)
             }
-            rdf_fusion_encoding::QuadStorageEncoding::String => {
+            QuadStorageEncoding::String => {
                 let context = SessionContext::new_with_state(self.state.clone());
                 let enc_str_udf = context.udf("ENC_STR")?;
-                let target_type =
-                    (**rdf_fusion_encoding::string::STRING_ENCODING).data_type();
+                let target_type = STRING_ENCODING.data_type();
 
                 let mut decode_udf = None;
                 let mut proj_exprs = Vec::new();

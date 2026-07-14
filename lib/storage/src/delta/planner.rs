@@ -82,13 +82,17 @@ impl DeltaQuadStoragePlanner {
             return plan_err!("Object ID mapping is not available for this storage");
         };
 
-        let physical_plan = Arc::new(EncodeAsObjectIdDeltaExec::try_new(
+        let physical_plan = EncodeAsObjectIdDeltaExec::try_new(
             Arc::clone(&physical_inputs[0]),
             Arc::clone(mapping),
             Arc::clone(node.schema().inner()),
-        )?);
+        )?
+        .with_buffering_options(
+            self.snapshot.options().max_buffered_rows,
+            self.snapshot.options().max_buffered_ids,
+        );
 
-        Ok(Some(physical_plan))
+        Ok(Some(Arc::new(physical_plan)))
     }
 }
 

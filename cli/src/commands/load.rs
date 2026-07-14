@@ -78,10 +78,13 @@ pub async fn load(
                     )
                     .await
                     .context("Failed to load RDF file into Delta Lake")?;
+
+                info!("Data loaded successfully. Optimizing database ....");
+                store.optimize().await?;
+                info!("Database optimized.")
             }
         }
     }
 
-    info!("Data loaded successfully.");
     Ok(())
 }

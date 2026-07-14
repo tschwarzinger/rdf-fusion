@@ -1,5 +1,5 @@
 use crate::object_id::ObjectIdDataType;
-use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray, PlainTermScalar};
+use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use crate::typed_family::{TypedFamilyArray, TypedFamilyEncodingRef, TypedFamilyScalar};
 use crate::{EncodingArray, EncodingScalar};
 use async_trait::async_trait;
@@ -7,7 +7,7 @@ use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::ScalarValue;
 use datafusion::error::DataFusionError;
-use rdf_fusion_common::{CorruptionError, GraphNameRef, StorageError, ThinError};
+use rdf_fusion_common::{CorruptionError, GraphNameRef, StorageError};
 use std::error::Error;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -136,9 +136,9 @@ pub trait ObjectIdDictionary: Debug + Send + Sync {
         scalar: &ScalarValue,
     ) -> Result<PlainTermScalar, ObjectIdDictionaryError> {
         if scalar.is_null() {
-            return Ok(PLAIN_TERM_ENCODING
-                .encode_term(ThinError::expected())
-                .expect("TODO"));
+            return Err(ObjectIdDictionaryError::UnexpectedObjectIdFormat(
+                "Cannot decode default graph (null) to a term".to_string(),
+            ));
         }
 
         let array = scalar

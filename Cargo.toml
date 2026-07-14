@@ -40,7 +40,6 @@ csv = "1.4"
 futures = "0.3"
 itertools = "0.14"
 md-5 = "0.11"
-moka = { version = "0.12", features = ["future"] }
 object_store = "0.13"
 rand = "0.10"
 rand_distr = "0.6"
@@ -57,6 +56,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 url = "2.5"
 uuid = "1.23"
 zip = "8.4"
+quick_cache = "0.7"
 
 # DataFusion and Related Dependencies (we try to keep them in-sync with DataFusion)
 ahash = "0.8"
@@ -84,7 +84,7 @@ serde_urlencoded = "0.7"
 # Testing / Benchmarking dependencies
 
 assert_cmd = "2.2"
-criterion = "0.8"
+criterion = { version = "0.8", features = ["async_tokio"] }
 insta = { version = "1.47", features = ["filters"] }
 prettytable-rs = "0.10"
 redb = "4.1"

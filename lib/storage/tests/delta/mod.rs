@@ -15,6 +15,7 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 use url::Url;
 
+mod object_ids;
 mod persistence;
 mod refresh;
 

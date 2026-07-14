@@ -1,19 +1,37 @@
 use crate::delta::log::DeltaQuadStorageLogChangesetRef;
 use crate::delta::log::DeltaStorageLogVersionRange;
-use moka::future::Cache;
+use quick_cache::Weighter;
+use quick_cache::sync::Cache;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ChangeSetWeighter;
+
+impl Weighter<DeltaStorageLogVersionRange, DeltaQuadStorageLogChangesetRef>
+    for ChangeSetWeighter
+{
+    fn weight(
+        &self,
+        _key: &DeltaStorageLogVersionRange,
+        val: &DeltaQuadStorageLogChangesetRef,
+    ) -> u64 {
+        val.size() as u64
+    }
+}
 
 /// Manages changesets for the [`DeltaQuadStorageLog`](crate::delta::log::DeltaQuadStorageLog).
-pub(crate) struct ChangesetManager {
-    cache: Cache<DeltaStorageLogVersionRange, DeltaQuadStorageLogChangesetRef>,
+pub struct ChangesetManager {
+    cache: Cache<
+        DeltaStorageLogVersionRange,
+        DeltaQuadStorageLogChangesetRef,
+        ChangeSetWeighter,
+    >,
 }
 
 impl ChangesetManager {
-    /// Creates a new [`ChangesetManager`] with the given maximum capacity in bytes.
     pub fn new(max_capacity_bytes: u64) -> Self {
-        let cache = Cache::builder()
-            .weigher(|_key, value: &DeltaQuadStorageLogChangesetRef| value.size() as u32)
-            .max_capacity(max_capacity_bytes)
-            .build();
+        let estimated_items = (max_capacity_bytes / 1_000_000).max(10) as usize;
+        let cache =
+            Cache::with_weighter(estimated_items, max_capacity_bytes, ChangeSetWeighter);
         Self { cache }
     }
 
@@ -22,7 +40,7 @@ impl ChangesetManager {
         &self,
         version_range: &DeltaStorageLogVersionRange,
     ) -> Option<DeltaQuadStorageLogChangesetRef> {
-        self.cache.get(version_range).await
+        self.cache.get(version_range)
     }
 
     /// Inserts a changeset into the cache.
@@ -31,6 +49,6 @@ impl ChangesetManager {
         version_range: DeltaStorageLogVersionRange,
         changeset: DeltaQuadStorageLogChangesetRef,
     ) {
-        self.cache.insert(version_range, changeset).await;
+        self.cache.insert(version_range, changeset);
     }
 }

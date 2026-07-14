@@ -27,6 +27,7 @@ pub enum LoadMode {
 pub struct DeltaQuadStorageBuilder {
     load_mode: LoadMode,
     log_store: Option<LogStoreRef>,
+    options: Option<RdfFusionOptions>,
     encoding: QuadStorageEncodingName,
     indexes: Vec<IndexComponents>,
     log_max_age: Option<Duration>,
@@ -38,6 +39,7 @@ impl DeltaQuadStorageBuilder {
         Self {
             load_mode: LoadMode::NoLoading,
             log_store: None,
+            options: None,
             encoding: QuadStorageEncodingName::ObjectId,
             indexes: vec![
                 IndexComponents::GSPO,
@@ -57,6 +59,12 @@ impl DeltaQuadStorageBuilder {
     /// Sets the log store
     pub fn with_log_store(mut self, log_store: LogStoreRef) -> Self {
         self.log_store = Some(log_store);
+        self
+    }
+
+    /// Sets the delta storage options
+    pub fn with_options(mut self, options: Option<RdfFusionOptions>) -> Self {
+        self.options = options;
         self
     }
 
@@ -109,7 +117,9 @@ impl DeltaQuadStorageBuilder {
                         &log_store.to_uri(&prefix_path)
                     );
 
-                    let result = DeltaQuadStorage::try_load(&session, log_store).await?;
+                    let options = self.options.unwrap_or_default();
+                    let result =
+                        DeltaQuadStorage::try_load(&session, &options, log_store).await?;
                     result.set_transaction_max_age(self.log_max_age).await;
                     Ok(result)
                 }

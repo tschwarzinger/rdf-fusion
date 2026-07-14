@@ -1,17 +1,18 @@
 use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::objectids::encoding::stream::ObjectIdEncodingStream;
 use datafusion::arrow::datatypes::SchemaRef;
-use datafusion::common::exec_datafusion_err;
 use datafusion::execution::context::TaskContext;
-use datafusion::physical_expr::EquivalenceProperties;
+use datafusion::physical_expr::{Distribution, EquivalenceProperties, Partitioning};
+use datafusion::physical_expr_common::metrics::MetricBuilder;
+use datafusion::physical_plan::metrics::{ExecutionPlanMetricsSet, MetricsSet};
 use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties,
     SendableRecordBatchStream,
 };
 use rdf_fusion_common::DFResult;
+use rdf_fusion_common::config::RdfFusionSessionConfigExt;
 use std::any::Any;
 use std::sync::Arc;
-use std::sync::atomic::AtomicI64;
 
 #[derive(Debug)]
 pub struct EncodeAsObjectIdDeltaExec {
@@ -23,8 +24,12 @@ pub struct EncodeAsObjectIdDeltaExec {
     output_schema: SchemaRef,
     /// The properties of the plan
     properties: Arc<PlanProperties>,
-    /// The number of partitions in the plan
-    num_running_streams: Arc<AtomicI64>,
+    /// Configured max buffered rows
+    max_buffered_rows: Option<usize>,
+    /// Configured max buffered IDs
+    max_buffered_ids: Option<usize>,
+    /// Execution metrics
+    metrics: ExecutionPlanMetricsSet,
 }
 
 impl EncodeAsObjectIdDeltaExec {
@@ -38,19 +43,28 @@ impl EncodeAsObjectIdDeltaExec {
             .properties()
             .as_ref()
             .clone()
-            .with_eq_properties(eq_properties);
-        let partition_count = i64::try_from(properties.partitioning.partition_count())
-            .map_err(|_| {
-                exec_datafusion_err!("Could not convert number of partitions to i64")
-            })?;
+            .with_eq_properties(eq_properties)
+            .with_partitioning(Partitioning::UnknownPartitioning(1));
 
         Ok(Self {
             input,
             mapping,
             output_schema,
             properties: Arc::new(properties),
-            num_running_streams: Arc::new(AtomicI64::new(partition_count)),
+            max_buffered_rows: None,
+            max_buffered_ids: None,
+            metrics: ExecutionPlanMetricsSet::new(),
         })
+    }
+
+    pub fn with_buffering_options(
+        mut self,
+        max_buffered_rows: Option<usize>,
+        max_buffered_ids: Option<usize>,
+    ) -> Self {
+        self.max_buffered_rows = max_buffered_rows;
+        self.max_buffered_ids = max_buffered_ids;
+        self
     }
 }
 
@@ -72,12 +86,19 @@ impl ExecutionPlan for EncodeAsObjectIdDeltaExec {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn schema(&self) -> SchemaRef {
         Arc::clone(&self.output_schema)
     }
+
     fn properties(&self) -> &Arc<PlanProperties> {
         &self.properties
     }
+
+    fn required_input_distribution(&self) -> Vec<Distribution> {
+        vec![Distribution::SinglePartition]
+    }
+
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
         vec![&self.input]
     }
@@ -86,11 +107,15 @@ impl ExecutionPlan for EncodeAsObjectIdDeltaExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        Ok(Arc::new(Self::try_new(
+        let mut new_plan = Self::try_new(
             Arc::clone(&children[0]),
             Arc::clone(&self.mapping),
             Arc::clone(&self.schema()),
-        )?))
+        )?;
+        new_plan.max_buffered_rows = self.max_buffered_rows;
+        new_plan.max_buffered_ids = self.max_buffered_ids;
+        new_plan.metrics = self.metrics.clone();
+        Ok(Arc::new(new_plan))
     }
 
     fn execute(
@@ -98,11 +123,28 @@ impl ExecutionPlan for EncodeAsObjectIdDeltaExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        let input_stream = self.input.execute(partition, context)?;
+        let input_stream = self.input.execute(partition, Arc::clone(&context))?;
+        let options = context.session_config().rdf_fusion_options_or_from_env()?;
+        let max_buffered_rows = self
+            .max_buffered_rows
+            .or(options.storage.delta.max_buffered_rows)
+            .unwrap_or(100_000);
+        let max_buffered_ids = self
+            .max_buffered_ids
+            .or(options.storage.delta.max_buffered_ids)
+            .unwrap_or(10_000);
+        let _commit_failures =
+            MetricBuilder::new(&self.metrics).counter("commit_failures", partition);
+
         Ok(Box::pin(ObjectIdEncodingStream::new(
             input_stream,
             Arc::clone(&self.mapping),
-            Arc::clone(&self.num_running_streams),
+            max_buffered_rows,
+            max_buffered_ids,
         )))
+    }
+
+    fn metrics(&self) -> Option<MetricsSet> {
+        Some(self.metrics.clone_inner())
     }
 }

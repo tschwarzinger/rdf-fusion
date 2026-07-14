@@ -1,6 +1,8 @@
+mod claimer;
 mod encoding;
 mod mapping;
 
+pub use claimer::*;
 pub use encoding::*;
 pub use mapping::*;
 

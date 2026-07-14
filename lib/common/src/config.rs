@@ -44,10 +44,33 @@ pub struct ParquetStorageOptions {
 }
 
 /// Delta storage configuration for RDF Fusion.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DeltaStorageOptions {
     /// The maximum age of the operations log that should be queried before refreshing.
     pub log_max_age: Option<Duration>,
+    /// The size of the claimed ranges for object IDs.
+    pub object_id_claim_size: i64,
+    /// Maximum number of rows to buffer before committing.
+    pub max_buffered_rows: Option<usize>,
+    /// Maximum number of pending IDs to buffer before committing.
+    pub max_buffered_ids: Option<usize>,
+    /// The size of the cache in the local object id dictionary.
+    pub object_id_cache_size: usize,
+    /// Whether the system can assume that no other node is writing to the storage.
+    pub assume_single_node: bool,
+}
+
+impl Default for DeltaStorageOptions {
+    fn default() -> Self {
+        Self {
+            log_max_age: None,
+            object_id_claim_size: 100_000,
+            max_buffered_rows: None,
+            max_buffered_ids: None,
+            object_id_cache_size: 1_000_000,
+            assume_single_node: false,
+        }
+    }
 }
 
 /// Options related to working with RDF files (e.g., Turtle).
@@ -84,6 +107,54 @@ impl ExtensionOptions for RdfFusionOptions {
 
                     self.storage.delta.log_max_age = Some(Duration::from_millis(ms));
                 }
+            }
+            "storage.delta.object_id_claim_size" => {
+                let size: i64 = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.delta.object_id_claim_size: {e}"
+                    ))
+                })?;
+                self.storage.delta.object_id_claim_size = size;
+            }
+            "storage.delta.max_buffered_rows" => {
+                if value.to_lowercase() == "none" || value.is_empty() {
+                    self.storage.delta.max_buffered_rows = None;
+                } else {
+                    let rows: usize = value.parse().map_err(|e| {
+                        DataFusionError::Configuration(format!(
+                            "Invalid value for storage.delta.max_buffered_rows: {e}"
+                        ))
+                    })?;
+                    self.storage.delta.max_buffered_rows = Some(rows);
+                }
+            }
+            "storage.delta.max_buffered_ids" => {
+                if value.to_lowercase() == "none" || value.is_empty() {
+                    self.storage.delta.max_buffered_ids = None;
+                } else {
+                    let ids: usize = value.parse().map_err(|e| {
+                        DataFusionError::Configuration(format!(
+                            "Invalid value for storage.delta.max_buffered_ids: {e}"
+                        ))
+                    })?;
+                    self.storage.delta.max_buffered_ids = Some(ids);
+                }
+            }
+            "storage.delta.object_id_cache_size" => {
+                let size: usize = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.delta.object_id_cache_size: {e}"
+                    ))
+                })?;
+                self.storage.delta.object_id_cache_size = size;
+            }
+            "storage.delta.assume_single_node" => {
+                let value: bool = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.delta.assume_single_node: {e}"
+                    ))
+                })?;
+                self.storage.delta.assume_single_node = value;
             }
             "storage.parquet.sort_order" => {
                 let value: RdfSortOrder = value.parse().map_err(|e| {
@@ -124,6 +195,31 @@ impl ExtensionOptions for RdfFusionOptions {
                     .log_max_age
                     .map(|v| v.as_millis().to_string()),
                 description: "The maximum age of the operations log that should be queried before refreshing.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.object_id_claim_size", Self::PREFIX),
+                value: Some(self.storage.delta.object_id_claim_size.to_string()),
+                description: "The size of claimed ID ranges for delta dictionary coordination.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.max_buffered_rows", Self::PREFIX),
+                value: self.storage.delta.max_buffered_rows.map(|r| r.to_string()),
+                description: "Maximum number of rows to buffer before committing delta dictionary transaction.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.max_buffered_ids", Self::PREFIX),
+                value: self.storage.delta.max_buffered_ids.map(|i| i.to_string()),
+                description: "Maximum number of pending IDs to buffer before committing delta dictionary transaction.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.object_id_cache_size", Self::PREFIX),
+                value: Some(self.storage.delta.object_id_cache_size.to_string()),
+                description: "The size of the cache in the local object id dictionary.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.assume_single_node", Self::PREFIX),
+                value: Some(self.storage.delta.assume_single_node.to_string()),
+                description: "Whether the node can assume that no other node is currently working on the DeltaQuads database.",
             },
             ConfigEntry {
                 key: format!("{}.storage.parquet.sort_order", Self::PREFIX),
@@ -170,12 +266,29 @@ impl RdfFusionOptions {
         if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE") {
             config.set("storage.delta.log_max_age", &val)?;
         }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_OBJECT_ID_CLAIM_SIZE") {
+            config.set("storage.delta.object_id_claim_size", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_MAX_BUFFERED_ROWS") {
+            config.set("storage.delta.max_buffered_rows", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_MAX_BUFFERED_IDS") {
+            config.set("storage.delta.max_buffered_ids", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_OBJECT_ID_CACHE_SIZE") {
+            config.set("storage.delta.object_id_cache_size", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE") {
+            config.set("storage.delta.assume_single_node", &val)?;
+        }
+
         if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_PARQUET_TARGET_FILE_COUNT") {
             config.set("storage.parquet.target_file_count", &val)?;
         }
         if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_PARQUET_SORT_ORDER") {
             config.set("storage.parquet.sort_order", &val)?;
         }
+
         if let Ok(val) =
             std::env::var("RDF_FUSION_STORAGE_RDF_ASSUME_QUADS_UNIQUE_IN_SINGLE_FILE")
         {
@@ -245,6 +358,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 4);
+        assert_eq!(entries.len(), 9);
     }
 }

@@ -10,7 +10,5 @@ mod snapshot;
 mod storage;
 mod transaction;
 
-pub(crate) use transaction::DeltaQuadStorageTransaction;
-
 pub use builder::{DeltaQuadStorageBuilder, LoadMode};
 pub use storage::DeltaQuadStorage;

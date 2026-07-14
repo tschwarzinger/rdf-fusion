@@ -18,6 +18,8 @@ pub enum LocalObjectIdError {
     #[error("Object ID {0} not found")]
     NotFound(i64),
     #[error("{0}")]
+    ObjectIdClaimer(String),
+    #[error("{0}")]
     Corruption(String),
     #[error(transparent)]
     Arrow(#[from] ArrowError),

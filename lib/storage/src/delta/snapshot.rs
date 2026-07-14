@@ -15,6 +15,7 @@ use datafusion::physical_planner::ExtensionPlanner;
 use deltalake::arrow::datatypes::{Field, Schema};
 use futures::StreamExt;
 use rdf_fusion_common::StorageError;
+use rdf_fusion_common::config::DeltaStorageOptions;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_extensions::RdfFusionContextView;
@@ -30,6 +31,7 @@ pub struct DeltaQuadStorageSnapshot {
     encoding: QuadStorageEncoding,
     object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
     version: u64,
+    options: DeltaStorageOptions,
     transactional_changeset: Option<DeltaQuadStorageLogChangesetRef>,
 }
 
@@ -40,6 +42,7 @@ impl DeltaQuadStorageSnapshot {
         indexes: Vec<DeltaQuadStorageIndexSnapshot>,
         encoding: QuadStorageEncoding,
         object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
+        options: DeltaStorageOptions,
         version: u64,
     ) -> Self {
         Self {
@@ -48,6 +51,7 @@ impl DeltaQuadStorageSnapshot {
             encoding,
             object_id_mapping,
             version,
+            options,
             transactional_changeset: None,
         }
     }
@@ -62,6 +66,10 @@ impl DeltaQuadStorageSnapshot {
 
     pub fn encoding(&self) -> &QuadStorageEncoding {
         &self.encoding
+    }
+
+    pub fn options(&self) -> &DeltaStorageOptions {
+        &self.options
     }
 
     pub fn object_id_mapping(&self) -> Option<&Arc<DeltaObjectIdDictionary>> {
