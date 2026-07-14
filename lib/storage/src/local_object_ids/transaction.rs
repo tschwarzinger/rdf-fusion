@@ -198,14 +198,7 @@ impl LocalObjectIdTransaction {
         Ok(())
     }
 
-    pub fn set_synced_version(&mut self, version: u64) -> Result<(), LocalObjectIdError> {
-        let mut metadata_table = self.write_txn.open_table(TABLE_METADATA)?;
-        let version_str = version.to_string();
-        metadata_table.insert(SYNCED_VERSION_KEY, version_str.as_str())?;
-        Ok(())
-    }
-
-    pub fn commit(self) -> Result<(), LocalObjectIdError> {
+    pub fn commit(self, delta_version: u64) -> Result<(), LocalObjectIdError> {
         {
             let mut id_to_term_table = self.write_txn.open_table(TABLE_ID_TO_TERM)?;
             let mut term_to_id_table = self.write_txn.open_table(TABLE_TERM_TO_ID)?;
@@ -226,19 +219,9 @@ impl LocalObjectIdTransaction {
 
             let current_claim = self.claimed_ids.peek_current_claim();
             let mut metadata_table = self.write_txn.open_table(TABLE_METADATA)?;
-
-            match current_claim {
-                None => {
-                    metadata_table.remove(NEXT_FREE_ID_KEY)?;
-                    metadata_table.remove(LAST_FREE_ID_KEY)?;
-                }
-                Some((next_free_id, last_free_id)) => {
-                    let next = next_free_id.to_string();
-                    let last = last_free_id.to_string();
-                    metadata_table.insert(NEXT_FREE_ID_KEY, next.as_str())?;
-                    metadata_table.insert(LAST_FREE_ID_KEY, last.as_str())?;
-                }
-            }
+            let delta_version_str = delta_version.to_string();
+            metadata_table.insert(SYNCED_VERSION_KEY, delta_version_str.as_str())?;
+            write_claim(&mut metadata_table, current_claim)?;
         }
 
         self.write_txn.commit()?;
@@ -249,18 +232,7 @@ impl LocalObjectIdTransaction {
     pub fn abort(mut self) -> Result<(), LocalObjectIdError> {
         {
             let mut metadata_table = self.write_txn.open_table(TABLE_METADATA)?;
-            match &self.reset_state_on_conflict {
-                None => {
-                    metadata_table.remove(NEXT_FREE_ID_KEY)?;
-                    metadata_table.remove(LAST_FREE_ID_KEY)?;
-                }
-                Some((next_free_id, last_free_id)) => {
-                    let next = next_free_id.to_string();
-                    let last = last_free_id.to_string();
-                    metadata_table.insert(NEXT_FREE_ID_KEY, next.as_str())?;
-                    metadata_table.insert(LAST_FREE_ID_KEY, last.as_str())?;
-                }
-            }
+            write_claim(&mut metadata_table, self.reset_state_on_conflict)?;
         }
 
         self.claimed_ids
@@ -308,5 +280,26 @@ fn try_load_initial_claim(
             "Only one claim tracking value was found in the local object id mapping."
                 .to_string(),
         )),
+    }
+}
+
+/// Writes the given `claim` into the metadata table.
+fn write_claim(
+    metadata_table: &mut redb::Table<&str, &str>,
+    claim: Option<(i64, i64)>,
+) -> Result<(), LocalObjectIdError> {
+    match claim {
+        None => {
+            metadata_table.remove(NEXT_FREE_ID_KEY)?;
+            metadata_table.remove(LAST_FREE_ID_KEY)?;
+            Ok(())
+        }
+        Some((next_free_id, last_free_id)) => {
+            let next = next_free_id.to_string();
+            let last = last_free_id.to_string();
+            metadata_table.insert(NEXT_FREE_ID_KEY, next.as_str())?;
+            metadata_table.insert(LAST_FREE_ID_KEY, last.as_str())?;
+            Ok(())
+        }
     }
 }

@@ -203,7 +203,8 @@ impl ObjectIdEncodingStream {
                 .map_err(|e| DataFusionError::External(Box::new(e)))?;
 
             if success {
-                txn.commit()
+                let delta_version = mapping.delta_version().await;
+                txn.commit(delta_version)
                     .map_err(|e| DataFusionError::External(Box::new(e)))?;
                 Ok(CommitResult::Success)
             } else {

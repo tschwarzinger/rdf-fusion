@@ -48,7 +48,7 @@ async fn test_transaction_with_claim_does_not_decrease_claim() {
     builder.append_raw(1, "http://example.org/A", None, None);
     let array = PlainTermArray::try_from(builder.finish().into_array_ref()).unwrap();
     txn.encode_array(&array).await.unwrap();
-    txn.commit().unwrap();
+    txn.commit(0).unwrap();
 
     let mut txn = dictionary.transaction().await.unwrap();
     let mut builder = PlainTermArrayElementBuilder::new();

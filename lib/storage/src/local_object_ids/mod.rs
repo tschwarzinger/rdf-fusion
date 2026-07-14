@@ -50,7 +50,7 @@ mod tests {
         ]);
 
         let encoded_ids = txn.encode_array(&input_array).await?;
-        txn.commit()?;
+        txn.commit(0)?;
 
         let snapshot = mapping.snapshot()?;
         let resolved_array_ref = snapshot.resolve_plain_terms(&encoded_ids)?;
@@ -86,7 +86,7 @@ mod tests {
         let batch = RecordBatch::try_new(schema, vec![id_array, term_array])?;
 
         txn.add_global_batch(&batch).await?;
-        txn.commit()?;
+        txn.commit(0)?;
 
         let snapshot = dictionary.snapshot()?;
         assert_eq!(snapshot.len().unwrap(), 2);
@@ -100,15 +100,13 @@ mod tests {
         let mapping = setup_dict().await;
         assert_eq!(mapping.snapshot()?.get_synced_version()?, None);
 
-        let mut txn = mapping.transaction().await?;
-        txn.set_synced_version(42)?;
-        txn.commit()?;
+        let txn = mapping.transaction().await?;
+        txn.commit(42)?;
 
         assert_eq!(mapping.snapshot()?.get_synced_version()?, Some(42));
 
-        let mut txn2 = mapping.transaction().await?;
-        txn2.set_synced_version(100)?;
-        txn2.commit()?;
+        let txn2 = mapping.transaction().await?;
+        txn2.commit(100)?;
 
         assert_eq!(mapping.snapshot()?.get_synced_version()?, Some(100));
 
@@ -125,7 +123,7 @@ mod tests {
         let ids = txn.encode_array(&array).await.unwrap();
         assert_eq!(ids.len(), 2);
 
-        txn.commit().unwrap();
+        txn.commit(0).unwrap();
 
         let snapshot = dict.snapshot().unwrap();
         let resolved = snapshot.resolve_plain_terms(&ids).unwrap();

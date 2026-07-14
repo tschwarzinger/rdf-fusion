@@ -28,6 +28,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
+md-5.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

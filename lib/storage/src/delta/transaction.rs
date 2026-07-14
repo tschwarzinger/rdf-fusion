@@ -258,11 +258,12 @@ impl DeltaQuadsStorageTransaction {
                 current_count += batch.num_rows();
                 writer.write(batch).await?;
 
-                if current_count >= 10_000_000 {
-                    info!("Flushing ~10M operations during large transaction ...");
+                if current_count >= 1_000_000 {
+                    info!("Flushing ~1M operations during large transaction ...");
                     let new_files = writer.flush().await?;
                     add_actions.extend(new_files);
                     current_count = 0;
+                    writer = create_record_batch_writer(&table).await?;
                 }
             }
         }

@@ -86,7 +86,7 @@ pub async fn main() -> anyhow::Result<()> {
                     )
                     .await
                 }
-                cli::QuadStorageType::DeltaLake => {
+                cli::QuadStorageType::DeltaQuads => {
                     let store = create_store(&args).await?;
                     commands::load::load(
                         commands::load::LoadCommandType::Other(store),
@@ -144,7 +144,7 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
         .context("Invalid object store URL")?;
 
     let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
-        cli::QuadStorageType::DeltaLake => {
+        cli::QuadStorageType::DeltaQuads => {
             create_delta_storage(
                 &location,
                 encoding,
@@ -215,7 +215,7 @@ async fn create_delta_storage(
 }
 
 /// HACK: Creates a dummy RdfFusionContext for Parquet loading because we cannot create an empty
-/// Parquet store, so we set up a dummy DeltaLake store inside an in-memory object store.
+/// Parquet store, so we set up a dummy DeltaQuads store inside an in-memory object store.
 async fn create_context_for_parquet_load(
     args: &Args,
 ) -> anyhow::Result<RdfFusionContext> {

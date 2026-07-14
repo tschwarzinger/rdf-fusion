@@ -118,7 +118,7 @@ impl ObjectIdClaimer for DeltaObjectIdClaimer {
                 Err(object_store::Error::NotImplemented { .. })
                 | Err(object_store::Error::NotSupported { .. }) => {
                     return Err(LocalObjectIdError::ObjectIdClaimer(
-                        "The object store does not support conditional puts. If you are running a single node, you can set the RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE=1 environment variable to bypass this check.".to_string(),
+                        "The object store does not support conditional puts. If you are running a single node, you can set the RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE=true environment variable to bypass this check.".to_string(),
                     ));
                 }
                 Err(object_store::Error::AlreadyExists { .. })

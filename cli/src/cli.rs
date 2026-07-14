@@ -56,7 +56,7 @@ pub enum QuadStorageType {
     /// Stores RDF quads in various [Delta Lake](https://delta.io) tables.
     ///
     /// Only supports a single location.
-    DeltaLake,
+    DeltaQuads,
     /// Directly queries a set of Parquet files.
     Parquet,
 }

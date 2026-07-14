@@ -12,7 +12,9 @@ use deltalake::arrow::datatypes::Schema;
 use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
 use deltalake::kernel::Action;
 use deltalake::kernel::engine::arrow_conversion::{TryFromArrow, TryFromKernel};
-use deltalake::kernel::transaction::{CommitBuilder, TableReference, TransactionError};
+use deltalake::kernel::transaction::{
+    CommitBuilder, CommitProperties, TableReference, TransactionError,
+};
 use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
 use deltalake::protocol::{DeltaOperation, SaveMode};
@@ -21,6 +23,7 @@ use deltalake::{
     DataType as DeltaDataType, DeltaTable, DeltaTableConfig, DeltaTableError, StructField,
 };
 use futures::StreamExt;
+use md5::{Digest, Md5};
 use rdf_fusion_common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::TermEncoding;
@@ -43,19 +46,20 @@ fn get_redb_path(
     }
 
     if let Some(ref work_dir) = options.local.work_dir {
-        let mut safe_name = String::new();
-        let mut last_was_underscore = false;
-        for c in location.as_str().chars() {
-            if c.is_alphanumeric() {
-                safe_name.push(c);
-                last_was_underscore = false;
-            } else if !last_was_underscore {
-                safe_name.push('_');
-                last_was_underscore = true;
-            }
+        let mut hasher = Md5::new();
+        hasher.update(location.as_str().as_bytes());
+        let result = hasher.finalize();
+
+        let mut hash = String::with_capacity(32);
+        for byte in result {
+            use std::fmt::Write;
+            write!(&mut hash, "{byte:02x}").unwrap();
         }
-        let safe_name = safe_name.trim_end_matches('_');
-        let file_name = format!("{safe_name}.redb");
+
+        let file_name = format!("{hash}.redb");
+
+        info!("Using redb file '{file_name}' for location '{location}'.");
+
         Some(
             std::path::PathBuf::from(work_dir)
                 .join("dictionaries")
@@ -112,18 +116,17 @@ impl DeltaObjectIdDictionary {
             options.storage.delta.object_id_claim_size,
             put_mode,
         ));
-        let in_memory_mapping = LocalObjectIdDictionary::try_new(
+        let local_mapping = LocalObjectIdDictionary::try_new(
             db_path,
             options.storage.delta.object_id_cache_size,
             claimer,
         )?;
 
-        let mut txn = in_memory_mapping.transaction().await?;
-        txn.set_synced_version(table.version().unwrap_or(0))?;
-        txn.commit()?;
+        let txn = local_mapping.transaction().await?;
+        txn.commit(0)?;
 
         Ok(Self {
-            local_mapping: Arc::new(in_memory_mapping),
+            local_mapping: Arc::new(local_mapping),
             table: Arc::new(tokio::sync::RwLock::new(table)),
             table_schema,
         })
@@ -186,6 +189,11 @@ impl DeltaObjectIdDictionary {
         Arc::clone(&self.local_mapping)
     }
 
+    /// Returns the current version of the Delta Table.
+    pub async fn delta_version(&self) -> u64 {
+        self.table.read().await.version().unwrap_or(0) as u64
+    }
+
     pub async fn update_local_dictionary(&self) -> Result<(), DeltaQuadsStorageError> {
         let mut table = self.table.write().await;
         table.load().await?;
@@ -220,8 +228,7 @@ impl DeltaObjectIdDictionary {
             txn.add_global_batch(&batch?).await?;
         }
 
-        txn.set_synced_version(table_version as u64)?;
-        txn.commit()?;
+        txn.commit(table_version as u64)?;
 
         Ok(())
     }
@@ -231,7 +238,7 @@ impl DeltaObjectIdDictionary {
         Ok(())
     }
 
-    /// Flushes the current transaction to Delta Lake. Returns Ok(true) if successful, Ok(false) on
+    /// Commits the current transaction to Delta Lake. Returns Ok(true) if successful, Ok(false) on
     /// conflict.
     pub async fn commit_dictionary_transaction_to_delta(
         &self,
@@ -269,10 +276,15 @@ impl DeltaObjectIdDictionary {
         let add_actions = writer.flush().await?;
 
         let table_state = table.state.as_ref().expect("Table state loaded");
+        let current_version = table_state.version();
+        let should_checkpoint = current_version > 0 && current_version % 10 == 0;
 
-        let commit_result = CommitBuilder::default()
+        let commit_properties = CommitProperties::default()
+            .with_create_checkpoint(should_checkpoint)
+            .with_max_retries(0);
+
+        let commit_result = CommitBuilder::from(commit_properties)
             .with_actions(add_actions.into_iter().map(Action::Add).collect())
-            .with_max_retries(0)
             .build(
                 Some(table_state),
                 table.log_store(),
@@ -285,8 +297,8 @@ impl DeltaObjectIdDictionary {
             .await;
 
         match commit_result {
-            Ok(_) => {
-                table.load().await?;
+            Ok(state) => {
+                table.state = Some(state.snapshot);
                 Ok(true)
             }
             Err(DeltaTableError::VersionAlreadyExists(_)) => Ok(false),
@@ -332,7 +344,7 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
             .encode_array(array)
             .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
-        txn.commit()
+        txn.commit(self.delta_version().await)
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
 
         Ok(Arc::new(ids_array) as ArrayRef)

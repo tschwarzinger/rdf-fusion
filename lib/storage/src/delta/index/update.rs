@@ -169,6 +169,8 @@ impl DeltaStorageQuadIndexUpdater {
                 let file_actions = writer.flush().await?;
                 all_actions.extend(file_actions.into_iter().map(Action::Add));
                 current_rows = 0;
+                writer = RecordBatchWriter::for_table(&self.index_table)?
+                    .with_writer_properties(self.writer_properties.clone());
             }
         }
 
