@@ -1,166 +1,111 @@
 mod claim;
-mod dictionary;
 mod error;
-mod snapshot;
-mod transaction;
+mod in_memory;
+mod rocksdb;
+mod traits;
 
 pub use claim::{ObjectIdClaim, ObjectIdClaimer, StaticObjectIdClaimer};
-pub use dictionary::LocalObjectIdDictionary;
 pub use error::LocalObjectIdError;
-use redb::TableDefinition;
-pub use snapshot::LocalObjectIdDictionarySnapshot;
-pub use transaction::LocalObjectIdTransaction;
-
-type TermTuple<'a> = (i8, &'a str, Option<&'a str>, Option<&'a str>);
+pub use in_memory::InMemoryObjectIdDictionary;
+pub use quick_cache::sync::Cache;
+pub use rocksdb::RocksDBObjectIdDictionary;
+pub use traits::{
+    LocalObjectIdDictionary, LocalObjectIdDictionarySnapshot, LocalObjectIdTransaction,
+};
 
 type OwnedTermTuple = (i8, String, Option<String>, Option<String>);
 
-const TABLE_ID_TO_TERM: TableDefinition<i64, TermTuple<'static>> =
-    TableDefinition::new("id_to_term");
-const TABLE_TERM_TO_ID: TableDefinition<TermTuple<'static>, i64> =
-    TableDefinition::new("term_to_id");
-const TABLE_METADATA: TableDefinition<&str, &str> = TableDefinition::new("metadata");
+pub(crate) const CF_ID_TO_TERM: &str = "id_to_term";
+pub(crate) const CF_TERM_TO_ID: &str = "term_to_id";
+pub(crate) const CF_METADATA: &str = "metadata";
 
-const SYNCED_VERSION_KEY: &str = "synced_version";
-const NEXT_FREE_ID_KEY: &str = "next_free_id";
-const LAST_FREE_ID_KEY: &str = "last_free_id";
+pub(crate) const SYNCED_VERSION_KEY: &str = "synced_version";
+pub(crate) const NEXT_FREE_ID_KEY: &str = "next_free_id";
+pub(crate) const LAST_FREE_ID_KEY: &str = "last_free_id";
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use datafusion::arrow::array::{Array, Int64Builder, RecordBatch};
-    use datafusion::arrow::datatypes::{DataType, Field, Schema};
-    use rdf_fusion_common::DFResult;
-    use rdf_fusion_encoding::EncodingArray;
-    use rdf_fusion_encoding::plain_term::{
-        PlainTermArray, PlainTermArrayElementBuilder, PlainTermEncoding,
-    };
-    use std::sync::Arc;
-
-    #[tokio::test]
-    async fn test_encode_and_resolve_terms() -> DFResult<()> {
-        let mapping = setup_dict().await;
-        let mut txn = mapping.transaction().await?;
-
-        let input_array = create_test_array(vec![
-            ("http://example.org/Alice", None, None),
-            ("b0", None, None),
-            ("Hello", None, Some("en")),
-            ("42", Some("http://www.w3.org/2001/XMLSchema#integer"), None),
-        ]);
-
-        let encoded_ids = txn.encode_array(&input_array).await?;
-        txn.commit(0)?;
-
-        let snapshot = mapping.snapshot()?;
-        let resolved_array_ref = snapshot.resolve_plain_terms(&encoded_ids)?;
-
-        assert_eq!(input_array.inner().as_ref(), resolved_array_ref.as_ref());
-        Ok(())
+pub(crate) fn encode_term_tuple_ref(
+    tuple: &(i8, &str, Option<&str>, Option<&str>),
+) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.push(tuple.0 as u8);
+    bytes.extend_from_slice(&(tuple.1.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(tuple.1.as_bytes());
+    if let Some(dt) = tuple.2 {
+        bytes.push(1);
+        bytes.extend_from_slice(&(dt.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(dt.as_bytes());
+    } else {
+        bytes.push(0);
     }
-
-    #[tokio::test]
-    async fn test_add_global_batch_non_contiguous() -> DFResult<()> {
-        let dictionary = LocalObjectIdDictionary::try_new(
-            None,
-            1_000_000,
-            Arc::new(StaticObjectIdClaimer),
-        )?;
-        let mut txn = dictionary.transaction().await?;
-
-        let mut id_builder = Int64Builder::new();
-        id_builder.append_value(1);
-        id_builder.append_value(3);
-        let id_array = Arc::new(id_builder.finish()) as Arc<dyn Array>;
-
-        let mut term_builder = PlainTermArrayElementBuilder::new();
-        term_builder.append_raw(1, "A", None, None);
-        term_builder.append_raw(1, "B", None, None);
-        let term_array = term_builder.finish().into_array_ref();
-
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new("term", PlainTermEncoding::data_type().clone(), true),
-        ]));
-
-        let batch = RecordBatch::try_new(schema, vec![id_array, term_array])?;
-
-        txn.add_global_batch(&batch).await?;
-        txn.commit(0)?;
-
-        let snapshot = dictionary.snapshot()?;
-        assert_eq!(snapshot.len().unwrap(), 2);
-        assert!(snapshot.read_claimed_object_ids()?.is_none()); // Doesn't change claim
-
-        Ok(())
+    if let Some(lang) = tuple.3 {
+        bytes.push(1);
+        bytes.extend_from_slice(&(lang.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(lang.as_bytes());
+    } else {
+        bytes.push(0);
     }
+    bytes
+}
 
-    #[tokio::test]
-    async fn test_synced_version() -> DFResult<()> {
-        let mapping = setup_dict().await;
-        assert_eq!(mapping.snapshot()?.get_synced_version()?, None);
+pub(crate) fn decode_term_tuple(bytes: &[u8]) -> OwnedTermTuple {
+    let term_type = bytes[0] as i8;
+    let mut offset = 1;
 
-        let txn = mapping.transaction().await?;
-        txn.commit(42)?;
+    let len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+    offset += 4;
+    let value = std::str::from_utf8(&bytes[offset..offset + len])
+        .unwrap()
+        .to_string();
+    offset += len;
 
-        assert_eq!(mapping.snapshot()?.get_synced_version()?, Some(42));
-
-        let txn2 = mapping.transaction().await?;
-        txn2.commit(100)?;
-
-        assert_eq!(mapping.snapshot()?.get_synced_version()?, Some(100));
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_transaction_commit() {
-        let dict = setup_dict().await;
-
-        let mut txn = dict.transaction().await.unwrap();
-        let array = create_test_array(vec![("test1", None, None), ("test2", None, None)]);
-
-        let ids = txn.encode_array(&array).await.unwrap();
-        assert_eq!(ids.len(), 2);
-
-        txn.commit(0).unwrap();
-
-        let snapshot = dict.snapshot().unwrap();
-        let resolved = snapshot.resolve_plain_terms(&ids).unwrap();
-        assert_eq!(resolved.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_transaction_abort() {
-        let dict = setup_dict().await;
-
-        let mut txn = dict.transaction().await.unwrap();
-        let array = create_test_array(vec![("test1", None, None)]);
-        let ids = txn.encode_array(&array).await.unwrap();
-
-        txn.abort().unwrap();
-
-        let snapshot = dict.snapshot().unwrap();
-        assert!(snapshot.resolve_plain_terms(&ids).is_err());
-        assert_eq!(
-            snapshot.read_claimed_object_ids().unwrap().unwrap(),
-            (0, 9223372036854775807) // New claims are also stored on aborts.
-        );
-    }
-
-    async fn setup_dict() -> LocalObjectIdDictionary {
-        LocalObjectIdDictionary::try_new(None, 1_000_000, Arc::new(StaticObjectIdClaimer))
+    let data_type = if bytes[offset] == 1 {
+        offset += 1;
+        let len =
+            u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        let dt = std::str::from_utf8(&bytes[offset..offset + len])
             .unwrap()
-    }
+            .to_string();
+        offset += len;
+        Some(dt)
+    } else {
+        offset += 1;
+        None
+    };
 
-    fn create_test_array(
-        terms: Vec<(&str, Option<&str>, Option<&str>)>,
-    ) -> PlainTermArray {
-        let mut builder = PlainTermArrayElementBuilder::new();
-        for (value, datatype, lang) in terms {
-            builder.append_raw(1, value, datatype, lang);
+    let language = if bytes[offset] == 1 {
+        offset += 1;
+        let len =
+            u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        let lang = std::str::from_utf8(&bytes[offset..offset + len])
+            .unwrap()
+            .to_string();
+        Some(lang)
+    } else {
+        None
+    };
+
+    (term_type, value, data_type, language)
+}
+
+pub(crate) fn validate_initial_claim(
+    next_free_id: Option<i64>,
+    last_free_id: Option<i64>,
+) -> Result<Option<(i64, i64)>, LocalObjectIdError> {
+    match (next_free_id, last_free_id) {
+        (Some(next), Some(last)) => {
+            if next > last {
+                return Err(LocalObjectIdError::Corruption(format!(
+                    "Invalid object id claim when loading local object id dictionary ([{next}, {last}])"
+                )));
+            }
+            Ok(Some((next, last)))
         }
-        let array_ref = builder.finish().into_array_ref();
-        PlainTermArray::try_from(array_ref).unwrap()
+        (None, None) => Ok(None),
+        _ => Err(LocalObjectIdError::Corruption(
+            "Only one claim tracking value was found in the local object id mapping."
+                .to_string(),
+        )),
     }
 }

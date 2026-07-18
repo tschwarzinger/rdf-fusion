@@ -7,6 +7,7 @@ use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskCo
 use datafusion::logical_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF,
 };
+use datafusion::physical_expr::{EquivalenceProperties, Partitioning};
 use datafusion::physical_plan::execution_plan::CardinalityEffect;
 use datafusion::physical_plan::metrics::{
     BaselineMetrics, ExecutionPlanMetricsSet, MetricsSet, Time,
@@ -14,7 +15,6 @@ use datafusion::physical_plan::metrics::{
 use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
 };
-use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
 use futures::Stream;
 use futures::future::BoxFuture;
 use rdf_fusion_common::DFResult;

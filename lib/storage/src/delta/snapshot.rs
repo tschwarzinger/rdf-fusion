@@ -115,7 +115,10 @@ impl QuadStorageSnapshot for DeltaQuadsStorageSnapshot {
             .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;
 
-        let Some(named_graphs) = changeset.added_named_graphs(state).await? else {
+        let Some(named_graphs) = changeset
+            .added_named_graphs(&crate::delta::log::ChangesetContext::default(), state)
+            .await?
+        else {
             let fields = vec![Field::new(
                 COL_GRAPH,
                 self.encoding.term_type().clone(),

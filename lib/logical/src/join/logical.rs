@@ -171,7 +171,7 @@ impl UserDefinedLogicalNodeCore for SparqlJoinNode {
             .as_ref()
             .map(ToString::to_string)
             .unwrap_or_default();
-        write!(f, "SparqlJoin: {} {}", self.join_type, &filter)
+        write!(f, "SparqlJoin: {} {}", self.join_type, filter)
     }
 
     fn with_exprs_and_inputs(

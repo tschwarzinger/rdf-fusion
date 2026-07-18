@@ -23,6 +23,7 @@ sparesults.workspace = true
 text-diff.workspace = true
 time = { workspace = true, features = ["formatting"] }
 tokio.workspace = true
+tempfile.workspace = true
 tokio-util = { workspace = true, features = ["io"] }
 url.workspace = true
 

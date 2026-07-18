@@ -8,8 +8,8 @@ pub fn ensure_file_download(file_path: &Path) -> anyhow::Result<()> {
     if !file_path.exists() {
         bail!(
             "{:?} does not exist ({:?})",
-            &file_path,
-            &path::absolute(file_path)
+            file_path,
+            path::absolute(file_path)
         );
     }
     Ok(())

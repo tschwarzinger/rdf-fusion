@@ -26,6 +26,7 @@ use rdf_fusion_extensions::storage::{
 };
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::info;
 
 /// A quad storage that uses Delta Lake tables for storing quads.
 ///
@@ -339,12 +340,25 @@ impl QuadStorage for DeltaQuadsStorage {
 
     async fn optimize(&self, state: &SessionState) -> Result<(), StorageError> {
         if self.indexes.is_empty() {
+            info!("Database has no indexes.");
             return Ok(());
         }
 
-        let any_index = &self.indexes()[0];
-        let snapshot = any_index.snapshot().await?;
-        let current_index_version = snapshot.log_transaction_version();
+        let mut snapshots = Vec::new();
+        for index in self.indexes() {
+            let snapshot = index.snapshot().await?;
+            snapshots.push(snapshot)
+        }
+
+        let mut min_version = u64::MAX;
+        for snapshot in &snapshots {
+            let current_index_version = snapshot.log_transaction_version();
+            if current_index_version < min_version {
+                min_version = current_index_version;
+            }
+        }
+
+        let current_index_version = min_version;
         let current_log_version = self.log.version().await;
 
         if current_log_version < current_index_version {
@@ -354,6 +368,10 @@ impl QuadStorage for DeltaQuadsStorage {
         }
 
         if current_log_version == current_index_version {
+            info!(
+                "All indexes are up-to-date (version {}).",
+                current_log_version
+            );
             return Ok(());
         }
 
@@ -363,10 +381,26 @@ impl QuadStorage for DeltaQuadsStorage {
         );
         let changeset = self.log.compute_changeset(state, version_range).await?;
 
-        for index in &self.indexes {
+        info!(
+            "Updating indexes from version {} to version {}",
+            current_index_version, current_log_version
+        );
+
+        for (index, snapshot) in self.indexes.iter().zip(snapshots.iter()) {
+            if snapshot.log_transaction_version() == current_log_version {
+                info!(
+                    "Skipping updating index {} with matching version ({}).",
+                    snapshot.components(),
+                    snapshot.log_transaction_version()
+                );
+                continue;
+            }
+
+            info!("Updating index {} ...", index.components().to_string());
             Box::pin(index.update(state, Arc::clone(&changeset)))
                 .await
                 .map_err(|e| StorageError::Other(Box::new(e)))?;
+            info!("Index {} updated.", index.components().to_string());
         }
 
         Ok(())

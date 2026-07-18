@@ -20,6 +20,7 @@ fn run_plan_assertions(assertions: impl FnOnce()) {
         r"part-[0-9a-f-]+\.zstd\.parquet",
         "delta-parquet-file.zstd.parquet",
     );
+    settings.add_filter(r"part-[0-9a-f-]+.parquet", "delta-parquet-file.parquet");
 
     settings.bind(assertions);
 }

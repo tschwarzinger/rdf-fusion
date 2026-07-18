@@ -44,20 +44,26 @@ impl VerifyNotNullExec {
             .collect::<Vec<_>>();
         let new_schema = Arc::new(Schema::new(fields));
 
-        let plan_properties = Arc::new(
-            inner.properties().as_ref().clone().with_eq_properties(
-                inner
-                    .properties()
-                    .eq_properties
-                    .clone()
-                    .with_new_schema(new_schema)?,
-            ),
-        );
+        let inner_properties = inner.properties().as_ref().clone();
+        let inner_orderings = inner_properties
+            .output_ordering()
+            .iter()
+            .flat_map(|lo| lo.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let mut new_eq_properties = inner
+            .properties()
+            .eq_properties
+            .clone()
+            .with_new_schema(new_schema)?;
+        new_eq_properties.add_orderings([inner_orderings]);
+        let plan_properties = inner_properties.with_eq_properties(new_eq_properties);
 
         Ok(Self {
             inner,
             columns_to_verify,
-            plan_properties,
+            plan_properties: Arc::new(plan_properties),
         })
     }
 }
@@ -79,6 +85,10 @@ impl ExecutionPlan for VerifyNotNullExec {
 
     fn schema(&self) -> SchemaRef {
         Arc::clone(self.plan_properties.eq_properties.schema())
+    }
+
+    fn maintains_input_order(&self) -> Vec<bool> {
+        vec![true]
     }
 
     fn properties(&self) -> &Arc<PlanProperties> {

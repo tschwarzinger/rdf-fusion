@@ -131,308 +131,343 @@ mod tests {
     use datafusion::physical_plan::displayable;
     use datafusion::physical_planner::DefaultPhysicalPlanner;
     use datafusion::prelude::{SessionConfig, SessionContext};
-    use insta::{Settings, assert_snapshot};
     use rdf_fusion_common::{NamedNode, Quad, TermPattern, TriplePattern};
     use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
     use rdf_fusion_execution::RdfFusionContextBuilder;
     use rdf_fusion_extensions::storage::QuadStorage;
     use rdf_fusion_logical::ActiveGraph;
 
+    /// Automatically applies standard filters for Parquet file names before snapshotting.
+    macro_rules! assert_plan_snapshot {
+        ($plan_str:expr, @$snapshot:literal) => {
+            let plan_str = $plan_str;
+
+            insta::with_settings!({filters => vec![
+                (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
+                (r"part-[0-9a-f-]+\.parquet", "<file>.parquet"),
+            ]}, {
+                insta::assert_snapshot!(plan_str, @$snapshot);
+            });
+        };
+    }
+
     #[tokio::test]
     async fn test_planner_skips_apply_changeset_when_versions_match() {
-        let (session, storage, node) = setup(
+        let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
             vec![IndexComponents::GSPO],
+            1,
         )
         .await;
-        let planner =
-            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
-        let plan = plan_node(&planner, &node, &session).await;
-        insta::with_settings!({filters => vec![
-            (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
-        ]}, {
-            assert_snapshot!(
-                print_scan_implementation(plan.as_ref()),
-                @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 0, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 0 AND 0 <= subject_max@2, required_guarantees=[subject in (0)]"
-            )
-        });
+        assert_plan_snapshot!(ctx.get_plan_string().await, @"EmptyExec");
     }
 
     #[tokio::test]
     async fn test_planner_pushes_down_filter_string_encoding() {
-        let (session, storage, node) =
-            setup(QuadStorageEncodingName::String, vec![IndexComponents::GSPO]).await;
-
-        let planner =
-            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
-        let plan = plan_node(&planner, &node, &session).await;
-        insta::with_settings!({filters => vec![
-            (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
-        ]}, {
-            assert_snapshot!(
-                print_scan_implementation(plan.as_ref()),
-                @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.at/>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.at/> AND <https://my.at/> <= subject_max@2, required_guarantees=[subject in (<https://my.at/>)]"
-            )
-        });
+        let ctx = PlannerTestContext::new(
+            QuadStorageEncodingName::String,
+            vec![IndexComponents::GSPO],
+            1,
+        )
+        .await;
+        assert_plan_snapshot!(ctx.get_plan_string().await, @"EmptyExec");
     }
 
     #[tokio::test]
     async fn test_no_index_no_change() {
-        let (session, storage, node) =
-            setup(QuadStorageEncodingName::ObjectId, vec![]).await;
-        let planner =
-            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
-        let plan = plan_node(&planner, &node, &session).await;
-
-        assert_snapshot!(
-                print_scan_implementation(plan.as_ref()),
-            @"EmptyExec"
-        )
+        let ctx =
+            PlannerTestContext::new(QuadStorageEncodingName::ObjectId, vec![], 1).await;
+        assert_plan_snapshot!(ctx.get_plan_string().await, @"EmptyExec");
     }
 
     #[tokio::test]
     async fn test_no_index_with_change() {
-        let (session, storage, node) =
-            setup(QuadStorageEncodingName::ObjectId, vec![]).await;
+        let ctx =
+            PlannerTestContext::new(QuadStorageEncodingName::ObjectId, vec![], 1).await;
 
-        let df = quads_to_plain_term_dataframe(
-            &session,
-            &[Quad::new(
-                NamedNode::new_unchecked("https://my.com/s"),
-                NamedNode::new_unchecked("https://my.com/p"),
-                NamedNode::new_unchecked("https://my.com/o"),
-                NamedNode::new_unchecked("https://my.com/g"),
-            )],
-        );
+        ctx.insert(&[test_quad(
+            "https://my.com/s",
+            "https://my.com/p",
+            "https://my.com/o",
+            "https://my.com/g",
+        )])
+        .await;
 
-        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
-        transaction.insert(df).await.unwrap();
-        transaction.commit().await.unwrap();
-
-        let planner =
-            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
-        let plan = plan_node(&planner, &node, &session).await;
-
-        let mut settings = Settings::default();
-        settings.add_filter(r"part-.*\.parquet", "<name>.parquet");
-        settings.bind(|| {
-            assert_snapshot!(
-                print_scan_implementation(plan.as_ref()),
-                @"
-            ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-              FilterExec: graph@0 IS NULL AND subject@1 = 4
-                DataSourceExec: partitions=1, partition_sizes=[1]
-            "
-            )
-        })
+        assert_plan_snapshot!(ctx.get_plan_string().await, @"
+        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+          FilterExec: graph@0 IS NULL AND subject@1 = 4
+            DataSourceExec: partitions=1, partition_sizes=[1]
+        ");
     }
 
     #[tokio::test]
     async fn test_planner_with_additions() {
-        let (session, storage, node) = setup(
+        let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
             vec![IndexComponents::GSPO],
+            1,
         )
+        .await
+        .with_existing_quads(&[test_quad(
+            "https://my.com/base_s",
+            "https://my.com/base_p",
+            "https://my.com/base_o",
+            "https://my.com/base_g",
+        )])
         .await;
 
-        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
-        transaction
-            .insert(quads_to_plain_term_dataframe(
-                &session,
-                &[Quad::new(
-                    NamedNode::new_unchecked("https://my.com/s"),
-                    NamedNode::new_unchecked("https://my.com/p"),
-                    NamedNode::new_unchecked("https://my.com/o"),
-                    NamedNode::new_unchecked("https://my.com/g"),
-                )],
-            ))
-            .await
-            .unwrap();
-        transaction.commit().await.unwrap();
+        ctx.insert(&[test_quad(
+            "https://my.com/s",
+            "https://my.com/p",
+            "https://my.com/o",
+            "https://my.com/g",
+        )])
+        .await;
 
-        let planner =
-            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
-        let plan = plan_node(&planner, &node, &session).await;
-        insta::with_settings!({filters => vec![
-            (r"part-.*\.parquet", "<file>.parquet"),
-        ]}, {
-                assert_snapshot!(
-                    print_scan_implementation(plan.as_ref()),
-                        @"
-                ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-                  UnionExec
-                    HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
-                      FilterExec: graph@0 IS NULL AND subject@1 = 4
-                        DataSourceExec: partitions=1, partition_sizes=[1]
-                      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 4, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 4 AND 4 <= subject_max@2, required_guarantees=[subject in (4)]
-                    FilterExec: graph@0 IS NULL AND subject@1 = 4
-                      DataSourceExec: partitions=1, partition_sizes=[1]
-                "
-                )
-        });
+        assert_plan_snapshot!(
+            ctx.get_plan_string().await,
+            @"
+        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+          SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
+            SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
+              UnionExec
+                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 8, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 8 AND 8 <= subject_max@2, required_guarantees=[subject in (8)]
+                SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
+                  FilterExec: graph@0 IS NULL AND subject@1 = 8
+                    DataSourceExec: partitions=1, partition_sizes=[1]
+        "
+        );
     }
 
     #[tokio::test]
     async fn test_planner_with_deletions_inserts_anti_join() {
-        let (session, storage, node) = setup(
+        let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
             vec![IndexComponents::GSPO],
+            1,
         )
+        .await
+        .with_existing_quads(&[test_quad(
+            "https://my.com/s",
+            "https://my.com/p",
+            "https://my.com/o",
+            "https://my.com/g",
+        )])
         .await;
 
-        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
-        transaction
-            .remove(quads_to_plain_term_dataframe(
-                &session,
-                &[Quad::new(
-                    NamedNode::new_unchecked("https://my.com/s"),
-                    NamedNode::new_unchecked("https://my.com/p"),
-                    NamedNode::new_unchecked("https://my.com/o"),
-                    NamedNode::new_unchecked("https://my.com/g"),
-                )],
-            ))
-            .await
-            .unwrap();
-        transaction.commit().await.unwrap();
+        ctx.remove(&[test_quad(
+            "https://my.com/s",
+            "https://my.com/p",
+            "https://my.com/o",
+            "https://my.com/g",
+        )])
+        .await;
 
-        let planner =
-            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
-        let plan = plan_node(&planner, &node, &session).await;
-
-        insta::with_settings!({filters => vec![
-            (r"part-.*\.parquet", "<file>.parquet"),
-        ]}, {
-            assert_snapshot!(
-                print_scan_implementation(plan.as_ref()),
-                @"
-            ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-              HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
-                FilterExec: graph@0 IS NULL AND subject@1 = 4
-                  DataSourceExec: partitions=1, partition_sizes=[1]
-                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 4, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 4 AND 4 <= subject_max@2, required_guarantees=[subject in (4)]
-            "
-            );
-        });
+        assert_plan_snapshot!(ctx.get_plan_string().await, @"
+        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+          SortMergeJoinExec: join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
+            SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
+              FilterExec: graph@0 IS NULL AND subject@1 = 4
+                DataSourceExec: partitions=1, partition_sizes=[1]
+            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 4, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 4 AND 4 <= subject_max@2, required_guarantees=[subject in (4)]
+        ");
     }
 
     #[tokio::test]
     async fn test_planner_with_additions_and_deletions() {
-        let (session, storage, node) = setup(
+        let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
             vec![IndexComponents::GSPO],
+            1,
         )
+        .await
+        .with_existing_quads(&[test_quad(
+            "https://my.com/s",
+            "https://my.com/p",
+            "https://my.com/o",
+            "https://my.com/g",
+        )])
         .await;
 
-        let transaction = storage.begin_transaction(&session.state()).await.unwrap();
-        transaction
-            .insert(quads_to_plain_term_dataframe(
-                &session,
-                &[Quad::new(
-                    NamedNode::new_unchecked("https://my.com/s"),
-                    NamedNode::new_unchecked("https://my.com/p"),
-                    NamedNode::new_unchecked("https://my.com/o"),
-                    NamedNode::new_unchecked("https://my.com/g"),
-                )],
-            ))
-            .await
-            .unwrap();
+        ctx.insert(&[test_quad(
+            "https://my.com/s1",
+            "https://my.com/p1",
+            "https://my.com/o1",
+            "https://my.com/g1",
+        )])
+        .await;
+        ctx.remove(&[test_quad(
+            "https://my.com/s2",
+            "https://my.com/p2",
+            "https://my.com/o2",
+            "https://my.com/g2",
+        )])
+        .await;
 
-        transaction
-            .remove(quads_to_plain_term_dataframe(
-                &session,
-                &[Quad::new(
-                    NamedNode::new_unchecked("https://my.com/s2"),
-                    NamedNode::new_unchecked("https://my.com/p2"),
-                    NamedNode::new_unchecked("https://my.com/o2"),
-                    NamedNode::new_unchecked("https://my.com/g2"),
-                )],
-            ))
-            .await
-            .unwrap();
-        transaction.commit().await.unwrap();
-
-        let planner =
-            DeltaQuadsStoragePlanner::new(storage.snapshot_impl().await.unwrap());
-        let plan = plan_node(&planner, &node, &session).await;
-
-        insta::with_settings!({filters => vec![
-            (r"part-.*\.parquet", "<file>.parquet"),
-        ]}, {
-            assert_snapshot!(
-                print_scan_implementation(plan.as_ref()),
-                @"
-            ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+        assert_plan_snapshot!(ctx.get_plan_string().await, @"
+        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+          SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
+            SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
               UnionExec
-                HashJoinExec: mode=CollectLeft, join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
-                  CoalescePartitionsExec
-                    UnionExec
-                      FilterExec: graph@0 IS NULL AND subject@1 = 8
-                        DataSourceExec: partitions=1, partition_sizes=[1]
-                      FilterExec: graph@0 IS NULL AND subject@1 = 8
-                        DataSourceExec: partitions=1, partition_sizes=[1]
-                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[]]}, projection=[graph, subject, predicate, object], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 8, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 8 AND 8 <= subject_max@2, required_guarantees=[subject in (8)]
-                FilterExec: graph@0 IS NULL AND subject@1 = 8
-                  DataSourceExec: partitions=1, partition_sizes=[1]
-            "
-                    );
-
-        });
+                SortMergeJoinExec: join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
+                  SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
+                    FilterExec: graph@0 IS NULL AND subject@1 = 12
+                      DataSourceExec: partitions=1, partition_sizes=[1]
+                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 12, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 12 AND 12 <= subject_max@2, required_guarantees=[subject in (12)]
+                SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
+                  FilterExec: graph@0 IS NULL AND subject@1 = 12
+                    DataSourceExec: partitions=1, partition_sizes=[1]
+        ");
     }
 
-    async fn setup(
-        encoding: QuadStorageEncodingName,
-        indexes: Vec<IndexComponents>,
-    ) -> (SessionContext, Arc<DeltaQuadsStorage>, QuadPatternNode) {
-        let mut config = SessionConfig::new().with_target_partitions(1);
-        let options = config.options_mut();
-        options.optimizer.enable_dynamic_filter_pushdown = true;
-        options.execution.parquet.pushdown_filters = true;
+    #[tokio::test]
+    async fn test_planner_with_additions_multiple_partitions() {
+        let ctx = PlannerTestContext::new(
+            QuadStorageEncodingName::ObjectId,
+            vec![IndexComponents::GSPO],
+            2,
+        )
+        .await
+        .with_existing_quads(&[test_quad(
+            "https://my.com/base_s",
+            "https://my.com/base_p",
+            "https://my.com/base_o",
+            "https://my.com/base_g",
+        )])
+        .await;
 
-        let storage = Arc::new(DeltaQuadsStorage::new_in_memory(encoding, indexes).await);
+        ctx.insert(&[test_quad(
+            "https://my.com/s",
+            "https://my.com/p",
+            "https://my.com/o",
+            "https://my.com/g",
+        )])
+        .await;
 
-        let storage = Arc::clone(&storage);
-        let context =
-            RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
-                .with_single_partition_session_config()
-                .build()
+        assert_plan_snapshot!(ctx.get_plan_string().await, @"
+        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
+          SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
+            SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
+              UnionExec
+                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 8, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 8 AND 8 <= subject_max@2, required_guarantees=[subject in (8)]
+                SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
+                  FilterExec: graph@0 IS NULL AND subject@1 = 8
+                    DataSourceExec: partitions=1, partition_sizes=[1]
+        ");
+    }
+
+    // ------------------------------------------------------------------------
+    // Test Context Fixture
+    // ------------------------------------------------------------------------
+
+    /// Encapsulates all setup and data manipulation for testing the planner.
+    struct PlannerTestContext {
+        session: SessionContext,
+        storage: Arc<DeltaQuadsStorage>,
+        node: QuadPatternNode,
+    }
+
+    impl PlannerTestContext {
+        /// Creates a new context with a configurable number of partitions.
+        async fn new(
+            encoding: QuadStorageEncodingName,
+            indexes: Vec<IndexComponents>,
+            partitions: usize,
+        ) -> Self {
+            let mut config = SessionConfig::new().with_target_partitions(partitions);
+            let options = config.options_mut();
+            options.optimizer.enable_dynamic_filter_pushdown = true;
+            options.execution.parquet.pushdown_filters = true;
+
+            let storage =
+                Arc::new(DeltaQuadsStorage::new_in_memory(encoding, indexes).await);
+
+            let context = RdfFusionContextBuilder::new(
+                Arc::clone(&storage) as Arc<dyn QuadStorage>
+            )
+            .with_session_config(Some(config))
+            .build()
+            .unwrap();
+
+            let node = QuadPatternNode::new(
+                context.storage().encoding(),
+                ActiveGraph::DefaultGraph,
+                None,
+                TriplePattern {
+                    subject: TermPattern::NamedNode(NamedNode::new_unchecked(
+                        "https://my.at/",
+                    )),
+                    predicate: rdf_fusion_common::Variable::new_unchecked("p").into(),
+                    object: rdf_fusion_common::Variable::new_unchecked("o").into(),
+                },
+            );
+
+            Self {
+                session: context.session_context().clone(),
+                storage,
+                node,
+            }
+        }
+
+        /// Inserts quads directly into the storage as a new transaction and optimizes the storage.
+        async fn with_existing_quads(self, quads: &[Quad]) -> Self {
+            self.insert(quads).await;
+            self.storage.optimize(&self.session.state()).await.unwrap();
+            self
+        }
+
+        /// Inserts quads directly into the storage as a new transaction.
+        async fn insert(&self, quads: &[Quad]) {
+            let df = quads_to_plain_term_dataframe(&self.session, quads);
+            let transaction = self
+                .storage
+                .begin_transaction(&self.session.state())
+                .await
+                .unwrap();
+            transaction.insert(df).await.unwrap();
+            transaction.commit().await.unwrap();
+        }
+
+        /// Removes quads from the storage as a new transaction.
+        async fn remove(&self, quads: &[Quad]) {
+            let df = quads_to_plain_term_dataframe(&self.session, quads);
+            let transaction = self
+                .storage
+                .begin_transaction(&self.session.state())
+                .await
+                .unwrap();
+            transaction.remove(df).await.unwrap();
+            transaction.commit().await.unwrap();
+        }
+
+        /// Returns the formatted string representation of the physical plan.
+        async fn get_plan_string(&self) -> String {
+            let planner = DeltaQuadsStoragePlanner::new(
+                self.storage.snapshot_impl().await.unwrap(),
+            );
+            let plan = planner
+                .plan_extension(
+                    &DefaultPhysicalPlanner::default(),
+                    &self.node,
+                    &[],
+                    &[],
+                    &self.session.state(),
+                )
+                .await
+                .unwrap()
                 .unwrap();
 
-        let node = QuadPatternNode::new(
-            context.storage().encoding(),
-            ActiveGraph::DefaultGraph,
-            None,
-            TriplePattern {
-                subject: TermPattern::NamedNode(NamedNode::new_unchecked(
-                    "https://my.at/",
-                )),
-                predicate: rdf_fusion_common::Variable::new_unchecked("p").into(),
-                object: rdf_fusion_common::Variable::new_unchecked("o").into(),
-            },
-        );
-
-        (context.session_context().clone(), storage, node)
+            displayable(plan.as_ref()).indent(false).to_string()
+        }
     }
 
-    async fn plan_node(
-        planner: &DeltaQuadsStoragePlanner,
-        node: &QuadPatternNode,
-        session: &SessionContext,
-    ) -> Arc<dyn ExecutionPlan> {
-        planner
-            .plan_extension(
-                &DefaultPhysicalPlanner::default(),
-                node,
-                &[],
-                &[],
-                &session.state(),
-            )
-            .await
-            .unwrap()
-            .unwrap()
-    }
-
-    /// Provides the inner scan plan as a string.
-    fn print_scan_implementation(plan: &dyn ExecutionPlan) -> String {
-        displayable(plan).indent(false).to_string()
+    /// Helper to cleanly instantiate a test quad.
+    fn test_quad(s: &str, p: &str, o: &str, g: &str) -> Quad {
+        Quad::new(
+            NamedNode::new_unchecked(s),
+            NamedNode::new_unchecked(p),
+            NamedNode::new_unchecked(o),
+            NamedNode::new_unchecked(g),
+        )
     }
 }

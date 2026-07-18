@@ -30,6 +30,7 @@ use rdf_fusion_encoding::QuadStorageEncoding;
 pub use snapshot::DeltaQuadsStorageIndexSnapshot;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::info;
 
 /// TODO: Make this configurable
 const PAGE_ROW_COUNT: usize = 8_192;
@@ -162,6 +163,11 @@ impl DeltaQuadsStorageIndex {
             .await?
             .unwrap_or(0) as u64;
 
+        info!(
+            "Loading Parquet metadata and Bloom filters for {} files in index {}.",
+            active_files.len(),
+            components.to_string()
+        );
         let (parquet_metadata, bloom_filters) = load_parquet_metadata_for_files(
             log_store.as_ref(),
             &active_files,
@@ -169,6 +175,10 @@ impl DeltaQuadsStorageIndex {
             None,
         )
         .await?;
+        info!(
+            "Parquet metadata and Bloom filters loaded for index {}.",
+            components.to_string()
+        );
 
         Ok(Self {
             storage_encoding,

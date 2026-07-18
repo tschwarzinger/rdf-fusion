@@ -8,9 +8,12 @@ use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::execution::SessionState;
 use datafusion::physical_expr::expressions::Column;
-use datafusion::physical_expr::{LexOrdering, PhysicalExpr, PhysicalSortExpr};
-use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
+use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
+use datafusion::physical_optimizer::PhysicalOptimizerRule;
+use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
+use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
 use datafusion::physical_plan::sorts::sort::SortExec;
+use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
 use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanProperties};
 use deltalake::DeltaTable;
 use deltalake::kernel::transaction::CommitBuilder;
@@ -79,6 +82,7 @@ impl DeltaStorageQuadIndexUpdater {
         .await?;
 
         let sorted_physical_plan = self.sort_for_index(plan_result.scan)?;
+
         let files_to_add = self.write_new_files(sorted_physical_plan).await?;
         let files_to_remove = self.remove_all_files()?;
         let all_actions = [files_to_add, files_to_remove].concat();
@@ -100,22 +104,13 @@ impl DeltaStorageQuadIndexUpdater {
 
         for component in self.index.components().inner() {
             let col_name = component.column_name();
-
-            // Look up the physical index of the column in the schema
             let col_idx = schema.index_of(col_name).map_err(|e| {
                 DeltaQuadsStorageError::Other(format!(
                     "Column {col_name} not found in schema for sorting: {e}"
                 ))
             })?;
-
-            // Create the physical column reference
-            let phys_col =
-                Arc::new(Column::new(col_name, col_idx)) as Arc<dyn PhysicalExpr>;
-
-            // Logical .sort(true, true) means asc=true, nulls_first=true.
-            // This translates to descending=false, nulls_first=true in Arrow.
             sort_exprs.push(PhysicalSortExpr {
-                expr: phys_col,
+                expr: Arc::new(Column::new(col_name, col_idx)),
                 options: SortOptions {
                     descending: false,
                     nulls_first: true,
@@ -123,12 +118,34 @@ impl DeltaStorageQuadIndexUpdater {
             });
         }
 
-        // Wrap the plan in a SortExec node
         let ordering = LexOrdering::new(sort_exprs).expect("Contains four columns");
-        let coalesced_plan = Arc::new(CoalescePartitionsExec::new(plan));
-        let sorted_plan = Arc::new(SortExec::new(ordering, coalesced_plan));
+        let sorted_plan = Arc::new(
+            SortExec::new(ordering.clone(), plan).with_preserve_partitioning(true),
+        ) as Arc<dyn ExecutionPlan>;
 
-        Ok(sorted_plan)
+        let should_merge = sorted_plan
+            .properties()
+            .output_partitioning()
+            .partition_count()
+            > 1;
+        let merged_partitions = if should_merge {
+            Arc::new(SortPreservingMergeExec::new(ordering, sorted_plan))
+                as Arc<dyn ExecutionPlan>
+        } else {
+            sorted_plan
+        };
+
+        let rules = [
+            Arc::new(EnforceSorting::new()) as Arc<dyn PhysicalOptimizerRule>,
+            Arc::new(SanityCheckPlan::new()) as Arc<dyn PhysicalOptimizerRule>,
+        ];
+        let config = self.state.config_options();
+        let mut rewritten_plan = merged_partitions;
+        for rule in rules {
+            rewritten_plan = rule.optimize(rewritten_plan, config)?;
+        }
+
+        Ok(rewritten_plan)
     }
 
     async fn write_new_files(

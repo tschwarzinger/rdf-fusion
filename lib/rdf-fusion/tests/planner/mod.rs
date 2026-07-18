@@ -1,10 +1,8 @@
-use insta::Settings;
 use rdf_fusion::common::{GraphNameRef, NamedNode, Quad, RdfFormat};
-use rdf_fusion::execution::sparql::QueryOptions;
+use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
 use rdf_fusion::store::Store;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_execution::RdfFusionContextBuilder;
-use rdf_fusion_execution::sparql::QueryExplanation;
 use rdf_fusion_storage::delta::DeltaQuadsStorage;
 use rdf_fusion_storage::index::IndexComponents;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
@@ -14,66 +12,124 @@ use tokio::fs::File;
 mod bgp;
 mod exists;
 
-async fn assert_query_explanation(
-    store: Store,
-    query: &str,
-    assert: impl FnOnce(QueryExplanation),
-) {
-    let (_, explanation) = store
-        .explain_query_opt(query, QueryOptions::default())
-        .await
-        .unwrap();
-
-    let mut settings = Settings::default();
-    settings.add_filter(r"part-.*\.parquet", "<name>.parquet");
-    settings.bind(move || assert(explanation));
+/// Encapsulates all setup and data manipulation via the public `Store` API.
+pub struct StoreTestContext {
+    pub store: Store,
 }
 
-/// Helper function to create an in-memory DeltaQuads store loaded with specific quads.
-async fn setup_store(quads: Vec<Quad>) -> Store {
-    let storage = DeltaQuadsStorage::new_in_memory(
-        QuadStorageEncodingName::ObjectId,
-        vec![IndexComponents::GPOS],
-    )
-    .await;
-
-    let ctx = RdfFusionContextBuilder::new(Arc::new(storage))
-        .with_register_in_memory_store(true)
-        .with_single_partition_session_config()
-        .build()
-        .unwrap();
-
-    let store = Store::new(ctx);
-
-    for quad in quads {
-        store.insert(quad.as_ref()).await.unwrap();
-    }
-    store.optimize().await.unwrap();
-
-    store
-}
-
-/// Helper for the basic tests
-async fn setup_basic_store() -> Store {
-    setup_store(vec![Quad::new(
-        NamedNode::new_unchecked("http://example.org/s1"),
-        NamedNode::new_unchecked("http://example.org/p1"),
-        NamedNode::new_unchecked("http://example.org/o1"),
-        GraphNameRef::DefaultGraph,
-    )])
-    .await
-}
-
-/// Helper for the basic tests
-async fn setup_store_with_graph_data(ttl_file_path: &str) -> Store {
-    let store = setup_store(vec![]).await;
-    store
-        .load_from_reader(
-            File::open(ttl_file_path).await.unwrap(),
-            RdfFileScanOptions::with_format(RdfFormat::Turtle),
+impl StoreTestContext {
+    /// Bootstraps a fresh, empty in-memory Store.
+    pub async fn new() -> Self {
+        let storage = DeltaQuadsStorage::new_in_memory(
+            QuadStorageEncodingName::ObjectId,
+            vec![IndexComponents::GPOS],
         )
-        .await
-        .unwrap();
-    store.optimize().await.unwrap();
-    store
+        .await;
+
+        let ctx = RdfFusionContextBuilder::new(Arc::new(storage))
+            .with_register_in_memory_store(true)
+            .with_single_partition_session_config()
+            .build()
+            .unwrap();
+
+        Self {
+            store: Store::new(ctx),
+        }
+    }
+
+    /// Inserts a slice of quads into the store.
+    pub async fn insert(&self, quads: &[Quad]) -> &Self {
+        for quad in quads {
+            self.store.insert(quad.as_ref()).await.unwrap();
+        }
+        self
+    }
+
+    /// Loads data from a Turtle file.
+    pub async fn load_ttl(&self, path: &str) -> &Self {
+        self.store
+            .load_from_reader(
+                File::open(path).await.unwrap(),
+                RdfFileScanOptions::with_format(RdfFormat::Turtle),
+            )
+            .await
+            .unwrap();
+        self
+    }
+
+    /// Triggers store optimization (e.g., applying updates/deltas to indexes).
+    pub async fn optimize(&self) -> &Self {
+        self.store.optimize().await.unwrap();
+        self
+    }
+
+    /// Retrieves the logical and physical query plans as trimmed strings.
+    pub async fn get_query_plans(&self, query: &str) -> (String, String) {
+        let explanation = self.explain(query).await;
+
+        let logical_str = format!("{}", explanation.optimized_logical_plan)
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let physical_str =
+            datafusion::physical_plan::displayable(explanation.execution_plan.as_ref())
+                .indent(true)
+                .to_string()
+                .lines()
+                .map(str::trim_end)
+                .collect::<Vec<_>>()
+                .join("\n");
+
+        (logical_str, physical_str)
+    }
+
+    /// Helper: Generates the plan explanation for a given SPARQL query.
+    pub async fn explain(&self, query: &str) -> QueryExplanation {
+        let (_, explanation) = self
+            .store
+            .explain_query_opt(query, QueryOptions::default())
+            .await
+            .unwrap();
+        explanation
+    }
+
+    // ------------------------------------------------------------------------
+    // Pre-configured Scenarios
+    // ------------------------------------------------------------------------
+
+    /// Creates a store, inserts a standard single quad, and optimizes it.
+    pub async fn setup_basic() -> Self {
+        let ctx = Self::new().await;
+        ctx.insert(&[Quad::new(
+            NamedNode::new_unchecked("http://example.org/s1"),
+            NamedNode::new_unchecked("http://example.org/p1"),
+            NamedNode::new_unchecked("http://example.org/o1"),
+            GraphNameRef::DefaultGraph,
+        )])
+        .await;
+        ctx.optimize().await;
+        ctx
+    }
+
+    /// Creates a store, loads a Turtle file, and optimizes it.
+    pub async fn setup_with_ttl(path: &str) -> Self {
+        let ctx = Self::new().await;
+        ctx.load_ttl(path).await;
+        ctx.optimize().await;
+        ctx
+    }
+}
+
+#[macro_export]
+macro_rules! assert_plan_snapshot {
+    ($plan:expr, @$snapshot:literal) => {
+        insta::with_settings!({filters => vec![
+            (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
+            (r"part-[0-9a-f-]+\.parquet", "<file>.parquet"),
+        ]}, {
+            insta::assert_snapshot!($plan, @$snapshot);
+        });
+    };
 }

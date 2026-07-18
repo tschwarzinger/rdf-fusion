@@ -5,16 +5,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum LocalObjectIdError {
-    #[error("Database error: {0}")]
-    Database(#[from] redb::DatabaseError),
-    #[error("Transaction error: {0}")]
-    Transaction(#[from] redb::TransactionError),
-    #[error("Table error: {0}")]
-    Table(#[from] redb::TableError),
-    #[error("Storage error: {0}")]
-    Storage(#[from] redb::StorageError),
-    #[error("Commit error: {0}")]
-    Commit(#[from] redb::CommitError),
+    #[error("RocksDB error: {0}")]
+    RocksDb(#[from] rocksdb::Error),
     #[error("Object ID {0} not found")]
     NotFound(i64),
     #[error("{0}")]

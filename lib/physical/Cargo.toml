@@ -13,16 +13,19 @@ RDF Fusion Physical Operators and Rewriting Rules
 async-trait.workspace = true
 datafusion.workspace = true
 futures.workspace = true
-rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-common.workspace = true
 rdf-fusion-logical.workspace = true
 itertools.workspace = true
-datafusion-physical-expr = "53.1"
 
 [dev-dependencies]
-insta.workspace = true
+criterion = { workspace = true, features = ["async_tokio"] }
+rand.workspace = true
 tokio.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "sorted_distinct"
+harness = false

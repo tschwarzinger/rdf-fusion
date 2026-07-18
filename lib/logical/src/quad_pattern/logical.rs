@@ -181,7 +181,7 @@ impl UserDefinedLogicalNodeCore for QuadPatternNode {
         if let Some(graph_variable) = &self.pattern.graph_variable {
             write!(f, "graph_variable={graph_variable} ")?;
         }
-        write!(f, "triple_pattern=[{}]", &self.pattern.triple_pattern)?;
+        write!(f, "triple_pattern=[{}]", self.pattern.triple_pattern)?;
 
         if self.pattern.active_graph != ActiveGraph::DefaultGraph {
             write!(f, ", active_graph: {} ", self.pattern.active_graph)?;

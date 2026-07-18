@@ -803,7 +803,7 @@ mod tests {
         changeset: &dyn DeltaQuadsStorageLogChangeset,
     ) -> String {
         let plan = changeset
-            .removed_quads(state)
+            .removed_quads(&ChangesetContext::default(), state)
             .await
             .expect("Failed to obtain removals")
             .expect("Removals are empty");
@@ -903,7 +903,7 @@ mod tests {
         changeset: &dyn DeltaQuadsStorageLogChangeset,
     ) -> String {
         let plan = changeset
-            .added_quads(state)
+            .added_quads(&ChangesetContext::default(), state)
             .await
             .expect("Failed to obtain additions")
             .expect("Additions are empty");

@@ -28,11 +28,11 @@ enum EncoderStreamState {
     ReadyToProcess,
     /// Currently waiting for a new dictionary transaction to be initialized.
     AwaitingDictionaryTransactionInit(
-        BoxFuture<'static, DFResult<LocalObjectIdTransaction>>,
+        BoxFuture<'static, DFResult<Box<dyn LocalObjectIdTransaction>>>,
     ),
     /// Currently waiting for a batch to finish encoding asynchronously.
     AwaitingEncoding(
-        BoxFuture<'static, DFResult<(LocalObjectIdTransaction, RecordBatch)>>,
+        BoxFuture<'static, DFResult<(Box<dyn LocalObjectIdTransaction>, RecordBatch)>>,
     ),
     /// Currently waiting for the active transaction to commit to the dictionary.
     AwaitingDictionaryDeltaCommit(BoxFuture<'static, DFResult<CommitResult>>),
@@ -55,7 +55,7 @@ pub struct ObjectIdEncodingStream {
     ready_to_yield_batches: VecDeque<RecordBatch>,
 
     // --- Transaction State ---
-    current_txn: Option<LocalObjectIdTransaction>,
+    current_txn: Option<Box<dyn LocalObjectIdTransaction>>,
     max_buffered_rows: usize,
     max_buffered_ids: usize,
 
@@ -141,7 +141,7 @@ impl ObjectIdEncodingStream {
 
     fn create_transaction_future(
         mapping: Arc<DeltaObjectIdDictionary>,
-    ) -> BoxFuture<'static, DFResult<LocalObjectIdTransaction>> {
+    ) -> BoxFuture<'static, DFResult<Box<dyn LocalObjectIdTransaction>>> {
         Box::pin(async move {
             mapping
                 .dictionary()
@@ -152,10 +152,11 @@ impl ObjectIdEncodingStream {
     }
 
     fn create_encoding_future(
-        mut txn: LocalObjectIdTransaction,
+        mut txn: Box<dyn LocalObjectIdTransaction>,
         batch: RecordBatch,
         schema: SchemaRef,
-    ) -> BoxFuture<'static, DFResult<(LocalObjectIdTransaction, RecordBatch)>> {
+    ) -> BoxFuture<'static, DFResult<(Box<dyn LocalObjectIdTransaction>, RecordBatch)>>
+    {
         Box::pin(async move {
             let mut encoded_columns = Vec::with_capacity(batch.num_columns());
 
@@ -194,21 +195,23 @@ impl ObjectIdEncodingStream {
 
     fn create_commit_future(
         mapping: Arc<DeltaObjectIdDictionary>,
-        txn: LocalObjectIdTransaction,
+        txn: Box<dyn LocalObjectIdTransaction>,
     ) -> BoxFuture<'static, DFResult<CommitResult>> {
         Box::pin(async move {
             let success = mapping
-                .commit_dictionary_transaction_to_delta(&txn)
+                .commit_dictionary_transaction_to_delta(txn.as_ref())
                 .await
                 .map_err(|e| DataFusionError::External(Box::new(e)))?;
 
             if success {
                 let delta_version = mapping.delta_version().await;
                 txn.commit(delta_version)
+                    .await
                     .map_err(|e| DataFusionError::External(Box::new(e)))?;
                 Ok(CommitResult::Success)
             } else {
                 txn.abort()
+                    .await
                     .map_err(|e| DataFusionError::External(Box::new(e)))?;
                 Ok(CommitResult::Conflict)
             }

@@ -96,7 +96,7 @@ impl UserDefinedLogicalNodeCore for PropertyPathNode {
         write!(
             f,
             "PropertyPath: {}{} {} {}",
-            &graph_name, &self.subject, &self.path, &self.object
+            graph_name, self.subject, self.path, self.object
         )
     }
 

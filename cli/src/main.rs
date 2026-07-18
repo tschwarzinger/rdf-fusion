@@ -5,6 +5,7 @@ use clap::Parser;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::execution::cache::cache_manager::CacheManagerConfig;
+use datafusion::execution::disk_manager::DiskManagerBuilder;
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
@@ -96,6 +97,10 @@ pub async fn main() -> anyhow::Result<()> {
                     .await
                 }
             }
+        }
+        Command::Optimize => {
+            let store = create_store(&args).await?;
+            commands::optimize::optimize(store).await
         }
         Command::Query {
             query,
@@ -280,7 +285,12 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     let cache_config = CacheManagerConfig::default();
     let mut builder = RuntimeEnvBuilder::new().with_cache_manager(cache_config);
     if let Some(memory_limit) = args.runtime.memory_limit {
-        builder = builder.with_memory_limit(memory_limit * 1024 * 1024, 1.0);
+        builder = builder
+            .with_memory_limit(memory_limit * 1024 * 1024, 1.0)
+            .with_disk_manager_builder(
+                DiskManagerBuilder::default()
+                    .with_max_temp_directory_size(250 * 1024 * 1024 * 1024),
+            );
     }
     let registry = Arc::clone(&builder.object_store_registry);
 

@@ -1,9 +1,15 @@
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::{DeltaStorageLogVersionRange, EagerChangeset};
+use crate::index::IndexComponents;
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use datafusion::physical_plan::ExecutionPlan;
 use std::sync::Arc;
+
+#[derive(Debug, Clone, Default)]
+pub struct ChangesetContext {
+    pub intended_sort_order: Option<IndexComponents>,
+}
 
 /// A reference to a [`DeltaQuadsStorageLogChangeset`].
 pub type DeltaQuadsStorageLogChangesetRef = Arc<dyn DeltaQuadsStorageLogChangeset>;
@@ -38,18 +44,21 @@ pub trait DeltaQuadsStorageLogChangeset: Send + Sync {
     /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_common::quads::COL_GRAPH).
     async fn cleared_graphs(
         &self,
+        context: &ChangesetContext,
         state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
     /// Returns a list of removed quads.
     async fn removed_quads(
         &self,
+        context: &ChangesetContext,
         state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
     /// Returns a list of added quads.
     async fn added_quads(
         &self,
+        context: &ChangesetContext,
         state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
@@ -58,6 +67,7 @@ pub trait DeltaQuadsStorageLogChangeset: Send + Sync {
     /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_common::quads::COL_GRAPH).
     async fn added_named_graphs(
         &self,
+        context: &ChangesetContext,
         state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 
@@ -66,6 +76,7 @@ pub trait DeltaQuadsStorageLogChangeset: Send + Sync {
     /// The data frame should have one column [`COL_GRAPH`](rdf_fusion_common::quads::COL_GRAPH).
     async fn dropped_named_graphs(
         &self,
+        context: &ChangesetContext,
         state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError>;
 

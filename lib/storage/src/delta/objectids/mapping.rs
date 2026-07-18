@@ -1,6 +1,9 @@
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::objectids::{DeltaObjectIdClaimer, ObjectIdClaimerPutMode};
-use crate::local_object_ids::{LocalObjectIdDictionary, LocalObjectIdTransaction};
+use crate::local_object_ids::{
+    InMemoryObjectIdDictionary, LocalObjectIdDictionary, LocalObjectIdTransaction,
+    RocksDBObjectIdDictionary,
+};
 use async_trait::async_trait;
 use datafusion::arrow::array::{Array, ArrayRef, Int64Array, Int64Builder, RecordBatch};
 use datafusion::arrow::datatypes::{Field, SchemaRef};
@@ -35,9 +38,10 @@ use rdf_fusion_encoding::plain_term::{
 };
 use rdf_fusion_encoding::typed_family::{TypedFamilyArray, TypedFamilyEncodingRef};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::info;
 
-fn get_redb_path(
+fn get_rocksdb_path(
     options: &RdfFusionOptions,
     location: &url::Url,
 ) -> Option<std::path::PathBuf> {
@@ -56,9 +60,9 @@ fn get_redb_path(
             write!(&mut hash, "{byte:02x}").unwrap();
         }
 
-        let file_name = format!("{hash}.redb");
+        let file_name = hash.to_string();
 
-        info!("Using redb file '{file_name}' for location '{location}'.");
+        info!("Using rocksdb directory '{file_name}' for location '{location}'.");
 
         Some(
             std::path::PathBuf::from(work_dir)
@@ -74,9 +78,9 @@ fn get_redb_path(
 #[derive(Debug)]
 pub struct DeltaObjectIdDictionary {
     /// The in-memory mapping.
-    local_mapping: Arc<LocalObjectIdDictionary>,
+    local_mapping: Arc<dyn LocalObjectIdDictionary>,
     /// The durable Delta table storing the mapping
-    table: Arc<tokio::sync::RwLock<DeltaTable>>,
+    table: Arc<RwLock<DeltaTable>>,
     /// The schema of the table.
     table_schema: SchemaRef,
 }
@@ -106,7 +110,7 @@ impl DeltaObjectIdDictionary {
             .await?;
         let table_schema = Arc::new(Schema::new(arrow_columns));
 
-        let db_path = get_redb_path(options, table.log_store().config().location());
+        let db_path = get_rocksdb_path(options, table.log_store().config().location());
         let put_mode = match options.storage.delta.assume_single_node {
             true => ObjectIdClaimerPutMode::AlwaysOverwrite,
             false => ObjectIdClaimerPutMode::EnsureVersion,
@@ -116,18 +120,23 @@ impl DeltaObjectIdDictionary {
             options.storage.delta.object_id_claim_size,
             put_mode,
         ));
-        let local_mapping = LocalObjectIdDictionary::try_new(
-            db_path,
-            options.storage.delta.object_id_cache_size,
-            claimer,
-        )?;
+        let local_mapping: Arc<dyn LocalObjectIdDictionary> = if let Some(path) = db_path
+        {
+            Arc::new(RocksDBObjectIdDictionary::try_new(
+                path,
+                options.storage.delta.object_id_cache_size,
+                claimer,
+            )?)
+        } else {
+            Arc::new(InMemoryObjectIdDictionary::new(claimer))
+        };
 
         let txn = local_mapping.transaction().await?;
-        txn.commit(0)?;
+        txn.commit(0).await?;
 
         Ok(Self {
-            local_mapping: Arc::new(local_mapping),
-            table: Arc::new(tokio::sync::RwLock::new(table)),
+            local_mapping,
+            table: Arc::new(RwLock::new(table)),
             table_schema,
         })
     }
@@ -154,10 +163,9 @@ impl DeltaObjectIdDictionary {
             .collect::<Vec<_>>();
         let table_schema = Arc::new(Schema::new(arrow_columns));
 
-        info!("Loaded object id mapping state. Rebuilding in-memory dictionary ...");
+        info!("Loaded global object id mapping table state.");
 
         let options = session.config().rdf_fusion_options_or_from_env()?;
-        let db_path = get_redb_path(&options, table.log_store().config().location());
         let put_mode = match options.storage.delta.assume_single_node {
             true => ObjectIdClaimerPutMode::AlwaysOverwrite,
             false => ObjectIdClaimerPutMode::EnsureVersion,
@@ -167,25 +175,34 @@ impl DeltaObjectIdDictionary {
             options.storage.delta.object_id_claim_size,
             put_mode,
         ));
-        let in_memory_mapping = LocalObjectIdDictionary::try_new(
-            db_path,
-            options.storage.delta.object_id_cache_size,
-            claimer,
-        )?;
+
+        let db_path = get_rocksdb_path(&options, table.log_store().config().location());
+        let local_dictionary: Arc<dyn LocalObjectIdDictionary> =
+            if let Some(path) = db_path {
+                Arc::new(RocksDBObjectIdDictionary::try_new(
+                    path,
+                    options.storage.delta.object_id_cache_size,
+                    claimer,
+                )?)
+            } else {
+                Arc::new(InMemoryObjectIdDictionary::new(claimer))
+            };
 
         let mapping = Self {
-            local_mapping: Arc::new(in_memory_mapping),
-            table: Arc::new(tokio::sync::RwLock::new(table)),
+            local_mapping: local_dictionary,
+            table: Arc::new(RwLock::new(table)),
             table_schema,
         };
 
+        info!("Trying to update local dictionary ...");
         mapping.update_local_dictionary().await?;
+        info!("Local dictionary up-to-date.");
 
         Ok(mapping)
     }
 
     /// Returns a reference to the underlying dictionary.
-    pub fn dictionary(&self) -> Arc<LocalObjectIdDictionary> {
+    pub fn dictionary(&self) -> Arc<dyn LocalObjectIdDictionary> {
         Arc::clone(&self.local_mapping)
     }
 
@@ -198,7 +215,8 @@ impl DeltaObjectIdDictionary {
         let mut table = self.table.write().await;
         table.load().await?;
 
-        let version_on_disk = self.local_mapping.snapshot()?.get_synced_version()?;
+        let version_on_disk =
+            self.local_mapping.snapshot().await?.get_synced_version()?;
         let table_version = table.version().unwrap_or(0);
 
         if let Some(v_on_disk) = version_on_disk {
@@ -228,7 +246,7 @@ impl DeltaObjectIdDictionary {
             txn.add_global_batch(&batch?).await?;
         }
 
-        txn.commit(table_version as u64)?;
+        txn.commit(table_version as u64).await?;
 
         Ok(())
     }
@@ -242,7 +260,7 @@ impl DeltaObjectIdDictionary {
     /// conflict.
     pub async fn commit_dictionary_transaction_to_delta(
         &self,
-        txn: &LocalObjectIdTransaction,
+        txn: &dyn LocalObjectIdTransaction,
     ) -> Result<bool, DeltaQuadsStorageError> {
         let pending_count = txn.pending_ids().len();
         if pending_count == 0 {
@@ -323,6 +341,7 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         let snapshot = self
             .local_mapping
             .snapshot()
+            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
         if let Some(id) = snapshot.get_id_by_term(term) {
             Ok(Some(ScalarValue::Int64(Some(id))))
@@ -345,6 +364,7 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
             .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
         txn.commit(self.delta_version().await)
+            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
 
         Ok(Arc::new(ids_array) as ArrayRef)
@@ -364,6 +384,7 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         let term_col = self
             .local_mapping
             .snapshot()
+            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
             .resolve_plain_terms(id_array)
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
@@ -388,6 +409,7 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         let typed_value_col = self
             .local_mapping
             .snapshot()
+            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
             .resolve_plain_terms(id_array)
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;

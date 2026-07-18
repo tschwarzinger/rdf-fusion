@@ -296,11 +296,7 @@ impl DisplayAs for ParquetQuadScanExec {
             write!(f, ", graph_variable={var}")?;
         }
 
-        write!(
-            f,
-            ", triple_pattern=[{}]",
-            &self.quad_pattern.triple_pattern
-        )?;
+        write!(f, ", triple_pattern=[{}]", self.quad_pattern.triple_pattern)?;
         write!(f, ", blank_node_mode={}", self.quad_pattern.blank_node_mode)?;
         write!(f, ", ")?;
 

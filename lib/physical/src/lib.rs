@@ -9,5 +9,6 @@
 //! Contains physical operators for [RDF Fusion](https://docs.rs/rdf-fusion/).
 
 pub mod bgp;
+pub mod distinct;
 pub mod object_id;
 pub mod paths;

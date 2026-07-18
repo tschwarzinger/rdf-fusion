@@ -2,8 +2,8 @@ use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::changeset::DeltaQuadsStorageLogChangeset;
 use crate::delta::log::operations_changeset_stream::OperationsChangesetStream;
 use crate::delta::log::{
-    COL_COMMIT_VERSION, COL_OPERATION, COL_OPERATION_SEQ_ID, ComputeLogChangesetExec,
-    DeltaStorageLogOperation, DeltaStorageLogVersionRange,
+    COL_COMMIT_VERSION, COL_OPERATION, COL_OPERATION_SEQ_ID, ChangesetContext,
+    ComputeLogChangesetExec, DeltaStorageLogOperation, DeltaStorageLogVersionRange,
 };
 use async_trait::async_trait;
 use datafusion::arrow::array::{
@@ -423,6 +423,7 @@ impl DeltaQuadsStorageLogChangeset for EagerChangeset {
 
     async fn cleared_graphs(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.cleared_graphs).await
@@ -430,6 +431,7 @@ impl DeltaQuadsStorageLogChangeset for EagerChangeset {
 
     async fn removed_quads(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.removed_quads).await
@@ -437,6 +439,7 @@ impl DeltaQuadsStorageLogChangeset for EagerChangeset {
 
     async fn added_quads(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.added_quads).await
@@ -444,6 +447,7 @@ impl DeltaQuadsStorageLogChangeset for EagerChangeset {
 
     async fn added_named_graphs(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.added_named_graphs).await
@@ -451,6 +455,7 @@ impl DeltaQuadsStorageLogChangeset for EagerChangeset {
 
     async fn dropped_named_graphs(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         create_result(&self.session_context, &self.dropped_named_graphs).await
@@ -591,12 +596,20 @@ mod tests {
         // 3. Verify
         let removed = collect_and_format(
             &state,
-            extended.removed_quads(&state).await.unwrap().unwrap(),
+            extended
+                .removed_quads(&ChangesetContext::default(), &state)
+                .await
+                .unwrap()
+                .unwrap(),
         )
         .await;
         let added = collect_and_format(
             &state,
-            extended.added_quads(&state).await.unwrap().unwrap(),
+            extended
+                .added_quads(&ChangesetContext::default(), &state)
+                .await
+                .unwrap()
+                .unwrap(),
         )
         .await;
 
@@ -688,12 +701,20 @@ mod tests {
         // 3. Verify
         let added = collect_and_format(
             &state,
-            extended.added_quads(&state).await.unwrap().unwrap(),
+            extended
+                .added_quads(&ChangesetContext::default(), &state)
+                .await
+                .unwrap()
+                .unwrap(),
         )
         .await;
         let cleared = collect_and_format(
             &state,
-            extended.cleared_graphs(&state).await.unwrap().unwrap(),
+            extended
+                .cleared_graphs(&ChangesetContext::default(), &state)
+                .await
+                .unwrap()
+                .unwrap(),
         )
         .await;
 
@@ -818,7 +839,11 @@ mod tests {
         .unwrap();
 
         // Check added_quads schema
-        let added_plan = changeset.added_quads(&state).await.unwrap().unwrap();
+        let added_plan = changeset
+            .added_quads(&ChangesetContext::default(), &state)
+            .await
+            .unwrap()
+            .unwrap();
         let added_schema = added_plan.schema();
         assert!(
             !added_schema
@@ -843,7 +868,11 @@ mod tests {
         );
 
         // Check removed_quads schema
-        let removed_plan = changeset.removed_quads(&state).await.unwrap().unwrap();
+        let removed_plan = changeset
+            .removed_quads(&ChangesetContext::default(), &state)
+            .await
+            .unwrap()
+            .unwrap();
         let removed_schema = removed_plan.schema();
         assert!(
             !removed_schema
@@ -868,8 +897,11 @@ mod tests {
         );
 
         // Check added_named_graphs schema
-        let added_graphs_plan =
-            changeset.added_named_graphs(&state).await.unwrap().unwrap();
+        let added_graphs_plan = changeset
+            .added_named_graphs(&ChangesetContext::default(), &state)
+            .await
+            .unwrap()
+            .unwrap();
         let added_graphs_schema = added_graphs_plan.schema();
         assert!(
             added_graphs_schema
@@ -881,7 +913,7 @@ mod tests {
 
         // Check dropped_named_graphs schema
         let dropped_graphs_plan = changeset
-            .dropped_named_graphs(&state)
+            .dropped_named_graphs(&ChangesetContext::default(), &state)
             .await
             .unwrap()
             .unwrap();
@@ -895,8 +927,11 @@ mod tests {
         );
 
         // Check cleared_graphs schema (should be nullable as it can include the default graph)
-        let cleared_graphs_plan =
-            changeset.cleared_graphs(&state).await.unwrap().unwrap();
+        let cleared_graphs_plan = changeset
+            .cleared_graphs(&ChangesetContext::default(), &state)
+            .await
+            .unwrap()
+            .unwrap();
         let cleared_graphs_schema = cleared_graphs_plan.schema();
         assert!(
             cleared_graphs_schema

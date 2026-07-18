@@ -207,7 +207,7 @@ async fn test_concurrent_dictionary_inserts() {
     // Drop to ensure no lingering locks
     drop(storage_1);
 
-    // 2. Now spawn 10 concurrent tasks that each have their own separated LocalObjectIdDictionary
+    // 2. Now spawn 10 concurrent tasks that each have their own separated LocalObjectIdDictionary trait
     let num_tasks = 10;
     let mut handles = Vec::new();
 
@@ -270,7 +270,7 @@ async fn test_concurrent_dictionary_inserts() {
     let mapping = storage.delta_object_id_mapping().unwrap();
     mapping.flush().await.unwrap();
 
-    let local_dict = mapping.dictionary().snapshot().unwrap();
+    let local_dict = mapping.dictionary().snapshot().await.unwrap();
 
     // 10 overlapping_subj, 1 predicate, 500 unique objects (10 tasks * 5 batches * 10 objects)
     let expected_unique_terms = 10 + 1 + 500;

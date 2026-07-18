@@ -275,7 +275,7 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
             None => {
                 return Err(DataFusionError::Execution(format!(
                     "Pre-loaded metadata reader did not find file '{}' in cache",
-                    &file.object_meta.location
+                    file.object_meta.location
                 )));
             }
         };

@@ -1,12 +1,16 @@
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::index::DeltaQuadsStorageIndexSnapshot;
 use crate::delta::log::{
-    DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef, DeltaStorageLogVersionRange,
+    ChangesetContext, DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef,
+    DeltaStorageLogVersionRange,
 };
 use crate::index::IndexComponents;
 use crate::parquet::scan_builder::{
     ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
 };
+use datafusion::arrow::compute::SortOptions;
+use datafusion::arrow::datatypes::DataType;
+use datafusion::common::stats::Precision;
 use datafusion::common::{DFSchema, JoinType, NullEquality};
 use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::physical_plan::FileGroup;
@@ -14,22 +18,27 @@ use datafusion::execution::SessionState;
 use datafusion::logical_expr::Expr;
 use datafusion::logical_expr::utils::conjunction;
 use datafusion::physical_expr::PhysicalExpr;
+use datafusion::physical_expr::PhysicalSortExpr;
 use datafusion::physical_expr::create_physical_expr;
 use datafusion::physical_expr::expressions::Column as PhysColumn;
+use datafusion::physical_expr::{LexOrdering, LexRequirement};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::enforce_distribution::EnforceDistribution;
 use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
+use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::empty::EmptyExec;
 use datafusion::physical_plan::filter::FilterExec;
-use datafusion::physical_plan::joins::{HashJoinExec, PartitionMode};
+use datafusion::physical_plan::joins::{HashJoinExec, PartitionMode, SortMergeJoinExec};
 use datafusion::physical_plan::projection::ProjectionExec;
+use datafusion::physical_plan::sorts::sort::SortExec;
+use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
 use datafusion::physical_plan::union::UnionExec;
-use deltalake::arrow::datatypes::{Field, Schema};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
-use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
+use rdf_fusion_physical::distinct::SortedDistinctExec;
 use std::sync::Arc;
 
 pub struct QuadPatternScanPlanningResult {
@@ -137,17 +146,24 @@ impl DeltaQuadsStorageScanPlanBuilder {
     }
 
     pub async fn build(
-        self,
+        &self,
     ) -> Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError> {
-        let filters = self.pattern.compute_filters(&self.encoding).await?;
-
         let initial_plan = match (&self.index, &self.changeset) {
             (Some(index), Some(changeset)) => {
                 let base_scan = self
                     .scan_index_physical(index, IndexScanProjectionPushdown::No)
                     .await?;
+
+                let Some(base_scan) = base_scan else {
+                    return self.build_without_index(changeset).await?;
+                };
+
+                if base_scan.partition_statistics(None)?.num_rows == Precision::Exact(0) {
+                    return self.build_without_index(changeset).await?;
+                }
+
                 let applied_scan = self
-                    .apply_changeset_data_physical(base_scan, changeset, &filters)
+                    .apply_changeset_data_physical(base_scan, changeset)
                     .await?;
 
                 let scan = self.project_components_to_variables_physical(
@@ -170,64 +186,26 @@ impl DeltaQuadsStorageScanPlanBuilder {
                     )
                     .await?;
                 Ok(QuadPatternScanPlanningResult {
-                    scan: base_scan,
+                    scan: match base_scan {
+                        None => self.build_empty_scan()?.scan,
+                        Some(scan) => scan,
+                    },
                     chosen_index: Some(index.components()),
                     changeset_version_range: None,
                 })
             }
 
-            (None, Some(changeset)) => {
-                // If there's no index, the base is empty but we need all quad columns for joins.
-                let fields = vec![
-                    Arc::new(Field::new(
-                        COL_GRAPH,
-                        self.encoding.term_type().clone(),
-                        true,
-                    )),
-                    Arc::new(Field::new(
-                        COL_SUBJECT,
-                        self.encoding.term_type().clone(),
-                        false,
-                    )),
-                    Arc::new(Field::new(
-                        COL_PREDICATE,
-                        self.encoding.term_type().clone(),
-                        false,
-                    )),
-                    Arc::new(Field::new(
-                        COL_OBJECT,
-                        self.encoding.term_type().clone(),
-                        false,
-                    )),
-                ];
-                let empty_base = Arc::new(EmptyExec::new(Arc::new(Schema::new(fields))))
-                    as Arc<dyn ExecutionPlan>;
+            (None, Some(changeset)) => self.build_without_index(changeset).await?,
 
-                let applied_scan = self
-                    .apply_changeset_data_physical(empty_base, changeset, &filters)
-                    .await?;
-
-                let scan = self.project_components_to_variables_physical(
-                    applied_scan,
-                    self.projection_indices.as_deref(),
-                )?;
-
-                Ok(QuadPatternScanPlanningResult {
-                    scan,
-                    chosen_index: None,
-                    changeset_version_range: Some(changeset.version_range()),
-                })
-            }
-
-            (None, None) => self.build_empty_scan_physical(),
+            (None, None) => self.build_empty_scan(),
         }?;
 
+        let config = self.session_state.config_options();
         let rules = [
             Arc::new(EnforceDistribution::new()) as Arc<dyn PhysicalOptimizerRule>,
             Arc::new(EnforceSorting::new()) as Arc<dyn PhysicalOptimizerRule>,
+            Arc::new(SanityCheckPlan::new()) as Arc<dyn PhysicalOptimizerRule>,
         ];
-        let config = self.session_state.config_options();
-
         let mut rewritten_plan = initial_plan.scan;
         for rule in rules {
             rewritten_plan = rule.optimize(rewritten_plan, config)?;
@@ -240,7 +218,37 @@ impl DeltaQuadsStorageScanPlanBuilder {
         })
     }
 
-    fn build_empty_scan_physical(
+    async fn build_without_index(
+        &self,
+        changeset: &DeltaQuadsStorageLogChangesetRef,
+    ) -> Result<
+        Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError>,
+        DeltaQuadsStorageError,
+    > {
+        let filters = self.pattern.compute_filters(&self.encoding).await?;
+
+        let context = ChangesetContext::default();
+        let added_quads = changeset.added_quads(&context, &self.session_state).await?;
+
+        let scan = match added_quads {
+            None => self.build_empty_scan()?.scan,
+            Some(added_quads) => {
+                let filtered = self.filter_and_project(added_quads, None, &filters)?;
+                self.project_components_to_variables_physical(
+                    filtered,
+                    self.projection_indices.as_deref(),
+                )?
+            }
+        };
+
+        Ok(Ok(QuadPatternScanPlanningResult {
+            scan,
+            chosen_index: None,
+            changeset_version_range: Some(changeset.version_range()),
+        }))
+    }
+
+    fn build_empty_scan(
         &self,
     ) -> Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError> {
         let schema = self.pattern.compute_schema(&self.encoding);
@@ -260,17 +268,29 @@ impl DeltaQuadsStorageScanPlanBuilder {
         &self,
         base_scan: Arc<dyn ExecutionPlan>,
         changeset: &DeltaQuadsStorageLogChangesetRef,
-        filters: &[Expr],
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
+        let filters = self.pattern.compute_filters(&self.encoding).await?;
+        let context = ChangesetContext {
+            intended_sort_order: self.index.as_ref().map(|i| i.components()),
+        };
+
+        let index = self
+            .index
+            .as_ref()
+            .expect("Index must exist if base_scan is not empty");
+        let components = index.components().inner().to_vec();
         let mut current_plan = base_scan;
 
         // 1. Handle Cleared Graphs (LeftAnti Join on COL_GRAPH)
-        if let Some(cleared_plan) = changeset.cleared_graphs(&self.session_state).await? {
+        if let Some(cleared_plan) = changeset
+            .cleared_graphs(&context, &self.session_state)
+            .await?
+        {
             let left_schema = current_plan.schema();
             let right_schema = cleared_plan.schema();
 
-            let l_idx = left_schema.index_of(COL_GRAPH).expect("Scan has column");
-            let r_idx = right_schema.index_of(COL_GRAPH).expect("Scan has column");
+            let l_idx = left_schema.index_of(COL_GRAPH)?;
+            let r_idx = right_schema.index_of(COL_GRAPH)?;
 
             let join_on = vec![(
                 Arc::new(PhysColumn::new(COL_GRAPH, r_idx)) as Arc<dyn PhysicalExpr>,
@@ -290,48 +310,41 @@ impl DeltaQuadsStorageScanPlanBuilder {
             )?);
         }
 
-        // 2. Extract and format Logical DataFrames for Removed and Added
-        // Use all 4 columns for join correctly
+        // Handle removed quads
         let removed_plan = changeset
-            .removed_quads(&self.session_state)
+            .removed_quads(&context, &self.session_state)
             .await?
-            .map(|df| self.filter_and_project(df, None, filters))
+            .map(|df| self.filter_and_project(df, None, &filters))
             .transpose()?;
+        if let Some(removed_plan) = removed_plan {
+            let left_schema = removed_plan.schema();
+            let right_schema = current_plan.schema();
+            let mut join_on = Vec::new();
+            let mut sort_options = Vec::new();
 
-        let added_plan = changeset
-            .added_quads(&self.session_state)
-            .await?
-            .map(|df| self.filter_and_project(df, None, filters))
-            .transpose()?;
+            let mut is_struct = false;
+            for component in &components {
+                let name = component.column_name();
+                let l_idx = left_schema.index_of(name)?;
+                let r_idx = right_schema.index_of(name)?;
 
-        // 3. Phase 1: The Masking Anti-Join -> (Base \ (Removed U Added))
-        let masking_df = match (removed_plan, added_plan.clone()) {
-            (Some(removed_plan), Some(added_plan)) => {
-                Some(UnionExec::try_new(vec![removed_plan, added_plan])?)
-            }
-            (Some(r), None) => Some(r),
-            (None, Some(a)) => Some(a),
-            (None, None) => None,
-        };
-
-        if let Some(mask_plan) = masking_df {
-            if !current_plan.as_any().is::<EmptyExec>() {
-                let left_schema = current_plan.schema();
-                let right_schema = mask_plan.schema();
-                let mut join_on = Vec::new();
-
-                // Match on all 4 columns
-                for name in [COL_GRAPH, COL_SUBJECT, COL_PREDICATE, COL_OBJECT] {
-                    let l_idx = left_schema.index_of(name).expect("Schema has column");
-                    let r_idx = right_schema.index_of(name).expect("Schema has column");
-                    join_on.push((
-                        Arc::new(PhysColumn::new(name, r_idx)) as Arc<dyn PhysicalExpr>,
-                        Arc::new(PhysColumn::new(name, l_idx)) as Arc<dyn PhysicalExpr>,
-                    ));
+                if matches!(left_schema.field(l_idx).data_type(), DataType::Struct(_)) {
+                    is_struct = true;
                 }
 
+                join_on.push((
+                    Arc::new(PhysColumn::new(name, l_idx)) as Arc<dyn PhysicalExpr>,
+                    Arc::new(PhysColumn::new(name, r_idx)) as Arc<dyn PhysicalExpr>,
+                ));
+                sort_options.push(SortOptions {
+                    descending: false,
+                    nulls_first: true,
+                });
+            }
+
+            if is_struct {
                 current_plan = Arc::new(HashJoinExec::try_new(
-                    mask_plan,
+                    removed_plan,
                     current_plan,
                     join_on,
                     None,
@@ -341,17 +354,57 @@ impl DeltaQuadsStorageScanPlanBuilder {
                     NullEquality::NullEqualsNull,
                     false,
                 )?);
+            } else {
+                current_plan = Arc::new(SortMergeJoinExec::try_new(
+                    removed_plan,
+                    current_plan,
+                    join_on,
+                    None,
+                    JoinType::RightAnti,
+                    sort_options,
+                    NullEquality::NullEqualsNull,
+                )?);
             }
         }
 
-        // 4. Phase 2: Append -> ... U Added
+        // Handle added quads.
+        let added_plan = changeset
+            .added_quads(&context, &self.session_state)
+            .await?
+            .map(|df| self.filter_and_project(df, None, &filters))
+            .transpose()?;
         if let Some(adds_plan) = added_plan {
-            if current_plan.as_any().is::<EmptyExec>() {
-                current_plan = adds_plan;
-            } else {
-                current_plan = UnionExec::try_new(vec![current_plan, adds_plan])
-                    .expect("Input not empty");
+            let mut sort_exprs = Vec::new();
+            let schema = current_plan.schema();
+
+            for component in &components {
+                let name = component.column_name();
+                let idx = schema.index_of(name)?;
+                sort_exprs.push(PhysicalSortExpr {
+                    expr: Arc::new(PhysColumn::new(name, idx)) as Arc<dyn PhysicalExpr>,
+                    options: SortOptions {
+                        descending: false,
+                        nulls_first: true,
+                    },
+                });
             }
+            let ordering =
+                LexOrdering::new(sort_exprs).expect("LexOrdering should be valid");
+
+            current_plan = Arc::new(SortExec::new(ordering.clone(), current_plan));
+            let adds_plan = Arc::new(SortExec::new(ordering.clone(), adds_plan));
+            let adds_and_index = UnionExec::try_new(vec![current_plan, adds_plan])
+                .expect("Input not empty");
+
+            let adds_and_index_single_partition = Arc::new(SortPreservingMergeExec::new(
+                ordering.clone(),
+                adds_and_index,
+            ));
+
+            current_plan = Arc::new(SortedDistinctExec::new(
+                adds_and_index_single_partition,
+                LexRequirement::from(ordering.clone()),
+            ));
         }
 
         Ok(current_plan)
@@ -361,16 +414,45 @@ impl DeltaQuadsStorageScanPlanBuilder {
         &self,
         index: &DeltaQuadsStorageIndexSnapshot,
         projection: IndexScanProjectionPushdown,
-    ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
+    ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         let table_uri = index.log_store().config().location().clone();
         let table_path = object_store::path::Path::from(table_uri.path());
 
-        let mut file_group = Vec::new();
-        for file in index.active_files().as_ref() {
+        if index.active_files().is_empty() {
+            return Ok(None);
+        }
+
+        let target_partitions = self
+            .session_state
+            .config_options()
+            .execution
+            .target_partitions;
+        let mut file_groups = vec![Vec::new(); target_partitions];
+
+        for (i, file) in index.active_files().as_ref().iter().enumerate() {
             let full_path = table_path.clone().join(file.path.as_str()).to_string();
             let partitioned_file = PartitionedFile::new(full_path, file.size as u64);
-            file_group.push(partitioned_file);
+            file_groups[i % target_partitions].push(partitioned_file);
         }
+
+        file_groups.retain(|g| !g.is_empty());
+        let file_groups: Vec<FileGroup> =
+            file_groups.into_iter().map(FileGroup::new).collect();
+
+        let mut sort_exprs = Vec::new();
+        let schema = self.encoding.quad_schema();
+        for component in index.components().inner() {
+            let name = component.column_name();
+            let idx = schema.inner().index_of(name)?;
+            sort_exprs.push(PhysicalSortExpr {
+                expr: Arc::new(PhysColumn::new(name, idx)) as Arc<dyn PhysicalExpr>,
+                options: SortOptions {
+                    descending: false,
+                    nulls_first: true,
+                },
+            });
+        }
+        let ordering = LexOrdering::new(sort_exprs).expect("LexOrdering should be valid");
 
         let pushdown_projection = match projection {
             IndexScanProjectionPushdown::No => PushdownProjection::No,
@@ -388,8 +470,9 @@ impl DeltaQuadsStorageScanPlanBuilder {
             &self.session_state,
             self.encoding.clone(),
             table_uri.as_object_store_url(),
-            vec![FileGroup::new(file_group)],
+            file_groups,
         )
+        .with_output_ordering(vec![ordering])
         .with_quad_pattern(self.pattern.clone())
         .with_pushdown_projection(pushdown_projection)
         .with_reader_factory_type(custom_factory)
@@ -397,7 +480,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
         .build()
         .await?;
 
-        Ok(plan)
+        Ok(Some(plan))
     }
 
     // Removed pushdown_projection_into_index_scan and compute_projection_exprs

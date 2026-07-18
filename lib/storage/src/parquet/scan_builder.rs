@@ -61,6 +61,7 @@ pub struct ParquetQuadScanBuilder<'a> {
     reader_factory_type: ParquetQuadScanReaderFactoryType,
     pushdown_projection: PushdownProjection,
     eager_pruning: bool,
+    output_ordering: Option<Vec<datafusion::physical_expr::LexOrdering>>,
 }
 
 impl<'a> ParquetQuadScanBuilder<'a> {
@@ -79,6 +80,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             reader_factory_type: ParquetQuadScanReaderFactoryType::Default,
             pushdown_projection: PushdownProjection::No,
             eager_pruning: false,
+            output_ordering: None,
         }
     }
 
@@ -103,6 +105,14 @@ impl<'a> ParquetQuadScanBuilder<'a> {
     /// query planner.
     pub fn with_eager_pruning(mut self, eager_pruning: bool) -> Self {
         self.eager_pruning = eager_pruning;
+        self
+    }
+
+    pub fn with_output_ordering(
+        mut self,
+        output_ordering: Vec<datafusion::physical_expr::LexOrdering>,
+    ) -> Self {
+        self.output_ordering = Some(output_ordering);
         self
     }
 
@@ -137,6 +147,9 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                 .with_file_groups(file_groups);
         if let Some(stats) = statistics {
             file_scan_config = file_scan_config.with_statistics(stats);
+        }
+        if let Some(ordering) = self.output_ordering {
+            file_scan_config = file_scan_config.with_output_ordering(ordering);
         }
         let data_source =
             Arc::new(DataSourceExec::new(Arc::new(file_scan_config.build())));

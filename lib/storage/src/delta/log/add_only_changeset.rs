@@ -2,11 +2,12 @@ use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::operation_log_file::OperationLogFile;
 use crate::delta::log::operations_changeset_stream::OperationsChangesetStream;
 use crate::delta::log::{
-    COL_OPERATION, DeltaQuadsStorageLogChangeset, DeltaStorageLogOperation,
-    DeltaStorageLogVersionRange, EagerChangeset,
+    COL_OPERATION, ChangesetContext, DeltaQuadsStorageLogChangeset,
+    DeltaStorageLogOperation, DeltaStorageLogVersionRange, EagerChangeset,
 };
 use crate::exec::VerifyNotNullExec;
 use async_trait::async_trait;
+use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::object_store::ObjectStoreUrl;
@@ -17,13 +18,17 @@ use datafusion::datasource::physical_plan::{
 use datafusion::datasource::source::DataSourceExec;
 use datafusion::datasource::table_schema::TableSchema;
 use datafusion::execution::SessionState;
+use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::expressions::{Column, col, is_not_null, lit};
 use datafusion::physical_expr::projection::ProjectionExpr;
-use datafusion::physical_plan::aggregates::{
-    AggregateExec, AggregateMode, PhysicalGroupBy,
-};
+use datafusion::physical_expr::{LexOrdering, LexRequirement, PhysicalSortExpr};
+use datafusion::physical_plan::sorts::sort::SortExec;
+use rdf_fusion_common::QuadComponent;
+use rdf_fusion_physical::distinct::SortedDistinctExec;
+
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::projection::ProjectionExec;
+use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use deltalake::logstore::ObjectStoreRef;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -60,14 +65,20 @@ impl LazyInsertionOnlyChangeset {
     /// Returns an execution plan that scans all Parquet files.
     fn scan_all_files(
         &self,
+        state: &SessionState,
         projection_indices: Vec<usize>,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
-        let mut file_group = Vec::new();
-        for file in &self.files {
+        let target_partitions = state.config().target_partitions();
+
+        let mut file_groups = vec![Vec::new(); target_partitions];
+        for (i, file) in self.files.iter().enumerate() {
             let partitioned_file =
                 PartitionedFile::new(file.inner().path.clone(), file.inner().size as u64);
-            file_group.push(partitioned_file);
+            file_groups[i % target_partitions].push(partitioned_file);
         }
+        file_groups.retain(|g| !g.is_empty());
+        let file_groups: Vec<FileGroup> =
+            file_groups.into_iter().map(FileGroup::new).collect();
 
         let table_schema = TableSchema::new(Arc::clone(&self.table_schema), vec![]);
 
@@ -78,12 +89,13 @@ impl LazyInsertionOnlyChangeset {
                 .with_parquet_file_reader_factory(Arc::new(file_factory)),
         );
         let file_scan_config = FileScanConfigBuilder::new(self.table_uri.clone(), source)
-            .with_file_group(FileGroup::new(file_group))
+            .with_file_groups(file_groups)
             .with_projection_indices(Some(projection_indices))?
             .build();
 
-        let scan_plan = Arc::new(DataSourceExec::new(Arc::new(file_scan_config)));
-        Ok(scan_plan)
+        let datasource = DataSourceExec::new(Arc::new(file_scan_config));
+
+        Ok(Arc::new(datasource))
     }
 }
 
@@ -95,6 +107,7 @@ impl DeltaQuadsStorageLogChangeset for LazyInsertionOnlyChangeset {
 
     async fn cleared_graphs(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         Ok(None)
@@ -102,6 +115,7 @@ impl DeltaQuadsStorageLogChangeset for LazyInsertionOnlyChangeset {
 
     async fn removed_quads(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         Ok(None)
@@ -109,72 +123,102 @@ impl DeltaQuadsStorageLogChangeset for LazyInsertionOnlyChangeset {
 
     async fn added_quads(
         &self,
-        _state: &SessionState,
+        context: &ChangesetContext,
+        state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
-        let scan_plan = self.scan_all_files(vec![2, 3, 4, 5])?;
-
-        let group_by = PhysicalGroupBy::new_single(vec![
-            (Arc::new(Column::new(COL_GRAPH, 0)), COL_GRAPH.to_string()),
-            (
-                Arc::new(Column::new(COL_SUBJECT, 1)),
-                COL_SUBJECT.to_string(),
-            ),
-            (
-                Arc::new(Column::new(COL_PREDICATE, 2)),
-                COL_PREDICATE.to_string(),
-            ),
-            (Arc::new(Column::new(COL_OBJECT, 3)), COL_OBJECT.to_string()),
-        ]);
+        let scan_plan = self.scan_all_files(state, vec![2, 3, 4, 5])?;
 
         let scan_plan_schema = scan_plan.schema();
-        let aggregate_plan = Arc::new(AggregateExec::try_new(
-            AggregateMode::Single,
-            group_by,
-            vec![],
-            vec![],
-            scan_plan,
-            scan_plan_schema,
-        )?);
+        let mut sort_exprs = Vec::new();
 
-        let verified_plan = Arc::new(VerifyNotNullExec::try_new(
-            aggregate_plan,
-            vec![1, 2, 3], // subject, predicate, object
-        )?);
+        let components = if let Some(order) = &context.intended_sort_order {
+            order.inner().to_vec()
+        } else {
+            vec![
+                QuadComponent::GraphName,
+                QuadComponent::Subject,
+                QuadComponent::Predicate,
+                QuadComponent::Object,
+            ]
+        };
 
+        for component in &components {
+            let name = component.column_name();
+            let idx = scan_plan_schema.index_of(name)?;
+            sort_exprs.push(PhysicalSortExpr {
+                expr: Arc::new(Column::new(name, idx)) as Arc<dyn PhysicalExpr>,
+                options: SortOptions {
+                    descending: false,
+                    nulls_first: true,
+                },
+            });
+        }
+
+        let ordering = LexOrdering::new(sort_exprs).unwrap();
+        let sort_plan = Arc::new(
+            SortExec::new(ordering.clone(), scan_plan).with_preserve_partitioning(true),
+        );
+        let merged_sort_plan =
+            Arc::new(SortPreservingMergeExec::new(ordering.clone(), sort_plan));
+
+        let distinct_plan = Arc::new(SortedDistinctExec::new(
+            merged_sort_plan,
+            LexRequirement::from(ordering),
+        )) as Arc<dyn ExecutionPlan>;
+
+        let mut verify_indices = Vec::new();
+        let agg_schema = distinct_plan.schema();
+        for name in [COL_SUBJECT, COL_PREDICATE, COL_OBJECT] {
+            verify_indices.push(agg_schema.index_of(name)?);
+        }
+
+        let verified_plan =
+            Arc::new(VerifyNotNullExec::try_new(distinct_plan, verify_indices)?);
         Ok(Some(verified_plan))
     }
 
     /// The added quads may implicitly create new graphs.
     async fn added_named_graphs(
         &self,
-        _state: &SessionState,
+        _context: &ChangesetContext,
+        state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
-        let scan_plan = self.scan_all_files(vec![2])?;
+        let scan_plan = self.scan_all_files(state, vec![2])?;
         let filtered = FilterExec::try_new(
             is_not_null(col(COL_GRAPH, scan_plan.schema().as_ref())?)?,
             scan_plan,
         )?;
 
-        let group_by = PhysicalGroupBy::new_single(vec![(
-            Arc::new(Column::new(COL_GRAPH, 0)),
-            COL_GRAPH.to_string(),
-        )]);
-
         let scan_plan_schema = filtered.schema();
-        let aggregate_plan = Arc::new(AggregateExec::try_new(
-            AggregateMode::Single,
-            group_by,
-            vec![],
-            vec![],
-            Arc::new(filtered),
-            scan_plan_schema,
-        )?);
+        let sort_exprs = vec![PhysicalSortExpr {
+            expr: Arc::new(Column::new(
+                COL_GRAPH,
+                scan_plan_schema.index_of(COL_GRAPH)?,
+            )) as Arc<dyn PhysicalExpr>,
+            options: SortOptions {
+                descending: false,
+                nulls_first: true,
+            },
+        }];
+        let ordering = LexOrdering::new(sort_exprs).unwrap();
+        let sort_plan = Arc::new(
+            SortExec::new(ordering.clone(), Arc::new(filtered))
+                .with_preserve_partitioning(true),
+        ) as Arc<dyn ExecutionPlan>;
+        let merged_sort_plan =
+            Arc::new(SortPreservingMergeExec::new(ordering.clone(), sort_plan));
 
-        Ok(Some(aggregate_plan))
+        let distinct_plan = Arc::new(SortedDistinctExec::new(
+            merged_sort_plan,
+            LexRequirement::from(ordering),
+        )) as Arc<dyn ExecutionPlan>;
+
+        Ok(Some(distinct_plan))
     }
 
     async fn dropped_named_graphs(
         &self,
+        _context: &ChangesetContext,
         _state: &SessionState,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
         Ok(None)
@@ -185,7 +229,7 @@ impl DeltaQuadsStorageLogChangeset for LazyInsertionOnlyChangeset {
         state: &SessionState,
     ) -> Result<EagerChangeset, DeltaQuadsStorageError> {
         let operations = self
-            .added_quads(state)
+            .added_quads(&ChangesetContext::default(), state)
             .await?
             .expect("Quads are never empty");
         let operations_schema = operations.schema();
@@ -264,7 +308,11 @@ mod tests {
             .await?;
         let eager = changeset.as_eager_changeset(&state).await?;
 
-        let added_quads = eager.added_quads(&state).await.unwrap().unwrap();
+        let added_quads = eager
+            .added_quads(&ChangesetContext::default(), &state)
+            .await
+            .unwrap()
+            .unwrap();
         let result = collect(added_quads, state.task_ctx()).await?;
         assert_eq!(result.iter().map(|rb| rb.num_rows()).sum::<usize>(), 1);
         Ok(())

@@ -96,6 +96,8 @@ pub enum Command {
         #[arg(required = true)]
         inputs: Vec<String>,
     },
+    /// Optimizes the database.
+    Optimize,
     /// Export the database to an RDF data dump.
     Dump {
         /// The location where the dump should be written.

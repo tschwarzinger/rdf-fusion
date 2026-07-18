@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::context::SessionState;
 use datafusion::parquet::file::metadata::ParquetMetaData;
+use log::info;
 use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStoreExt};
 use rdf_fusion_common::StorageError;
@@ -53,6 +54,7 @@ impl ParquetQuadStorage {
             .await
             .map_err(|e| StorageError::Other(e.to_string().into()))?;
 
+        info!("Loading Parquet metadata and Bloom filters for file {url}...");
         let (parquet_meta, bloom_filters) =
             crate::parquet::reader::load_parquet_metadata_and_bloom_filters(
                 Arc::clone(&object_store),
@@ -61,6 +63,7 @@ impl ParquetQuadStorage {
             )
             .await
             .map_err(|e| StorageError::Other(e.to_string().into()))?;
+        info!("Parquet metadata and Bloom filters loaded for file {url}.");
 
         let bloom_filter_cache = PreloadedBloomFilters::new();
         bloom_filter_cache.insert(path, bloom_filters);

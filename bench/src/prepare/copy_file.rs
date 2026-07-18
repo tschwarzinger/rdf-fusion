@@ -9,8 +9,8 @@ pub fn ensure_copy_file(env: &BenchmarkContext, file_name: &Path) -> anyhow::Res
     if !file_path.exists() {
         bail!(
             "{:?} does not exist ({:?})",
-            &file_path,
-            &path::absolute(&file_path)
+            file_path,
+            path::absolute(&file_path)
         );
     }
     Ok(())

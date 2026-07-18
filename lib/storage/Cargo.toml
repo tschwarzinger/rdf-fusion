@@ -20,7 +20,8 @@ rdf-fusion-common.workspace = true
 datafusion.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-logical.workspace = true
-redb.workspace = true
+rdf-fusion-physical.workspace = true
+rocksdb.workspace = true
 quick_cache.workspace = true
 serde_json.workspace = true
 deltalake.workspace = true
@@ -29,6 +30,7 @@ tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
 md-5.workspace = true
+log = "0.4.29"
 
 [dev-dependencies]
 criterion.workspace = true

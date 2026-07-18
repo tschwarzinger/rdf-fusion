@@ -439,9 +439,9 @@ mod tests {
     use datafusion::arrow::compute::concat_batches;
     use datafusion::arrow::datatypes::{DataType, Field};
     use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
-    use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
     use datafusion::physical_plan::collect;
     use datafusion::physical_plan::sorts::sort::SortExec;
+    use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
     use datafusion::prelude::SessionContext;
     use deltalake::arrow::util::pretty::pretty_format_batches;
     use insta::assert_snapshot;
@@ -851,13 +851,6 @@ mod tests {
             let df = ctx.read_batch(batch).unwrap();
             let exec = df.create_physical_plan().await.unwrap();
 
-            let single_partition_exec =
-                if exec.output_partitioning().partition_count() > 1 {
-                    Arc::new(CoalescePartitionsExec::new(exec)) as Arc<dyn ExecutionPlan>
-                } else {
-                    exec
-                };
-
             // Add the sort ordering property
             let commit_version_col =
                 col(COL_COMMIT_VERSION, self.schema.as_ref()).unwrap();
@@ -866,13 +859,16 @@ mod tests {
                 PhysicalSortExpr::new(commit_version_col, SortOptions::default().asc()),
                 PhysicalSortExpr::new(seq_id_col, SortOptions::default().asc()),
             ];
-            let sort_exec = Arc::new(SortExec::new(
-                LexOrdering::new(sort_exprs).unwrap(),
-                single_partition_exec,
-            ));
+            let ordering = LexOrdering::new(sort_exprs).unwrap();
+
+            let sort_exec = Arc::new(
+                SortExec::new(ordering.clone(), exec).with_preserve_partitioning(true),
+            );
+            let merged_exec =
+                Arc::new(SortPreservingMergeExec::new(ordering.clone(), sort_exec));
 
             let compute_exec: Arc<dyn ExecutionPlan> =
-                Arc::new(ComputeLogChangesetExec::try_new(sort_exec).unwrap());
+                Arc::new(ComputeLogChangesetExec::try_new(merged_exec).unwrap());
             let results = collect(Arc::clone(&compute_exec), ctx.task_ctx())
                 .await
                 .unwrap();
