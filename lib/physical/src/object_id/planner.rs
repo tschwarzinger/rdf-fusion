@@ -5,6 +5,7 @@ use datafusion::execution::SessionState;
 use datafusion::logical_expr::{LogicalPlan, ScalarUDF, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
+use rdf_fusion_encoding::object_id::is_object_id_data_type;
 use rdf_fusion_logical::encoding::object_id::DecodeObjectIdsNode;
 use std::sync::Arc;
 
@@ -53,7 +54,7 @@ impl ExtensionPlanner for DecodeObjectIdsPlanner {
 
         for field in input_exec.schema().fields() {
             let name = field.name().clone();
-            if decode_set.contains(&name) {
+            if decode_set.contains(&name) && is_object_id_data_type(field.data_type()) {
                 projections.push(
                     crate::object_id::exec::ObjectIdDecodingExecProjection::Decode {
                         source_column: name.clone(),

@@ -8,6 +8,7 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::object_id::ObjectIdDictionary;
+use rdf_fusion_encoding::object_id::is_object_id_data_type;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
@@ -77,6 +78,13 @@ impl ScalarUDFImpl for DecodeTermUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let input_type = args.arg_fields[0].data_type();
+        if !is_object_id_data_type(input_type) {
+            return exec_err!(
+                "DecodeTermUDF requires an ObjectId encoded argument (Int64, UInt64, Int32, UInt32, FixedSizeBinary), but got: {:?}",
+                input_type
+            );
+        }
         Ok(Arc::new(Field::new(
             "output",
             PLAIN_TERM_ENCODING.data_type().clone(),

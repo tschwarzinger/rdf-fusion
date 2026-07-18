@@ -1,13 +1,14 @@
 mod logical;
 mod rewrite;
 
+pub use logical::*;
+pub use rewrite::*;
+
 use datafusion::arrow::datatypes::{Field, Fields};
 use datafusion::common::{DFSchema, DFSchemaRef};
-pub use logical::*;
 use rdf_fusion_common::BlankNodeMatchingMode;
 use rdf_fusion_common::{TermPattern, TriplePattern, VariableRef};
 use rdf_fusion_encoding::QuadStorageEncoding;
-pub use rewrite::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 

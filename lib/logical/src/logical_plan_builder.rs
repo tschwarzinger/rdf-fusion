@@ -6,10 +6,9 @@ use crate::minus::MinusNode;
 use crate::patterns::PatternNode;
 use crate::{RdfFusionExprBuilder, RdfFusionExprBuilderContext};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::common::{Column, DFSchema, DFSchemaRef, plan_datafusion_err, plan_err};
-
 use datafusion::common::ExprSchema;
 use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion::common::{Column, DFSchema, DFSchemaRef, plan_datafusion_err, plan_err};
 use datafusion::logical_expr::{
     Expr, ExprSchemable, Extension, LogicalPlan, LogicalPlanBuilder, Sort, SortExpr,
     UserDefinedLogicalNode, col,

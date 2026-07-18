@@ -41,10 +41,15 @@ fi
 # Using associative array or simply sort -u
 UNIQUE_BENCHES=($(echo "${BENCHES_TO_RUN[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' '))
 
+
 for bench in "${UNIQUE_BENCHES[@]}"; do
     if [[ "$STEP" == "main" ]]; then
+        # TODO: Remove once crit benchmarks are independent of env variables
+        set -gx RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE true
         cargo bench --bench "$bench" -- --save-baseline "main-$bench"
     elif [[ "$STEP" == "candidate" ]]; then
+        # TODO: Remove once crit benchmarks are independent of env variables
+        set -gx RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE true
         cargo bench --bench "$bench" -- --save-baseline "candidate-$bench"
     elif [[ "$STEP" == "compare" ]]; then
         critcmp "main-$bench" "candidate-$bench"

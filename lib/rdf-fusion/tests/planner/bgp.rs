@@ -13,10 +13,10 @@ async fn test_bgp_planner_short_circuit() {
           QuadPattern: triple_pattern=[?s <http://example.org/p2> ?o2], projection=[0]
         ");
     assert_plan_snapshot!(physical, @"
-    DecodeObjectIdsExec: projections=[decode(s__oid) as s]
-      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s__oid@0, s__oid@0)], projection=[s__oid@0]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> <http://example.org/o1>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 2 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 2 AND 2 <= object_max@6, required_guarantees=[object in (2), predicate in (1)]
+    DecodeObjectIdsExec: projections=[decode(s) as s]
+      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s@0, s@0)], projection=[s@0]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> <http://example.org/o1>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 2 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 2 AND 2 <= object_max@6, required_guarantees=[object in (2), predicate in (1)]
     ");
 }
 
@@ -53,10 +53,10 @@ async fn test_bgp_planner_projection_pushdown() {
           QuadPattern: triple_pattern=[?s <http://example.org/p2> ?o2], projection=[0]
         ");
     assert_plan_snapshot!(physical, @"
-    DecodeObjectIdsExec: projections=[decode(s__oid) as s]
-      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s__oid@0, s__oid@0)], projection=[s__oid@0]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o1], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
+    DecodeObjectIdsExec: projections=[decode(s) as s]
+      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s@0, s@0)], projection=[s@0]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o1], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
     ");
 }
 
@@ -72,10 +72,10 @@ async fn test_bgp_planner_late_decoding() {
           QuadPattern: triple_pattern=[?o1 <http://example.org/p2> ?o2], projection=[0]
         ");
     assert_plan_snapshot!(physical, @"
-    DecodeObjectIdsExec: projections=[decode(s__oid) as s]
-      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(o1__oid@0, o1__oid@1)], projection=[s__oid@1]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?o1 <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as o1__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o1], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s__oid, object@3 as o1__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
+    DecodeObjectIdsExec: projections=[decode(s) as s]
+      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(o1@0, o1@1)], projection=[s@1]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?o1 <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as o1], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o1], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as s, object@3 as o1], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
     ");
 }
 
@@ -105,16 +105,16 @@ async fn test_bgp_planner_complex_filter() {
         ");
     assert_plan_snapshot!(physical, @"
     ProjectionExec: expr=[city@0 as city, name@3 as name]
-      DecodeObjectIdsExec: projections=[decode(city__oid) as city, pop, code, decode(name__oid) as name]
+      DecodeObjectIdsExec: projections=[decode(city) as city, pop, code, decode(name) as name]
         FilterExec: EBV(EQ(ENC_TF(STR(code@2)), 2:{value:75001,language:})) AND EBV(GT(ENC_TF(pop@1), 4:4:1000000))
-          DecodeObjectIdsExec: projections=[city__oid, decode(pop__oid) as pop, decode(code__oid) as code, name__oid]
-            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city__oid@0, city__oid@0)], projection=[city__oid@0, pop__oid@1, code__oid@2, name__oid@4]
-              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city__oid@0, city__oid@0)], projection=[city__oid@0, pop__oid@1, code__oid@3]
-                HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city__oid@0, city__oid@0)], projection=[city__oid@0, pop__oid@2]
-                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 8, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 8 AND 8 <= object_max@6, required_guarantees=[object in (8), predicate in (1)]
-                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/population> ?pop], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid, object@3 as pop__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
-                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/postalCode> ?code], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid, object@3 as code__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 7 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 7 AND 7 <= predicate_max@2, required_guarantees=[predicate in (7)]
-              ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/name> ?name], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid, object@3 as name__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 2 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 2 AND 2 <= predicate_max@2, required_guarantees=[predicate in (2)]
+          DecodeObjectIdsExec: projections=[city, decode(pop) as pop, decode(code) as code, name]
+            HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, pop@1, code@2, name@4]
+              HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, pop@1, code@3]
+                HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, pop@2]
+                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 8, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 8 AND 8 <= object_max@6, required_guarantees=[object in (8), predicate in (1)]
+                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/population> ?pop], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city, object@3 as pop], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
+                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/postalCode> ?code], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city, object@3 as code], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 7 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 7 AND 7 <= predicate_max@2, required_guarantees=[predicate in (7)]
+              ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/name> ?name], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city, object@3 as name], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 2 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 2 AND 2 <= predicate_max@2, required_guarantees=[predicate in (2)]
     ");
 }
 
@@ -142,10 +142,10 @@ async fn test_bgp_planner_filter_on_join_column_bsbm_explore_5() {
         ");
     assert_plan_snapshot!(physical, @"
     FilterExec: EBV(EQ(ENC_TF(STR(name@2)), 2:{value:Paris,language:})) AND EBV(EQ(ENC_TF(STR(type@1)), 2:{value:http://schema.org/City,language:})) AND EBV(EQ(ENC_TF(STR(city@0)), 2:{value:http://www.wikidata.org/entity/Q90,language:})), projection=[city@0, name@2]
-      DecodeObjectIdsExec: projections=[decode(city__oid) as city, decode(type__oid) as type, decode(name__oid) as name]
-        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city__oid@0, city__oid@0)], projection=[city__oid@0, type__oid@1, name__oid@3]
-          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid, object@3 as type__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
-          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/name> ?name], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid, object@3 as name__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
+      DecodeObjectIdsExec: projections=[decode(city) as city, decode(type) as type, decode(name) as name]
+        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, type@1, name@3]
+          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city, object@3 as type], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
+          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/name> ?name], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city, object@3 as name], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
     ");
 }
 
@@ -169,15 +169,16 @@ async fn test_bgp_planner_filter_pushdown_with_object_id() {
 
     let (logical, physical) = ctx.get_query_plans(query).await;
     assert_plan_snapshot!(logical, @"
-        BasicGraphPattern: projection=[city], columns_to_decode=[city], filters=[city__oid = Int64(0) AS EBV(EQ(ENC_TF(city),ENC_TF(Struct({term_type:0,value:http://www.wikidata.org/entity/Q90,data_type:,language_tag:}))))]
-          QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>]
-          QuadPattern: triple_pattern=[?city <http://schema.org/population> ?pop], projection=[0]
-        ");
+    BasicGraphPattern: projection=[city], columns_to_decode=[city], filters=[EBV(EQ(ENC_TF(city), Union 1:0:http://www.wikidata.org/entity/Q90)) AS EBV(EQ(ENC_TF(city),ENC_TF(Struct({term_type:0,value:http://www.wikidata.org/entity/Q90,data_type:,language_tag:}))))]
+      QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>]
+      QuadPattern: triple_pattern=[?city <http://schema.org/population> ?pop], projection=[0]
+    ");
     assert_plan_snapshot!(physical, @"
-    DecodeObjectIdsExec: projections=[decode(city__oid) as city]
-      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city__oid@0, city__oid@0)], projection=[city__oid@0]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 8 AND subject@1 = 0, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 8 AND 8 <= object_max@6 AND subject_null_count@10 != row_count@4 AND subject_min@8 <= 0 AND 0 <= subject_max@9, required_guarantees=[object in (8), predicate in (1), subject in (0)]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/population> ?pop], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
+    FilterExec: EBV(EQ(ENC_TF(city@0), 1:0:http://www.wikidata.org/entity/Q90))
+      DecodeObjectIdsExec: projections=[decode(city) as city]
+        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0]
+          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 8, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 8 AND 8 <= object_max@6, required_guarantees=[object in (8), predicate in (1)]
+          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/population> ?pop], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
     ");
 }
 
@@ -207,11 +208,11 @@ async fn test_bgp_planner_not_using_one_column() {
         ");
     assert_plan_snapshot!(physical, @"
     SortExec: expr=[AS_SORTABLE_BYTES(ENC_TF(code@1)) ASC], preserve_partitioning=[false]
-      DecodeObjectIdsExec: projections=[decode(city__oid) as city, decode(code__oid) as code]
-        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city__oid@0, city__oid@0)], projection=[city__oid@0, code__oid@2]
-          HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city__oid@0, city__oid@0)], projection=[city__oid@0]
-            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 8, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 8 AND 8 <= object_max@6, required_guarantees=[object in (8), predicate in (1)]
-            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/population> ?pop], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
-          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/postalCode> ?code], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city__oid, object@3 as code__oid], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 7 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 7 AND 7 <= predicate_max@2, required_guarantees=[predicate in (7)]
+      DecodeObjectIdsExec: projections=[decode(city) as city, decode(code) as code]
+        HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, code@2]
+          HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0]
+            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 8, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 8 AND 8 <= object_max@6, required_guarantees=[object in (8), predicate in (1)]
+            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/population> ?pop], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 4 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 4 AND 4 <= predicate_max@2, required_guarantees=[predicate in (4)]
+          ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://schema.org/postalCode> ?code], blank_node_mode=Variable, file_groups={1 group: [[indexes/GPOS/<file>.parquet]]}, projection=[subject@1 as city, object@3 as code], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 7 AND DynamicFilter [ empty ], pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 7 AND 7 <= predicate_max@2, required_guarantees=[predicate in (7)]
     ");
 }

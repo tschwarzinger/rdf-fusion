@@ -1,15 +1,13 @@
-use crate::bgp::BgpNode;
 use crate::expr::scalars::try_extract_scalar_term;
 use crate::expr::unwrap_encoding_changes;
 use datafusion::common::tree_node::{Transformed, TreeNode};
-use datafusion::common::{Column, DFSchema, DFSchemaRef, plan_datafusion_err, plan_err};
+use datafusion::common::{DFSchema, DFSchemaRef, plan_datafusion_err};
 use datafusion::logical_expr::expr::ScalarFunction;
 use datafusion::logical_expr::utils::merge_schema;
 use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, lit};
 use datafusion::optimizer::utils::NamePreserver;
 use datafusion::optimizer::{ApplyOrder, OptimizerConfig, OptimizerRule};
 use rdf_fusion_common::{DFResult, Term};
-use rdf_fusion_encoding::plain_term::PlainTermScalar;
 use rdf_fusion_encoding::{EncodingName, EncodingScalar, RdfFusionEncodings};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
@@ -45,14 +43,11 @@ impl SimplifySparqlExpressionsRule {
         &self,
         expr: Expr,
         input_schema: &DFSchema,
-        is_bgp_node: bool,
     ) -> DFResult<Transformed<Expr>> {
         expr.transform_up(|expr| match expr {
-            Expr::ScalarFunction(scalar_function) => self.try_rewrite_scalar_function(
-                scalar_function,
-                input_schema,
-                is_bgp_node,
-            ),
+            Expr::ScalarFunction(scalar_function) => {
+                self.try_rewrite_scalar_function(scalar_function, input_schema)
+            }
             _ => Ok(Transformed::no(expr)),
         })
     }
@@ -62,7 +57,6 @@ impl SimplifySparqlExpressionsRule {
         &self,
         scalar_function: ScalarFunction,
         input_schema: &DFSchema,
-        is_bgp_node: bool,
     ) -> DFResult<Transformed<Expr>> {
         let function_name = scalar_function.func.name();
         let builtin = BuiltinName::try_from(function_name);
@@ -74,16 +68,12 @@ impl SimplifySparqlExpressionsRule {
             BuiltinName::IsCompatible => {
                 try_replace_is_compatible_with_equality(scalar_function, input_schema)
             }
-            BuiltinName::Equal => {
-                let future = try_replace_equality_with_same_term(
-                    &self.encodings,
-                    self.function_registry.as_ref(),
-                    input_schema,
-                    scalar_function,
-                    is_bgp_node,
-                );
-                futures::executor::block_on(future)
-            }
+            BuiltinName::Equal => try_replace_equality_with_same_term(
+                &self.encodings,
+                self.function_registry.as_ref(),
+                input_schema,
+                scalar_function,
+            ),
             BuiltinName::EffectiveBooleanValue => {
                 try_replace_boolean_round_trip(scalar_function)
             }
@@ -125,11 +115,10 @@ impl OptimizerRule for SimplifySparqlExpressionsRule {
         };
 
         // Changing the expression might lead to a name change in the schema.
-        let is_bgp_node = matches!(&plan, LogicalPlan::Extension(ext) if ext.node.as_any().downcast_ref::<BgpNode>().is_some());
         let name_preserver = NamePreserver::new(&plan);
         plan.map_expressions(|expr| {
             let name = name_preserver.save(&expr);
-            let expr = self.try_rewrite_expression(expr, &schema, is_bgp_node)?;
+            let expr = self.try_rewrite_expression(expr, &schema)?;
             Ok(Transformed::new_transformed(
                 name.restore(expr.data),
                 expr.transformed,
@@ -175,12 +164,11 @@ fn try_replace_is_compatible_with_equality(
 /// - `?country = <Austria>` -> `sameTerm(?country, <Austria>)`
 /// - `?value = "1"^^xsd:integer`, no optimization opportunity, as, for example, `"01"^^xsd:integer`
 ///   is also equal to the literal
-async fn try_replace_equality_with_same_term(
+fn try_replace_equality_with_same_term(
     encodings: &RdfFusionEncodings,
     registry: &dyn RdfFusionFunctionRegistry,
     schema: &DFSchema,
     scalar_function: ScalarFunction,
-    is_bgp_node: bool,
 ) -> DFResult<Transformed<Expr>> {
     let lhs_term = try_extract_scalar_term(encodings, &scalar_function.args[0]);
     let rhs_term = try_extract_scalar_term(encodings, &scalar_function.args[1]);
@@ -205,31 +193,22 @@ async fn try_replace_equality_with_same_term(
         .try_get_encoding_name(field.data_type())
         .ok_or_else(|| plan_datafusion_err!("Expected comparison with RDF terms"))?;
 
-    if encoding == EncodingName::TypedFamily {
+    if encoding == EncodingName::TypedFamily || encoding == EncodingName::ObjectId {
         return Ok(Transformed::no(Expr::ScalarFunction(scalar_function)));
     }
 
-    replace_equality_with_same_term(
-        encodings,
-        registry,
-        schema,
-        term,
-        other_expression,
-        is_bgp_node,
-    )
-    .await
+    replace_equality_with_same_term(encodings, registry, schema, term, other_expression)
 }
 
 /// Execute the replacement for [try_replace_equality_with_same_term] when all preconditions are
 /// met. May swap the order of the arguments, but this is fine due to the commutativity of `=` and
 /// `sameTerm`.
-async fn replace_equality_with_same_term(
+fn replace_equality_with_same_term(
     encodings: &RdfFusionEncodings,
     registry: &dyn RdfFusionFunctionRegistry,
     schema: &DFSchema,
     term: Term,
     other_expression: &Expr,
-    is_bgp_node: bool,
 ) -> DFResult<Transformed<Expr>> {
     let encoding_name = encodings
         .try_get_encoding_name(other_expression.to_field(schema)?.1.data_type())
@@ -239,24 +218,11 @@ async fn replace_equality_with_same_term(
             .plain_term()
             .encode_term(Ok(term.as_ref()))?
             .into_scalar_value(),
-        EncodingName::ObjectId => {
-            let Some(encoding) = encodings.object_id() else {
-                return plan_err!("No Object ID mapping registerd.");
-            };
-
-            match encoding
-                .encode_scalar(&PlainTermScalar::from(term.as_ref()))
-                .await
-            {
-                Ok(scalar) => scalar.into_scalar_value(),
-                Err(err) => plan_err!("Failed to encode term: {}", err)?,
-            }
-        }
         EncodingName::String => encodings
             .string_encoding()
             .encode_term(Ok(term.as_ref()))?
             .into_scalar_value(),
-        EncodingName::TypedFamily => {
+        EncodingName::TypedFamily | EncodingName::ObjectId => {
             unreachable!("Handled in caller")
         }
     };
@@ -264,40 +230,9 @@ async fn replace_equality_with_same_term(
     let boolean_as_term =
         registry.udf(&FunctionName::Builtin(BuiltinName::NativeBooleanAsTerm))?;
 
-    if is_bgp_node && encoding_name == EncodingName::ObjectId {
-        let new_expr = other_expression
-            .clone()
-            .transform_up(|e| {
-                if let Expr::Column(c) = e {
-                    Ok(Transformed::yes(Expr::Column(Column::new(
-                        c.relation,
-                        format!("{}__oid", c.name),
-                    ))))
-                } else {
-                    Ok(Transformed::no(e))
-                }
-            })?
-            .data;
-
-        let Some(encoding) = encodings.object_id() else {
-            return plan_err!("No Object ID mapping registerd.");
-        };
-        let oid_scalar = match encoding
-            .encode_scalar(&PlainTermScalar::from(term.as_ref()))
-            .await
-        {
-            Ok(s) => s.into_scalar_value(),
-            Err(err) => plan_err!("Failed to encode term: {}", err)?,
-        };
-
-        Ok(Transformed::yes(
-            boolean_as_term.call(vec![lit(oid_scalar).eq(new_expr)]),
-        ))
-    } else {
-        Ok(Transformed::yes(
-            boolean_as_term.call(vec![lit(scalar).eq(other_expression.clone())]),
-        ))
-    }
+    Ok(Transformed::yes(
+        boolean_as_term.call(vec![lit(scalar).eq(other_expression.clone())]),
+    ))
 }
 
 /// Tries to replace EBV(BOOLEAN_AS_TERM(X)) with X. This can be a crucial optimization in query

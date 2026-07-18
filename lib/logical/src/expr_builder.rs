@@ -6,7 +6,7 @@ use datafusion::logical_expr::{Expr, ExprSchemable, lit};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::{Iri, LiteralRef, TermRef, ThinError};
 use rdf_fusion_encoding::plain_term::{
-    PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder, PlainTermScalar,
+    PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingName, EncodingScalar};
 use rdf_fusion_extensions::functions::{BuiltinName, FunctionName};
@@ -1011,15 +1011,9 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 let arg = tf_array.try_as_scalar(0)?;
                 arg.into_scalar_value()
             }
-            EncodingName::ObjectId => match self.context.encodings().object_id() {
-                None => {
-                    return plan_err!("The context has not ObjectID encoding registered");
-                }
-                Some(encoding) => futures::executor::block_on(
-                    encoding.encode_scalar(&PlainTermScalar::from(scalar)),
-                )?
-                .into_scalar_value(),
-            },
+            EncodingName::ObjectId => {
+                plan_err!("Object id columns not supported in build_same_term_scalar.")?
+            }
             EncodingName::String => {
                 let turtle = scalar.to_string(); // This should ideally be proper Turtle
                 ScalarValue::Utf8(Some(turtle))

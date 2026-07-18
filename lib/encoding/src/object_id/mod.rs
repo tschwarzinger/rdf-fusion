@@ -30,6 +30,14 @@ impl ObjectIdDataType {
     }
 }
 
+/// Returns true if the given data type is a valid object id data type.
+pub fn is_object_id_data_type(data_type: &DataType) -> bool {
+    matches!(
+        data_type,
+        DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
+    )
+}
+
 impl From<ObjectIdDataType> for DataType {
     fn from(value: ObjectIdDataType) -> Self {
         match value {

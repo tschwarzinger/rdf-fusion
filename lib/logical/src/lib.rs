@@ -27,7 +27,7 @@ mod logical_plan_builder;
 mod logical_plan_builder_context;
 pub mod minus;
 pub mod paths;
-pub mod patterns;
+pub mod patterns; // TODO: Remove this once we have a better way for property paths
 pub mod quad_pattern;
 
 pub use active_graph::{ActiveGraph, EnumeratedActiveGraph};
