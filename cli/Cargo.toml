@@ -29,6 +29,7 @@ rdf-fusion-extensions.workspace = true
 rdf-fusion-web.workspace = true
 snmalloc-rs.workspace = true
 tokio.workspace = true
+console-subscriber = { workspace = true, optional = true }
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -46,3 +47,6 @@ workspace = true
 assert_cmd.workspace = true
 insta.workspace = true
 tempfile.workspace = true
+
+[features]
+perf-debugging = ["console-subscriber"]

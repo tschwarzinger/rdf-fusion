@@ -18,6 +18,7 @@ pub fn unpack_archive(file_path: &Path, archive_type: ArchiveType) -> Result<(),
             fs::write(file_path, &buf)?;
         }
         ArchiveType::Zip => {
+            #[allow(clippy::disallowed_methods)]
             let archive = fs::read(file_path).context("Cannot read zip file")?;
             fs::remove_file(file_path).context("Cannot remove existing .zip file")?;
             ZipArchive::new(Cursor::new(archive))

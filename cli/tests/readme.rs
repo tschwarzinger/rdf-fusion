@@ -50,6 +50,7 @@ fn test_readme_example_serve_delta() {
             .spawn()
             .expect("Failed to start serve command");
 
+    #[allow(clippy::disallowed_methods)]
     std::thread::sleep(std::time::Duration::from_millis(500));
     let status = child
         .try_wait()
@@ -108,6 +109,7 @@ fn test_readme_example_dump_delta() {
     ]);
     cmd.assert().success();
 
+    #[allow(clippy::disallowed_methods)]
     let content = fs::read_to_string(&dump_file).expect("Dump file should exist");
     assert!(!content.is_empty());
     assert!(content.contains("<http://example.org/#spiderman>"));

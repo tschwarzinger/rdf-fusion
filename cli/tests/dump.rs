@@ -25,6 +25,7 @@ fn test_cli_dump_spiderman() {
 
     cmd.assert().success();
 
+    #[allow(clippy::disallowed_methods)]
     let content = fs::read_to_string(&dump_path).expect("Dump file should exist");
     let mut lines: Vec<&str> = content.lines().collect();
     lines.sort();
@@ -60,6 +61,7 @@ fn test_cli_dump_spiderman_graph() {
 
     cmd.assert().success();
     if std::path::Path::new(&dump_path).exists() {
+        #[allow(clippy::disallowed_methods)]
         let content = fs::read_to_string(&dump_path).expect("Dump file should exist");
         assert!(content.is_empty());
     }
@@ -89,6 +91,7 @@ fn test_cli_dump_spiderman_sorted() {
 
     cmd.assert().success();
 
+    #[allow(clippy::disallowed_methods)]
     let content = fs::read_to_string(&dump_path).expect("Dump file should exist");
     insta::assert_snapshot!(content);
 }
@@ -117,6 +120,7 @@ fn test_cli_dump_spiderman_sorted_osp() {
 
     cmd.assert().success();
 
+    #[allow(clippy::disallowed_methods)]
     let content = fs::read_to_string(&dump_path).expect("Dump file should exist");
     insta::assert_snapshot!(content);
 }
@@ -145,6 +149,7 @@ fn test_cli_dump_spiderman_sorted_native() {
 
     cmd.assert().success();
 
+    #[allow(clippy::disallowed_methods)]
     let content = fs::read_to_string(&dump_path).expect("Dump file should exist");
     insta::assert_snapshot!(content);
 }
@@ -173,6 +178,7 @@ fn test_cli_dump_spiderman_sorted_native_osp() {
 
     cmd.assert().success();
 
+    #[allow(clippy::disallowed_methods)]
     let content = fs::read_to_string(&dump_path).expect("Dump file should exist");
     insta::assert_snapshot!(content);
 }

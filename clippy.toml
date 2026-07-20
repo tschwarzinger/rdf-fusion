@@ -3,6 +3,9 @@
 disallowed-methods = [
   { path = "tokio::task::spawn", reason = "To provide cancel-safety, use `SpawnedTask::spawn` instead (https://github.com/apache/datafusion/issues/6513)" },
   { path = "tokio::task::spawn_blocking", reason = "To provide cancel-safety, use `SpawnedTask::spawn_blocking` instead (https://github.com/apache/datafusion/issues/6513)" },
+  { path = "std::thread::sleep", reason = "Use `tokio::time::sleep` in async contexts to avoid blocking the executor." },
+  { path = "std::fs::read", reason = "Use `tokio::fs::read` in async contexts to avoid blocking the executor." },
+  { path = "std::fs::read_to_string", reason = "Use `tokio::fs::read_to_string` in async contexts to avoid blocking the executor." },
 ]
 
 disallowed-types = [

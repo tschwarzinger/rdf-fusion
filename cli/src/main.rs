@@ -34,11 +34,16 @@ use url::Url;
 mod cli;
 mod commands;
 
+#[cfg(not(feature = "perf-debugging"))]
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
+    #[cfg(feature = "perf-debugging")]
+    console_subscriber::init();
+
+    #[cfg(not(feature = "perf-debugging"))]
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()

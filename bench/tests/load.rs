@@ -12,6 +12,7 @@ pub(crate) fn load_queries(
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "sparql") {
             let name = path.file_stem().unwrap().to_string_lossy().to_string();
+            #[allow(clippy::disallowed_methods)]
             let content = fs::read_to_string(&path)?;
             queries.push((name, content));
         }

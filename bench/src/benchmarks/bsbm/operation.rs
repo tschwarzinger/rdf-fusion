@@ -8,6 +8,7 @@ use std::path::PathBuf;
 pub fn list_raw_operations<TQueryName: TryFrom<u8>>(
     path: PathBuf,
 ) -> anyhow::Result<impl Iterator<Item = SparqlRawOperation<TQueryName>>> {
+    #[allow(clippy::disallowed_methods)]
     let reader = fs::read(path)?;
     let result = csv::Reader::from_reader(reader.as_slice())
         .records()
