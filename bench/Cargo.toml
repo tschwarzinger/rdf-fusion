@@ -35,6 +35,8 @@ serde_json.workspace = true
 snmalloc-rs.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 url.workspace = true
 zip.workspace = true
 

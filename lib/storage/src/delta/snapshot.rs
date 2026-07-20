@@ -5,6 +5,7 @@ use crate::delta::log::{
 use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::planner::DeltaQuadsStoragePlanner;
 use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
+use crate::parquet::reader::ChunkCache;
 use async_trait::async_trait;
 use datafusion::common::Result as DFResult;
 use datafusion::common::stats::Precision;
@@ -33,6 +34,7 @@ pub struct DeltaQuadsStorageSnapshot {
     version: u64,
     options: DeltaStorageOptions,
     transactional_changeset: Option<DeltaQuadsStorageLogChangesetRef>,
+    chunk_cache: Arc<ChunkCache>,
 }
 
 impl DeltaQuadsStorageSnapshot {
@@ -44,6 +46,7 @@ impl DeltaQuadsStorageSnapshot {
         object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
         options: DeltaStorageOptions,
         version: u64,
+        chunk_cache: Arc<ChunkCache>,
     ) -> Self {
         Self {
             log,
@@ -53,11 +56,16 @@ impl DeltaQuadsStorageSnapshot {
             version,
             options,
             transactional_changeset: None,
+            chunk_cache,
         }
     }
 
     pub fn log(&self) -> &Arc<DeltaQuadsStorageLog> {
         &self.log
+    }
+
+    pub fn chunk_cache(&self) -> &Arc<ChunkCache> {
+        &self.chunk_cache
     }
 
     pub fn indexes(&self) -> &[DeltaQuadsStorageIndexSnapshot] {
@@ -136,6 +144,7 @@ impl QuadStorageSnapshot for DeltaQuadsStorageSnapshot {
             QuadPattern::all_quads(),
             self.encoding.clone(),
         )
+        .with_cache(Arc::clone(&self.chunk_cache))
         .with_best_index(&self.indexes)
         .map_err(|e| StorageError::Other(Box::new(e)))?
         .with_changeset_for_log(&self.log, Some(self.version))

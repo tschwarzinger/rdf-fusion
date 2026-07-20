@@ -7,14 +7,30 @@ use rdf_fusion_bench::{
     BenchQuadStorageTypeArg, BenchmarkingConfig, Operation, QuadStorageEncodingNameArg,
     QuadStorageLocationArg, execute_benchmark_operation,
 };
+use tracing::warn;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[global_allocator]
 static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args = RdfFusionBenchArgs::parse();
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .init();
 
+    if std::env::var("RDF_FUSION_LOCAL_WORK_DIR").is_ok() {
+        warn!(
+            "Environment variable RDF_FUSION_LOCAL_WORK_DIR is set. This could lead to accidentally associating an non-matching object id dictionary with a new database.",
+        );
+    }
+
+    let args = RdfFusionBenchArgs::parse();
     let storage_encoding = QuadStorageEncodingName::from(args.storage_encoding);
 
     // Validate invalid combinations

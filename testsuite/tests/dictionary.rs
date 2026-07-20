@@ -43,3 +43,22 @@ async fn dictionary_testsuite_rocksdb() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[allow(deprecated)]
+async fn dictionary_testsuite_rocksdb_no_cache() -> Result<()> {
+    DictionaryTestSuiteBuilder::new(|| async {
+        let temp_dir = tempfile::tempdir()?;
+        let path = temp_dir.into_path();
+        let dict: Arc<dyn LocalObjectIdDictionary> = Arc::new(
+            RocksDBObjectIdDictionary::try_new(path, 0, Arc::new(StaticObjectIdClaimer))?,
+        );
+        Ok(dict)
+    })
+    .build()
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
+}

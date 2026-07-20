@@ -5,6 +5,7 @@ use crate::delta::log::{
     DeltaStorageLogVersionRange,
 };
 use crate::index::IndexComponents;
+use crate::parquet::reader::ChunkCache;
 use crate::parquet::scan_builder::{
     ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
 };
@@ -58,6 +59,7 @@ pub struct DeltaQuadsStorageScanPlanBuilder {
     index: Option<DeltaQuadsStorageIndexSnapshot>,
     changeset: Option<DeltaQuadsStorageLogChangesetRef>,
     projection_indices: Option<Vec<usize>>,
+    cache: Option<Arc<ChunkCache>>,
 }
 
 impl DeltaQuadsStorageScanPlanBuilder {
@@ -73,6 +75,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
             index: None,
             changeset: None,
             projection_indices: None,
+            cache: None,
         }
     }
 
@@ -106,6 +109,11 @@ impl DeltaQuadsStorageScanPlanBuilder {
         projection_indices: Option<Vec<usize>>,
     ) -> Self {
         self.projection_indices = projection_indices;
+        self
+    }
+
+    pub fn with_cache(mut self, cache: Arc<ChunkCache>) -> Self {
+        self.cache = Some(cache);
         self
     }
 
@@ -466,7 +474,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
             index.bloom_filters().clone(),
         );
 
-        let plan = ParquetQuadScanBuilder::new(
+        let mut plan = ParquetQuadScanBuilder::new(
             &self.session_state,
             self.encoding.clone(),
             table_uri.as_object_store_url(),
@@ -476,9 +484,13 @@ impl DeltaQuadsStorageScanPlanBuilder {
         .with_quad_pattern(self.pattern.clone())
         .with_pushdown_projection(pushdown_projection)
         .with_reader_factory_type(custom_factory)
-        .with_eager_pruning(true)
-        .build()
-        .await?;
+        .with_eager_pruning(true);
+
+        if let Some(cache) = &self.cache {
+            plan = plan.with_cache(Arc::clone(cache));
+        }
+
+        let plan = plan.build().await?;
 
         Ok(Some(plan))
     }

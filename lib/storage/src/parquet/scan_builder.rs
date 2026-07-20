@@ -1,4 +1,7 @@
 use crate::parquet::reader::PreLoadedMetadataReaderFactory;
+use crate::parquet::reader::{
+    CachedFileReaderFactory, ChunkCache, PreloadedBloomFilters, PreloadedParquetMetadata,
+};
 use crate::parquet::scan::ParquetQuadScanExec;
 use datafusion::common::plan_datafusion_err;
 use datafusion::common::stats::Precision;
@@ -41,8 +44,6 @@ pub enum PushdownProjection {
 pub type EagerPruningResult =
     (ParquetAccessPlan, Option<Arc<dyn PhysicalExpr>>, Statistics);
 
-use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
-
 /// Defines which [`ParquetFileReaderFactory`] should be used during scanning.
 pub enum ParquetQuadScanReaderFactoryType {
     /// Uses the default DataFusion parquet reader
@@ -62,6 +63,7 @@ pub struct ParquetQuadScanBuilder<'a> {
     pushdown_projection: PushdownProjection,
     eager_pruning: bool,
     output_ordering: Option<Vec<datafusion::physical_expr::LexOrdering>>,
+    cache: Option<Arc<ChunkCache>>,
 }
 
 impl<'a> ParquetQuadScanBuilder<'a> {
@@ -81,6 +83,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             pushdown_projection: PushdownProjection::No,
             eager_pruning: false,
             output_ordering: None,
+            cache: None,
         }
     }
 
@@ -123,6 +126,12 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         pushdown_projection: PushdownProjection,
     ) -> Self {
         self.pushdown_projection = pushdown_projection;
+        self
+    }
+
+    /// Caches the byte ranges of the parquet files being scanned in the given chunk cache.
+    pub fn with_cache(mut self, cache: Arc<ChunkCache>) -> Self {
+        self.cache = Some(cache);
         self
     }
 
@@ -234,6 +243,16 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                 ))
             }
         };
+
+        let reader_factory: Arc<dyn ParquetFileReaderFactory> =
+            if let Some(cache) = &self.cache {
+                Arc::new(CachedFileReaderFactory::new(
+                    reader_factory,
+                    Arc::clone(cache),
+                )) as _
+            } else {
+                reader_factory
+            };
 
         let mut parquet_source = ParquetSource::new(table_schema)
             .with_pushdown_filters(pushdown_filters)

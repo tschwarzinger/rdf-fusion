@@ -12,6 +12,8 @@ use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
 use futures::future::BoxFuture;
 use object_store::ObjectMeta;
+use quick_cache::Weighter;
+use quick_cache::sync::Cache;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::atomic::AtomicUsize;
@@ -292,6 +294,138 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
             path: file.object_meta.location.clone(),
             metadata: preloaded_parquet_meta,
             bloom_filter_cache: self.bloom_filter_cache.clone(),
+        }))
+    }
+}
+
+#[derive(Clone)]
+pub struct BytesWeighter;
+
+impl Weighter<String, Bytes> for BytesWeighter {
+    fn weight(&self, _key: &String, val: &Bytes) -> u64 {
+        val.len() as u64
+    }
+}
+
+pub type ChunkCache = Cache<String, Bytes, BytesWeighter>;
+
+/// A custom [`AsyncFileReader`] that wraps an inner reader and caches byte ranges exactly as requested.
+pub struct CachedFileReader {
+    inner: Box<dyn AsyncFileReader + Send>,
+    path: object_store::path::Path,
+    cache: Arc<ChunkCache>,
+}
+
+impl AsyncFileReader for CachedFileReader {
+    fn get_bytes(
+        &mut self,
+        range: Range<u64>,
+    ) -> BoxFuture<'_, Result<Bytes, ParquetError>> {
+        let ranges = vec![range];
+        let fut = self.get_byte_ranges(ranges);
+        Box::pin(async move {
+            let mut results = fut.await?;
+            Ok(results.pop().unwrap())
+        })
+    }
+
+    fn get_byte_ranges(
+        &mut self,
+        ranges: Vec<Range<u64>>,
+    ) -> BoxFuture<'_, Result<Vec<Bytes>, ParquetError>> {
+        let cache = Arc::clone(&self.cache);
+        let path = self.path.to_string();
+
+        let mut uncached_indices = Vec::new();
+        let mut fetch_ranges = Vec::new();
+        let mut results = vec![None; ranges.len()];
+
+        for (idx, range) in ranges.iter().enumerate() {
+            if range.start >= range.end {
+                results[idx] = Some(Bytes::new());
+                continue;
+            }
+            let key = format!("{}:{}..{}", path, range.start, range.end);
+            if let Some(bytes) = cache.get(&key) {
+                results[idx] = Some(bytes);
+            } else {
+                uncached_indices.push(idx);
+                fetch_ranges.push(range.clone());
+            }
+        }
+
+        if fetch_ranges.is_empty() {
+            let bytes = results.into_iter().map(Option::unwrap).collect();
+            return Box::pin(async move { Ok(bytes) });
+        }
+
+        let fut = self.inner.get_byte_ranges(fetch_ranges.clone());
+        Box::pin(async move {
+            let fetched_bytes = fut.await?;
+            for (idx, (range, bytes)) in uncached_indices
+                .into_iter()
+                .zip(fetch_ranges.into_iter().zip(fetched_bytes))
+            {
+                let key = format!("{}:{}..{}", path, range.start, range.end);
+                // Use copy_from_slice to ensure we don't cache large underlying buffers
+                // if the inner object store reader coalesced the requests.
+                let owned_bytes = Bytes::copy_from_slice(&bytes);
+                cache.insert(key, owned_bytes.clone());
+                results[idx] = Some(owned_bytes);
+            }
+
+            let final_results = results.into_iter().map(Option::unwrap).collect();
+            Ok(final_results)
+        })
+    }
+
+    fn get_metadata(
+        &mut self,
+        options: Option<&ArrowReaderOptions>,
+    ) -> BoxFuture<'_, Result<Arc<ParquetMetaData>, ParquetError>> {
+        let opts = options.cloned();
+        Box::pin(async move { self.inner.get_metadata(opts.as_ref()).await })
+    }
+}
+
+/// A factory that wraps an inner factory and creates a CachedFileReader
+#[derive(Debug, Clone)]
+pub struct CachedFileReaderFactory {
+    inner_factory: Arc<dyn ParquetFileReaderFactory>,
+    cache: Arc<ChunkCache>,
+}
+
+impl CachedFileReaderFactory {
+    pub fn new(
+        inner_factory: Arc<dyn ParquetFileReaderFactory>,
+        cache: Arc<ChunkCache>,
+    ) -> Self {
+        Self {
+            inner_factory,
+            cache,
+        }
+    }
+}
+
+impl ParquetFileReaderFactory for CachedFileReaderFactory {
+    fn create_reader(
+        &self,
+        partition_index: usize,
+        file: PartitionedFile,
+        metadata_size_hint: Option<usize>,
+        metrics: &ExecutionPlanMetricsSet,
+    ) -> DFResult<Box<dyn AsyncFileReader + Send>> {
+        let inner_reader = self.inner_factory.create_reader(
+            partition_index,
+            file.clone(),
+            metadata_size_hint,
+            metrics,
+        )?;
+
+        Ok(Box::new(CachedFileReader {
+            inner: inner_reader,
+            path: file.object_meta.location.clone(),
+            cache: Arc::clone(&self.cache),
         }))
     }
 }

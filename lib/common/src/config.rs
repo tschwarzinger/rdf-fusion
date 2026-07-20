@@ -58,6 +58,8 @@ pub struct DeltaStorageOptions {
     pub object_id_cache_size: usize,
     /// Whether the system can assume that no other node is writing to the storage.
     pub assume_single_node: bool,
+    /// The number of bytes of the cache used for object store page reads.
+    pub page_cache_size: usize,
 }
 
 impl Default for DeltaStorageOptions {
@@ -69,6 +71,7 @@ impl Default for DeltaStorageOptions {
             max_buffered_ids: None,
             object_id_cache_size: 1_000_000,
             assume_single_node: false,
+            page_cache_size: 1024 * 1024 * 1024,
         }
     }
 }
@@ -156,6 +159,14 @@ impl ExtensionOptions for RdfFusionOptions {
                 })?;
                 self.storage.delta.assume_single_node = value;
             }
+            "storage.delta.page_cache_size" => {
+                let size: usize = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.delta.page_cache_size: {e}"
+                    ))
+                })?;
+                self.storage.delta.page_cache_size = size;
+            }
             "storage.parquet.sort_order" => {
                 let value: RdfSortOrder = value.parse().map_err(|e| {
                     DataFusionError::Configuration(format!(
@@ -222,6 +233,11 @@ impl ExtensionOptions for RdfFusionOptions {
                 description: "Whether the node can assume that no other node is currently working on the DeltaQuadss database.",
             },
             ConfigEntry {
+                key: format!("{}.storage.delta.page_cache_size", Self::PREFIX),
+                value: Some(self.storage.delta.page_cache_size.to_string()),
+                description: "The size of the cache used for object store page reads in MB.",
+            },
+            ConfigEntry {
                 key: format!("{}.storage.parquet.sort_order", Self::PREFIX),
                 value: self
                     .storage
@@ -280,6 +296,9 @@ impl RdfFusionOptions {
         }
         if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE") {
             config.set("storage.delta.assume_single_node", &val)?;
+        }
+        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_PAGE_CACHE_SIZE") {
+            config.set("storage.delta.page_cache_size", &val)?;
         }
 
         if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_PARQUET_TARGET_FILE_COUNT") {
@@ -358,6 +377,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 9);
+        assert_eq!(entries.len(), 10);
     }
 }

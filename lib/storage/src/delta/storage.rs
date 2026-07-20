@@ -7,6 +7,7 @@ use crate::delta::refresh::DeltaTableRefresher;
 use crate::delta::snapshot::DeltaQuadsStorageSnapshot;
 use crate::delta::transaction::DeltaQuadsStorageTransaction;
 use crate::index::IndexComponents;
+use crate::parquet::reader::ChunkCache;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::instant::Instant;
@@ -46,6 +47,8 @@ pub struct DeltaQuadsStorage {
     refresher: Arc<DeltaTableRefresher>,
     /// Options
     options: DeltaStorageOptions,
+    /// Chunked cache for object store reads
+    chunk_cache: Arc<ChunkCache>,
 }
 
 impl DeltaQuadsStorage {
@@ -130,6 +133,11 @@ impl DeltaQuadsStorage {
             object_id_mapping,
             refresher: Arc::new(DeltaTableRefresher::new(None)),
             options: options.storage.delta.clone(),
+            chunk_cache: Arc::new(ChunkCache::with_weighter(
+                100_000, // estimated number of items
+                options.storage.delta.page_cache_size as u64,
+                crate::parquet::reader::BytesWeighter,
+            )),
         })
     }
 
@@ -238,6 +246,11 @@ impl DeltaQuadsStorage {
             object_id_mapping,
             refresher: Arc::new(DeltaTableRefresher::new(None)),
             options: options.storage.delta.clone(),
+            chunk_cache: Arc::new(ChunkCache::with_weighter(
+                100_000, // estimated number of items
+                options.storage.delta.page_cache_size as u64,
+                crate::parquet::reader::BytesWeighter,
+            )),
         })
     }
 
@@ -303,6 +316,7 @@ impl DeltaQuadsStorage {
             self.object_id_mapping.clone(),
             self.options.clone(),
             version,
+            Arc::clone(&self.chunk_cache),
         ))
     }
 }
