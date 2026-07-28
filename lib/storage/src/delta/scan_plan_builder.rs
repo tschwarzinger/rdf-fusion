@@ -1,14 +1,14 @@
 use crate::delta::error::DeltaQuadsStorageError;
-use crate::delta::index::DeltaQuadsStorageIndexSnapshot;
 use crate::delta::log::{
     ChangesetContext, DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef,
     DeltaStorageLogVersionRange,
 };
-use crate::index::IndexComponents;
-use crate::parquet::reader::ChunkCache;
+use crate::delta::quad_table::DeltaQuadsQuadTableSnapshot;
+use crate::object_store::CachedObjectStore;
 use crate::parquet::scan_builder::{
     ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
 };
+use crate::quad_tables::QuadTableName;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::stats::Precision;
@@ -45,21 +45,21 @@ use std::sync::Arc;
 pub struct QuadPatternScanPlanningResult {
     /// The scan implementation
     pub scan: Arc<dyn ExecutionPlan>,
-    /// The index that was chosen to be scanned. [`None`], if no index was scanned.
-    pub chosen_index: Option<IndexComponents>,
+    /// The quad_table that was chosen to be scanned. [`None`], if no quad_table was scanned.
+    pub chosen_quad_table: Option<QuadTableName>,
     /// The changese version range.
     pub changeset_version_range: Option<DeltaStorageLogVersionRange>,
 }
 
-/// A builder for constructing scan plans from an optional index and an optional manual changeset.
+/// A builder for constructing scan plans from an optional quad_table and an optional manual changeset.
 pub struct DeltaQuadsStorageScanPlanBuilder {
     session_state: SessionState,
     pattern: QuadPattern,
     encoding: QuadStorageEncoding,
-    index: Option<DeltaQuadsStorageIndexSnapshot>,
+    quad_table: Option<DeltaQuadsQuadTableSnapshot>,
     changeset: Option<DeltaQuadsStorageLogChangesetRef>,
     projection_indices: Option<Vec<usize>>,
-    cache: Option<Arc<ChunkCache>>,
+    object_store: Option<Arc<CachedObjectStore>>,
 }
 
 impl DeltaQuadsStorageScanPlanBuilder {
@@ -72,18 +72,18 @@ impl DeltaQuadsStorageScanPlanBuilder {
             session_state,
             pattern,
             encoding,
-            index: None,
+            quad_table: None,
             changeset: None,
             projection_indices: None,
-            cache: None,
+            object_store: None,
         }
     }
 
-    pub fn with_best_index(
+    pub fn with_best_quad_table(
         self,
-        indexes: &[DeltaQuadsStorageIndexSnapshot],
+        quad_tables: &[DeltaQuadsQuadTableSnapshot],
     ) -> Result<Self, DeltaQuadsStorageError> {
-        let best_index = indexes
+        let best_quad_table = quad_tables
             .iter()
             .max_by_key(|idx| {
                 idx.compute_scan_score(
@@ -93,14 +93,14 @@ impl DeltaQuadsStorageScanPlanBuilder {
                 )
             })
             .cloned();
-        match best_index {
+        match best_quad_table {
             None => Ok(self),
-            Some(idx) => Ok(self.with_index(idx)),
+            Some(idx) => Ok(self.with_quad_table(idx)),
         }
     }
 
-    pub fn with_index(mut self, index: DeltaQuadsStorageIndexSnapshot) -> Self {
-        self.index = Some(index);
+    pub fn with_quad_table(mut self, quad_table: DeltaQuadsQuadTableSnapshot) -> Self {
+        self.quad_table = Some(quad_table);
         self
     }
 
@@ -112,8 +112,8 @@ impl DeltaQuadsStorageScanPlanBuilder {
         self
     }
 
-    pub fn with_cache(mut self, cache: Arc<ChunkCache>) -> Self {
-        self.cache = Some(cache);
+    pub fn with_object_store(mut self, object_store: Arc<CachedObjectStore>) -> Self {
+        self.object_store = Some(object_store);
         self
     }
 
@@ -126,18 +126,18 @@ impl DeltaQuadsStorageScanPlanBuilder {
             None => log.version().await,
             Some(target_version) => target_version,
         };
-        let index_version = match self.index.as_ref() {
+        let quad_table_version = match self.quad_table.as_ref() {
             None => 0,
-            Some(index) => index.log_transaction_version(),
+            Some(quad_table) => quad_table.log_transaction_version(),
         };
 
-        if target_version < index_version {
+        if target_version < quad_table_version {
             return Err(DeltaQuadsStorageError::VersionError(
-                "The target version is older than the index version".to_string(),
+                "The target version is older than the quad_table version".to_string(),
             ));
         }
 
-        match DeltaStorageLogVersionRange::try_new(index_version, target_version) {
+        match DeltaStorageLogVersionRange::try_new(quad_table_version, target_version) {
             None => Ok(self),
             Some(version_range) => {
                 let changeset = log
@@ -156,18 +156,21 @@ impl DeltaQuadsStorageScanPlanBuilder {
     pub async fn build(
         &self,
     ) -> Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError> {
-        let initial_plan = match (&self.index, &self.changeset) {
-            (Some(index), Some(changeset)) => {
+        let initial_plan = match (&self.quad_table, &self.changeset) {
+            (Some(quad_table), Some(changeset)) => {
                 let base_scan = self
-                    .scan_index_physical(index, IndexScanProjectionPushdown::No)
+                    .scan_quad_table_physical(
+                        quad_table,
+                        QuadTableScanProjectionPushdown::No,
+                    )
                     .await?;
 
                 let Some(base_scan) = base_scan else {
-                    return self.build_without_index(changeset).await?;
+                    return self.build_without_quad_table(changeset).await?;
                 };
 
                 if base_scan.partition_statistics(None)?.num_rows == Precision::Exact(0) {
-                    return self.build_without_index(changeset).await?;
+                    return self.build_without_quad_table(changeset).await?;
                 }
 
                 let applied_scan = self
@@ -181,16 +184,18 @@ impl DeltaQuadsStorageScanPlanBuilder {
 
                 Ok(QuadPatternScanPlanningResult {
                     scan,
-                    chosen_index: Some(index.components()),
+                    chosen_quad_table: Some(quad_table.components()),
                     changeset_version_range: Some(changeset.version_range()),
                 })
             }
 
-            (Some(index), None) => {
+            (Some(quad_table), None) => {
                 let base_scan = self
-                    .scan_index_physical(
-                        index,
-                        IndexScanProjectionPushdown::Yes(self.projection_indices.clone()),
+                    .scan_quad_table_physical(
+                        quad_table,
+                        QuadTableScanProjectionPushdown::Yes(
+                            self.projection_indices.clone(),
+                        ),
                     )
                     .await?;
                 Ok(QuadPatternScanPlanningResult {
@@ -198,12 +203,12 @@ impl DeltaQuadsStorageScanPlanBuilder {
                         None => self.build_empty_scan()?.scan,
                         Some(scan) => scan,
                     },
-                    chosen_index: Some(index.components()),
+                    chosen_quad_table: Some(quad_table.components()),
                     changeset_version_range: None,
                 })
             }
 
-            (None, Some(changeset)) => self.build_without_index(changeset).await?,
+            (None, Some(changeset)) => self.build_without_quad_table(changeset).await?,
 
             (None, None) => self.build_empty_scan(),
         }?;
@@ -221,12 +226,12 @@ impl DeltaQuadsStorageScanPlanBuilder {
 
         Ok(QuadPatternScanPlanningResult {
             scan: rewritten_plan,
-            chosen_index: initial_plan.chosen_index,
+            chosen_quad_table: initial_plan.chosen_quad_table,
             changeset_version_range: initial_plan.changeset_version_range,
         })
     }
 
-    async fn build_without_index(
+    async fn build_without_quad_table(
         &self,
         changeset: &DeltaQuadsStorageLogChangesetRef,
     ) -> Result<
@@ -251,7 +256,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
 
         Ok(Ok(QuadPatternScanPlanningResult {
             scan,
-            chosen_index: None,
+            chosen_quad_table: None,
             changeset_version_range: Some(changeset.version_range()),
         }))
     }
@@ -266,7 +271,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
         };
         Ok(QuadPatternScanPlanningResult {
             scan: Arc::new(EmptyExec::new(final_schema)),
-            chosen_index: None,
+            chosen_quad_table: None,
             changeset_version_range: None,
         })
     }
@@ -279,14 +284,14 @@ impl DeltaQuadsStorageScanPlanBuilder {
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
         let filters = self.pattern.compute_filters(&self.encoding).await?;
         let context = ChangesetContext {
-            intended_sort_order: self.index.as_ref().map(|i| i.components()),
+            intended_sort_order: self.quad_table.as_ref().map(|i| i.components()),
         };
 
-        let index = self
-            .index
+        let quad_table = self
+            .quad_table
             .as_ref()
-            .expect("Index must exist if base_scan is not empty");
-        let components = index.components().inner().to_vec();
+            .expect("QuadTable must exist if base_scan is not empty");
+        let components = quad_table.components().inner().to_vec();
         let mut current_plan = base_scan;
 
         // 1. Handle Cleared Graphs (LeftAnti Join on COL_GRAPH)
@@ -401,16 +406,15 @@ impl DeltaQuadsStorageScanPlanBuilder {
 
             current_plan = Arc::new(SortExec::new(ordering.clone(), current_plan));
             let adds_plan = Arc::new(SortExec::new(ordering.clone(), adds_plan));
-            let adds_and_index = UnionExec::try_new(vec![current_plan, adds_plan])
+            let adds_and_quad_table = UnionExec::try_new(vec![current_plan, adds_plan])
                 .expect("Input not empty");
 
-            let adds_and_index_single_partition = Arc::new(SortPreservingMergeExec::new(
-                ordering.clone(),
-                adds_and_index,
-            ));
+            let adds_and_quad_table_single_partition = Arc::new(
+                SortPreservingMergeExec::new(ordering.clone(), adds_and_quad_table),
+            );
 
             current_plan = Arc::new(SortedDistinctExec::new(
-                adds_and_index_single_partition,
+                adds_and_quad_table_single_partition,
                 LexRequirement::from(ordering.clone()),
             ));
         }
@@ -418,15 +422,15 @@ impl DeltaQuadsStorageScanPlanBuilder {
         Ok(current_plan)
     }
 
-    async fn scan_index_physical(
+    async fn scan_quad_table_physical(
         &self,
-        index: &DeltaQuadsStorageIndexSnapshot,
-        projection: IndexScanProjectionPushdown,
+        quad_table: &DeltaQuadsQuadTableSnapshot,
+        projection: QuadTableScanProjectionPushdown,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
-        let table_uri = index.log_store().config().location().clone();
+        let table_uri = quad_table.log_store().config().location().clone();
         let table_path = object_store::path::Path::from(table_uri.path());
 
-        if index.active_files().is_empty() {
+        if quad_table.active_files().is_empty() {
             return Ok(None);
         }
 
@@ -437,7 +441,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
             .target_partitions;
         let mut file_groups = vec![Vec::new(); target_partitions];
 
-        for (i, file) in index.active_files().as_ref().iter().enumerate() {
+        for (i, file) in quad_table.active_files().as_ref().iter().enumerate() {
             let full_path = table_path.clone().join(file.path.as_str()).to_string();
             let partitioned_file = PartitionedFile::new(full_path, file.size as u64);
             file_groups[i % target_partitions].push(partitioned_file);
@@ -449,7 +453,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
 
         let mut sort_exprs = Vec::new();
         let schema = self.encoding.quad_schema();
-        for component in index.components().inner() {
+        for component in quad_table.components().inner() {
             let name = component.column_name();
             let idx = schema.inner().index_of(name)?;
             sort_exprs.push(PhysicalSortExpr {
@@ -463,15 +467,15 @@ impl DeltaQuadsStorageScanPlanBuilder {
         let ordering = LexOrdering::new(sort_exprs).expect("LexOrdering should be valid");
 
         let pushdown_projection = match projection {
-            IndexScanProjectionPushdown::No => PushdownProjection::No,
-            IndexScanProjectionPushdown::Yes(projections) => {
+            QuadTableScanProjectionPushdown::No => PushdownProjection::No,
+            QuadTableScanProjectionPushdown::Yes(projections) => {
                 PushdownProjection::Yes(projections)
             }
         };
 
         let custom_factory = ParquetQuadScanReaderFactoryType::Preloaded(
-            index.parquet_metadata().clone(),
-            index.bloom_filters().clone(),
+            quad_table.parquet_metadata().clone(),
+            quad_table.bloom_filters().clone(),
         );
 
         let mut plan = ParquetQuadScanBuilder::new(
@@ -486,8 +490,8 @@ impl DeltaQuadsStorageScanPlanBuilder {
         .with_reader_factory_type(custom_factory)
         .with_eager_pruning(true);
 
-        if let Some(cache) = &self.cache {
-            plan = plan.with_cache(Arc::clone(cache));
+        if let Some(object_store) = &self.object_store {
+            plan = plan.with_object_store(Arc::clone(object_store) as _);
         }
 
         let plan = plan.build().await?;
@@ -495,10 +499,8 @@ impl DeltaQuadsStorageScanPlanBuilder {
         Ok(Some(plan))
     }
 
-    // Removed pushdown_projection_into_index_scan and compute_projection_exprs
-
     /// Physically maps the output columns to their requested variable names
-    /// and applies projection indices if defined.
+    /// and applies projection quad_tables if defined.
     fn project_components_to_variables_physical(
         &self,
         plan: Arc<dyn ExecutionPlan>,
@@ -551,10 +553,10 @@ impl DeltaQuadsStorageScanPlanBuilder {
     }
 }
 
-/// Determines how the projection should be handled during the index scan.
-enum IndexScanProjectionPushdown {
+/// Determines how the projection should be handled during the quad_table scan.
+enum QuadTableScanProjectionPushdown {
     /// No projection pushdown
     No,
-    /// Pushdown the projection with optional additional projection indexes
+    /// Pushdown the projection with optional additional projection quad_tables
     Yes(Option<Vec<usize>>),
 }

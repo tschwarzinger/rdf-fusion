@@ -182,7 +182,7 @@ fn to_query_solution(
     for _ in 0..num_rows {
         let mut row_terms = Vec::with_capacity(column_terms.len());
 
-        // Get the term at index i from each column
+        // Get the term at quad_table i from each column
         #[allow(clippy::expect_used)]
         for column in &mut column_terms {
             let term = column.next().expect("Length is guaranteed");

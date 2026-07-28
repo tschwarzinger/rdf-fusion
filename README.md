@@ -56,7 +56,7 @@ Once installed, you can use the CLI to run a SPARQL engine. See `rdf-fusion --he
 The following examples showcase some of the use cases that can be implemented using RDF Fusion's CLI.
 For more detailed information about the commands, please consult the manual or open an issue.
 
-**Build a Delta Lake database from RDF files:**
+**Build a DeltaQuads database from RDF files:**
 
 Creates a new database at the location `file:///tmp/my-db` using the `delta-quads` storage backend.
 
@@ -64,7 +64,7 @@ Creates a new database at the location `file:///tmp/my-db` using the `delta-quad
 rdf-fusion --storage-type delta-quads --location file:///tmp/my-db load ./examples/data/spiderman.ttl
 ```
 
-**Serve a SPARQL HTTP server from a Delta Lake database:**
+**Serve a SPARQL HTTP server from a DeltaQuads database:**
 
 Serves the database created in the example above at the default endpoint.
 
@@ -81,7 +81,7 @@ For example, to find out how many names "Spiderman" has:
 rdf-fusion --storage-type parquet --location ./examples/data/spiderman.parquet query "SELECT (COUNT(?name) AS ?count) WHERE { <http://example.org/#spiderman> <http://xmlns.com/foaf/0.1/name> ?name }"
 ```
 
-**Dump a Delta Lake database into a sorted N-Quads file:**
+**Dump a DeltaQuads database into a sorted N-Quads file:**
 
 Dumps the current snapshot of a database to an RDF serialization format, such as N-Quads.
 

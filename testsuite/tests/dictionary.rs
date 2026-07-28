@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rdf_fusion::storage::local_object_ids::{
-    InMemoryObjectIdDictionary, LocalObjectIdDictionary, RocksDBObjectIdDictionary,
+    InMemoryObjectIdDictionary, LmdbObjectIdDictionary, LocalObjectIdDictionary,
     StaticObjectIdClaimer,
 };
 use rdf_fusion_testsuite::dictionary::DictionaryTestSuiteBuilder;
@@ -24,12 +24,12 @@ async fn dictionary_testsuite_in_memory() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[allow(deprecated)]
-async fn dictionary_testsuite_rocksdb() -> Result<()> {
+async fn dictionary_testsuite_lmdb() -> Result<()> {
     DictionaryTestSuiteBuilder::new(|| async {
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.into_path();
         let dict: Arc<dyn LocalObjectIdDictionary> =
-            Arc::new(RocksDBObjectIdDictionary::try_new(
+            Arc::new(LmdbObjectIdDictionary::try_new(
                 path,
                 1_000_000,
                 Arc::new(StaticObjectIdClaimer),
@@ -46,12 +46,12 @@ async fn dictionary_testsuite_rocksdb() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[allow(deprecated)]
-async fn dictionary_testsuite_rocksdb_no_cache() -> Result<()> {
+async fn dictionary_testsuite_lmdb_no_cache() -> Result<()> {
     DictionaryTestSuiteBuilder::new(|| async {
         let temp_dir = tempfile::tempdir()?;
         let path = temp_dir.into_path();
         let dict: Arc<dyn LocalObjectIdDictionary> = Arc::new(
-            RocksDBObjectIdDictionary::try_new(path, 0, Arc::new(StaticObjectIdClaimer))?,
+            LmdbObjectIdDictionary::try_new(path, 0, Arc::new(StaticObjectIdClaimer))?,
         );
         Ok(dict)
     })

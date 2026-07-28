@@ -1,8 +1,12 @@
 use crate::delta::objectids::DeltaObjectIdDictionary;
+use crate::delta::objectids::encoding::writer::{
+    DeltaObjectIdDictionaryWriter, EncodeSharedResult, ForceCommitResult, TxnOutcome,
+};
 use crate::local_object_ids::LocalObjectIdTransaction;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{DataType, Fields, SchemaRef};
 use datafusion::common::{DataFusionError, exec_datafusion_err};
+use datafusion::execution::SessionState;
 use datafusion::physical_plan::{RecordBatchStream, SendableRecordBatchStream};
 use deltalake::arrow::datatypes::Schema;
 use futures::future::BoxFuture;
@@ -15,29 +19,28 @@ use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-
-/// The outcome of attempting to commit a dictionary transaction.
-enum CommitResult {
-    Success,
-    Conflict,
-}
+use tokio::sync::watch;
 
 /// The state machine for the `ObjectIdEncodingStream`.
 enum EncoderStreamState {
+    /// Initializing the intended delta version.
+    AwaitingInitialVersion(BoxFuture<'static, u64>),
     /// Ready to pull a new batch or check if the current transaction needs to be flushed.
     ReadyToProcess,
-    /// Currently waiting for a new dictionary transaction to be initialized.
-    AwaitingDictionaryTransactionInit(
-        BoxFuture<'static, DFResult<Box<dyn LocalObjectIdTransaction>>>,
-    ),
     /// Currently waiting for a batch to finish encoding asynchronously.
-    AwaitingEncoding(
-        BoxFuture<'static, DFResult<(Box<dyn LocalObjectIdTransaction>, RecordBatch)>>,
-    ),
+    AwaitingEncoding(BoxFuture<'static, DFResult<(EncodeSharedResult, RecordBatch)>>),
+    /// Currently waiting for a forced commit.
+    AwaitingForceCommit(BoxFuture<'static, DFResult<ForceCommitResult>>),
     /// Currently waiting for the active transaction to commit to the dictionary.
-    AwaitingDictionaryDeltaCommit(BoxFuture<'static, DFResult<CommitResult>>),
+    AwaitingDictionaryDeltaCommit(
+        BoxFuture<'static, DFResult<bool>>,
+        watch::Sender<Option<TxnOutcome>>,
+    ),
     /// A transaction conflict occurred. Waiting to sync the local dictionary before retrying.
-    AwaitingLocalDictionaryUpdate(BoxFuture<'static, DFResult<()>>),
+    AwaitingLocalDictionaryUpdate(
+        BoxFuture<'static, DFResult<u64>>,
+        watch::Sender<Option<TxnOutcome>>,
+    ),
     /// The stream has fully exhausted its input and all transactions have been committed.
     Done,
 }
@@ -46,7 +49,9 @@ enum EncoderStreamState {
 pub struct ObjectIdEncodingStream {
     input: SendableRecordBatchStream,
     mapping: Arc<DeltaObjectIdDictionary>,
+    writer: Arc<DeltaObjectIdDictionaryWriter>,
     schema: SchemaRef,
+    session_state: SessionState,
 
     // --- State Buffers ---
     retry_queue: VecDeque<RecordBatch>,
@@ -55,7 +60,7 @@ pub struct ObjectIdEncodingStream {
     ready_to_yield_batches: VecDeque<RecordBatch>,
 
     // --- Transaction State ---
-    current_txn: Option<Box<dyn LocalObjectIdTransaction>>,
+    intended_delta_version: u64,
     max_buffered_rows: usize,
     max_buffered_ids: usize,
 
@@ -69,6 +74,7 @@ impl ObjectIdEncodingStream {
         mapping: Arc<DeltaObjectIdDictionary>,
         max_buffered_rows: usize,
         max_buffered_ids: usize,
+        session_state: SessionState,
     ) -> Self {
         let encoded_type = mapping.object_id_data_type().term_type();
         let fields = input
@@ -79,38 +85,41 @@ impl ObjectIdEncodingStream {
             .collect::<Fields>();
         let schema = Arc::new(Schema::new(fields));
 
+        let writer = mapping.shared_writer();
+        let writer_clone = Arc::clone(&writer);
+
         Self {
             input,
             mapping,
+            writer,
             schema,
+            session_state,
             retry_queue: VecDeque::new(),
             active_txn_raw_batches: Vec::new(),
             active_txn_encoded_batches: Vec::new(),
             ready_to_yield_batches: VecDeque::new(),
-            current_txn: None,
+            intended_delta_version: 0,
             max_buffered_rows,
             max_buffered_ids,
-            state: EncoderStreamState::ReadyToProcess,
+            state: EncoderStreamState::AwaitingInitialVersion(Box::pin(async move {
+                writer_clone.active_delta_version().await
+            })),
             is_exhausted: false,
         }
     }
 
     /// Checks whether limits have been reached and the active transaction should be committed.
-    fn should_commit_dictionary(&self) -> bool {
-        let Some(current_txn) = &self.current_txn else {
-            return false;
-        };
-
+    fn should_force_commit(&self) -> bool {
         let pending_rows = self
             .active_txn_encoded_batches
             .iter()
             .map(|b| b.num_rows())
             .sum::<usize>();
         let is_input_empty = self.is_exhausted && self.retry_queue.is_empty();
-        let reached_row_limit = pending_rows > self.max_buffered_rows;
-        let reached_id_limit = current_txn.pending_ids().len() > self.max_buffered_ids;
+        let reached_row_limit = pending_rows >= self.max_buffered_rows;
 
-        is_input_empty || reached_row_limit || reached_id_limit
+        // Note: reached_id_limit is checked by the writer during encode.
+        (is_input_empty || reached_row_limit) && pending_rows > 0
     }
 
     /// Handles the success path: migrating encoded batches to the output buffer and resetting counters.
@@ -119,6 +128,7 @@ impl ObjectIdEncodingStream {
         self.ready_to_yield_batches.extend(unflushed);
 
         self.active_txn_raw_batches.clear();
+        self.intended_delta_version += 1;
 
         if self.is_exhausted && self.retry_queue.is_empty() {
             self.state = EncoderStreamState::Done;
@@ -128,37 +138,26 @@ impl ObjectIdEncodingStream {
     }
 
     /// Handles the conflict path: transferring raw batches to the retry queue and wiping invalid encoded ones.
-    fn handle_conflict_sync(&mut self) {
+    fn handle_conflict(&mut self, next_version: u64) {
         let failed_batches = std::mem::take(&mut self.active_txn_raw_batches);
         self.retry_queue.extend(failed_batches);
 
         self.active_txn_encoded_batches.clear();
+        self.intended_delta_version = next_version;
 
         self.state = EncoderStreamState::ReadyToProcess;
     }
 
     // --- Async Future Generators ---
 
-    fn create_transaction_future(
-        mapping: Arc<DeltaObjectIdDictionary>,
-    ) -> BoxFuture<'static, DFResult<Box<dyn LocalObjectIdTransaction>>> {
-        Box::pin(async move {
-            mapping
-                .dictionary()
-                .transaction()
-                .await
-                .map_err(|e| DataFusionError::External(Box::new(e)))
-        })
-    }
-
     fn create_encoding_future(
-        mut txn: Box<dyn LocalObjectIdTransaction>,
+        writer: Arc<DeltaObjectIdDictionaryWriter>,
+        txn_id: u64,
         batch: RecordBatch,
-        schema: SchemaRef,
-    ) -> BoxFuture<'static, DFResult<(Box<dyn LocalObjectIdTransaction>, RecordBatch)>>
-    {
+        max_buffered_ids: usize,
+    ) -> BoxFuture<'static, DFResult<(EncodeSharedResult, RecordBatch)>> {
         Box::pin(async move {
-            let mut encoded_columns = Vec::with_capacity(batch.num_columns());
+            let mut plain_arrays = Vec::with_capacity(batch.num_columns());
 
             for i in 0..batch.num_columns() {
                 let column = batch.column(i);
@@ -177,26 +176,24 @@ impl ObjectIdEncodingStream {
                         exec_datafusion_err!("Failed to convert to PlainTerm: {}", e)
                     })?
                 };
-
-                let encoded = txn
-                    .encode_array(&plain_array)
-                    .await
-                    .map_err(|e| exec_datafusion_err!("Encoding failed: {}", e))?;
-
-                encoded_columns.push(Arc::new(encoded) as _);
+                plain_arrays.push(plain_array);
             }
 
-            let res_batch = RecordBatch::try_new(schema, encoded_columns)
-                .map_err(|e| exec_datafusion_err!("Batch creation failed: {}", e))?;
+            let array_refs: Vec<&PlainTermArray> = plain_arrays.iter().collect();
 
-            Ok((txn, res_batch))
+            let result = writer
+                .encode_shared(txn_id, &array_refs, max_buffered_ids)
+                .await
+                .map_err(|e| DataFusionError::External(Box::new(e)))?;
+
+            Ok((result, batch))
         })
     }
 
     fn create_commit_future(
         mapping: Arc<DeltaObjectIdDictionary>,
         txn: Box<dyn LocalObjectIdTransaction>,
-    ) -> BoxFuture<'static, DFResult<CommitResult>> {
+    ) -> BoxFuture<'static, DFResult<bool>> {
         Box::pin(async move {
             let success = mapping
                 .commit_dictionary_transaction_to_delta(txn.as_ref())
@@ -208,25 +205,30 @@ impl ObjectIdEncodingStream {
                 txn.commit(delta_version)
                     .await
                     .map_err(|e| DataFusionError::External(Box::new(e)))?;
-                Ok(CommitResult::Success)
+                Ok(true)
             } else {
                 txn.abort()
                     .await
                     .map_err(|e| DataFusionError::External(Box::new(e)))?;
-                Ok(CommitResult::Conflict)
+                Ok(false)
             }
         })
     }
 
     fn create_sync_future(
         mapping: Arc<DeltaObjectIdDictionary>,
-    ) -> BoxFuture<'static, DFResult<()>> {
+        writer: Arc<DeltaObjectIdDictionaryWriter>,
+        session_state: SessionState,
+    ) -> BoxFuture<'static, DFResult<u64>> {
         Box::pin(async move {
             mapping
-                .update_local_dictionary()
+                .update_local_dictionary(&session_state)
                 .await
                 .map_err(|e| DataFusionError::External(Box::new(e)))?;
-            Ok(())
+
+            let new_version = mapping.delta_version().await;
+            writer.sync_active_version(new_version + 1).await;
+            Ok(new_version + 1)
         })
     }
 }
@@ -239,101 +241,166 @@ impl Stream for ObjectIdEncodingStream {
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         loop {
-            // Yield any fully ready-to-go batches to the consumer
+            let writer = Arc::clone(&self.writer);
+            let mapping = Arc::clone(&self.mapping);
+            let schema = Arc::clone(&self.schema);
+            let max_ids = self.max_buffered_ids;
+            let session_state = self.session_state.clone();
+            let intended_delta_version = self.intended_delta_version;
             if let Some(batch) = self.ready_to_yield_batches.pop_front() {
                 return Poll::Ready(Some(Ok(batch)));
             }
 
             match &mut self.state {
-                EncoderStreamState::ReadyToProcess => {
-                    // 1. If limits are reached, commit the current transaction.
-                    if self.should_commit_dictionary() {
-                        let txn = self.current_txn.take().unwrap();
-                        let mapping = Arc::clone(&self.mapping);
+                EncoderStreamState::AwaitingInitialVersion(fut) => {
+                    self.intended_delta_version = ready!(fut.as_mut().poll(cx));
+                    self.state = EncoderStreamState::ReadyToProcess;
+                }
 
-                        self.state = EncoderStreamState::AwaitingDictionaryDeltaCommit(
-                            Self::create_commit_future(mapping, txn),
+                EncoderStreamState::ReadyToProcess => {
+                    if let Some(batch) = self.retry_queue.pop_front() {
+                        self.active_txn_raw_batches.push(batch.clone());
+                        self.state = EncoderStreamState::AwaitingEncoding(
+                            Self::create_encoding_future(
+                                writer,
+                                intended_delta_version,
+                                batch,
+                                max_ids,
+                            ),
                         );
                         continue;
                     }
 
-                    // 2. Otherwise, grab the next batch to process.
-                    let batch = if let Some(b) = self.retry_queue.pop_front() {
-                        b
-                    } else {
-                        if self.is_exhausted {
-                            self.state = EncoderStreamState::Done;
-                            continue;
-                        }
-
-                        match ready!(self.input.poll_next_unpin(cx)) {
-                            Some(Ok(b)) => b,
-                            Some(Err(e)) => return Poll::Ready(Some(Err(e))),
-                            None => {
-                                self.is_exhausted = true;
-                                continue;
-                            }
-                        }
-                    };
-
-                    // 3. If we grabbed a batch but don't have a transaction, initialize one!
-                    if self.current_txn.is_none() {
-                        // Put the batch back to process it once the transaction is ready
-                        self.retry_queue.push_front(batch);
-
-                        let mapping = Arc::clone(&self.mapping);
-                        self.state =
-                            EncoderStreamState::AwaitingDictionaryTransactionInit(
-                                Self::create_transaction_future(mapping),
-                            );
+                    if self.should_force_commit() {
+                        self.state = EncoderStreamState::AwaitingForceCommit(Box::pin(
+                            async move {
+                                writer
+                                    .force_commit(intended_delta_version)
+                                    .await
+                                    .map_err(|e| DataFusionError::External(Box::new(e)))
+                            },
+                        ));
                         continue;
                     }
 
-                    // 4. We have a batch and an active transaction. Start encoding.
-                    self.active_txn_raw_batches.push(batch.clone());
+                    if self.is_exhausted {
+                        self.state = EncoderStreamState::Done;
+                        continue;
+                    }
 
-                    let txn = self.current_txn.take().unwrap();
-                    let schema = Arc::clone(&self.schema);
-
-                    self.state = EncoderStreamState::AwaitingEncoding(
-                        Self::create_encoding_future(txn, batch, schema),
-                    );
-                }
-
-                EncoderStreamState::AwaitingDictionaryTransactionInit(fut) => {
-                    let txn = ready!(fut.as_mut().poll(cx))?;
-                    self.current_txn = Some(txn);
-                    self.state = EncoderStreamState::ReadyToProcess;
-                }
-
-                EncoderStreamState::AwaitingEncoding(fut) => {
-                    let (txn, encoded_batch) = ready!(fut.as_mut().poll(cx))?;
-
-                    self.current_txn = Some(txn);
-                    self.active_txn_encoded_batches.push(encoded_batch);
-                    self.state = EncoderStreamState::ReadyToProcess;
-                }
-
-                EncoderStreamState::AwaitingDictionaryDeltaCommit(fut) => {
-                    match ready!(fut.as_mut().poll(cx))? {
-                        CommitResult::Success => {
-                            // current_txn is already None. We will lazily create a new one.
-                            self.handle_successful_commit();
+                    match ready!(self.input.poll_next_unpin(cx)) {
+                        Some(Ok(b)) => {
+                            self.active_txn_raw_batches.push(b.clone());
+                            self.state = EncoderStreamState::AwaitingEncoding(
+                                Self::create_encoding_future(
+                                    writer,
+                                    intended_delta_version,
+                                    b,
+                                    max_ids,
+                                ),
+                            );
                         }
-                        CommitResult::Conflict => {
-                            let mapping = Arc::clone(&self.mapping);
-                            self.state =
-                                EncoderStreamState::AwaitingLocalDictionaryUpdate(
-                                    Self::create_sync_future(mapping),
-                                );
+                        Some(Err(e)) => return Poll::Ready(Some(Err(e))),
+                        None => {
+                            self.is_exhausted = true;
+                            continue;
                         }
                     }
                 }
 
-                EncoderStreamState::AwaitingLocalDictionaryUpdate(fut) => {
-                    ready!(fut.as_mut().poll(cx))?;
-                    // current_txn is still None. Dictionary is updated.
-                    self.handle_conflict_sync();
+                EncoderStreamState::AwaitingForceCommit(fut) => {
+                    match ready!(fut.as_mut().poll(cx))? {
+                        ForceCommitResult::TriggeredCommit { txn, sender, .. } => {
+                            self.state =
+                                EncoderStreamState::AwaitingDictionaryDeltaCommit(
+                                    Self::create_commit_future(mapping, txn),
+                                    sender,
+                                );
+                        }
+                        ForceCommitResult::Closed(TxnOutcome::Committed) => {
+                            self.handle_successful_commit();
+                        }
+                        ForceCommitResult::Closed(TxnOutcome::Conflicted) => {
+                            let next_version = self.intended_delta_version + 1;
+                            self.handle_conflict(next_version);
+                        }
+                    }
+                }
+
+                EncoderStreamState::AwaitingEncoding(fut) => {
+                    let (result, _raw_batch) = ready!(fut.as_mut().poll(cx))?;
+
+                    match result {
+                        EncodeSharedResult::Buffering { encoded, .. } => {
+                            let encoded_columns =
+                                encoded.into_iter().map(|a| Arc::new(a) as _).collect();
+                            let res_batch = RecordBatch::try_new(
+                                Arc::clone(&schema),
+                                encoded_columns,
+                            )
+                            .map_err(|e| {
+                                exec_datafusion_err!("Batch creation failed: {}", e)
+                            })?;
+                            self.active_txn_encoded_batches.push(res_batch);
+                            self.state = EncoderStreamState::ReadyToProcess;
+                        }
+                        EncodeSharedResult::TriggeredCommit {
+                            encoded,
+                            txn,
+                            sender,
+                            ..
+                        } => {
+                            let encoded_columns =
+                                encoded.into_iter().map(|a| Arc::new(a) as _).collect();
+                            let res_batch = RecordBatch::try_new(
+                                Arc::clone(&schema),
+                                encoded_columns,
+                            )
+                            .map_err(|e| {
+                                exec_datafusion_err!("Batch creation failed: {}", e)
+                            })?;
+                            self.active_txn_encoded_batches.push(res_batch);
+
+                            self.state =
+                                EncoderStreamState::AwaitingDictionaryDeltaCommit(
+                                    Self::create_commit_future(mapping, txn),
+                                    sender,
+                                );
+                        }
+                        EncodeSharedResult::Closed(TxnOutcome::Committed) => {
+                            let failed_batch = self.active_txn_raw_batches.pop().unwrap();
+                            self.retry_queue.push_front(failed_batch);
+                            self.handle_successful_commit();
+                        }
+                        EncodeSharedResult::Closed(TxnOutcome::Conflicted) => {
+                            let next_version = self.intended_delta_version + 1;
+                            self.handle_conflict(next_version);
+                        }
+                    }
+                }
+
+                EncoderStreamState::AwaitingDictionaryDeltaCommit(fut, sender) => {
+                    let success = ready!(fut.as_mut().poll(cx))?;
+
+                    if success {
+                        let _ = sender.send(Some(TxnOutcome::Committed));
+                        self.handle_successful_commit();
+                    } else {
+                        self.state = EncoderStreamState::AwaitingLocalDictionaryUpdate(
+                            Self::create_sync_future(
+                                mapping,
+                                writer,
+                                session_state.clone(),
+                            ),
+                            sender.clone(),
+                        );
+                    }
+                }
+
+                EncoderStreamState::AwaitingLocalDictionaryUpdate(fut, sender) => {
+                    let new_version = ready!(fut.as_mut().poll(cx))?;
+                    let _ = sender.send(Some(TxnOutcome::Conflicted));
+                    self.handle_conflict(new_version);
                 }
 
                 EncoderStreamState::Done => return Poll::Ready(None),

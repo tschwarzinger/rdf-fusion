@@ -120,12 +120,15 @@ impl RdfFusionBenchContext {
             .with_storage_type(BenchQuadStorageTypeArg::DeltaQuads)
             .with_data_fusion_config(config);
 
+        let database_dir = tempfile::tempdir().unwrap().keep();
+        let results_dir = tempfile::tempdir().unwrap().keep();
+
         RdfFusionBenchContextBuilder::new(
             options,
             PathBuf::from("./bench_files"),
             data_dir,
-            PathBuf::from("/tmp/database"),
-            PathBuf::from("/tmp/results"),
+            database_dir,
+            results_dir,
         )
     }
 
@@ -224,11 +227,21 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
     /// Returns the RDF Fusion configuration.
     pub fn get_rdf_fusion_config(&self) -> rdf_fusion::common::config::RdfFusionOptions {
-        self.context
+        let mut opts = self
+            .context
             .config
             .data_fusion_config
             .rdf_fusion_options_or_from_env()
-            .expect("Failed to get RDF Fusion options")
+            .expect("Failed to get RDF Fusion options");
+
+        opts.local.work_dir = Some(
+            self.databases_dir()
+                .join("work")
+                .to_str()
+                .unwrap()
+                .to_string(),
+        );
+        opts
     }
 
     /// Creates a [RuntimeEnv] with the configured memory limits and caching.

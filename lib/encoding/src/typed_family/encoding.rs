@@ -47,7 +47,7 @@ pub struct TypedFamilyEncoding {
     data_type: DataType,
     /// The registered families
     families: Vec<TypedFamilyRef>,
-    /// Cache mapping datatype string to the family's index in `self.families`.
+    /// Cache mapping datatype string to the family's quad_table in `self.families`.
     cache: HashMap<String, i8, ahash::RandomState>,
 }
 
@@ -132,7 +132,7 @@ impl TypedFamilyEncoding {
         .with_family_arrays(family_arrays)?
         .finish();
 
-        /// Computes the mapping from row index to its corresponding type family ID.
+        /// Computes the mapping from row quad_table to its corresponding type family ID.
         fn compute_row_to_family(
             encoding: &TypedFamilyEncoding,
             array: &PlainTermArray,

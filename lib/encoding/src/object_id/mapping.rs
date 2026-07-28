@@ -1,7 +1,7 @@
+use crate::EncodingArray;
 use crate::object_id::ObjectIdDataType;
 use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use crate::typed_family::{TypedFamilyArray, TypedFamilyEncodingRef, TypedFamilyScalar};
-use crate::{EncodingArray, EncodingScalar};
 use async_trait::async_trait;
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::error::ArrowError;
@@ -87,35 +87,11 @@ pub trait ObjectIdDictionary: Debug + Send + Sync {
 
     /// Try to retrieve the object id of the given `term`.
     ///
-    /// This method *does not* automatically create a mapping. See [Self::encode_scalar] for this
-    /// functionality.
+    /// This method *does not* automatically create a mapping.
     async fn try_get_object_id(
         &self,
         term: &PlainTermScalar,
     ) -> Result<Option<ScalarValue>, ObjectIdDictionaryError>;
-
-    /// Encodes the entire `array` as an array of object ids. The [`Self::object_id_data_type`]
-    /// determined which array type is used.
-    ///
-    /// Automatically creates a mapping for a fresh object id if a term is not yet mapped.
-    async fn encode_array(
-        &self,
-        array: &PlainTermArray,
-    ) -> Result<ArrayRef, ObjectIdDictionaryError>;
-
-    /// Encodes a single `term` as an [`ScalarValue`]. Automatically creates a mapping for a
-    /// fresh object id if the term is not yet mapped.
-    async fn encode_scalar(
-        &self,
-        term: &PlainTermScalar,
-    ) -> Result<ScalarValue, ObjectIdDictionaryError> {
-        let array = term
-            .to_array(1)
-            .expect("Data type is supported for to_array");
-        let encoded = self.encode_array(&array).await?;
-        let scalar_value = ScalarValue::try_from_array(encoded.as_ref(), 0)?;
-        Ok(scalar_value)
-    }
 
     /// Decodes the entire `array` as a [`PlainTermArray`].
     async fn decode_array(
@@ -177,13 +153,6 @@ pub trait ObjectIdDictionaryExtensions {
         &self,
         graph_name: GraphNameRef<'_>,
     ) -> Result<Option<ScalarValue>, ObjectIdDictionaryError>;
-
-    /// Encodes the given `graph_name`, simply returning the default graph id if the graph is the
-    /// default graph.
-    async fn encode_graph_name(
-        &self,
-        graph_name: GraphNameRef<'_>,
-    ) -> Result<ScalarValue, ObjectIdDictionaryError>;
 }
 
 #[async_trait]
@@ -208,26 +177,6 @@ where
                     self.object_id_data_type(),
                 );
                 Ok(Some(ScalarValue::try_new_null(&data_type).unwrap()))
-            }
-        }
-    }
-
-    async fn encode_graph_name(
-        &self,
-        graph_name: GraphNameRef<'_>,
-    ) -> Result<ScalarValue, ObjectIdDictionaryError> {
-        match graph_name {
-            GraphNameRef::NamedNode(nn) => {
-                self.encode_scalar(&PlainTermScalar::from(nn)).await
-            }
-            GraphNameRef::BlankNode(bnode) => {
-                self.encode_scalar(&PlainTermScalar::from(bnode)).await
-            }
-            GraphNameRef::DefaultGraph => {
-                let data_type = datafusion::arrow::datatypes::DataType::from(
-                    self.object_id_data_type(),
-                );
-                Ok(ScalarValue::try_new_null(&data_type).unwrap())
             }
         }
     }

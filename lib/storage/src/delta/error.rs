@@ -1,5 +1,5 @@
-use crate::index::IndexComponents;
 use crate::local_object_ids::LocalObjectIdError;
+use crate::quad_tables::QuadTableName;
 use datafusion::arrow::datatypes::{DataType, SchemaRef};
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
@@ -22,8 +22,8 @@ pub enum DeltaQuadsStorageError {
     InvalidSchema(SchemaRef),
     #[error("The arrow type '{0}' is not supported by the delta storage.")]
     UnsupportedArrowType(DataType),
-    #[error("The index '{0}' is not maintained by the delta storage.")]
-    IndexNotFound(IndexComponents),
+    #[error("The quad_table '{0}' is not maintained by the delta storage.")]
+    QuadTableNotFound(QuadTableName),
     #[error("{0}")]
     VersionError(String),
     #[error("An invariant was violated in the storage layer. {0}")]

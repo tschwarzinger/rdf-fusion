@@ -73,8 +73,9 @@ pub struct InMemoryLocalObjectIdDictionarySnapshot {
     guard: OwnedRwLockReadGuard<InMemoryBackend>,
 }
 
+#[async_trait]
 impl LocalObjectIdDictionarySnapshot for InMemoryLocalObjectIdDictionarySnapshot {
-    fn resolve_plain_terms(
+    async fn resolve_plain_terms(
         &self,
         ids: &Int64Array,
     ) -> Result<ArrayRef, LocalObjectIdError> {
@@ -93,24 +94,23 @@ impl LocalObjectIdDictionarySnapshot for InMemoryLocalObjectIdDictionarySnapshot
             let id = ids.value(idx);
 
             if Some(id) == last_id {
-                let (term_type, value, data_type, language) =
-                    last_term.as_ref().unwrap().as_ref();
+                let term = last_term.as_ref().unwrap().as_ref();
                 builder.append_raw(
-                    *term_type,
-                    value,
-                    data_type.as_deref(),
-                    language.as_deref(),
+                    term.term_type,
+                    &term.value,
+                    term.data_type.as_deref(),
+                    term.language.as_deref(),
                 );
                 continue;
             }
 
             if let Some(arc) = id_to_term.get(&id) {
-                let (term_type, value, data_type, language) = arc.as_ref();
+                let term = arc.as_ref();
                 builder.append_raw(
-                    *term_type,
-                    value,
-                    data_type.as_deref(),
-                    language.as_deref(),
+                    term.term_type,
+                    &term.value,
+                    term.data_type.as_deref(),
+                    term.language.as_deref(),
                 );
                 last_id = Some(id);
                 last_term = Some(Arc::clone(arc));
@@ -121,11 +121,13 @@ impl LocalObjectIdDictionarySnapshot for InMemoryLocalObjectIdDictionarySnapshot
         Ok(builder.finish().into_array_ref())
     }
 
-    fn len(&self) -> Result<u64, LocalObjectIdError> {
+    async fn len(&self) -> Result<u64, LocalObjectIdError> {
         Ok(self.guard.id_to_term.len() as u64)
     }
 
-    fn read_claimed_object_ids(&self) -> Result<Option<(i64, i64)>, LocalObjectIdError> {
+    async fn read_claimed_object_ids(
+        &self,
+    ) -> Result<Option<(i64, i64)>, LocalObjectIdError> {
         let meta = &self.guard.metadata;
         let next = meta.get(NEXT_FREE_ID_KEY).cloned();
         let last = meta.get(LAST_FREE_ID_KEY).cloned();
@@ -151,23 +153,23 @@ impl LocalObjectIdDictionarySnapshot for InMemoryLocalObjectIdDictionarySnapshot
         }
     }
 
-    fn is_empty(&self) -> Result<bool, LocalObjectIdError> {
+    async fn is_empty(&self) -> Result<bool, LocalObjectIdError> {
         Ok(self.guard.id_to_term.is_empty())
     }
 
-    fn get_id_by_term(&self, term: &PlainTermScalar) -> Option<i64> {
+    async fn get_id_by_term(&self, term: &PlainTermScalar) -> Option<i64> {
         let parts = term.as_parts()?;
-        let owned_tuple: OwnedTermTuple = (
-            parts.term_type,
-            parts.value.into(),
-            parts.data_type.map(|s| s.into()),
-            parts.language_tag.map(|s| s.into()),
-        );
+        let owned_tuple = OwnedTermTuple {
+            term_type: parts.term_type,
+            value: parts.value.into(),
+            data_type: parts.data_type.map(|s| s.into()),
+            language: parts.language_tag.map(|s| s.into()),
+        };
 
         self.guard.term_to_id.get(&owned_tuple).copied()
     }
 
-    fn get_synced_version(&self) -> Result<Option<u64>, LocalObjectIdError> {
+    async fn get_synced_version(&self) -> Result<Option<u64>, LocalObjectIdError> {
         let meta = &self.guard.metadata;
         if let Some(s) = meta.get(SYNCED_VERSION_KEY) {
             s.parse::<u64>()
@@ -195,7 +197,7 @@ impl LocalObjectIdTransaction for InMemoryLocalObjectIdTransaction {
     ) -> Result<Int64Array, LocalObjectIdError> {
         let array_parts = array.as_parts();
         let mut result_ids = Int64Builder::with_capacity(array.len());
-        let mut last_term_tuple: Option<(i8, &str, Option<&str>, Option<&str>)> = None;
+        let mut last_term_tuple: Option<OwnedTermTuple> = None;
         let mut last_id = i64::MIN;
 
         for idx in 0..array.len() {
@@ -214,19 +216,19 @@ impl LocalObjectIdTransaction for InMemoryLocalObjectIdTransaction {
                 .language_tag
                 .is_valid(idx)
                 .then(|| array_parts.language_tag.value(idx));
-            let term_tuple = (term_type, value, data_type, language);
+            let term_tuple = OwnedTermTuple {
+                term_type,
+                value: value.into(),
+                data_type: data_type.map(|s| s.into()),
+                language: language.map(|s| s.into()),
+            };
 
-            if Some(term_tuple) == last_term_tuple {
+            if Some(&term_tuple) == last_term_tuple.as_ref() {
                 result_ids.append_value(last_id);
                 continue;
             }
 
-            let owned_tuple: OwnedTermTuple = (
-                term_type,
-                value.into(),
-                data_type.map(|s| s.into()),
-                language.map(|s| s.into()),
-            );
+            let owned_tuple = term_tuple.clone();
 
             if let Some(&id) = self.pending_terms.get(&owned_tuple) {
                 result_ids.append_value(id);
@@ -289,12 +291,12 @@ impl LocalObjectIdTransaction for InMemoryLocalObjectIdTransaction {
                 .is_valid(i)
                 .then(|| array_parts.language_tag.value(i));
 
-            let owned_tuple: OwnedTermTuple = (
+            let owned_tuple = OwnedTermTuple {
                 term_type,
-                value.into(),
-                data_type.map(|s| s.into()),
-                language.map(|s| s.into()),
-            );
+                value: value.into(),
+                data_type: data_type.map(|s| s.into()),
+                language: language.map(|s| s.into()),
+            };
 
             let arc_tuple = Arc::new(owned_tuple.clone());
             self.pending_terms.insert(owned_tuple, id);

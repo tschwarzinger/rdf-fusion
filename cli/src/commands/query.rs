@@ -49,7 +49,10 @@ pub async fn query(
 
             println!("\nExecution Latency: {}ms", execution_latency.as_millis())
         } else {
-            println!("\nExecution Plan:");
+            println!("\nLogical Plan:");
+            println!("{}", explanation.optimized_logical_plan);
+
+            println!("\n\nExecution Plan:");
             println!(
                 "{}",
                 displayable(explanation.execution_plan.as_ref()).indent(false)

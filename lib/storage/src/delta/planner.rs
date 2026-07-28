@@ -38,8 +38,8 @@ impl DeltaQuadsStoragePlanner {
             node.quad_pattern().clone(),
             self.snapshot.encoding().clone(),
         )
-        .with_cache(Arc::clone(self.snapshot.chunk_cache()))
-        .with_best_index(self.snapshot.indexes())?
+        .with_object_store(Arc::clone(self.snapshot.cached_store()))
+        .with_best_quad_table(self.snapshot.quad_tables())?
         .with_changeset_for_log(self.snapshot.log(), Some(self.snapshot.version()))
         .await?
         .with_projection_indices(node.projection.clone());
@@ -128,7 +128,7 @@ impl ExtensionPlanner for DeltaQuadsStoragePlanner {
 mod tests {
     use super::*;
     use crate::delta::storage::DeltaQuadsStorage;
-    use crate::index::IndexComponents;
+    use crate::quad_tables::QuadTableName;
     use datafusion::physical_plan::displayable;
     use datafusion::physical_planner::DefaultPhysicalPlanner;
     use datafusion::prelude::{SessionConfig, SessionContext};
@@ -156,7 +156,7 @@ mod tests {
     async fn test_planner_skips_apply_changeset_when_versions_match() {
         let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
-            vec![IndexComponents::GSPO],
+            vec![QuadTableName::GSPO],
             1,
         )
         .await;
@@ -167,7 +167,7 @@ mod tests {
     async fn test_planner_pushes_down_filter_string_encoding() {
         let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::String,
-            vec![IndexComponents::GSPO],
+            vec![QuadTableName::GSPO],
             1,
         )
         .await;
@@ -175,14 +175,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_no_index_no_change() {
+    async fn test_no_quad_table_no_change() {
         let ctx =
             PlannerTestContext::new(QuadStorageEncodingName::ObjectId, vec![], 1).await;
         assert_plan_snapshot!(ctx.get_plan_string().await, @"EmptyExec");
     }
 
     #[tokio::test]
-    async fn test_no_index_with_change() {
+    async fn test_no_quad_table_with_change() {
         let ctx =
             PlannerTestContext::new(QuadStorageEncodingName::ObjectId, vec![], 1).await;
 
@@ -196,7 +196,7 @@ mod tests {
 
         assert_plan_snapshot!(ctx.get_plan_string().await, @"
         ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-          FilterExec: graph@0 IS NULL AND subject@1 = 4
+          FilterExec: graph@0 IS NULL AND subject@1 = 1
             DataSourceExec: partitions=1, partition_sizes=[1]
         ");
     }
@@ -205,7 +205,7 @@ mod tests {
     async fn test_planner_with_additions() {
         let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
-            vec![IndexComponents::GSPO],
+            vec![QuadTableName::GSPO],
             1,
         )
         .await
@@ -232,9 +232,9 @@ mod tests {
           SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
             SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
               UnionExec
-                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 8, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 8 AND 8 <= subject_max@2, required_guarantees=[subject in (8)]
+                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 5, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 5 AND 5 <= subject_max@2, required_guarantees=[subject in (5)]
                 SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                  FilterExec: graph@0 IS NULL AND subject@1 = 8
+                  FilterExec: graph@0 IS NULL AND subject@1 = 5
                     DataSourceExec: partitions=1, partition_sizes=[1]
         "
         );
@@ -244,7 +244,7 @@ mod tests {
     async fn test_planner_with_deletions_inserts_anti_join() {
         let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
-            vec![IndexComponents::GSPO],
+            vec![QuadTableName::GSPO],
             1,
         )
         .await
@@ -268,9 +268,9 @@ mod tests {
         ProjectionExec: expr=[predicate@2 as p, object@3 as o]
           SortMergeJoinExec: join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
             SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-              FilterExec: graph@0 IS NULL AND subject@1 = 4
+              FilterExec: graph@0 IS NULL AND subject@1 = 1
                 DataSourceExec: partitions=1, partition_sizes=[1]
-            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 4, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 4 AND 4 <= subject_max@2, required_guarantees=[subject in (4)]
+            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 1, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 1 AND 1 <= subject_max@2, required_guarantees=[subject in (1)]
         ");
     }
 
@@ -278,7 +278,7 @@ mod tests {
     async fn test_planner_with_additions_and_deletions() {
         let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
-            vec![IndexComponents::GSPO],
+            vec![QuadTableName::GSPO],
             1,
         )
         .await
@@ -312,11 +312,11 @@ mod tests {
               UnionExec
                 SortMergeJoinExec: join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
                   SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                    FilterExec: graph@0 IS NULL AND subject@1 = 12
+                    FilterExec: graph@0 IS NULL AND subject@1 = 1
                       DataSourceExec: partitions=1, partition_sizes=[1]
-                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 12, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 12 AND 12 <= subject_max@2, required_guarantees=[subject in (12)]
+                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 1, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 1 AND 1 <= subject_max@2, required_guarantees=[subject in (1)]
                 SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                  FilterExec: graph@0 IS NULL AND subject@1 = 12
+                  FilterExec: graph@0 IS NULL AND subject@1 = 1
                     DataSourceExec: partitions=1, partition_sizes=[1]
         ");
     }
@@ -325,7 +325,7 @@ mod tests {
     async fn test_planner_with_additions_multiple_partitions() {
         let ctx = PlannerTestContext::new(
             QuadStorageEncodingName::ObjectId,
-            vec![IndexComponents::GSPO],
+            vec![QuadTableName::GSPO],
             2,
         )
         .await
@@ -350,9 +350,9 @@ mod tests {
           SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
             SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
               UnionExec
-                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.at/> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[indexes/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 8, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 8 AND 8 <= subject_max@2, required_guarantees=[subject in (8)]
+                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 5, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 5 AND 5 <= subject_max@2, required_guarantees=[subject in (5)]
                 SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                  FilterExec: graph@0 IS NULL AND subject@1 = 8
+                  FilterExec: graph@0 IS NULL AND subject@1 = 5
                     DataSourceExec: partitions=1, partition_sizes=[1]
         ");
     }
@@ -372,7 +372,7 @@ mod tests {
         /// Creates a new context with a configurable number of partitions.
         async fn new(
             encoding: QuadStorageEncodingName,
-            indexes: Vec<IndexComponents>,
+            quad_tables: Vec<QuadTableName>,
             partitions: usize,
         ) -> Self {
             let mut config = SessionConfig::new().with_target_partitions(partitions);
@@ -381,7 +381,7 @@ mod tests {
             options.execution.parquet.pushdown_filters = true;
 
             let storage =
-                Arc::new(DeltaQuadsStorage::new_in_memory(encoding, indexes).await);
+                Arc::new(DeltaQuadsStorage::new_in_memory(encoding, quad_tables).await);
 
             let context = RdfFusionContextBuilder::new(
                 Arc::clone(&storage) as Arc<dyn QuadStorage>
@@ -396,7 +396,7 @@ mod tests {
                 None,
                 TriplePattern {
                     subject: TermPattern::NamedNode(NamedNode::new_unchecked(
-                        "https://my.at/",
+                        "https://my.com/s",
                     )),
                     predicate: rdf_fusion_common::Variable::new_unchecked("p").into(),
                     object: rdf_fusion_common::Variable::new_unchecked("o").into(),

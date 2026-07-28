@@ -1,12 +1,12 @@
 use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::objectids::encoding::stream::ObjectIdEncodingStream;
 use datafusion::arrow::datatypes::SchemaRef;
-use datafusion::execution::context::TaskContext;
+use datafusion::execution::context::{SessionContext, TaskContext};
 use datafusion::physical_expr::{Distribution, EquivalenceProperties, Partitioning};
 use datafusion::physical_expr_common::metrics::MetricBuilder;
 use datafusion::physical_plan::metrics::{ExecutionPlanMetricsSet, MetricsSet};
 use datafusion::physical_plan::{
-    DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties,
+    DisplayAs, DisplayFormatType, ExecutionPlan, ExecutionPlanProperties, PlanProperties,
     SendableRecordBatchStream,
 };
 use rdf_fusion_common::DFResult;
@@ -44,7 +44,9 @@ impl EncodeAsObjectIdDeltaExec {
             .as_ref()
             .clone()
             .with_eq_properties(eq_properties)
-            .with_partitioning(Partitioning::UnknownPartitioning(1));
+            .with_partitioning(Partitioning::UnknownPartitioning(
+                input.output_partitioning().partition_count(),
+            ));
 
         Ok(Self {
             input,
@@ -74,13 +76,13 @@ impl DisplayAs for EncodeAsObjectIdDeltaExec {
         _t: DisplayFormatType,
         f: &mut std::fmt::Formatter,
     ) -> std::fmt::Result {
-        write!(f, "DeltaObjectIdEncodingExec")
+        write!(f, "EncodeAsObjectIdDeltaExec:")
     }
 }
 
 impl ExecutionPlan for EncodeAsObjectIdDeltaExec {
     fn name(&self) -> &str {
-        "DeltaObjectIdEncodingExec"
+        "EncodeAsObjectIdDeltaExec"
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -96,7 +98,11 @@ impl ExecutionPlan for EncodeAsObjectIdDeltaExec {
     }
 
     fn required_input_distribution(&self) -> Vec<Distribution> {
-        vec![Distribution::SinglePartition]
+        vec![Distribution::UnspecifiedDistribution]
+    }
+
+    fn benefits_from_input_partitioning(&self) -> Vec<bool> {
+        vec![true]
     }
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
@@ -136,11 +142,18 @@ impl ExecutionPlan for EncodeAsObjectIdDeltaExec {
         let _commit_failures =
             MetricBuilder::new(&self.metrics).counter("commit_failures", partition);
 
+        let session_ctx = SessionContext::new_with_config_rt(
+            context.session_config().clone(),
+            context.runtime_env(),
+        );
+        let session_state = session_ctx.state();
+
         Ok(Box::pin(ObjectIdEncodingStream::new(
             input_stream,
             Arc::clone(&self.mapping),
             max_buffered_rows,
             max_buffered_ids,
+            session_state,
         )))
     }
 

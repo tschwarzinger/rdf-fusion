@@ -1,15 +1,15 @@
-//! General-purpose types for quad indexes
+//! General-purpose types for quad tables
 
 use rdf_fusion_common::QuadComponent;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
 
-/// Represents a list of *disjunct* index components.
+/// Represents a list of *disjunct* quad table components that represents the sort order of a table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct IndexComponents([QuadComponent; 4]);
+pub struct QuadTableName([QuadComponent; 4]);
 
-impl Display for IndexComponents {
+impl Display for QuadTableName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for component in self.0.iter() {
             write!(f, "{component}")?;
@@ -19,11 +19,11 @@ impl Display for IndexComponents {
 }
 
 // Allows concisely generating all 24 constants
-macro_rules! define_indexes {
+macro_rules! define_quad_tables {
     ($($name:ident => [$a:ident, $b:ident, $c:ident, $d:ident]),* $(,)?) => {
         $(
-            #[doc = concat!("A ", stringify!($name), " index.")]
-            pub const $name: IndexComponents = IndexComponents([
+            #[doc = concat!("A ", stringify!($name), " quad_table.")]
+            pub const $name: QuadTableName = QuadTableName([
                 QuadComponent::$a,
                 QuadComponent::$b,
                 QuadComponent::$c,
@@ -31,15 +31,15 @@ macro_rules! define_indexes {
             ]);
         )*
 
-        /// Returns a list of all 24 valid [`IndexComponents`] permutations.
-        pub const fn list_all() -> &'static [IndexComponents; 24] {
+        /// Returns a list of all 24 valid [`QuadTableName`] permutations.
+        pub const fn list_all() -> &'static [QuadTableName; 24] {
             &[$(Self::$name),*]
         }
     };
 }
 
-impl IndexComponents {
-    define_indexes! {
+impl QuadTableName {
+    define_quad_tables! {
         // Subject First
         SPOG => [Subject, Predicate, Object, GraphName],
         SPGO => [Subject, Predicate, GraphName, Object],
@@ -78,32 +78,32 @@ impl IndexComponents {
         &self.0
     }
 
-    /// Tries to create a new [IndexComponents].
+    /// Tries to create a new [QuadTableName].
     ///
     /// Returns an error if a [QuadComponent] appears more than once.
     pub fn try_new(
         components: [QuadComponent; 4],
-    ) -> Result<Self, IndexComponentsCreationError> {
+    ) -> Result<Self, QuadTableNameCreationError> {
         let distinct = components.iter().collect::<HashSet<_>>();
         if distinct.len() != components.len() {
-            return Err(IndexComponentsCreationError);
+            return Err(QuadTableNameCreationError);
         }
 
-        Ok(IndexComponents(components))
+        Ok(QuadTableName(components))
     }
 }
 
 #[derive(Debug, Error)]
-#[error("Duplicate indexed component given.")]
-pub struct IndexComponentsCreationError;
+#[error("Duplicate quad table component given.")]
+pub struct QuadTableNameCreationError;
 
 #[cfg(test)]
 mod tests {
-    use crate::index::{IndexComponents, QuadComponent};
+    use crate::quad_tables::{QuadComponent, QuadTableName};
 
     #[test]
-    fn index_configuration_accepts_unique_components() {
-        let ok = IndexComponents::try_new([
+    fn quad_table_configuration_accepts_unique_components() {
+        let ok = QuadTableName::try_new([
             QuadComponent::GraphName,
             QuadComponent::Subject,
             QuadComponent::Predicate,
@@ -113,8 +113,8 @@ mod tests {
     }
 
     #[test]
-    fn index_configuration_rejects_duplicate_components() {
-        let err = IndexComponents::try_new([
+    fn quad_table_configuration_rejects_duplicate_components() {
+        let err = QuadTableName::try_new([
             QuadComponent::GraphName,
             QuadComponent::Subject,
             QuadComponent::Subject,

@@ -1,7 +1,5 @@
 use crate::parquet::reader::PreLoadedMetadataReaderFactory;
-use crate::parquet::reader::{
-    CachedFileReaderFactory, ChunkCache, PreloadedBloomFilters, PreloadedParquetMetadata,
-};
+use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use crate::parquet::scan::ParquetQuadScanExec;
 use datafusion::common::plan_datafusion_err;
 use datafusion::common::stats::Precision;
@@ -37,7 +35,7 @@ use std::sync::Arc;
 pub enum PushdownProjection {
     /// No projection pushdown. The scan returns the base schema.
     No,
-    /// Pushdown the projection with optional additional projection indexes.
+    /// Pushdown the projection with optional additional projection quad_tables.
     Yes(Option<Vec<usize>>),
 }
 
@@ -63,7 +61,7 @@ pub struct ParquetQuadScanBuilder<'a> {
     pushdown_projection: PushdownProjection,
     eager_pruning: bool,
     output_ordering: Option<Vec<datafusion::physical_expr::LexOrdering>>,
-    cache: Option<Arc<ChunkCache>>,
+    object_store: Option<Arc<dyn object_store::ObjectStore>>,
 }
 
 impl<'a> ParquetQuadScanBuilder<'a> {
@@ -83,7 +81,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             pushdown_projection: PushdownProjection::No,
             eager_pruning: false,
             output_ordering: None,
-            cache: None,
+            object_store: None,
         }
     }
 
@@ -130,8 +128,11 @@ impl<'a> ParquetQuadScanBuilder<'a> {
     }
 
     /// Caches the byte ranges of the parquet files being scanned in the given chunk cache.
-    pub fn with_cache(mut self, cache: Arc<ChunkCache>) -> Self {
-        self.cache = Some(cache);
+    pub fn with_object_store(
+        mut self,
+        object_store: Arc<dyn object_store::ObjectStore>,
+    ) -> Self {
+        self.object_store = Some(object_store);
         self
     }
 
@@ -199,7 +200,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                 plan = Arc::new(FilterExec::try_new(phys_filter, plan)?);
             }
 
-            if let PushdownProjection::Yes(indices) = pushdown_projection {
+            if let PushdownProjection::Yes(quad_tables) = pushdown_projection {
                 if let Some(pattern) = pattern {
                     let schema = plan.schema();
                     let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
@@ -207,7 +208,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                         session_state,
                         pattern,
                         &df_schema,
-                        indices.as_deref(),
+                        quad_tables.as_deref(),
                     )?;
                     plan = Arc::new(ProjectionExec::try_new(exprs, plan)?);
                 }
@@ -226,10 +227,13 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         let pushdown_filters = !matches!(self.encoding, QuadStorageEncoding::PlainTerm);
         let table_schema = TableSchema::new(Arc::clone(base_schema.inner()), vec![]);
 
-        let store = self
-            .session_state
-            .runtime_env()
-            .object_store(&self.object_store_url)?;
+        let store = if let Some(store) = self.object_store.clone() {
+            store
+        } else {
+            self.session_state
+                .runtime_env()
+                .object_store(&self.object_store_url)?
+        };
         let default_reader = Arc::new(DefaultParquetFileReaderFactory::new(store));
         let reader_factory: Arc<dyn ParquetFileReaderFactory> = match &self
             .reader_factory_type
@@ -244,16 +248,6 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             }
         };
 
-        let reader_factory: Arc<dyn ParquetFileReaderFactory> =
-            if let Some(cache) = &self.cache {
-                Arc::new(CachedFileReaderFactory::new(
-                    reader_factory,
-                    Arc::clone(cache),
-                )) as _
-            } else {
-                reader_factory
-            };
-
         let mut parquet_source = ParquetSource::new(table_schema)
             .with_pushdown_filters(pushdown_filters)
             .with_parquet_file_reader_factory(reader_factory);
@@ -267,7 +261,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
 
         match &self.pushdown_projection {
             PushdownProjection::No => Ok(Arc::new(parquet_source)),
-            PushdownProjection::Yes(indices) => {
+            PushdownProjection::Yes(quad_tables) => {
                 if matches!(self.encoding, QuadStorageEncoding::PlainTerm) {
                     Ok(Arc::new(parquet_source))
                 } else if let Some(pattern) = &self.pattern {
@@ -275,7 +269,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                         self.session_state,
                         pattern,
                         &mut parquet_source,
-                        indices.as_deref(),
+                        quad_tables.as_deref(),
                         base_schema,
                     )
                 } else {
@@ -393,12 +387,12 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             })
             .collect::<DFResult<Vec<_>>>()?;
 
-        if let Some(indices) = projection_indices {
-            let mut exprs = Vec::with_capacity(indices.len());
-            for &idx in indices {
+        if let Some(quad_tables) = projection_indices {
+            let mut exprs = Vec::with_capacity(quad_tables.len());
+            for &idx in quad_tables {
                 let expr = full_projections.get(idx).ok_or_else(|| {
                     plan_datafusion_err!(
-                        "Projection index {} out of bounds for schema length {}",
+                        "Projection quad_table {} out of bounds for schema length {}",
                         idx,
                         full_projections.len()
                     )
@@ -481,7 +475,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
 
             let access_plan = rg_filter.build();
 
-            // Page Index Pruning
+            // Page QuadTable Pruning
             let page_filter = PagePruningAccessPlanFilter::new(
                 &phys_expr,
                 Arc::clone(base_schema.inner()),

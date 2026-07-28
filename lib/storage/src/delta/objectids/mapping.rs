@@ -1,8 +1,9 @@
 use crate::delta::error::DeltaQuadsStorageError;
+use crate::delta::objectids::encoding::writer::DeltaObjectIdDictionaryWriter;
 use crate::delta::objectids::{DeltaObjectIdClaimer, ObjectIdClaimerPutMode};
 use crate::local_object_ids::{
-    InMemoryObjectIdDictionary, LocalObjectIdDictionary, LocalObjectIdTransaction,
-    RocksDBObjectIdDictionary,
+    InMemoryObjectIdDictionary, LmdbObjectIdDictionary, LocalObjectIdDictionary,
+    LocalObjectIdTransaction,
 };
 use async_trait::async_trait;
 use datafusion::arrow::array::{Array, ArrayRef, Int64Array, Int64Builder, RecordBatch};
@@ -12,6 +13,7 @@ use datafusion::execution::SessionState;
 use datafusion::prelude::SessionContext;
 use deltalake::arrow::datatypes::Schema;
 use deltalake::kernel::Action;
+use deltalake::kernel::Add;
 use deltalake::kernel::engine::arrow_conversion::{TryFromArrow, TryFromKernel};
 use deltalake::kernel::transaction::{CommitBuilder, CommitProperties, TransactionError};
 use deltalake::logstore::{LogStore, LogStoreRef};
@@ -37,7 +39,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-fn get_rocksdb_path(
+fn get_lmdb_path(
     options: &RdfFusionOptions,
     location: &url::Url,
 ) -> Option<std::path::PathBuf> {
@@ -56,14 +58,16 @@ fn get_rocksdb_path(
             write!(&mut hash, "{byte:02x}").unwrap();
         }
 
-        let file_name = hash.to_string();
+        let dir_name = hash.to_string();
 
-        info!("Using rocksdb directory '{file_name}' for location '{location}'.");
+        info!(
+            "Using lmdb environment in directory '{dir_name}' for location '{location}'."
+        );
 
         Some(
             std::path::PathBuf::from(work_dir)
                 .join("dictionaries")
-                .join(file_name),
+                .join(dir_name),
         )
     } else {
         None
@@ -79,6 +83,8 @@ pub struct DeltaObjectIdDictionary {
     table: Arc<RwLock<DeltaTable>>,
     /// The schema of the table.
     table_schema: SchemaRef,
+    /// The shared writer for parallel encoding.
+    writer: Arc<DeltaObjectIdDictionaryWriter>,
 }
 
 impl DeltaObjectIdDictionary {
@@ -106,7 +112,7 @@ impl DeltaObjectIdDictionary {
             .await?;
         let table_schema = Arc::new(Schema::new(arrow_columns));
 
-        let db_path = get_rocksdb_path(options, table.log_store().config().location());
+        let db_path = get_lmdb_path(options, table.log_store().config().location());
         let put_mode = match options.storage.delta.assume_single_node {
             true => ObjectIdClaimerPutMode::AlwaysOverwrite,
             false => ObjectIdClaimerPutMode::EnsureVersion,
@@ -119,10 +125,10 @@ impl DeltaObjectIdDictionary {
         let local_mapping: Arc<dyn LocalObjectIdDictionary> = if let Some(path) = db_path
         {
             info!(
-                "Creating rocksdb local dictionary at directory '{}'.",
+                "Creating lmdb local dictionary at directory '{}'.",
                 path.display()
             );
-            Arc::new(RocksDBObjectIdDictionary::try_new(
+            Arc::new(LmdbObjectIdDictionary::try_new(
                 path,
                 options.storage.delta.object_id_cache_size,
                 claimer,
@@ -132,10 +138,18 @@ impl DeltaObjectIdDictionary {
             Arc::new(InMemoryObjectIdDictionary::new(claimer))
         };
 
+        let table = Arc::new(RwLock::new(table));
+        let delta_version = table.read().await.version().unwrap_or(0) as u64;
+        let writer = Arc::new(DeltaObjectIdDictionaryWriter::new(
+            Arc::clone(&local_mapping),
+            delta_version + 1,
+        ));
+
         Ok(Self {
             local_mapping,
-            table: Arc::new(RwLock::new(table)),
+            table,
             table_schema,
+            writer,
         })
     }
 
@@ -174,10 +188,10 @@ impl DeltaObjectIdDictionary {
             put_mode,
         ));
 
-        let db_path = get_rocksdb_path(&options, table.log_store().config().location());
+        let db_path = get_lmdb_path(&options, table.log_store().config().location());
         let local_dictionary: Arc<dyn LocalObjectIdDictionary> =
             if let Some(path) = db_path {
-                Arc::new(RocksDBObjectIdDictionary::try_new(
+                Arc::new(LmdbObjectIdDictionary::try_new(
                     path,
                     options.storage.delta.object_id_cache_size,
                     claimer,
@@ -186,14 +200,22 @@ impl DeltaObjectIdDictionary {
                 Arc::new(InMemoryObjectIdDictionary::new(claimer))
             };
 
+        let table = Arc::new(RwLock::new(table));
+        let delta_version = table.read().await.version().unwrap_or(0) as u64;
+        let writer = Arc::new(DeltaObjectIdDictionaryWriter::new(
+            Arc::clone(&local_dictionary),
+            delta_version + 1,
+        ));
+
         let mapping = Self {
             local_mapping: local_dictionary,
-            table: Arc::new(RwLock::new(table)),
+            table,
             table_schema,
+            writer,
         };
 
         info!("Trying to update local dictionary ...");
-        mapping.update_local_dictionary().await?;
+        mapping.update_local_dictionary(session).await?;
         info!("Local dictionary up-to-date.");
 
         Ok(mapping)
@@ -202,6 +224,11 @@ impl DeltaObjectIdDictionary {
     /// Returns a reference to the underlying dictionary.
     pub fn dictionary(&self) -> Arc<dyn LocalObjectIdDictionary> {
         Arc::clone(&self.local_mapping)
+    }
+
+    /// Returns the shared writer for parallel encoding.
+    pub fn shared_writer(&self) -> Arc<DeltaObjectIdDictionaryWriter> {
+        Arc::clone(&self.writer)
     }
 
     /// Returns the current version of the Delta Table.
@@ -216,7 +243,10 @@ impl DeltaObjectIdDictionary {
     /// - If the local dictionary has no version (first run), it performs a full sync.
     /// - If the local dictionary is behind, it performs an incremental sync, fetching
     ///   only the new Parquet files added since the last sync.
-    pub async fn update_local_dictionary(&self) -> Result<(), DeltaQuadsStorageError> {
+    pub async fn update_local_dictionary(
+        &self,
+        session: &SessionState,
+    ) -> Result<(), DeltaQuadsStorageError> {
         let mut table = self.table.write().await;
         table.load().await?;
 
@@ -224,34 +254,36 @@ impl DeltaObjectIdDictionary {
             .local_mapping
             .snapshot()
             .await?
-            .get_synced_version()?
+            .get_synced_version()
+            .await?
             .unwrap_or(0);
 
-        let table_version = table.version().unwrap_or(0);
+        let global_version = table.version().unwrap_or(0);
 
-        if local_version == table_version as u64 {
+        if local_version == global_version as u64 {
             return Ok(());
         }
 
-        if local_version > table_version as u64 {
+        if local_version > global_version as u64 {
             return Err(DeltaQuadsStorageError::Corruption(format!(
-                "The local dictionary has a higher version than the global dictionary (local: {local_version}, global: {table_version})."
+                "The local dictionary has a higher version than the global dictionary (local: {local_version}, global: {global_version})."
             )));
         }
 
-        let session_ctx = SessionContext::new();
-        let mut txn = self.local_mapping.transaction().await?;
+        let session_ctx = SessionContext::new_with_state(session.clone());
 
+        info!(
+            "Syncing local dictionary incrementally from version {} to Delta table version {}...",
+            local_version, global_version
+        );
         self.sync_incrementally(
             &session_ctx,
             &table,
-            &mut *txn,
             local_version,
-            table_version as u64,
+            global_version as u64,
         )
         .await?;
-
-        txn.commit(table_version as u64).await?;
+        info!("Local dictionary updated.");
 
         Ok(())
     }
@@ -264,38 +296,59 @@ impl DeltaObjectIdDictionary {
         &self,
         session_ctx: &SessionContext,
         table: &DeltaTable,
-        txn: &mut dyn LocalObjectIdTransaction,
         v_on_disk: u64,
         table_version: u64,
     ) -> Result<(), DeltaQuadsStorageError> {
-        info!(
-            "Syncing local dictionary incrementally from version {} to Delta table version {}...",
-            v_on_disk, table_version
-        );
-
         let log_store = table.log_store();
-        let added_files =
+        let transactions =
             get_added_files_from_commits(log_store, v_on_disk + 1, table_version).await?;
 
+        let table_url = table.table_url();
+        let base_url = table_url.as_str().trim_end_matches('/');
+
         info!(
-            "Adding {} files from the global dictionary to the local dictionary ...",
-            added_files.len()
+            "Processing {} delta transactions to sync global dictionary...",
+            transactions.len()
         );
-        if !added_files.is_empty() {
-            let df = session_ctx
-                .read_parquet(
-                    added_files,
-                    datafusion::prelude::ParquetReadOptions::default(),
-                )
-                .await?;
 
-            let mut stream = df.execute_stream().await?;
-            while let Some(batch) = stream.next().await {
-                txn.add_global_batch(&batch?).await?;
+        for tx in transactions {
+            let file_paths: Vec<String> = tx
+                .added_files
+                .into_iter()
+                .map(|add| format!("{}/{}", base_url, add.path))
+                .collect();
+
+            let mut txn = self.local_mapping.transaction().await?;
+
+            if !file_paths.is_empty() {
+                info!(
+                    "Adding {} files from Delta version {} to the local dictionary...",
+                    file_paths.len(),
+                    tx.version
+                );
+
+                let df = session_ctx
+                    .read_parquet(
+                        file_paths,
+                        datafusion::prelude::ParquetReadOptions::default(),
+                    )
+                    .await?;
+
+                let mut stream = df.execute_stream().await?;
+                while let Some(batch) = stream.next().await {
+                    let batch = batch?;
+                    txn.add_global_batch(&batch).await?;
+                }
+
+                info!(
+                    "Committing {} entries to dictionary for version {}...",
+                    txn.pending_ids().len(),
+                    tx.version
+                );
             }
-        }
 
-        info!("Local dictionary sync complete.");
+            txn.commit(tx.version).await?;
+        }
 
         Ok(())
     }
@@ -324,10 +377,10 @@ impl DeltaObjectIdDictionary {
         for (id, term) in txn.pending_ids() {
             id_builder.append_value(*id);
             term_builder.append_raw(
-                term.0,
-                &term.1,
-                term.2.as_deref(),
-                term.3.as_deref(),
+                term.term_type,
+                &term.value,
+                term.data_type.as_deref(),
+                term.language.as_deref(),
             );
         }
 
@@ -392,31 +445,11 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
             .snapshot()
             .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
-        if let Some(id) = snapshot.get_id_by_term(term) {
+        if let Some(id) = snapshot.get_id_by_term(term).await {
             Ok(Some(ScalarValue::Int64(Some(id))))
         } else {
             Ok(None)
         }
-    }
-
-    async fn encode_array(
-        &self,
-        array: &PlainTermArray,
-    ) -> Result<ArrayRef, ObjectIdDictionaryError> {
-        let mut txn = self
-            .local_mapping
-            .transaction()
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
-        let ids_array = txn
-            .encode_array(array)
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
-        txn.commit(self.delta_version().await)
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
-
-        Ok(Arc::new(ids_array) as ArrayRef)
     }
 
     async fn decode_array(
@@ -436,6 +469,7 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
             .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
             .resolve_plain_terms(id_array)
+            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
 
         let result =
@@ -461,6 +495,7 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
             .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
             .resolve_plain_terms(id_array)
+            .await
             .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
 
         let plain_terms = PLAIN_TERM_ENCODING
@@ -472,6 +507,11 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
     }
 }
 
+struct DeltaTransactionFiles {
+    version: u64,
+    added_files: Vec<Add>,
+}
+
 /// Extracts the relative paths of newly added Parquet files from the Delta commit logs.
 ///
 /// Scans the JSONL transaction logs between `start_version` and `end_version` (inclusive)
@@ -480,8 +520,8 @@ async fn get_added_files_from_commits(
     log_store: LogStoreRef,
     start_version: u64,
     end_version: u64,
-) -> Result<Vec<String>, DeltaQuadsStorageError> {
-    let mut added_files = Vec::new();
+) -> Result<Vec<DeltaTransactionFiles>, DeltaQuadsStorageError> {
+    let mut transactions = Vec::new();
 
     for v in start_version..=end_version {
         let commit_bytes = log_store
@@ -501,6 +541,8 @@ async fn get_added_files_from_commits(
         use std::io::BufRead;
         let cursor = std::io::Cursor::new(commit_bytes.as_ref());
 
+        let mut added_files = Vec::new();
+
         // Parse the JSONL transaction log to find newly added files
         for line in cursor.lines() {
             let line =
@@ -517,10 +559,15 @@ async fn get_added_files_from_commits(
             })?;
 
             if let Action::Add(add) = action {
-                added_files.push(add.path);
+                added_files.push(add);
             }
         }
+
+        transactions.push(DeltaTransactionFiles {
+            version: v,
+            added_files,
+        });
     }
 
-    Ok(added_files)
+    Ok(transactions)
 }

@@ -17,21 +17,24 @@ pub trait LocalObjectIdDictionary: Send + Sync + std::fmt::Debug {
     ) -> Result<Box<dyn LocalObjectIdTransaction>, LocalObjectIdError>;
 }
 
+#[async_trait]
 pub trait LocalObjectIdDictionarySnapshot: Send + Sync {
-    fn resolve_plain_terms(
+    async fn resolve_plain_terms(
         &self,
         ids: &Int64Array,
     ) -> Result<ArrayRef, LocalObjectIdError>;
 
-    fn len(&self) -> Result<u64, LocalObjectIdError>;
+    async fn len(&self) -> Result<u64, LocalObjectIdError>;
 
-    fn read_claimed_object_ids(&self) -> Result<Option<(i64, i64)>, LocalObjectIdError>;
+    async fn read_claimed_object_ids(
+        &self,
+    ) -> Result<Option<(i64, i64)>, LocalObjectIdError>;
 
-    fn is_empty(&self) -> Result<bool, LocalObjectIdError>;
+    async fn is_empty(&self) -> Result<bool, LocalObjectIdError>;
 
-    fn get_id_by_term(&self, term: &PlainTermScalar) -> Option<i64>;
+    async fn get_id_by_term(&self, term: &PlainTermScalar) -> Option<i64>;
 
-    fn get_synced_version(&self) -> Result<Option<u64>, LocalObjectIdError>;
+    async fn get_synced_version(&self) -> Result<Option<u64>, LocalObjectIdError>;
 }
 
 #[async_trait]

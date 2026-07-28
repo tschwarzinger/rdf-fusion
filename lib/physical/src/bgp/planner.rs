@@ -543,7 +543,7 @@ impl BgpPlanner {
                 session_state,
             )?;
 
-            // Assign column indices dynamically to map left/right sources
+            // Assign column quad_tables dynamically to map left/right sources
             let mut column_indices = Vec::new();
             for i in 0..left.schema().fields().len() {
                 column_indices.push(ColumnIndex {

@@ -40,6 +40,7 @@ tracing-subscriber.workspace = true
 console-subscriber = { workspace = true, optional = true }
 url.workspace = true
 zip.workspace = true
+tempfile.workspace = true
 
 [features]
 perf-debugging = ["console-subscriber"]
@@ -67,4 +68,8 @@ harness = false
 
 [[bench]]
 name = "dump"
+harness = false
+
+[[bench]]
+name = "bulk_insert"
 harness = false

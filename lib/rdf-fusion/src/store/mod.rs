@@ -52,8 +52,11 @@ use rdf_fusion_common::{
     TermRef, Variable,
 };
 use rdf_fusion_encoding::EncodingName;
+use rdf_fusion_encoding::EncodingScalar;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 
+use datafusion::arrow::datatypes::{Field, Schema};
+use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::datasource::object_store::{
     DefaultObjectStoreRegistry, ObjectStoreRegistry,
 };
@@ -73,6 +76,7 @@ use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
+use rdf_fusion_storage::utils::graph_target_to_plain_term_dataframe;
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
 use tokio::runtime::Handle;
@@ -807,9 +811,12 @@ impl Store {
         let state = self.context.session_context().state();
         let graph_name = graph_name.into();
         let storage_encoding = self.context.storage().encoding();
-        let scalar = storage_encoding
-            .encode_term_scalar(graph_name.into())
-            .await?;
+        let scalar = storage_encoding.try_encode_term(graph_name.into()).await?;
+
+        let scalar = match scalar {
+            Some(s) => s,
+            None => return Ok(false),
+        };
 
         let snapshot = self.context.storage().snapshot().await?;
         let graphs = snapshot.named_graphs(&state).await?;
@@ -859,12 +866,33 @@ impl Store {
         &self,
         graph_name: impl Into<NamedOrBlankNodeRef<'a>>,
     ) -> Result<bool, StorageError> {
-        let transaction = self
-            .context
-            .storage()
+        let storage = self.context.storage();
+        let scalar_value = PLAIN_TERM_ENCODING
+            .encode_term(Ok(graph_name.into().into()))
+            .unwrap()
+            .into_scalar_value();
+
+        let transaction = storage
             .begin_transaction(&self.context.session_context().state())
             .await?;
-        let result = transaction.create_named_graph(graph_name.into()).await?;
+
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            COL_GRAPH,
+            scalar_value.data_type(),
+            true,
+        )]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![scalar_value.to_array_of_size(1).expect("Valid array")],
+        )
+        .expect("Valid batch");
+        let df = self
+            .context
+            .session_context()
+            .read_batch(batch)
+            .map_err(|e| StorageError::Other(Box::new(e)))?;
+
+        let result = transaction.create_named_graph(df).await?;
         transaction.commit().await?;
         Ok(result.unwrap_or(true))
     }
@@ -895,12 +923,23 @@ impl Store {
         &self,
         graph: &QuadStorageGraphTarget,
     ) -> Result<(), StorageError> {
-        let transaction = self
-            .context
-            .storage()
+        let storage = self.context.storage();
+        let storage_encoding = storage.encoding();
+
+        let transaction = storage
             .begin_transaction(&self.context.session_context().state())
             .await?;
-        transaction.clear_graph(graph).await?;
+        let snapshot = transaction.snapshot().await?;
+
+        let df = graph_target_to_plain_term_dataframe(
+            self.context.session_context(),
+            &storage_encoding,
+            snapshot.as_ref(),
+            graph,
+        )
+        .await?;
+
+        transaction.clear_graph(df).await?;
         transaction.commit().await
     }
 
@@ -931,15 +970,26 @@ impl Store {
     pub async fn drop_graph(
         &self,
         graph: &QuadStorageGraphTarget,
-    ) -> Result<(), StorageError> {
-        let transaction = self
-            .context
-            .storage()
+    ) -> Result<bool, StorageError> {
+        let storage = self.context.storage();
+        let storage_encoding = storage.encoding();
+
+        let transaction = storage
             .begin_transaction(&self.context.session_context().state())
             .await?;
-        transaction.drop_graph(graph).await?;
+        let snapshot = transaction.snapshot().await?;
+
+        let df = graph_target_to_plain_term_dataframe(
+            self.context.session_context(),
+            &storage_encoding,
+            snapshot.as_ref(),
+            graph,
+        )
+        .await?;
+
+        transaction.drop_graph(df).await?;
         transaction.commit().await?;
-        Ok(())
+        Ok(true)
     }
 
     /// Optimizes the database for future workload.

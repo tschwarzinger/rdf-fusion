@@ -19,6 +19,7 @@
 //! the results of a new test (e.g., [JSON Compare](https://jsoncompare.org/)). `CONSTRUCT` queries
 //! have been compared manually.
 
+use crate::load_queries;
 use crate::query_results::{run_graph_result_query, run_select_query};
 use insta::assert_snapshot;
 use rdf_fusion::encoding::QuadStorageEncodingName;
@@ -61,8 +62,7 @@ async fn run_bsbm_1000_test_results(encoding: QuadStorageEncodingName) {
     //
     // Explore
     //
-    let explore_queries =
-        crate::load::load_queries("tests/test_queries/bsbm/explore").unwrap();
+    let explore_queries = load_queries("tests/test_queries/bsbm/explore").unwrap();
     for (name, query_str) in explore_queries {
         let formatted_name = name
             .replace("explore-q", "Q")
@@ -81,7 +81,7 @@ async fn run_bsbm_1000_test_results(encoding: QuadStorageEncodingName) {
     //
     // Business Intelligence
     //
-    let bi_queries = crate::load::load_queries("tests/test_queries/bsbm/bi").unwrap();
+    let bi_queries = load_queries("tests/test_queries/bsbm/bi").unwrap();
     for (name, query_str) in bi_queries {
         let formatted_name = name.replace("bi-q", "Q");
         assert_snapshot!(

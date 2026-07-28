@@ -109,7 +109,7 @@ impl StringArgs {
         Self { arrays }
     }
 
-    /// Returns the array at `index`.
+    /// Returns the array at `quad_table`.
     pub fn get(&self, index: usize) -> &StringTermArray {
         &self.arrays[index]
     }

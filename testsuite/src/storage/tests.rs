@@ -2,8 +2,9 @@ use anyhow::Result;
 use datafusion::physical_plan::{collect, execute_stream};
 use datafusion::prelude::SessionContext;
 use futures::StreamExt;
-use rdf_fusion::api::storage::{QuadStorage, QuadStorageGraphTarget};
+use rdf_fusion::api::storage::QuadStorage;
 use rdf_fusion::common::{GraphName, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
+use rdf_fusion::encoding::EncodingScalar;
 use rdf_fusion::encoding::quads_to_plain_term_dataframe;
 use rdf_fusion::execution::RdfFusionContextBuilder;
 use std::slice;
@@ -118,7 +119,8 @@ pub async fn named_graph_insertion_and_query(
         NamedOrBlankNode::NamedNode(NamedNode::new_unchecked("http://example.com/graph"));
 
     let transaction = storage.begin_transaction(&ctx.state()).await?;
-    let inserted = transaction.create_named_graph(graph.as_ref()).await?;
+    let df = graph_to_dataframe(&ctx, storage.as_ref(), graph.as_ref()).await;
+    let inserted = transaction.create_named_graph(df).await?;
     transaction.commit().await?;
 
     if let Some(inserted) = inserted {
@@ -176,9 +178,13 @@ pub async fn clear_graph(storage: Arc<dyn QuadStorage>) -> Result<()> {
     assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 2);
 
     let transaction = storage.begin_transaction(&ctx.state()).await?;
-    let graph_target =
-        QuadStorageGraphTarget::NamedNode(NamedNode::new_unchecked(g1.to_string()));
-    transaction.clear_graph(&graph_target).await?;
+    let df = graph_to_dataframe(
+        &ctx,
+        storage.as_ref(),
+        NamedNode::new_unchecked(g1.to_string()).as_ref(),
+    )
+    .await;
+    transaction.clear_graph(df).await?;
     transaction.commit().await?;
 
     assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 1);
@@ -192,7 +198,8 @@ pub async fn insert_named_graph(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let graph =
         NamedOrBlankNode::NamedNode(NamedNode::new_unchecked("http://example.com/graph"));
     let transaction = storage.begin_transaction(&ctx.state()).await?;
-    transaction.create_named_graph(graph.as_ref()).await?;
+    let df = graph_to_dataframe(&ctx, storage.as_ref(), graph.as_ref()).await;
+    transaction.create_named_graph(df).await?;
     transaction.commit().await?;
 
     assert_named_graph_count(storage, &ctx, 1).await?;
@@ -205,14 +212,13 @@ pub async fn remove_named_graph(storage: Arc<dyn QuadStorage>) -> Result<()> {
     let graph = NamedNode::new_unchecked("http://example.com/graph");
 
     let transaction = storage.begin_transaction(&ctx.state()).await?;
-    transaction
-        .create_named_graph(graph.as_ref().into())
-        .await?;
+    let df = graph_to_dataframe(&ctx, storage.as_ref(), graph.clone().as_ref()).await;
+    transaction.create_named_graph(df).await?;
     transaction.commit().await?;
 
-    let graph_target = QuadStorageGraphTarget::NamedNode(graph.clone());
     let transaction = storage.begin_transaction(&ctx.state()).await?;
-    transaction.drop_graph(&graph_target).await?;
+    let df2 = graph_to_dataframe(&ctx, storage.as_ref(), graph.clone().as_ref()).await;
+    transaction.drop_graph(df2).await?;
     transaction.commit().await?;
 
     assert_named_graph_count(storage, &ctx, 0).await?;
@@ -247,9 +253,20 @@ pub async fn clear_all(storage: Arc<dyn QuadStorage>) -> Result<()> {
     );
 
     let transaction = storage.begin_transaction(&ctx.state()).await?;
-    transaction
-        .clear_graph(&QuadStorageGraphTarget::AllGraphs)
-        .await?;
+    let snapshot = storage.snapshot().await?;
+    let named_graphs_df = snapshot.named_graphs(&ctx.state()).await?;
+    let schema = Arc::clone(&named_graphs_df.schema());
+    let mut batches = collect(named_graphs_df, ctx.task_ctx()).await?;
+    let null_value = storage.encoding().create_null_scalar()?;
+    batches.push(
+        datafusion::arrow::record_batch::RecordBatch::try_new(
+            schema,
+            vec![null_value.to_array()?],
+        )
+        .unwrap(),
+    );
+    let all_graphs_df = ctx.read_batches(batches)?;
+    transaction.clear_graph(all_graphs_df).await?;
     transaction.commit().await?;
 
     assert_eq!(storage.snapshot().await?.len(&ctx.state()).await?, 0);
@@ -349,4 +366,28 @@ async fn assert_named_graph_count(
     let count = result.iter().map(|rb| rb.num_rows()).sum::<usize>();
     assert_eq!(count, expected);
     Ok(())
+}
+
+async fn graph_to_dataframe<'a>(
+    ctx: &SessionContext,
+    _storage: &dyn QuadStorage,
+    graph: impl Into<rdf_fusion::common::NamedOrBlankNodeRef<'a>>,
+) -> datafusion::dataframe::DataFrame {
+    let scalar_value = rdf_fusion::encoding::plain_term::PLAIN_TERM_ENCODING
+        .encode_term(Ok(graph.into().into()))
+        .unwrap()
+        .into_scalar_value();
+    let schema = Arc::new(datafusion::arrow::datatypes::Schema::new(vec![
+        datafusion::arrow::datatypes::Field::new(
+            rdf_fusion::common::quads::COL_GRAPH,
+            scalar_value.data_type(),
+            true,
+        ),
+    ]));
+    let batch = datafusion::arrow::record_batch::RecordBatch::try_new(
+        schema,
+        vec![scalar_value.to_array_of_size(1).expect("Valid array")],
+    )
+    .unwrap();
+    ctx.read_batch(batch).unwrap()
 }

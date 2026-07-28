@@ -193,9 +193,9 @@ impl DeltaStorageLogOperation {
 /// The log *does not special-case* inserting duplicates or removing quads does not actually exist
 /// in the database. The log simply appends another transaction that contains the duplicated insert
 /// (or remove respectively). When interpreting the log, the other system parts must be aware of
-/// this circumstance and adjust their alogorithms accordingly. For example, considering the index
-/// updater, it might be that the log contains the removal of a quad that is not in the index, as
-/// the quad has never existed in the database. Instead of returning an error, the index updater
+/// this circumstance and adjust their alogorithms accordingly. For example, considering the quad_table
+/// updater, it might be that the log contains the removal of a quad that is not in the quad_table, as
+/// the quad has never existed in the database. Instead of returning an error, the quad_table updater
 /// should simply ignore the remove operation.
 ///
 /// # Further Implicatations
@@ -252,6 +252,10 @@ impl DeltaQuadsStorageLog {
             .with_configuration_property(
                 TableProperty::EnableChangeDataFeed,
                 Some("true"),
+            )
+            .with_configuration_property(
+                TableProperty::TargetFileSize,
+                Some("268435456"), // 256 MiB
             )
             .await?;
 

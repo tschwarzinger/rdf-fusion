@@ -150,7 +150,7 @@ impl PlainTermArray {
         self.inner.is_empty()
     }
 
-    /// Returns the term at the given index.
+    /// Returns the term at the given quad_table.
     pub fn get(&self, index: usize) -> Option<PlainTermScalar> {
         if self.inner.is_null(index) {
             None

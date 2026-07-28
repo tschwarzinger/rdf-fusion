@@ -5,22 +5,9 @@ use clap::{Parser, Subcommand, ValueHint};
 /// RDF Fusion command line toolkit and SPARQL HTTP server
 pub struct Args {
     #[command(flatten)]
-    pub runtime: RuntimeConfig,
-    #[command(flatten)]
     pub storage: StorageConfigArgs,
     #[command(subcommand)]
     pub command: Command,
-}
-
-/// Runtime configuration options
-///
-/// TODO: Environment variable
-#[derive(Parser, Debug, Clone)]
-pub struct RuntimeConfig {
-    /// Memory limit for the process in MiB. Note that this limit only applies to the query engine.
-    /// For example, an in-memory storage will not be included in this limit.
-    #[arg(long)]
-    pub memory_limit: Option<usize>,
 }
 
 /// Configuration regarding RDF Fusion's storage.

@@ -6,9 +6,10 @@ use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::SessionStateBuilder;
 use datafusion::execution::cache::cache_manager::CacheManagerConfig;
 use datafusion::execution::disk_manager::DiskManagerBuilder;
+use datafusion::execution::memory_pool::{FairSpillPool, TrackConsumersPool};
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
-use datafusion::prelude::SessionConfig;
+use datafusion::prelude::{SessionConfig, SessionContext};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use object_store::ClientOptions;
@@ -21,6 +22,7 @@ use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::store::Store;
 use rdf_fusion_extensions::storage::QuadStorage;
 use std::env;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -141,14 +143,15 @@ pub async fn main() -> anyhow::Result<()> {
 
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
+    let mut session_config = SessionConfig::from_env()?;
     let runtime_env = build_runtime_env(args)?;
 
-    let mut session_config = SessionConfig::from_env()?;
     let rdf_fusion_options = RdfFusionOptions::from_env()?;
     session_config
         .options_mut()
         .extensions
         .insert(rdf_fusion_options.clone());
+
     let encoding = QuadStorageEncodingName::from_str(&args.storage.encoding)?;
     let location = Url::parse(&resolve_location(&args.storage.location)?)
         .context("Invalid object store URL")?;
@@ -183,6 +186,7 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
 
     let context = RdfFusionContextBuilder::new(storage)
         .with_runtime_env(Some(runtime_env))
+        .with_session_config(Some(session_config))
         .build()
         .context("Failed to create RDF Fusion Context")?;
     Ok(Store::new(context))
@@ -217,6 +221,7 @@ async fn create_delta_storage(
         DeltaQuadsStorageBuilder::new()
             .with_log_store(log_store)
             .with_load_mode(LoadMode::Load(Box::new(loading_state)))
+            .with_options(Some(rdf_fusion_options.clone()))
             .with_encoding(encoding)
             .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
             .build()
@@ -288,14 +293,19 @@ fn resolve_location(location: &str) -> anyhow::Result<String> {
 /// Builds the runtime environment from the given arguments.
 fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     let cache_config = CacheManagerConfig::default();
-    let mut builder = RuntimeEnvBuilder::new().with_cache_manager(cache_config);
-    if let Some(memory_limit) = args.runtime.memory_limit {
-        builder = builder
-            .with_memory_limit(memory_limit * 1024 * 1024, 1.0)
-            .with_disk_manager_builder(
-                DiskManagerBuilder::default()
-                    .with_max_temp_directory_size(250 * 1024 * 1024 * 1024),
-            );
+    let mut builder = RuntimeEnvBuilder::new()
+        .with_disk_manager_builder(DiskManagerBuilder::default())
+        .with_cache_manager(cache_config);
+
+    if let Ok(limit_str) = env::var("DATAFUSION_RUNTIME_MEMORY_LIMIT") {
+        let memory_limit = SessionContext::parse_capacity_limit(
+            "DATAFUSION_RUNTIME_MEMORY_LIMIT",
+            &limit_str,
+        )?;
+        builder = builder.with_memory_pool(Arc::new(TrackConsumersPool::new(
+            FairSpillPool::new(memory_limit),
+            NonZeroUsize::new(5).unwrap(),
+        )));
     }
     let registry = Arc::clone(&builder.object_store_registry);
 

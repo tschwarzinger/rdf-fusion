@@ -78,7 +78,7 @@ impl RdfFusionParquetWriterProperties {
                         order
                             .iter()
                             .map(|c: &QuadComponent| SortingColumn {
-                                column_idx: c.gspo_index() as i32,
+                                column_idx: c.gspo_quad_table() as i32,
                                 descending: false,
                                 nulls_first: true,
                             })

@@ -180,7 +180,7 @@ pub fn detect_encoding_from_types(
         let other_encoding = encodings.try_get_encoding_name(arg_type);
         if other_encoding != Some(encoding_name) {
             return plan_err!(
-                "Arguments have different encodings at index 0 and {i}: {encoding_name:?} and {other_encoding:?}"
+                "Arguments have different encodings at quad_table 0 and {i}: {encoding_name:?} and {other_encoding:?}"
             );
         }
     }

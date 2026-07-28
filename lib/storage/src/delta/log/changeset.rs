@@ -1,6 +1,6 @@
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::{DeltaStorageLogVersionRange, EagerChangeset};
-use crate::index::IndexComponents;
+use crate::quad_tables::QuadTableName;
 use async_trait::async_trait;
 use datafusion::execution::SessionState;
 use datafusion::physical_plan::ExecutionPlan;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
 pub struct ChangesetContext {
-    pub intended_sort_order: Option<IndexComponents>,
+    pub intended_sort_order: Option<QuadTableName>,
 }
 
 /// A reference to a [`DeltaQuadsStorageLogChangeset`].
@@ -25,7 +25,7 @@ pub type DeltaQuadsStorageLogChangesetRef = Arc<dyn DeltaQuadsStorageLogChangese
 ///
 /// The first implementation is used for "small" changesets. For such changesets, we want to
 /// amortize the cost of pre-computing the changeset by sharing it for multiple consumers (e.g.,
-/// index updaters, queries). However, if the changeset is huge, it can be that the available memory
+/// quad_table updaters, queries). However, if the changeset is huge, it can be that the available memory
 /// cannot hold the entire changeset (e.g., on the initial insert of a dataset). Then, if possible,
 /// we fall back to a lazily computed changeset which directly accesses the log table.
 ///

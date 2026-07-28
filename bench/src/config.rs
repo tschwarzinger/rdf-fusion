@@ -128,17 +128,18 @@ impl BenchmarkingConfig {
                     })?;
         }
 
-        if let Some(val) = get_env("RDF_FUSION_BENCH_MEMORY_LIMIT") {
+        if let Some(val) = get_env("DATAFUSION_RUNTIME_MEMORY_LIMIT") {
             let val_str = val.as_ref();
-            let limit_mib: usize =
-                val_str
-                    .parse()
-                    .map_err(|_| BenchmarkingConfigError::InvalidEnvVar {
-                        env_var: "RDF_FUSION_BENCH_MEMORY_LIMIT".to_string(),
-                        value: val_str.to_string(),
-                        expected_type: "Number (MiB)".to_string(),
-                    })?;
-            self.memory_limit = Some(limit_mib * 1024 * 1024);
+            let limit: usize = datafusion::prelude::SessionContext::parse_capacity_limit(
+                "DATAFUSION_RUNTIME_MEMORY_LIMIT",
+                val_str,
+            )
+            .map_err(|_| BenchmarkingConfigError::InvalidEnvVar {
+                env_var: "DATAFUSION_RUNTIME_MEMORY_LIMIT".to_string(),
+                value: val_str.to_string(),
+                expected_type: "Capacity string (e.g. 1G)".to_string(),
+            })?;
+            self.memory_limit = Some(limit);
         }
 
         if let Some(val) = get_env("RDF_FUSION_BENCH_MAX_PARALLEL_TASKS") {
@@ -251,7 +252,7 @@ mod tests {
     fn test_config_from_env_valid() {
         let mut mock_env = HashMap::new();
         mock_env.insert("RDF_FUSION_BENCH_VERBOSE_RESULTS", "true");
-        mock_env.insert("RDF_FUSION_BENCH_MEMORY_LIMIT", "100");
+        mock_env.insert("DATAFUSION_RUNTIME_MEMORY_LIMIT", "100M");
         mock_env.insert("RDF_FUSION_BENCH_MAX_PARALLEL_TASKS", "8");
         mock_env.insert("RDF_FUSION_BENCH_RESULTS_POSTFIX", "pso");
 
@@ -281,14 +282,14 @@ mod tests {
     #[test]
     fn test_config_from_env_memory_limit_invalid() {
         let mut mock_env = HashMap::new();
-        mock_env.insert("RDF_FUSION_BENCH_MEMORY_LIMIT", "notanumber");
+        mock_env.insert("DATAFUSION_RUNTIME_MEMORY_LIMIT", "notanumber");
 
         let mut config = BenchmarkingConfig::new();
         let result = config.apply_env_vars(|k| mock_env.get(k));
 
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Invalid value for RDF_FUSION_BENCH_MEMORY_LIMIT: 'notanumber' is invalid. Expected type: Number (MiB)"
+            "Invalid value for DATAFUSION_RUNTIME_MEMORY_LIMIT: 'notanumber' is invalid. Expected type: Capacity string (e.g. 1G)"
         );
     }
 

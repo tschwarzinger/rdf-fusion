@@ -13,21 +13,21 @@ use datafusion::dataframe::DataFrame;
 use datafusion::execution::FunctionRegistry;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::{ExprSchemable, Extension, LogicalPlan, col};
-use datafusion::physical_plan::collect;
+use datafusion::physical_plan::ExecutionPlanProperties;
 use datafusion::prelude::{Expr, SessionContext, lit};
 use deltalake::DeltaTable;
 use deltalake::kernel::Action;
 use deltalake::kernel::transaction::CommitBuilder;
+use deltalake::operations::write::writer::{DeltaWriter, WriterConfig};
 use deltalake::protocol::{DeltaOperation, SaveMode};
-use deltalake::writer::{DeltaWriter, RecordBatchWriter};
 use futures::StreamExt;
+use rdf_fusion_common::StorageError;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_common::{NamedOrBlankNodeRef, StorageError};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{QuadStorageEncoding, TermEncoding};
 use rdf_fusion_extensions::storage::{
-    QuadStorage, QuadStorageGraphTarget, QuadStorageSnapshot, QuadStorageTransaction,
+    QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
 use rdf_fusion_logical::encoding::object_id::EncodeAsObjectIdNode;
 use std::fmt::{Debug, Formatter};
@@ -162,37 +162,6 @@ impl DeltaQuadsStorageTransaction {
     }
 
     /// Append a graph-level operation to the log.
-    pub async fn append_graph_operation(
-        &self,
-        operation: DeltaStorageLogOperation,
-        graph: ScalarValue,
-    ) -> Result<(), DeltaQuadsStorageError> {
-        let (index, _) = self
-            .table_schema
-            .fields()
-            .iter()
-            .enumerate()
-            .find(|(_, f)| f.name() == COL_GRAPH)
-            .expect("Schema validated");
-        let batch = RecordBatch::try_new(
-            Arc::new(
-                self.table_schema
-                    .project(&[index])
-                    .expect("Valid projection"),
-            ),
-            vec![
-                graph
-                    .to_array_of_size(1)
-                    .expect("Valid array representation"),
-            ],
-        )
-        .expect("Valid batch");
-        let context = SessionContext::new_with_state(self.state.clone());
-        let data_frame = context.read_batch(batch)?;
-        self.append_graph_operations(operation, data_frame).await
-    }
-
-    /// Append a graph-level operation to the log.
     pub async fn append_graph_operations(
         &self,
         operation: DeltaStorageLogOperation,
@@ -227,7 +196,7 @@ impl DeltaQuadsStorageTransaction {
             parts,
             table_schema,
             table,
-            state: _,
+            state,
             may_depend_on_database_state,
         } = self;
 
@@ -236,45 +205,97 @@ impl DeltaQuadsStorageTransaction {
             return Ok(());
         }
 
-        let mut writer = create_record_batch_writer(&table).await?;
-        let aligned_schema = Arc::new(table_schema.project(&(0..6).collect::<Vec<_>>())?);
+        let aligned_schema = Arc::clone(&table_schema);
+        let mut streams = Vec::new();
 
-        let mut add_actions = Vec::new();
-
-        let mut current_count = 0;
         for part in parts {
-            let mut batch_stream = part.execute_stream().await?;
-            while let Some(batch) = batch_stream.next().await {
-                let batch = batch?;
-                // Project columns into the target schema (make subject etc. nullable)
-                // Use only columns 1..7 for writing (op, seq_id, g, s, p, o)
-                // index 0 is _commit_version
-                let batch = RecordBatch::try_new(
-                    Arc::clone(&aligned_schema),
-                    batch.columns()[1..7].to_vec(),
-                )
-                .expect("Failed to align schema nullability");
-
-                current_count += batch.num_rows();
-                writer.write(batch).await?;
-
-                if current_count >= 1_000_000 {
-                    info!("Flushing ~1M operations during large transaction ...");
-                    let new_files = writer.flush().await?;
-                    add_actions.extend(new_files);
-                    current_count = 0;
-                    writer = create_record_batch_writer(&table).await?;
-                }
+            let plan = part.create_physical_plan().await?;
+            let partitions = plan.output_partitioning().partition_count();
+            for i in 0..partitions {
+                let stream = plan.execute(i, state.task_ctx())?;
+                streams.push(stream);
             }
         }
 
-        let new_files = writer.flush().await?;
-        add_actions.extend(new_files);
+        let streams = Arc::new(tokio::sync::Mutex::new(streams.into_iter()));
+        let mut tasks = Vec::new();
+        let target_partitions = state.config().target_partitions();
+        let workers = std::cmp::max(1, target_partitions);
+
+        for _ in 0..workers {
+            let table = Arc::clone(&table);
+            let aligned_schema = Arc::clone(&aligned_schema);
+            let streams = Arc::clone(&streams);
+
+            let task = datafusion::common::runtime::SpawnedTask::spawn(async move {
+                let mut writer =
+                    create_record_batch_writer(&table, Arc::clone(&aligned_schema))
+                        .await?;
+                let mut add_actions = Vec::new();
+                let mut current_count = 0;
+
+                loop {
+                    let mut batch_stream = {
+                        let mut lock = streams.lock().await;
+                        match lock.next() {
+                            Some(stream) => stream,
+                            None => break,
+                        }
+                    };
+
+                    while let Some(batch) = batch_stream.next().await {
+                        let batch = batch?;
+                        // Project columns into the target schema (make subject etc. nullable)
+                        // Use only columns 1..7 for writing (op, seq_id, g, s, p, o)
+                        // quad_table 0 is _commit_version
+                        let batch = RecordBatch::try_new(
+                            Arc::clone(&aligned_schema),
+                            batch.columns()[1..7].to_vec(),
+                        )
+                        .expect("Failed to align schema nullability");
+
+                        current_count += batch.num_rows();
+                        writer
+                            .write(&batch)
+                            .await
+                            .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
+
+                        if current_count >= 1_000_000 {
+                            info!("Flushing ~1M operations during large transaction ...");
+                            let new_files = writer.close().await.map_err(|e| {
+                                DeltaQuadsStorageError::Other(e.to_string())
+                            })?;
+                            add_actions.extend(new_files);
+                            current_count = 0;
+                            writer = create_record_batch_writer(
+                                &table,
+                                Arc::clone(&aligned_schema),
+                            )
+                            .await?;
+                        }
+                    }
+                }
+
+                let new_files = writer
+                    .close()
+                    .await
+                    .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
+                add_actions.extend(new_files);
+
+                Ok::<Vec<deltalake::kernel::Add>, DeltaQuadsStorageError>(add_actions)
+            });
+            tasks.push(task);
+        }
+
+        let mut add_actions = Vec::new();
+        for task in tasks {
+            let actions = task.await.expect("Task panicked")?;
+            add_actions.extend(actions.into_iter().map(Action::Add));
+        }
 
         let mut table = table.write().await;
         let table_state = table.state.as_ref().expect("Table loaded");
-        let mut commit_builder = CommitBuilder::default()
-            .with_actions(add_actions.into_iter().map(Action::Add).collect());
+        let mut commit_builder = CommitBuilder::default().with_actions(add_actions);
         if may_depend_on_database_state.load(Ordering::Relaxed) {
             commit_builder = commit_builder.with_max_retries(0);
         }
@@ -334,10 +355,30 @@ impl DeltaQuadsStorageTransaction {
             return Ok(quads);
         };
 
+        self.encode_dataframe(quads)
+    }
+
+    fn encode_dataframe(&self, df: DataFrame) -> Result<DataFrame, StorageError> {
+        let df_schema = df.schema();
         let target_encoding = self.storage.encoding();
+
+        let is_encoded = df_schema.fields().iter().all(|f| match &target_encoding {
+            QuadStorageEncoding::ObjectId(encoding) => {
+                *f.data_type() == encoding.object_id_data_type().into()
+            }
+            QuadStorageEncoding::PlainTerm => {
+                f.data_type() == PLAIN_TERM_ENCODING.data_type()
+            }
+            QuadStorageEncoding::String => f.data_type() == STRING_ENCODING.data_type(),
+        });
+
+        if is_encoded {
+            return Ok(df);
+        }
+
         match target_encoding {
             QuadStorageEncoding::ObjectId(encoding) => {
-                let (state, logical_plan) = quads.into_parts();
+                let (state, logical_plan) = df.into_parts();
                 let node = EncodeAsObjectIdNode::try_new(
                     logical_plan,
                     encoding.object_id_data_type(),
@@ -356,7 +397,7 @@ impl DeltaQuadsStorageTransaction {
 
                 let mut decode_udf = None;
                 let mut proj_exprs = Vec::new();
-                for field in quads_schema.fields() {
+                for field in df_schema.fields() {
                     let col_expr = col(field.name().clone());
                     if matches!(
                         field.data_type(),
@@ -379,7 +420,7 @@ impl DeltaQuadsStorageTransaction {
                         proj_exprs.push(col_expr);
                     }
                 }
-                Ok(quads.select(proj_exprs)?)
+                Ok(df.select(proj_exprs)?)
             }
             QuadStorageEncoding::String => {
                 let context = SessionContext::new_with_state(self.state.clone());
@@ -388,7 +429,7 @@ impl DeltaQuadsStorageTransaction {
 
                 let mut decode_udf = None;
                 let mut proj_exprs = Vec::new();
-                for field in quads_schema.fields() {
+                for field in df_schema.fields() {
                     let col_expr = col(field.name().clone());
                     if matches!(
                         field.data_type(),
@@ -413,88 +454,10 @@ impl DeltaQuadsStorageTransaction {
                         proj_exprs.push(col_expr);
                     }
                 }
-                Ok(quads.select(proj_exprs)?)
+                Ok(df.select(proj_exprs)?)
             }
         }
     }
-
-    /// Handles clear or drop graph operation.
-    async fn handle_clear_or_drop_graph(
-        &self,
-        graph: &QuadStorageGraphTarget,
-        op: DeltaStorageLogOperation,
-    ) -> Result<(), StorageError> {
-        match graph {
-            QuadStorageGraphTarget::NamedNode(graph_name) => {
-                let scalar_value = self
-                    .storage
-                    .storage_encoding()
-                    .encode_term_scalar(graph_name.as_ref().into())
-                    .await?;
-                self.append_graph_operation(op, scalar_value)
-                    .await
-                    .map_err(|e| StorageError::Other(Box::new(e)))?;
-            }
-            QuadStorageGraphTarget::BlankNode(blank_node) => {
-                let scalar_value = self
-                    .storage
-                    .storage_encoding()
-                    .encode_term_scalar(blank_node.as_ref().into())
-                    .await?;
-                self.append_graph_operation(op, scalar_value)
-                    .await
-                    .map_err(|e| StorageError::Other(Box::new(e)))?;
-            }
-            QuadStorageGraphTarget::DefaultGraph => {
-                let scalar_value = self
-                    .storage
-                    .storage_encoding()
-                    .create_null_scalar()
-                    .map_err(|e| StorageError::Other(Box::new(e)))?;
-                self.append_graph_operation(op, scalar_value)
-                    .await
-                    .map_err(|e| StorageError::Other(Box::new(e)))?;
-            }
-            QuadStorageGraphTarget::NamedGraphs | QuadStorageGraphTarget::AllGraphs => {
-                let snapshot = self.snapshot().await?;
-                let named_graphs = snapshot.named_graphs(&self.state).await?;
-                let schema = named_graphs.schema();
-                let mut batches = collect(named_graphs, self.state.task_ctx()).await?;
-                if matches!(graph, QuadStorageGraphTarget::AllGraphs) {
-                    let null_value =
-                        self.storage.storage_encoding().create_null_scalar()?;
-                    let default_graph_batch =
-                        RecordBatch::try_new(schema, vec![null_value.to_array()?])
-                            .expect("Schema should match");
-                    batches.push(default_graph_batch);
-                }
-
-                // Nothing to clear or drop
-                if batches.is_empty() {
-                    return Ok(());
-                }
-
-                let context = SessionContext::new_with_state(self.state.clone());
-                let data_frame = context.read_batches(batches)?;
-                self.append_graph_operations(op, data_frame)
-                    .await
-                    .map_err(|e| StorageError::Other(Box::new(e)))?;
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Returns a new writer for the log table.
-///
-/// Immediately drops the lock on `table` after creating the writer. This is necessary as the read
-/// lock will not be automatically promoted to a write lock.
-async fn create_record_batch_writer(
-    table: &RwLock<DeltaTable>,
-) -> Result<RecordBatchWriter, DeltaQuadsStorageError> {
-    let table = table.read().await;
-    let writer = RecordBatchWriter::for_table(&table)?;
-    Ok(writer)
 }
 
 #[async_trait]
@@ -599,34 +562,28 @@ impl QuadStorageTransaction for DeltaQuadsStorageTransaction {
 
     async fn create_named_graph(
         &self,
-        graph_name: NamedOrBlankNodeRef<'_>,
+        graphs: DataFrame,
     ) -> Result<Option<bool>, StorageError> {
-        let graph_batch = self
-            .storage
-            .storage_encoding()
-            .encode_term_scalar(graph_name.into())
-            .await?;
-        self.append_graph_operation(DeltaStorageLogOperation::CreateGraph, graph_batch)
+        let graphs = self.encode_dataframe(graphs)?;
+        self.append_graph_operations(DeltaStorageLogOperation::CreateGraph, graphs)
             .await
             .map_err(|e| StorageError::Other(Box::new(e)))?;
         Ok(None)
     }
 
-    async fn clear_graph(
-        &self,
-        graph: &QuadStorageGraphTarget,
-    ) -> Result<(), StorageError> {
-        self.handle_clear_or_drop_graph(graph, DeltaStorageLogOperation::ClearGraph)
-            .await?;
+    async fn clear_graph(&self, graphs: DataFrame) -> Result<(), StorageError> {
+        let graphs = self.encode_dataframe(graphs)?;
+        self.append_graph_operations(DeltaStorageLogOperation::ClearGraph, graphs)
+            .await
+            .map_err(|e| StorageError::Other(Box::new(e)))?;
         Ok(())
     }
 
-    async fn drop_graph(
-        &self,
-        graph: &QuadStorageGraphTarget,
-    ) -> Result<(), StorageError> {
-        self.handle_clear_or_drop_graph(graph, DeltaStorageLogOperation::DropGraph)
-            .await?;
+    async fn drop_graph(&self, graphs: DataFrame) -> Result<(), StorageError> {
+        let graphs = self.encode_dataframe(graphs)?;
+        self.append_graph_operations(DeltaStorageLogOperation::DropGraph, graphs)
+            .await
+            .map_err(|e| StorageError::Other(Box::new(e)))?;
         Ok(())
     }
 
@@ -648,4 +605,30 @@ impl Debug for DeltaQuadsStorageTransaction {
             .field("table", &self.table)
             .finish()
     }
+}
+
+async fn create_record_batch_writer(
+    table: &RwLock<DeltaTable>,
+    schema: Arc<Schema>,
+) -> Result<DeltaWriter, DeltaQuadsStorageError> {
+    use deltalake::table::config::TablePropertiesExt;
+
+    let table = table.read().await;
+    let table_state = table.state.as_ref().unwrap();
+    let table_props = table_state.table_config();
+
+    let config = WriterConfig::new(
+        schema,
+        table_state.metadata().partition_columns().to_vec(),
+        None,
+        Some(table_props.target_file_size()),
+        None,
+        table_props.num_indexed_cols(),
+        table_props
+            .data_skipping_stats_columns
+            .as_ref()
+            .map(|c| c.iter().map(|c| c.to_string()).collect::<Vec<_>>()),
+    );
+    let writer = DeltaWriter::new(table.object_store(), config);
+    Ok(writer)
 }

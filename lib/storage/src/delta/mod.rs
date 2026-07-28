@@ -1,9 +1,9 @@
 mod builder;
 mod error;
-mod index;
 mod log;
 mod objectids;
 mod planner;
+mod quad_table;
 mod refresh;
 mod scan_plan_builder;
 mod snapshot;

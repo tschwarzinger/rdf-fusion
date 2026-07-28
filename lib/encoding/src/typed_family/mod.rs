@@ -70,7 +70,7 @@ impl TypedFamilyArgs {
         self.args.iter()
     }
 
-    /// Returns the array at the given index.
+    /// Returns the array at the given quad_table.
     pub fn get(&self, index: usize) -> TypedFamilyArray {
         self.args[index].to_array(self.number_rows)
     }

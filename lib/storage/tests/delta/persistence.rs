@@ -1,4 +1,6 @@
-use crate::delta::{create_context, create_test_log_store, populate_storage};
+use crate::delta::{
+    create_context, create_test_log_store, create_test_session_context, populate_storage,
+};
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::execution::SessionStateBuilder;
@@ -15,7 +17,7 @@ use rdf_fusion_encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEnc
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_storage::delta::DeltaQuadsStorage;
 use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
-use rdf_fusion_storage::index::IndexComponents;
+use rdf_fusion_storage::quad_tables::QuadTableName;
 use std::sync::Arc;
 use url::Url;
 
@@ -33,20 +35,13 @@ async fn test_reload_storage_object_id() {
                 .await
                 .unwrap(),
         );
-
         populate_storage(Arc::clone(&storage), "http://example.org/s1").await;
-
-        storage
-            .delta_object_id_mapping()
-            .unwrap()
-            .flush()
-            .await
-            .unwrap();
     }
 
     // 2. Reload and verify
     {
-        let ctx = SessionContext::new();
+        let ctx = create_test_session_context(&log_store);
+
         let storage = DeltaQuadsStorage::try_load(
             &ctx.state(),
             &RdfFusionOptions::default(),
@@ -55,7 +50,20 @@ async fn test_reload_storage_object_id() {
         .await
         .unwrap();
 
-        assert!(storage.delta_object_id_mapping().is_some());
+        let mapping = storage
+            .delta_object_id_mapping()
+            .expect("Should have an object id mapping");
+        assert_eq!(
+            mapping
+                .dictionary()
+                .snapshot()
+                .await
+                .unwrap()
+                .len()
+                .await
+                .unwrap(),
+            3
+        );
         assert_eq!(storage.log().version().await, 1);
     }
 }
@@ -94,17 +102,17 @@ async fn test_reload_storage_plain_term() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_reload_storage_with_index_and_optimize() {
+async fn test_reload_storage_with_quad_table_and_optimize() {
     let log_store = create_test_log_store();
     let session = SessionStateBuilder::new().build();
 
-    // 1. Create storage with indexes
+    // 1. Create storage with quad tables
     {
         let storage = Arc::new(
             DeltaQuadsStorageBuilder::new()
                 .with_log_store(Arc::clone(&log_store))
                 .with_encoding(QuadStorageEncodingName::PlainTerm)
-                .with_indexes(vec![IndexComponents::GSPO])
+                .with_quad_tables(vec![QuadTableName::GSPO])
                 .build()
                 .await
                 .unwrap(),
@@ -145,7 +153,6 @@ async fn test_reload_storage_with_index_and_optimize() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_storage_object_id() {
     let log_store = create_test_log_store();
-    let session = SessionStateBuilder::new().build();
 
     // 1. Create and populate storage
     {
@@ -170,8 +177,10 @@ async fn test_load_storage_object_id() {
 
     // 2. Reload and verify
     {
+        let ctx = create_test_session_context(&log_store);
+
         let storage = DeltaQuadsStorage::try_load(
-            &session,
+            &ctx.state(),
             &RdfFusionOptions::default(),
             Arc::clone(&log_store),
         )
@@ -222,7 +231,7 @@ async fn test_concurrent_dictionary_inserts() {
                 StorageConfig::default(),
             )
             .unwrap();
-            let ctx = SessionContext::new();
+            let ctx = create_test_session_context(&log_store);
             let storage = Arc::new(
                 DeltaQuadsStorage::try_load(
                     &ctx.state(),
@@ -258,7 +267,7 @@ async fn test_concurrent_dictionary_inserts() {
         StorageConfig::default(),
     )
     .unwrap();
-    let ctx = SessionContext::new();
+    let ctx = create_test_session_context(&log_store);
     let storage = DeltaQuadsStorage::try_load(
         &ctx.state(),
         &RdfFusionOptions::default(),
@@ -275,8 +284,11 @@ async fn test_concurrent_dictionary_inserts() {
     // 10 overlapping_subj, 1 predicate, 500 unique objects (10 tasks * 5 batches * 10 objects)
     let expected_unique_terms = 10 + 1 + 500;
 
-    assert_eq!(local_dict.len().unwrap(), expected_unique_terms as u64);
-    assert_eq!(local_dict.read_claimed_object_ids().unwrap(), None);
+    assert_eq!(
+        local_dict.len().await.unwrap(),
+        expected_unique_terms as u64
+    );
+    assert_eq!(local_dict.read_claimed_object_ids().await.unwrap(), None);
 }
 
 fn create_bulk_quads(
@@ -317,5 +329,95 @@ fn create_bulk_quads(
         ],
     )
     .unwrap();
+
     ctx.read_batch(batch).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_parallel_encoding_streams() {
+    let object_store = Arc::new(InMemory::new());
+    let base_url = Url::parse("memory:///").unwrap();
+
+    let log_store = logstore_with(
+        Arc::clone(&object_store) as Arc<dyn ObjectStore>,
+        &base_url,
+        StorageConfig::default(),
+    )
+    .unwrap();
+    let storage = Arc::new(
+        DeltaQuadsStorageBuilder::new()
+            .with_log_store(Arc::clone(&log_store))
+            .with_encoding(QuadStorageEncodingName::ObjectId)
+            .build()
+            .await
+            .unwrap(),
+    );
+
+    // Create a context and register planners
+    let ctx = create_context(
+        Arc::clone(&storage) as Arc<dyn QuadStorage>,
+        Arc::clone(&log_store),
+    );
+
+    let transaction = storage.begin_transaction(&ctx.state()).await.unwrap();
+
+    // Generate 10,000 quads, enough to distribute across partitions
+    let mut graph_builder = PlainTermArrayElementBuilder::new();
+    let mut subject_builder = PlainTermArrayElementBuilder::new();
+    let mut predicate_builder = PlainTermArrayElementBuilder::new();
+    let mut object_builder = PlainTermArrayElementBuilder::new();
+
+    for i in 0..10_000 {
+        graph_builder.append_null();
+        subject_builder.append_named_node(NamedNodeRef::new_unchecked(&format!(
+            "http://example.org/s_{}",
+            i % 100
+        )));
+        predicate_builder
+            .append_named_node(NamedNodeRef::new_unchecked("http://example.org/p"));
+        object_builder.append_named_node(NamedNodeRef::new_unchecked(&format!(
+            "http://example.org/o_{i}",
+        )));
+    }
+
+    let data_type = PlainTermEncoding::data_type().clone();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new(COL_GRAPH, data_type.clone(), true),
+        Field::new(COL_SUBJECT, data_type.clone(), true),
+        Field::new(COL_PREDICATE, data_type.clone(), true),
+        Field::new(COL_OBJECT, data_type, true),
+    ]));
+
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(graph_builder.finish().into_array_ref()),
+            Arc::new(subject_builder.finish().into_array_ref()),
+            Arc::new(predicate_builder.finish().into_array_ref()),
+            Arc::new(object_builder.finish().into_array_ref()),
+        ],
+    )
+    .unwrap();
+
+    // We repartition the dataframe so we have 4 partitions
+    let df = ctx
+        .read_batch(batch)
+        .unwrap()
+        .repartition(datafusion::logical_expr::Partitioning::RoundRobinBatch(4))
+        .unwrap();
+
+    transaction.insert(df).await.unwrap();
+    transaction.commit().await.unwrap();
+
+    let mapping = storage.delta_object_id_mapping().unwrap();
+    mapping.flush().await.unwrap();
+
+    let snapshot = storage.snapshot().await.unwrap();
+    let quads_len = snapshot.len(&ctx.state()).await.unwrap();
+    assert_eq!(quads_len, 10_000, "Quads table should have 10_000 rows");
+
+    let local_dict = mapping.dictionary().snapshot().await.unwrap();
+
+    // 100 unique subjects + 1 predicate + 10_000 objects = 10101
+    assert_eq!(local_dict.len().await.unwrap(), 10101);
 }

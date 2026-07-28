@@ -1,10 +1,9 @@
 use crate::EncodingName;
 use crate::encoding::TermEncoding;
 use crate::object_id::{
-    ObjectIdArray, ObjectIdDataType, ObjectIdDictionary, ObjectIdDictionaryError,
-    ObjectIdDictionaryRef, ObjectIdScalar,
+    ObjectIdArray, ObjectIdDataType, ObjectIdDictionary, ObjectIdDictionaryRef,
+    ObjectIdScalar,
 };
-use crate::plain_term::{PlainTermArray, PlainTermScalar};
 use datafusion::arrow::array::ArrayRef;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::ScalarValue;
@@ -103,31 +102,6 @@ impl ObjectIdEncoding {
     /// Returns the mapping that is used to encode and decode object ids.
     pub fn mapping(&self) -> &ObjectIdDictionaryRef {
         &self.mapping
-    }
-
-    /// Encodes a [`PlainTermScalar`] into an [`ObjectIdScalar`].
-    ///
-    /// See also [`ObjectIdDictionary::encode_scalar`].
-    pub async fn encode_scalar(
-        self: &Arc<Self>,
-        term: &PlainTermScalar,
-    ) -> Result<ObjectIdScalar, ObjectIdDictionaryError> {
-        let scalar = self.mapping.encode_scalar(term).await?;
-        ObjectIdScalar::try_new(Arc::clone(self), scalar)
-            .map_err(|e| ObjectIdDictionaryError::IllegalArgument(e.to_string()))
-    }
-
-    /// Encodes a [`PlainTermArray`] into an [`ObjectIdArray`].
-    ///
-    /// See also [`ObjectIdDictionary::encode_array`].
-    pub async fn encode_array(
-        self: &Arc<Self>,
-        array: &PlainTermArray,
-    ) -> Result<ObjectIdArray, ObjectIdDictionaryError> {
-        self.mapping
-            .encode_array(array)
-            .await
-            .map(|oids| ObjectIdArray::try_new(Arc::clone(self), oids).unwrap())
     }
 }
 

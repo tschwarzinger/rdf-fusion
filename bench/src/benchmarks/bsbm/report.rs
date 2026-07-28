@@ -101,12 +101,15 @@ impl<TUseCase: BsbmUseCase> BsbmReport<TUseCase> {
     fn write_query_details(
         &self,
         output_directory: &Path,
-        index: usize,
+        quad_table: usize,
     ) -> anyhow::Result<()> {
-        let query_i_path = output_directory.join(format!("query{index}"));
+        let query_i_path = output_directory.join(format!("query{quad_table}"));
         fs::create_dir_all(&query_i_path).context("Cannot create query directory")?;
 
-        let details = self.details.get(index).context("Cannot get explanation")?;
+        let details = self
+            .details
+            .get(quad_table)
+            .context("Cannot get explanation")?;
 
         self.dump_query_text(&query_i_path.join("0_query.txt"), details)?;
         self.dump_query_result_summary(&query_i_path.join("1_summary.txt"), details)?;

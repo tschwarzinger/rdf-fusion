@@ -207,14 +207,18 @@ impl QuadPattern {
                 for g in graphs {
                     match g.as_ref() {
                         GraphNameRef::NamedNode(nn) => {
-                            literals.push(lit(storage_encoding
-                                .encode_term_scalar(nn.into())
-                                .await?));
+                            let term =
+                                storage_encoding.try_encode_term(nn.into()).await?;
+                            if let Some(term) = term {
+                                literals.push(lit(term))
+                            };
                         }
                         GraphNameRef::BlankNode(bn) => {
-                            literals.push(lit(storage_encoding
-                                .encode_term_scalar(bn.into())
-                                .await?));
+                            let term =
+                                storage_encoding.try_encode_term(bn.into()).await?;
+                            if let Some(term) = term {
+                                literals.push(lit(term))
+                            };
                         }
                         GraphNameRef::DefaultGraph => include_default = true,
                     };
@@ -262,10 +266,13 @@ impl QuadPattern {
                 };
 
                 if let Some(term) = term {
-                    result.push(
-                        col(*col_name)
-                            .eq(lit(storage_encoding.encode_term_scalar(term).await?)),
-                    );
+                    let term = storage_encoding.try_encode_term(term).await?;
+                    let expr = if let Some(term) = term {
+                        col(*col_name).eq(lit(term))
+                    } else {
+                        lit(false)
+                    };
+                    result.push(expr);
                 }
             }
         }

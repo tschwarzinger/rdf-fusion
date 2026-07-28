@@ -54,7 +54,7 @@ pub trait FamilyArray: Sized + Send + Sync + Clone + Debug {
     /// Consumes this [`FamilyArray`] and converts it into the [`ArrayRef`].
     fn into_array_ref(self) -> ArrayRef;
 
-    /// Returns whether the value at the given index is null.
+    /// Returns whether the value at the given quad_table is null.
     ///
     /// The default implementation uses the [`is_not_null`] kernel for computing the [`NullBuffer`].
     /// This is necessary for arrays that do not contain a [`NullBuffer`] themselves (e.g., Union).

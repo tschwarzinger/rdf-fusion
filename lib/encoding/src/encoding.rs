@@ -25,9 +25,9 @@ pub trait EncodingArray: Clone {
     /// Consumes `self` and returns the inner array.
     fn into_array_ref(self) -> ArrayRef;
 
-    /// Extracts a scalar from this array at `index`.
+    /// Extracts a scalar from this array at `quad_table`.
     ///
-    /// Returns an error if the `index` is out of bounds.
+    /// Returns an error if the `quad_table` is out of bounds.
     fn try_as_scalar(
         &self,
         index: usize,

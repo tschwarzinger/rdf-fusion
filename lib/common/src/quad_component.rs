@@ -1,7 +1,7 @@
 use crate::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use std::fmt::{Display, Formatter};
 
-/// Represents what part of an RDF quad is index at the given position.
+/// Represents what part of an RDF quad is quad_table at the given position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum QuadComponent {
     /// The graph name
@@ -36,8 +36,8 @@ impl QuadComponent {
         ]
     }
 
-    /// Returns the index of the component in an GSPO quad pattern.
-    pub fn gspo_index(&self) -> usize {
+    /// Returns the quad_table of the component in an GSPO quad pattern.
+    pub fn gspo_quad_table(&self) -> usize {
         match self {
             QuadComponent::GraphName => 0,
             QuadComponent::Subject => 1,

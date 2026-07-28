@@ -24,6 +24,7 @@ async fn test_transaction_without_claim_abort_persists_claim() {
             .await
             .unwrap()
             .read_claimed_object_ids()
+            .await
             .unwrap()
             .unwrap(),
         (0, 9223372036854775807)
@@ -54,6 +55,7 @@ async fn test_transaction_with_claim_does_not_decrease_claim() {
             .await
             .unwrap()
             .read_claimed_object_ids()
+            .await
             .unwrap()
             .unwrap()
             .0,

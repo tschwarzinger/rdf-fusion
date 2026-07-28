@@ -9,6 +9,7 @@ pub use mapping::*;
 #[cfg(test)]
 mod tests {
     use crate::delta::objectids::DeltaObjectIdDictionary;
+    use datafusion::arrow::array::{Array, ArrayRef};
     use datafusion::arrow::util::pretty::pretty_format_columns;
     use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
     use insta::assert_snapshot;
@@ -32,7 +33,11 @@ mod tests {
         builder.append_null();
         let original_array = builder.finish();
 
-        let encoded = mapping.encode_array(&original_array).await.unwrap();
+        let mut txn = mapping.dictionary().transaction().await.unwrap();
+        let encoded: ArrayRef =
+            Arc::new(txn.encode_array(&original_array).await.unwrap());
+        txn.commit(1).await.unwrap();
+
         let decoded = mapping.decode_array(&encoded).await.unwrap();
         assert_eq!(decoded.inner().len(), 3);
 
@@ -54,7 +59,9 @@ mod tests {
         builder.append_null();
         let original_array = builder.finish();
 
-        let encoded = mapping.encode_array(&original_array).await.unwrap();
+        let mut txn = mapping.dictionary().transaction().await.unwrap();
+        let encoded: ArrayRef =
+            Arc::new(txn.encode_array(&original_array).await.unwrap());
         assert_eq!(encoded.len(), 3);
         assert!(encoded.is_null(2));
     }
@@ -68,7 +75,9 @@ mod tests {
         builder.append_named_node(NamedNodeRef::new_unchecked("http://example.org/b"));
         let original_array = builder.finish();
 
-        let encoded = mapping.encode_array(&original_array).await.unwrap();
+        let mut txn = mapping.dictionary().transaction().await.unwrap();
+        let encoded: ArrayRef =
+            Arc::new(txn.encode_array(&original_array).await.unwrap());
         assert_snapshot!(
             pretty_format_columns("encoded", &[encoded]).unwrap(),
             @r"
@@ -91,8 +100,11 @@ mod tests {
         builder.append_named_node(NamedNodeRef::new_unchecked("http://example.org/b"));
         let original_array = builder.finish();
 
-        let encoded1 = mapping.encode_array(&original_array).await.unwrap();
-        let encoded2 = mapping.encode_array(&original_array).await.unwrap();
+        let mut txn = mapping.dictionary().transaction().await.unwrap();
+        let encoded1: ArrayRef =
+            Arc::new(txn.encode_array(&original_array).await.unwrap());
+        let encoded2: ArrayRef =
+            Arc::new(txn.encode_array(&original_array).await.unwrap());
         assert_eq!(encoded1.as_ref(), encoded2.as_ref());
     }
 

@@ -4,9 +4,12 @@ use crate::sparql::error::QueryEvaluationError;
 use crate::sparql::{
     RdfFusionQuery, RdfFusionUpdate, UpdateOptions, evaluate_query_with_snapshot,
 };
+
+use datafusion::dataframe::DataFrame;
 use futures::{StreamExt, TryStreamExt};
 use itertools::izip;
 use oxrdfio::RdfParser;
+
 use rdf_fusion_common::RdfFormat;
 use rdf_fusion_common::sparql::algebra::GraphTarget;
 use rdf_fusion_common::sparql::term::{
@@ -14,12 +17,13 @@ use rdf_fusion_common::sparql::term::{
 };
 use rdf_fusion_common::sparql::{GraphUpdateOperation, Query};
 use rdf_fusion_common::{
-    BlankNode, GraphName, NamedNodePattern, NamedOrBlankNode, NamedOrBlankNodeRef, Quad,
-    Term, TermPattern,
+    BlankNode, GraphName, NamedNodePattern, NamedOrBlankNode, Quad, Term, TermPattern,
 };
+
 use rdf_fusion_encoding::quads_to_plain_term_dataframe;
-use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
+use rdf_fusion_extensions::storage::QuadStorageTransaction;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
+use rdf_fusion_storage::utils::graph_target_to_plain_term_dataframe;
 use sparesults::QuerySolution;
 use std::collections::HashMap;
 use std::io;
@@ -64,8 +68,9 @@ pub async fn evaluate_update(
                 transaction.remove(df).await?;
             }
             GraphUpdateOperation::Clear { silent, graph } => {
-                let target = convert_graph_target(graph);
-                let res = transaction.clear_graph(&target).await;
+                let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
+                    .await?;
+                let res = transaction.clear_graph(df).await;
                 if let Err(e) = res {
                     if !silent {
                         return Err(QueryEvaluationError::Storage(e));
@@ -73,8 +78,9 @@ pub async fn evaluate_update(
                 }
             }
             GraphUpdateOperation::Drop { silent, graph } => {
-                let target = convert_graph_target(graph);
-                let res = transaction.drop_graph(&target).await;
+                let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
+                    .await?;
+                let res = transaction.drop_graph(df).await;
                 if let Err(e) = res {
                     if !silent {
                         return Err(QueryEvaluationError::Storage(e));
@@ -82,9 +88,16 @@ pub async fn evaluate_update(
                 }
             }
             GraphUpdateOperation::Create { silent, graph } => {
+                let df = create_graph_target_dataframe(
+                    ctx,
+                    transaction.as_ref(),
+                    &GraphTarget::NamedNode(graph.clone()),
+                )
+                .await?;
                 let res = transaction
-                    .create_named_graph(NamedOrBlankNodeRef::NamedNode(graph.into()))
-                    .await?;
+                    .create_named_graph(df)
+                    .await
+                    .map_err(QueryEvaluationError::Storage)?;
                 if let Some(false) = res {
                     if !silent {
                         return Err(QueryEvaluationError::GraphAlreadyExists(
@@ -249,13 +262,24 @@ fn convert_ground_term(term: rdf_fusion_common::sparql::term::GroundTerm) -> Ter
     }
 }
 
-fn convert_graph_target(graph: &GraphTarget) -> QuadStorageGraphTarget {
-    match graph {
-        GraphTarget::NamedNode(n) => QuadStorageGraphTarget::NamedNode(n.clone()),
-        GraphTarget::DefaultGraph => QuadStorageGraphTarget::DefaultGraph,
-        GraphTarget::NamedGraphs => QuadStorageGraphTarget::NamedGraphs,
-        GraphTarget::AllGraphs => QuadStorageGraphTarget::AllGraphs,
-    }
+async fn create_graph_target_dataframe(
+    ctx: &RdfFusionContext,
+    transaction: &dyn QuadStorageTransaction,
+    graph: &GraphTarget,
+) -> Result<DataFrame, QueryEvaluationError> {
+    let snapshot = transaction
+        .snapshot()
+        .await
+        .map_err(QueryEvaluationError::Storage)?;
+
+    graph_target_to_plain_term_dataframe(
+        ctx.session_context(),
+        &ctx.storage().encoding(),
+        snapshot.as_ref(),
+        &graph.clone().into(),
+    )
+    .await
+    .map_err(QueryEvaluationError::Storage)
 }
 
 struct QuadPatternSubstituter {

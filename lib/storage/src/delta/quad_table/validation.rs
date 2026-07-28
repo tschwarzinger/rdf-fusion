@@ -1,6 +1,6 @@
 use crate::delta::error::DeltaQuadsStorageError;
-use crate::delta::index::snapshot::DeltaQuadsStorageIndexSnapshot;
-use crate::index::IndexComponents;
+use crate::delta::quad_table::snapshot::DeltaQuadsQuadTableSnapshot;
+use crate::quad_tables::QuadTableName;
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::col;
@@ -8,10 +8,10 @@ use datafusion::prelude::SessionContext;
 use deltalake::delta_datafusion::DeltaTableProvider;
 use std::sync::Arc;
 
-/// Implements validation of a single [`DeltaQuadsStorageIndexSnapshot`].
-pub async fn validate_index(
+/// Implements validation of a single [`DeltaQuadsQuadTableSnapshot`].
+pub async fn validate_quad_table(
     state: &SessionState,
-    snapshot: &DeltaQuadsStorageIndexSnapshot,
+    snapshot: &DeltaQuadsQuadTableSnapshot,
 ) -> Result<(), DeltaQuadsStorageError> {
     let provider = DeltaTableProvider::try_new(
         snapshot.eager_snapshot().clone(),
@@ -28,7 +28,7 @@ pub async fn validate_index(
     // Validate No Duplicates by comparing the total count of rows with the distinct count.
     async fn check_duplicates(
         df: DataFrame,
-        components: &IndexComponents,
+        components: &QuadTableName,
     ) -> Result<(), DeltaQuadsStorageError> {
         let total_count = df.clone().count().await?;
 
@@ -42,7 +42,7 @@ pub async fn validate_index(
 
         if total_count != distinct_count {
             return Err(DeltaQuadsStorageError::Other(format!(
-                "Validation failed: Index contains duplicates. Total: {total_count}, Distinct: {distinct_count}"
+                "Validation failed: QuadTable contains duplicates. Total: {total_count}, Distinct: {distinct_count}"
             )));
         }
 
@@ -65,7 +65,7 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
-    async fn test_validate_index_success_no_duplicates() {
+    async fn test_validate_quad_table_success_no_duplicates() {
         let ctx = setup_context();
         let schema = test_schema();
 
@@ -76,8 +76,8 @@ mod tests {
             vec!["o1", "o2", "o3"],
         );
 
-        let snapshot = create_snapshot(batch, IndexComponents::GSPO).await;
-        let result = validate_index(&ctx.state(), &snapshot).await;
+        let snapshot = create_snapshot(batch, QuadTableName::GSPO).await;
+        let result = validate_quad_table(&ctx.state(), &snapshot).await;
 
         assert!(
             result.is_ok(),
@@ -86,7 +86,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_validate_index_fails_with_duplicates() {
+    async fn test_validate_quad_table_fails_with_duplicates() {
         let ctx = setup_context();
         let schema = test_schema();
 
@@ -97,12 +97,12 @@ mod tests {
             vec!["o1", "o1", "o3"],
         );
 
-        let snapshot = create_snapshot(batch, IndexComponents::GSPO).await;
-        let result = validate_index(&ctx.state(), &snapshot).await;
+        let snapshot = create_snapshot(batch, QuadTableName::GSPO).await;
+        let result = validate_quad_table(&ctx.state(), &snapshot).await;
 
         assert_eq!(
             result.unwrap_err().to_string(),
-            "Validation failed: Index contains duplicates. Total: 3, Distinct: 2"
+            "Validation failed: QuadTable contains duplicates. Total: 3, Distinct: 2"
         );
     }
 
@@ -112,11 +112,11 @@ mod tests {
     }
 
     /// Creates an in-memory Delta table from the provided RecordBatch and wraps it in a
-    /// [`DeltaQuadsStorageIndexSnapshot`].
+    /// [`DeltaQuadsQuadTableSnapshot`].
     async fn create_snapshot(
         batch: RecordBatch,
-        components: IndexComponents,
-    ) -> DeltaQuadsStorageIndexSnapshot {
+        components: QuadTableName,
+    ) -> DeltaQuadsQuadTableSnapshot {
         let fields = batch
             .schema()
             .fields()
@@ -141,7 +141,7 @@ mod tests {
             .clone();
 
         // The encoding doesn't match the given input. This may break in the future.
-        DeltaQuadsStorageIndexSnapshot::new(
+        DeltaQuadsQuadTableSnapshot::new(
             QuadStorageEncoding::PlainTerm,
             snapshot,
             log_store,

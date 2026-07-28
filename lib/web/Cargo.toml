@@ -27,6 +27,7 @@ serde_urlencoded.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 anyhow.workspace = true
+tokio-stream = "0.1.18"
 
 [dev-dependencies]
 criterion.workspace = true

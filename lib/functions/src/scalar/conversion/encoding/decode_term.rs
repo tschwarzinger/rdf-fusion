@@ -81,7 +81,7 @@ impl ScalarUDFImpl for DecodeTermUDF {
         let input_type = args.arg_fields[0].data_type();
         if !is_object_id_data_type(input_type) {
             return exec_err!(
-                "DecodeTermUDF requires an ObjectId encoded argument (Int64, UInt64, Int32, UInt32, FixedSizeBinary), but got: {:?}",
+                "DecodeTermUDF requires an ObjectId encoded argument (Int64, UInt64, FixedSizeBinary), but got: {:?}",
                 input_type
             );
         }

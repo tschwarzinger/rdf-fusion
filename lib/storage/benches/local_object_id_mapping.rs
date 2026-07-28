@@ -8,7 +8,7 @@ use datafusion::arrow::array::Int64Array;
 use rdf_fusion_common::{Literal, NamedNode, Term};
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use rdf_fusion_storage::local_object_ids::{
-    InMemoryObjectIdDictionary, LocalObjectIdDictionary, RocksDBObjectIdDictionary,
+    InMemoryObjectIdDictionary, LmdbObjectIdDictionary, LocalObjectIdDictionary,
     StaticObjectIdClaimer,
 };
 
@@ -69,14 +69,14 @@ fn get_envs() -> Vec<BenchEnv> {
     let _ = std::fs::remove_dir_all(&path1);
     let _ = std::fs::remove_dir_all(&path2);
 
-    let rocksdb = RocksDBObjectIdDictionary::try_new(
+    let lmdb = LmdbObjectIdDictionary::try_new(
         path1.clone(),
         1024 * 1024 * 10,
         Arc::new(StaticObjectIdClaimer),
     )
     .unwrap();
 
-    let rocksdb_no_cache = RocksDBObjectIdDictionary::try_new(
+    let lmdb_no_cache = LmdbObjectIdDictionary::try_new(
         path2.clone(),
         0,
         Arc::new(StaticObjectIdClaimer),
@@ -92,13 +92,13 @@ fn get_envs() -> Vec<BenchEnv> {
             rocksdb_path: None,
         },
         BenchEnv {
-            name: "rocksdb",
-            dict: Arc::new(rocksdb),
+            name: "lmdb",
+            dict: Arc::new(lmdb),
             rocksdb_path: Some(path1),
         },
         BenchEnv {
-            name: "rocksdb_no_cache",
-            dict: Arc::new(rocksdb_no_cache),
+            name: "lmdb_no_cache",
+            dict: Arc::new(lmdb_no_cache),
             rocksdb_path: Some(path2),
         },
     ]
@@ -140,6 +140,7 @@ fn bench_decode_array(c: &mut Criterion) {
                     let snapshot = env.dict.snapshot().await.unwrap();
                     let decoded = snapshot
                         .resolve_plain_terms(std::hint::black_box(&shuffled_id_array))
+                        .await
                         .unwrap();
                     std::hint::black_box(decoded);
                 })
@@ -204,7 +205,7 @@ fn bench_encode_array_non_existing(c: &mut Criterion) {
                 "rdf-fusion-bench-rocksdb-non-ex-{}",
                 rand::random::<u64>()
             ));
-            let dict = RocksDBObjectIdDictionary::try_new(
+            let dict = LmdbObjectIdDictionary::try_new(
                 path.clone(),
                 1024 * 1024 * 10,
                 Arc::new(StaticObjectIdClaimer),

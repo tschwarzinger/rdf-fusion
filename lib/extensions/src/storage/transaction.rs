@@ -2,7 +2,8 @@ use crate::storage::snapshot::QuadStorageSnapshot;
 use async_trait::async_trait;
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
-use rdf_fusion_common::{BlankNode, NamedNode, NamedOrBlankNodeRef, StorageError};
+use rdf_fusion_common::sparql::algebra::GraphTarget;
+use rdf_fusion_common::{BlankNode, NamedNode, StorageError};
 use std::sync::Arc;
 
 /// Represents a transaction on a [`QuadStorage`](crate::storage::QuadStorage).
@@ -19,23 +20,17 @@ pub trait QuadStorageTransaction: Send + Sync {
     /// Removes the given quad from the storage.
     async fn remove(&self, quads: DataFrame) -> Result<Option<bool>, StorageError>;
 
-    /// Creates an empty named graph in the storage.
+    /// Creates empty named graphs in the storage.
     async fn create_named_graph(
         &self,
-        graph_name: NamedOrBlankNodeRef<'_>,
+        graphs: DataFrame,
     ) -> Result<Option<bool>, StorageError>;
 
     /// Clears the entire graph.
-    async fn clear_graph(
-        &self,
-        graph: &QuadStorageGraphTarget,
-    ) -> Result<(), StorageError>;
+    async fn clear_graph(&self, graphs: DataFrame) -> Result<(), StorageError>;
 
     /// Removes a graph from the storage.
-    async fn drop_graph(
-        &self,
-        graph: &QuadStorageGraphTarget,
-    ) -> Result<(), StorageError>;
+    async fn drop_graph(&self, graphs: DataFrame) -> Result<(), StorageError>;
 
     /// Returns the number of quads in the storage.
     async fn len(&self, state: &SessionState) -> Result<usize, StorageError>;
@@ -56,4 +51,15 @@ pub enum QuadStorageGraphTarget {
     NamedGraphs,
     /// All graphs (named graphs including the default graph).
     AllGraphs,
+}
+
+impl From<GraphTarget> for QuadStorageGraphTarget {
+    fn from(value: GraphTarget) -> Self {
+        match value {
+            GraphTarget::NamedNode(nn) => QuadStorageGraphTarget::NamedNode(nn),
+            GraphTarget::DefaultGraph => QuadStorageGraphTarget::DefaultGraph,
+            GraphTarget::NamedGraphs => QuadStorageGraphTarget::NamedGraphs,
+            GraphTarget::AllGraphs => QuadStorageGraphTarget::AllGraphs,
+        }
+    }
 }

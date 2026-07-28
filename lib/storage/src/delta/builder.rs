@@ -1,6 +1,6 @@
 use crate::delta::DeltaQuadsStorage;
 use crate::delta::error::DeltaQuadsStorageError;
-use crate::index::IndexComponents;
+use crate::quad_tables::QuadTableName;
 use datafusion::execution::SessionState;
 use deltalake::logstore::{IORuntime, LogStoreRef, StorageConfig, logstore_with};
 use futures::StreamExt;
@@ -29,7 +29,7 @@ pub struct DeltaQuadsStorageBuilder {
     log_store: Option<LogStoreRef>,
     options: Option<RdfFusionOptions>,
     encoding: QuadStorageEncodingName,
-    indexes: Vec<IndexComponents>,
+    quad_tables: Vec<QuadTableName>,
     log_max_age: Option<Duration>,
 }
 
@@ -41,10 +41,10 @@ impl DeltaQuadsStorageBuilder {
             log_store: None,
             options: None,
             encoding: QuadStorageEncodingName::ObjectId,
-            indexes: vec![
-                IndexComponents::GSPO,
-                IndexComponents::GPOS,
-                IndexComponents::GOSP,
+            quad_tables: vec![
+                QuadTableName::GSPO,
+                QuadTableName::GPOS,
+                QuadTableName::GOSP,
             ],
             log_max_age: None,
         }
@@ -74,9 +74,9 @@ impl DeltaQuadsStorageBuilder {
         self
     }
 
-    /// Sets which indexes the delta storage should use.
-    pub fn with_indexes(mut self, indexes: Vec<IndexComponents>) -> Self {
-        self.indexes = indexes;
+    /// Sets which quad tables the delta storage should use.
+    pub fn with_quad_tables(mut self, quad_tables: Vec<QuadTableName>) -> Self {
+        self.quad_tables = quad_tables;
         self
     }
 
@@ -146,7 +146,7 @@ impl DeltaQuadsStorageBuilder {
             let result = DeltaQuadsStorage::new_at_location(
                 &options,
                 self.encoding,
-                self.indexes,
+                self.quad_tables,
                 log_store,
             )
             .await?;

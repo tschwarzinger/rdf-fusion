@@ -140,19 +140,27 @@ impl QuadStorageEncoding {
     }
 
     /// Encodes the given term into a [ScalarValue] that can be used for filtering.
-    pub async fn encode_term_scalar(&self, term: TermRef<'_>) -> DFResult<ScalarValue> {
+    ///
+    /// If `Ok(None)` is returned, the mapping for the object id does not exist.
+    pub async fn try_encode_term(
+        &self,
+        term: TermRef<'_>,
+    ) -> DFResult<Option<ScalarValue>> {
         match self {
-            QuadStorageEncoding::PlainTerm => Ok(PLAIN_TERM_ENCODING
-                .encode_term(Ok(term))?
-                .into_scalar_value()),
+            QuadStorageEncoding::PlainTerm => Ok(Some(
+                PLAIN_TERM_ENCODING
+                    .encode_term(Ok(term))?
+                    .into_scalar_value(),
+            )),
             QuadStorageEncoding::ObjectId(enc) => {
                 let pt_scalar = PLAIN_TERM_ENCODING.encode_term(Ok(term))?;
-                let val = enc.encode_scalar(&pt_scalar).await?;
-                Ok(val.into_scalar_value())
+                let mapping = enc.mapping();
+                let val = mapping.try_get_object_id(&pt_scalar).await?;
+                Ok(val)
             }
-            QuadStorageEncoding::String => {
-                Ok(STRING_ENCODING.encode_term(Ok(term))?.into_scalar_value())
-            }
+            QuadStorageEncoding::String => Ok(Some(
+                STRING_ENCODING.encode_term(Ok(term))?.into_scalar_value(),
+            )),
         }
     }
 

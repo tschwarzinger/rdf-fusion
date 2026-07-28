@@ -3,12 +3,12 @@ use datafusion::prelude::SessionConfig;
 use rdf_fusion::api::storage::QuadStorage;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::storage::delta::DeltaQuadsStorage;
-use rdf_fusion::storage::index::IndexComponents;
+use rdf_fusion::storage::quad_tables::QuadTableName;
 use rdf_fusion_testsuite::storage::StorageTestSuiteBuilder;
 use std::sync::Arc;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn delta_storage_testsuite_without_index() -> Result<()> {
+async fn delta_storage_testsuite_without_quad_table() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_plain_term_encoding(vec![]).await
     })
@@ -21,12 +21,12 @@ async fn delta_storage_testsuite_without_index() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn delta_storage_testsuite_with_index() -> Result<()> {
+async fn delta_storage_testsuite_with_quad_table() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_plain_term_encoding(vec![
-            IndexComponents::GSPO,
-            IndexComponents::GPOS,
-            IndexComponents::GOSP,
+            QuadTableName::GSPO,
+            QuadTableName::GPOS,
+            QuadTableName::GOSP,
         ])
         .await
     })
@@ -39,7 +39,7 @@ async fn delta_storage_testsuite_with_index() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn delta_storage_object_id_testsuite_without_index() -> Result<()> {
+async fn delta_storage_object_id_testsuite_without_quad_table() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_object_id(vec![]).await
     })
@@ -52,12 +52,12 @@ async fn delta_storage_object_id_testsuite_without_index() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn delta_storage_object_id_testsuite_with_index() -> Result<()> {
+async fn delta_storage_object_id_testsuite_with_quad_table() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_object_id(vec![
-            IndexComponents::GSPO,
-            IndexComponents::GPOS,
-            IndexComponents::GOSP,
+            QuadTableName::GSPO,
+            QuadTableName::GPOS,
+            QuadTableName::GOSP,
         ])
         .await
     })
@@ -70,7 +70,7 @@ async fn delta_storage_object_id_testsuite_with_index() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn delta_storage_string_testsuite_without_index() -> Result<()> {
+async fn delta_storage_string_testsuite_without_quad_table() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_string(vec![]).await
     })
@@ -83,12 +83,12 @@ async fn delta_storage_string_testsuite_without_index() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn delta_storage_string_testsuite_with_index() -> Result<()> {
+async fn delta_storage_string_testsuite_with_quad_table() -> Result<()> {
     StorageTestSuiteBuilder::new(|| async {
         create_delta_storage_with_string(vec![
-            IndexComponents::GSPO,
-            IndexComponents::GPOS,
-            IndexComponents::GOSP,
+            QuadTableName::GSPO,
+            QuadTableName::GPOS,
+            QuadTableName::GOSP,
         ])
         .await
     })
@@ -101,30 +101,31 @@ async fn delta_storage_string_testsuite_with_index() -> Result<()> {
 }
 
 async fn create_delta_storage_with_plain_term_encoding(
-    indexes: Vec<IndexComponents>,
+    quad_tables: Vec<QuadTableName>,
 ) -> Result<Arc<dyn QuadStorage>, Error> {
     let mut config = SessionConfig::default();
     config.options_mut().execution.target_partitions = 1;
 
     let storage =
-        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::PlainTerm, indexes)
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::PlainTerm, quad_tables)
             .await;
     Ok(Arc::new(storage) as Arc<dyn QuadStorage>)
 }
 
 async fn create_delta_storage_with_object_id(
-    indexes: Vec<IndexComponents>,
+    quad_tables: Vec<QuadTableName>,
 ) -> Result<Arc<dyn QuadStorage>, Error> {
     let storage =
-        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::ObjectId, indexes)
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::ObjectId, quad_tables)
             .await;
     Ok(Arc::new(storage) as Arc<dyn QuadStorage>)
 }
 
 async fn create_delta_storage_with_string(
-    indexes: Vec<IndexComponents>,
+    quad_tables: Vec<QuadTableName>,
 ) -> Result<Arc<dyn QuadStorage>, Error> {
     let storage =
-        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::String, indexes).await;
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::String, quad_tables)
+            .await;
     Ok(Arc::new(storage) as Arc<dyn QuadStorage>)
 }

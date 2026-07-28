@@ -1,4 +1,4 @@
-use crate::load::load_queries;
+use crate::load_queries;
 use crate::parquet::{
     ParquetTestConfig, format_bytes, get_dumped_bytes, setup_test_store,
 };

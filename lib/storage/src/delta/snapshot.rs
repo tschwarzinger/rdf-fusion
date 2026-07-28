@@ -1,11 +1,11 @@
-use crate::delta::index::DeltaQuadsStorageIndexSnapshot;
 use crate::delta::log::{
     DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
 use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::planner::DeltaQuadsStoragePlanner;
+use crate::delta::quad_table::DeltaQuadsQuadTableSnapshot;
 use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
-use crate::parquet::reader::ChunkCache;
+use crate::object_store::CachedObjectStore;
 use async_trait::async_trait;
 use datafusion::common::Result as DFResult;
 use datafusion::common::stats::Precision;
@@ -28,35 +28,35 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct DeltaQuadsStorageSnapshot {
     log: Arc<DeltaQuadsStorageLog>,
-    indexes: Vec<DeltaQuadsStorageIndexSnapshot>,
+    quad_tables: Vec<DeltaQuadsQuadTableSnapshot>,
     encoding: QuadStorageEncoding,
     object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
     version: u64,
     options: DeltaStorageOptions,
     transactional_changeset: Option<DeltaQuadsStorageLogChangesetRef>,
-    chunk_cache: Arc<ChunkCache>,
+    cached_store: Arc<CachedObjectStore>,
 }
 
 impl DeltaQuadsStorageSnapshot {
     /// Creates a new [`DeltaQuadsStorageSnapshot`].
     pub fn new(
         log: Arc<DeltaQuadsStorageLog>,
-        indexes: Vec<DeltaQuadsStorageIndexSnapshot>,
+        quad_tables: Vec<DeltaQuadsQuadTableSnapshot>,
         encoding: QuadStorageEncoding,
         object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
         options: DeltaStorageOptions,
         version: u64,
-        chunk_cache: Arc<ChunkCache>,
+        cached_store: Arc<CachedObjectStore>,
     ) -> Self {
         Self {
             log,
-            indexes,
+            quad_tables,
             encoding,
             object_id_mapping,
             version,
             options,
             transactional_changeset: None,
-            chunk_cache,
+            cached_store,
         }
     }
 
@@ -64,12 +64,12 @@ impl DeltaQuadsStorageSnapshot {
         &self.log
     }
 
-    pub fn chunk_cache(&self) -> &Arc<ChunkCache> {
-        &self.chunk_cache
+    pub fn cached_store(&self) -> &Arc<CachedObjectStore> {
+        &self.cached_store
     }
 
-    pub fn indexes(&self) -> &[DeltaQuadsStorageIndexSnapshot] {
-        &self.indexes
+    pub fn quad_tables(&self) -> &[DeltaQuadsQuadTableSnapshot] {
+        &self.quad_tables
     }
 
     pub fn encoding(&self) -> &QuadStorageEncoding {
@@ -144,8 +144,8 @@ impl QuadStorageSnapshot for DeltaQuadsStorageSnapshot {
             QuadPattern::all_quads(),
             self.encoding.clone(),
         )
-        .with_cache(Arc::clone(&self.chunk_cache))
-        .with_best_index(&self.indexes)
+        .with_object_store(Arc::clone(&self.cached_store))
+        .with_best_quad_table(&self.quad_tables)
         .map_err(|e| StorageError::Other(Box::new(e)))?
         .with_changeset_for_log(&self.log, Some(self.version))
         .await

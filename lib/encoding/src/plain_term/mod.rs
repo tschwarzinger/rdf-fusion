@@ -42,7 +42,7 @@ impl PlainTermArgs {
         self.arrays.is_empty()
     }
 
-    /// Returns the array at the given index.
+    /// Returns the array at the given quad_table.
     pub fn get(&self, index: usize) -> &PlainTermArray {
         &self.arrays[index]
     }

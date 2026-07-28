@@ -30,6 +30,15 @@ fn create_test_log_store() -> Arc<dyn LogStore> {
     .unwrap()
 }
 
+fn create_test_session_context(log_store: &Arc<dyn LogStore>) -> SessionContext {
+    let ctx = SessionContext::new();
+    ctx.runtime_env().register_object_store(
+        &Url::parse("memory://").unwrap(),
+        log_store.root_object_store(None),
+    );
+    ctx
+}
+
 fn create_test_quads(ctx: &SessionContext, s: &str) -> datafusion::dataframe::DataFrame {
     let data_type = PlainTermEncoding::data_type().clone();
     let schema = Arc::new(Schema::new(vec![

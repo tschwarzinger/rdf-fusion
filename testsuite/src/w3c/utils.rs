@@ -314,7 +314,7 @@ impl StaticQueryResults {
                             .object_for_subject_predicate(solution, rs::INDEX)
                             .map(|object| {
                                 let TermRef::Literal(l) = object else {
-                                    bail!("Invalid rs:index: {object}")
+                                    bail!("Invalid rs:quad_table: {object}")
                                 };
                                 Ok(u64::from_str(l.value())?)
                             })

@@ -193,7 +193,7 @@ impl Stream for SortedDistinctStream {
                     return Poll::Ready(Some(Ok(batch)));
                 }
 
-                // Slow path: collect indices of unique rows
+                // Slow path: collect quad_tables of unique rows
                 let mut unique_indices = Vec::with_capacity(batch.num_rows());
                 if start_idx == 0 {
                     unique_indices.push((0, 0));

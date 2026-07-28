@@ -20,11 +20,11 @@ pub async fn serialize_query_result(
     let response = match query_result {
         QueryResults::Solutions(solutions) => {
             let format = query_format?;
-            let result = serialize_solutions(solutions, format).await?;
+            let result = serialize_solutions(solutions, format)?;
             Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", format.media_type())
-                .body(result.into())
+                .body(result)
                 .context("Could not build response")
         }
         QueryResults::Boolean(result) => {

@@ -4,7 +4,7 @@ use rdf_fusion::store::Store;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_storage::delta::DeltaQuadsStorage;
-use rdf_fusion_storage::index::IndexComponents;
+use rdf_fusion_storage::quad_tables::QuadTableName;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::sync::Arc;
 use tokio::fs::File;
@@ -22,7 +22,7 @@ impl StoreTestContext {
     pub async fn new() -> Self {
         let storage = DeltaQuadsStorage::new_in_memory(
             QuadStorageEncodingName::ObjectId,
-            vec![IndexComponents::GPOS],
+            vec![QuadTableName::GPOS],
         )
         .await;
 
@@ -57,7 +57,7 @@ impl StoreTestContext {
         self
     }
 
-    /// Triggers store optimization (e.g., applying updates/deltas to indexes).
+    /// Triggers store optimization (e.g., applying updates/deltas to quad tables).
     pub async fn optimize(&self) -> &Self {
         self.store.optimize().await.unwrap();
         self
@@ -102,12 +102,20 @@ impl StoreTestContext {
     /// Creates a store, inserts a standard single quad, and optimizes it.
     pub async fn setup_basic() -> Self {
         let ctx = Self::new().await;
-        ctx.insert(&[Quad::new(
-            NamedNode::new_unchecked("http://example.org/s1"),
-            NamedNode::new_unchecked("http://example.org/p1"),
-            NamedNode::new_unchecked("http://example.org/o1"),
-            GraphNameRef::DefaultGraph,
-        )])
+        ctx.insert(&[
+            Quad::new(
+                NamedNode::new_unchecked("http://example.org/s1"),
+                NamedNode::new_unchecked("http://example.org/p1"),
+                NamedNode::new_unchecked("http://example.org/o1"),
+                GraphNameRef::DefaultGraph,
+            ),
+            Quad::new(
+                NamedNode::new_unchecked("http://example.org/o1"),
+                NamedNode::new_unchecked("http://example.org/p2"),
+                NamedNode::new_unchecked("http://example.org/o2"),
+                GraphNameRef::DefaultGraph,
+            ),
+        ])
         .await;
         ctx.optimize().await;
         ctx

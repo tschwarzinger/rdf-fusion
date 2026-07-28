@@ -24,7 +24,7 @@ pub async fn encode_and_resolve_terms(
     txn.commit(0).await?;
 
     let snapshot = mapping.snapshot().await?;
-    let resolved_array_ref = snapshot.resolve_plain_terms(&encoded_ids)?;
+    let resolved_array_ref = snapshot.resolve_plain_terms(&encoded_ids).await?;
 
     assert_eq!(input_array.inner().as_ref(), resolved_array_ref.as_ref());
     Ok(())
@@ -56,24 +56,30 @@ pub async fn add_global_batch_non_contiguous(
     txn.commit(0).await?;
 
     let snapshot = dictionary.snapshot().await?;
-    assert_eq!(snapshot.len().unwrap(), 2);
-    assert!(snapshot.read_claimed_object_ids()?.is_none());
+    assert_eq!(snapshot.len().await.unwrap(), 2);
+    assert!(snapshot.read_claimed_object_ids().await?.is_none());
 
     Ok(())
 }
 
 pub async fn synced_version(mapping: Arc<dyn LocalObjectIdDictionary>) -> Result<()> {
-    assert_eq!(mapping.snapshot().await?.get_synced_version()?, None);
+    assert_eq!(mapping.snapshot().await?.get_synced_version().await?, None);
 
     let txn = mapping.transaction().await?;
     txn.commit(42).await?;
 
-    assert_eq!(mapping.snapshot().await?.get_synced_version()?, Some(42));
+    assert_eq!(
+        mapping.snapshot().await?.get_synced_version().await?,
+        Some(42)
+    );
 
     let txn2 = mapping.transaction().await?;
     txn2.commit(100).await?;
 
-    assert_eq!(mapping.snapshot().await?.get_synced_version()?, Some(100));
+    assert_eq!(
+        mapping.snapshot().await?.get_synced_version().await?,
+        Some(100)
+    );
 
     Ok(())
 }
@@ -88,7 +94,7 @@ pub async fn transaction_commit(dict: Arc<dyn LocalObjectIdDictionary>) -> Resul
     txn.commit(0).await?;
 
     let snapshot = dict.snapshot().await?;
-    let resolved = snapshot.resolve_plain_terms(&ids)?;
+    let resolved = snapshot.resolve_plain_terms(&ids).await?;
     assert_eq!(resolved.len(), 2);
     Ok(())
 }
@@ -101,9 +107,9 @@ pub async fn transaction_abort(dict: Arc<dyn LocalObjectIdDictionary>) -> Result
     txn.abort().await?;
 
     let snapshot = dict.snapshot().await?;
-    assert!(snapshot.resolve_plain_terms(&ids).is_err());
+    assert!(snapshot.resolve_plain_terms(&ids).await.is_err());
     assert_eq!(
-        snapshot.read_claimed_object_ids()?.unwrap(),
+        snapshot.read_claimed_object_ids().await?.unwrap(),
         (0, 9223372036854775807)
     );
     Ok(())

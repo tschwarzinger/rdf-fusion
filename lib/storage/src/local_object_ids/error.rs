@@ -5,8 +5,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum LocalObjectIdError {
-    #[error("RocksDB error: {0}")]
-    RocksDb(#[from] rocksdb::Error),
+    #[error("Storage error: {0}")]
+    Storage(String),
     #[error("Object ID {0} not found")]
     NotFound(i64),
     #[error("{0}")]
@@ -17,6 +17,12 @@ pub enum LocalObjectIdError {
     Arrow(#[from] ArrowError),
     #[error(transparent)]
     DataFusion(#[from] DataFusionError),
+}
+
+impl From<heed::Error> for LocalObjectIdError {
+    fn from(error: heed::Error) -> Self {
+        LocalObjectIdError::Storage(error.to_string())
+    }
 }
 
 impl From<LocalObjectIdError> for DataFusionError {

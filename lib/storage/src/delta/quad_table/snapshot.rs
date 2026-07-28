@@ -1,6 +1,6 @@
-use crate::delta::index::{is_named_node_bound, is_term_bound};
-use crate::index::IndexComponents;
+use crate::delta::quad_table::{is_named_node_bound, is_term_bound};
 use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
+use crate::quad_tables::QuadTableName;
 use deltalake::kernel::{Add, EagerSnapshot};
 use deltalake::logstore::LogStoreRef;
 use rdf_fusion_common::{BlankNodeMatchingMode, QuadComponent, TriplePattern};
@@ -8,33 +8,33 @@ use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::ActiveGraph;
 use std::sync::Arc;
 
-/// Represents an immutable snapshot of the index at a specific Delta commit version.
+/// Represents an immutable snapshot of the quad_table at a specific Delta commit version.
 ///
 /// This guarantees that readers see a consistent state of the data and the application log version.
 /// Note that we assume that no cleanup job (i.e., vacuuming) is cleaning up the files that are
 /// referenced by this snapshot.
 #[derive(Debug, Clone)]
-pub struct DeltaQuadsStorageIndexSnapshot {
+pub struct DeltaQuadsQuadTableSnapshot {
     /// The encoding used for storing quads.
     storage_encoding: QuadStorageEncoding,
-    /// The log store of the index table.
+    /// The log store of the quad_table table.
     log_store: LogStoreRef,
-    /// The snapshot of the index table.
+    /// The snapshot of the quad_table table.
     snapshot: EagerSnapshot,
-    /// The active files of the index table.
+    /// The active files of the quad_table table.
     active_files: Arc<Vec<Add>>,
     /// Preloaded parquet metadata.
     parquet_metadata: PreloadedParquetMetadata,
     /// Preloaded bloom filters.
     bloom_filters: PreloadedBloomFilters,
-    /// The components of the index.
-    components: IndexComponents,
+    /// The components of the quad_table.
+    components: QuadTableName,
     /// The log version that this snapshot represents.
     log_version: u64,
 }
 
-impl DeltaQuadsStorageIndexSnapshot {
-    /// Creates a new [`DeltaQuadsStorageIndexSnapshot`]. The snapshot and the log store are
+impl DeltaQuadsQuadTableSnapshot {
+    /// Creates a new [`DeltaQuadsQuadTableSnapshot`]. The snapshot and the log store are
     /// expected to belong to the same Delta table.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -44,7 +44,7 @@ impl DeltaQuadsStorageIndexSnapshot {
         active_files: Arc<Vec<Add>>,
         parquet_metadata: PreloadedParquetMetadata,
         bloom_filters: PreloadedBloomFilters,
-        components: IndexComponents,
+        components: QuadTableName,
         log_version: u64,
     ) -> Self {
         Self {
@@ -74,7 +74,7 @@ impl DeltaQuadsStorageIndexSnapshot {
         &self.bloom_filters
     }
 
-    /// Returns the current version of the quad storage database that this index snapshot reflects.
+    /// Returns the current version of the quad storage database that this quad_table snapshot reflects.
     pub fn log_transaction_version(&self) -> u64 {
         self.log_version
     }
@@ -94,12 +94,12 @@ impl DeltaQuadsStorageIndexSnapshot {
         &self.log_store
     }
 
-    /// Returns the components of the index.
-    pub fn components(&self) -> IndexComponents {
+    /// Returns the components of the quad_table.
+    pub fn components(&self) -> QuadTableName {
         self.components
     }
 
-    /// Computes the scan score for this index given the active graph and the pattern.
+    /// Computes the scan score for this quad_table given the active graph and the pattern.
     pub fn compute_scan_score(
         &self,
         active_graph: &ActiveGraph,
@@ -126,7 +126,7 @@ impl DeltaQuadsStorageIndexSnapshot {
 
             // We don't stop after finding a non-bound component, because components that are
             // part of the sort order should still exhibit a better clustering, even though the
-            // scan is no longer restricted to a slice of the index.
+            // scan is no longer restricted to a slice of the quad_table.
             if is_bound {
                 let position = 3 - i;
                 score += 1 << position;
@@ -140,8 +140,8 @@ impl DeltaQuadsStorageIndexSnapshot {
 mod tests {
     use super::*;
     use crate::delta::DeltaQuadsStorage;
-    use crate::delta::index::DeltaQuadsStorageIndex;
-    use crate::index::IndexComponents;
+    use crate::delta::quad_table::DeltaQuadsQuadTable;
+    use crate::quad_tables::QuadTableName;
     use datafusion::prelude::{SessionConfig, SessionContext};
     use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
     use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
@@ -157,7 +157,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scan_score_fully_bound() {
-        let index = create_test_index(IndexComponents::GSPO).await;
+        let quad_table = create_test_quad_table(QuadTableName::GSPO).await;
 
         let pattern = TriplePattern {
             subject: bound_term(),
@@ -165,7 +165,7 @@ mod tests {
             object: bound_term(),
         };
 
-        let score = index.snapshot().await.unwrap().compute_scan_score(
+        let score = quad_table.snapshot().await.unwrap().compute_scan_score(
             &ActiveGraph::DefaultGraph,
             &pattern,
             BlankNodeMatchingMode::Filter,
@@ -176,14 +176,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_scan_score_longer_prefixes_score_higher() {
-        let index = create_test_index(IndexComponents::GSPO).await;
+        let quad_table = create_test_quad_table(QuadTableName::GSPO).await;
 
         let pattern_g = TriplePattern {
             subject: variable_term(),
             predicate: variable_named_node(),
             object: variable_term(),
         };
-        let score_g = index.snapshot().await.unwrap().compute_scan_score(
+        let score_g = quad_table.snapshot().await.unwrap().compute_scan_score(
             &ActiveGraph::DefaultGraph,
             &pattern_g,
             BlankNodeMatchingMode::Filter,
@@ -194,7 +194,7 @@ mod tests {
             predicate: variable_named_node(),
             object: variable_term(),
         };
-        let score_gs = index.snapshot().await.unwrap().compute_scan_score(
+        let score_gs = quad_table.snapshot().await.unwrap().compute_scan_score(
             &ActiveGraph::DefaultGraph,
             &pattern_gs,
             BlankNodeMatchingMode::Filter,
@@ -205,7 +205,7 @@ mod tests {
             predicate: bound_named_node(),
             object: variable_term(),
         };
-        let score_gsp = index.snapshot().await.unwrap().compute_scan_score(
+        let score_gsp = quad_table.snapshot().await.unwrap().compute_scan_score(
             &ActiveGraph::DefaultGraph,
             &pattern_gsp,
             BlankNodeMatchingMode::Filter,
@@ -218,7 +218,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scan_score_broken_prefix() {
-        let index = create_test_index(IndexComponents::GSPO).await;
+        let quad_table = create_test_quad_table(QuadTableName::GSPO).await;
 
         let pattern_broken = TriplePattern {
             subject: variable_term(),
@@ -226,7 +226,7 @@ mod tests {
             object: bound_term(),
         };
 
-        let score = index.snapshot().await.unwrap().compute_scan_score(
+        let score = quad_table.snapshot().await.unwrap().compute_scan_score(
             &ActiveGraph::DefaultGraph,
             &pattern_broken,
             BlankNodeMatchingMode::Filter,
@@ -237,7 +237,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_scan_score_unbound_first_component() {
-        let index = create_test_index(IndexComponents::GSPO).await;
+        let quad_table = create_test_quad_table(QuadTableName::GSPO).await;
 
         let pattern = TriplePattern {
             subject: bound_term(),
@@ -245,7 +245,7 @@ mod tests {
             object: bound_term(),
         };
 
-        let score = index.snapshot().await.unwrap().compute_scan_score(
+        let score = quad_table.snapshot().await.unwrap().compute_scan_score(
             &ActiveGraph::AllGraphs,
             &pattern,
             BlankNodeMatchingMode::Filter,
@@ -255,7 +255,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_index_update_with_only_adds() {
+    async fn test_quad_table_update_with_only_adds() {
         let options = SessionConfig::default().with_target_partitions(1);
         let session_context = SessionContext::new_with_config(options);
         session_context.runtime_env().register_object_store(
@@ -265,7 +265,7 @@ mod tests {
 
         let storage = DeltaQuadsStorage::new_in_memory(
             QuadStorageEncodingName::PlainTerm,
-            vec![IndexComponents::GSPO],
+            vec![QuadTableName::GSPO],
         )
         .await;
 
@@ -295,15 +295,15 @@ mod tests {
             .unwrap();
         transaction.commit().await.unwrap();
 
-        // Update indexes
+        // Update quad tables
         let state = session_context.state();
         storage.optimize(&state).await.unwrap();
 
-        let index = Arc::clone(&storage.indexes()[0]);
-        assert_quad_count(session_context, index, 2).await;
+        let quad_table = Arc::clone(&storage.quad_tables()[0]);
+        assert_quad_count(session_context, quad_table, 2).await;
     }
 
-    async fn create_test_index(components: IndexComponents) -> DeltaQuadsStorageIndex {
+    async fn create_test_quad_table(components: QuadTableName) -> DeltaQuadsQuadTable {
         let memory_store = Arc::new(InMemory::new());
         let url = Url::parse("memory://").unwrap();
         let log_store = logstore_with(
@@ -312,13 +312,13 @@ mod tests {
             StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
         )
         .unwrap();
-        DeltaQuadsStorageIndex::try_new(
+        DeltaQuadsQuadTable::try_new(
             QuadStorageEncoding::PlainTerm,
             log_store,
             components,
         )
         .await
-        .expect("Failed to create test index")
+        .expect("Failed to create test quad_table")
     }
 
     fn bound_term() -> TermPattern {
@@ -339,13 +339,13 @@ mod tests {
 
     async fn assert_quad_count(
         session_context: SessionContext,
-        index: Arc<DeltaQuadsStorageIndex>,
+        quad_table: Arc<DeltaQuadsQuadTable>,
         expected_count: usize,
     ) {
-        let index = index.snapshot().await.unwrap();
+        let quad_table = quad_table.snapshot().await.unwrap();
         let table_provider = DeltaTableProvider::try_new(
-            index.eager_snapshot().clone(),
-            Arc::clone(index.log_store()),
+            quad_table.eager_snapshot().clone(),
+            Arc::clone(quad_table.log_store()),
             DeltaScanConfig::default(),
         )
         .unwrap();
