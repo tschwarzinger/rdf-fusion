@@ -47,7 +47,8 @@ impl RdfFusionParquetWriterProperties {
             .set_bloom_filter_enabled(false)
             .set_statistics_enabled(EnabledStatistics::Page)
             .set_statistics_truncate_length(Some(256)) // IRIs might be long
-            .set_column_index_truncate_length(Some(256)); // IRIs might be long
+            .set_column_index_truncate_length(Some(256)) // IRIs might be long
+            .set_created_by("rdf-fusion".to_owned());
 
         builder = if encoding.term_type().is_primitive() {
             builder

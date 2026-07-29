@@ -131,12 +131,6 @@ async fn for_all_explanations(
             .await
             .unwrap();
 
-        println!(
-            "{}:\n{}",
-            benchmark_name,
-            displayable(explanation.execution_plan.as_ref()).indent(false)
-        );
-
         run_plan_assertions(|| assertion(benchmark_name, explanation));
     }
 }

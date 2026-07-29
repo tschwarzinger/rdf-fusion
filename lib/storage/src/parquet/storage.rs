@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use datafusion::datasource::object_store::ObjectStoreRegistry;
 use datafusion::execution::context::SessionState;
 use datafusion::parquet::file::metadata::ParquetMetaData;
-use log::info;
 use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStoreExt};
 use rdf_fusion_common::StorageError;
@@ -15,6 +14,7 @@ use rdf_fusion_extensions::storage::{
 };
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
+use tracing::info;
 use url::Url;
 
 /// A quad storage that reads from Parquet files.

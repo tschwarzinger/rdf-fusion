@@ -1,4 +1,3 @@
-use crate::prepare::PrepRequirement;
 use async_trait::async_trait;
 use std::path::Path;
 
@@ -7,6 +6,7 @@ mod name;
 
 use crate::environment::BenchmarkContext;
 use crate::report::BenchmarkReport;
+use crate::requirement::BenchRequirement;
 pub use name::BenchmarkName;
 use rdf_fusion::store::Store;
 
@@ -20,7 +20,7 @@ pub trait Benchmark: Send {
     fn name(&self) -> BenchmarkName;
 
     /// Returns a list of preparation requirements.
-    fn requirements(&self, bench_files_path: &Path) -> Vec<PrepRequirement>;
+    fn requirements(&self, bench_files_path: &Path) -> Vec<BenchRequirement>;
 
     /// Prepares a [`Store`] but does not execute the benchmark.
     async fn prepare_store(

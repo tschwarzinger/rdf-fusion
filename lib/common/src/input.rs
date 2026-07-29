@@ -1,7 +1,7 @@
 use crate::DFResult;
 use datafusion::common::exec_datafusion_err;
 use datafusion::execution::SessionState;
-use object_store::ObjectStoreExt;
+use datafusion::object_store::ObjectStoreExt;
 use oxrdf::GraphName;
 use oxrdfio::RdfFormat;
 use std::cmp::Ordering;

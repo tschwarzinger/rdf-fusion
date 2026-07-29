@@ -30,21 +30,20 @@ repository = "https://github.com/tobixdev/rdf-fusion"
 anyhow = "1.0"
 async-trait = "0.1"
 base16ct = { version = "1.0", features = ["alloc"] }
-bytes = "1.0"
-bzip2 = "0.6"
+bytes = "1.12"
 chrono = "0.4"
 clap = "4.6"
 clap_complete = "4.6"
-clap_mangen = "0.2"
+clap_mangen = "0.3"
 console-subscriber = "0.5"
 csv = "1.4"
 futures = "0.3"
-itertools = "0.14"
+itertools = "0.15"
 md-5 = "0.11"
 object_store = "0.13"
 rand = "0.10"
 rand_distr = "0.6"
-regex = "1.12"
+regex = "1.13"
 reqwest = { version = "0.13", features = ["stream"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -55,10 +54,9 @@ thiserror = "2.0"
 time = "0.3"
 tokio-util = { version = "0.7", features = ["io"] }
 url = "2.5"
-uuid = "1.23"
-zip = "8.4"
+uuid = "1.24"
 quick_cache = "0.7"
-heed = "0.20"
+heed = "0.22"
 
 # DataFusion and Related Dependencies (we try to keep them in-sync with DataFusion)
 ahash = "0.8"
@@ -76,21 +74,21 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
 axum = "0.8"
 axum-extra = { version = "0.12", features = ["typed-header"] }
-axum-test = "19.1"
+axum-test = "21.0"
 headers = "0.4"
 headers-accept = "0.3"
 mediatype = "0.21"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "trace"] }
 serde_urlencoded = "0.7"
 
 # Testing / Benchmarking dependencies
 
 assert_cmd = "2.2"
 criterion = { version = "0.8", features = ["async_tokio"] }
-insta = { version = "1.47", features = ["filters"] }
+insta = { version = "1.48", features = ["filters"] }
 prettytable-rs = "0.10"
 text-diff = "0.4"
-tempfile = "3.10"
+tempfile = "3.27"
 tokio-test = "0.4"
 
 # Upstream Oxigraph dependencies

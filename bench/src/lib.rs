@@ -12,8 +12,8 @@ pub mod benchmarks;
 pub mod config;
 pub mod environment;
 pub mod operation;
-pub mod prepare;
 pub mod report;
+pub mod requirement;
 pub mod runs;
 mod utils;
 
@@ -22,14 +22,14 @@ pub use config::*;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]
 pub enum Operation {
     /// Prepares the data for a given benchmark.
-    Prepare,
+    Check,
     /// Executes a given benchmark, assuming that the preparation has already been done.
     Execute,
 }
 
 /// Executes an `operation` of a given `benchmark`.
 ///
-/// - [Operation::Prepare] prepares the data for the given benchmark.
+/// - [Operation::Check] prepares the data for the given benchmark.
 /// - [Operation::Execute] executes the given benchmark. The runner verifies the requirements before
 ///   executing the benchmark (e.g., whether a file exists).
 pub async fn execute_benchmark_operation(
@@ -53,25 +53,19 @@ pub async fn execute_benchmark_operation(
     let benchmark = create_benchmark_instance(&bench_ctx, benchmark)?;
 
     match operation {
-        Operation::Prepare => {
-            println!("Preparing benchmark '{}' ...", benchmark.name());
-
-            if bench_ctx.data_dir().exists() {
-                println!(
-                    "Cleaning data directory '{}' ...",
-                    bench_ctx.data_dir().display()
-                );
-                fs::remove_dir_all(bench_ctx.data_dir())?;
-            }
-            fs::create_dir_all(bench_ctx.data_dir())?;
+        Operation::Check => {
+            println!(
+                "Checking requirements for benchmark '{}' ...",
+                benchmark.name()
+            );
 
             for requirement in
                 benchmark.requirements(bench_ctx.bench_files_dir().as_path())
             {
-                bench_ctx.prepare_requirement(requirement).await?;
+                bench_ctx.ensure_requirement(requirement)?;
             }
 
-            println!("Benchmark '{}' prepared.\n", benchmark.name());
+            println!("All checks passed for '{}'.\n", benchmark.name());
         }
         Operation::Execute => {
             println!("Executing benchmark '{}' ...\n", benchmark.name());

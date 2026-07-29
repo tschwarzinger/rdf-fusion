@@ -5,7 +5,7 @@ use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::col;
 use datafusion::prelude::SessionContext;
-use deltalake::delta_datafusion::DeltaTableProvider;
+use deltalake::delta_datafusion::TableProviderBuilder;
 use std::sync::Arc;
 
 /// Implements validation of a single [`DeltaQuadsQuadTableSnapshot`].
@@ -13,14 +13,13 @@ pub async fn validate_quad_table(
     state: &SessionState,
     snapshot: &DeltaQuadsQuadTableSnapshot,
 ) -> Result<(), DeltaQuadsStorageError> {
-    let provider = DeltaTableProvider::try_new(
-        snapshot.eager_snapshot().clone(),
-        Arc::clone(snapshot.log_store()),
-        Default::default(),
-    )?;
+    let provider = TableProviderBuilder::default()
+        .with_eager_snapshot(snapshot.eager_snapshot().clone())
+        .with_log_store(Arc::clone(snapshot.log_store()))
+        .await?;
 
     let context = SessionContext::new_with_state(state.clone());
-    let df = context.read_table(Arc::new(provider))?;
+    let df = context.read_table(provider)?;
     check_duplicates(df.clone(), &snapshot.components()).await?;
 
     return Ok(());

@@ -1,8 +1,5 @@
 use crate::benchmarks::BenchmarkName;
-use crate::prepare::{
-    PrepRequirement, prepare_copy_file, prepare_run_closure, prepare_run_command,
-};
-use crate::prepare::{ensure_file_download, prepare_file_download};
+use crate::requirement::BenchRequirement;
 use crate::{BenchQuadStorageTypeArg, BenchmarkingConfig, QuadStorageLocationArg};
 use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
@@ -441,49 +438,30 @@ impl<'ctx> BenchmarkContext<'ctx> {
         format!("file://{}", full_path.display())
     }
 
-    /// Prepares the context such that `requirement` is fulfilled.
-    pub async fn prepare_requirement(
+    /// Ensures that the `requirement` is fulfilled in this context.
+    pub fn ensure_requirement(
         &self,
-        requirement: PrepRequirement,
+        requirement: BenchRequirement,
     ) -> anyhow::Result<()> {
         match requirement {
-            PrepRequirement::CopyFile {
-                source_path,
-                target_path,
-                action,
-            } => prepare_copy_file(&source_path, &target_path, action.as_ref()),
-            PrepRequirement::FileDownload {
-                url,
-                file_name,
-                action,
-            } => prepare_file_download(url, file_name, action).await,
-            PrepRequirement::RunClosure { execute, .. } => {
-                prepare_run_closure(self, &execute)
+            BenchRequirement::FileExists(path) => {
+                if !path.exists() {
+                    anyhow::bail!(
+                        "File {} does not exist. Please run the preparation script.",
+                        path.display()
+                    );
+                }
+                Ok(())
             }
-            PrepRequirement::RunCommand {
-                workdir,
-                program,
-                args,
-                ..
-            } => prepare_run_command(&workdir, &program, &args),
-        }
-    }
-
-    /// Ensures that the `requirement` is fulfilled in this context.
-    pub fn ensure_requirement(&self, requirement: PrepRequirement) -> anyhow::Result<()> {
-        match requirement {
-            PrepRequirement::CopyFile { target_path, .. } => {
-                ensure_file_download(target_path.as_path())
+            BenchRequirement::DirectoryExists(path) => {
+                if !path.exists() {
+                    anyhow::bail!(
+                        "Directory {} does not exist. Please run the preparation script.",
+                        path.display()
+                    );
+                }
+                Ok(())
             }
-            PrepRequirement::FileDownload { file_name, .. } => {
-                ensure_file_download(file_name.as_path())
-            }
-            PrepRequirement::RunClosure {
-                check_requirement, ..
-            }
-            | PrepRequirement::RunCommand {
-                check_requirement, ..
-            } => check_requirement(self),
         }
     }
 }

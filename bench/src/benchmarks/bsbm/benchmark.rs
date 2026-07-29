@@ -1,16 +1,14 @@
 use crate::BenchQuadStorageTypeArg;
 use crate::benchmarks::bsbm::operation::list_raw_operations;
 use crate::benchmarks::bsbm::report::{BsbmReport, ExploreReportBuilder, QueryDetails};
-use crate::benchmarks::bsbm::requirements::{
-    copy_pre_generated_queries, download_bsbm_tools, generate_dataset_requirement,
-};
+
 use crate::benchmarks::bsbm::use_case::BsbmUseCase;
 use crate::benchmarks::bsbm::{BusinessIntelligenceUseCase, ExploreUseCase, NumProducts};
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::BenchmarkContext;
 use crate::operation::{SparqlOperation, SparqlRawOperation};
-use crate::prepare::PrepRequirement;
 use crate::report::BenchmarkReport;
+use crate::requirement::BenchRequirement;
 use crate::utils::print_store_stats;
 use anyhow::Context;
 use async_trait::async_trait;
@@ -27,20 +25,12 @@ use url::Url;
 /// Holds file paths for the files required for executing a BSBM run.
 #[derive(Clone)]
 struct BsbmFilePaths {
-    /// A path to the bsbmtools directory.
-    bsbmtools: PathBuf,
-    /// A path to the td_data directory.
-    td_data: PathBuf,
     /// A path to the dataset NTriples file.
     dataset: PathBuf,
     /// A path to the csv file that contains the pre-generated queries.
     queries: PathBuf,
-    /// A path to the source of the explore queries.
-    queries_explore_source: PathBuf,
     /// A path to the target of the explore queries.
     queries_explore_target: PathBuf,
-    /// A path to the source of the business intelligence queries.
-    queries_bi_source: PathBuf,
     /// A path to the target of the business intelligence queries.
     queries_bi_target: PathBuf,
 }
@@ -54,8 +44,6 @@ struct BsbmFilePaths {
 pub struct BsbmBenchmark<TUseCase: BsbmUseCase> {
     /// The name of the benchmark.
     name: BenchmarkName,
-    /// The number of products.
-    num_products: NumProducts,
     /// How many queries to execute at most.
     max_query_count: Option<u64>,
     /// Path file.
@@ -71,42 +59,25 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
         num_products: NumProducts,
         max_query_count: Option<u64>,
     ) -> anyhow::Result<Self> {
-        let bsbmtools = context.data_dir().join("bsbmtools");
-        let td_data = context.data_dir().join("td_data");
         let dataset_path = context.data_dir().join("dataset.nt");
         let queries_path = context.data_dir().join(TUseCase::queries_file_path());
 
-        let queries_explore_source = context
-            .parent()
-            .bench_files_dir()
-            .join("bsbm_queries")
-            .join(format!("explore-{num_products}.csv.bz2"));
         let queries_explore_target =
             context.data_dir().join(ExploreUseCase::queries_file_path());
 
-        let queries_bi_source = context
-            .parent()
-            .bench_files_dir()
-            .join("bsbm_queries")
-            .join(format!("businessIntelligence-{num_products}.csv.bz2"));
         let queries_bi_target = context
             .data_dir()
             .join(BusinessIntelligenceUseCase::queries_file_path());
 
         let paths = BsbmFilePaths {
-            bsbmtools,
-            td_data,
             dataset: dataset_path,
             queries: queries_path,
-            queries_explore_source,
             queries_explore_target,
-            queries_bi_source,
             queries_bi_target,
         };
 
         Ok(Self {
             name: TUseCase::name().into_benchmark_name(num_products, max_query_count),
-            num_products,
             max_query_count,
             paths,
             phantom_data: PhantomData,
@@ -161,24 +132,11 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
         self.name
     }
 
-    #[allow(clippy::expect_used)]
-    fn requirements(&self, _bench_files_path: &Path) -> Vec<PrepRequirement> {
+    fn requirements(&self, _bench_files_path: &Path) -> Vec<BenchRequirement> {
         vec![
-            download_bsbm_tools(self.paths.bsbmtools.clone()),
-            generate_dataset_requirement(
-                self.paths.bsbmtools.clone(),
-                self.paths.dataset.clone(),
-                self.paths.td_data.clone(),
-                self.num_products,
-            ),
-            copy_pre_generated_queries(
-                self.paths.queries_explore_source.clone(),
-                self.paths.queries_explore_target.clone(),
-            ),
-            copy_pre_generated_queries(
-                self.paths.queries_bi_source.clone(),
-                self.paths.queries_bi_target.clone(),
-            ),
+            BenchRequirement::FileExists(self.paths.dataset.clone()),
+            BenchRequirement::FileExists(self.paths.queries_explore_target.clone()),
+            BenchRequirement::FileExists(self.paths.queries_bi_target.clone()),
         ]
     }
 

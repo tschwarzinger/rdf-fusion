@@ -6,9 +6,7 @@ mod business_intelligence;
 mod explore;
 mod operation;
 mod report;
-mod requirements;
 mod use_case;
-
 pub use benchmark::BsbmBenchmark;
 pub use business_intelligence::*;
 pub use explore::*;

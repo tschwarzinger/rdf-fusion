@@ -59,7 +59,7 @@ jobs:
           git clean -fd
           
           # 2. Run benches for main
-          just prepare-benches
+          just bench prepare-benches
           /tmp/run_ci_benches.sh main "$PR_LABELS"
           
           # 3. Switch back to the PR merge commit to continue
@@ -69,7 +69,7 @@ jobs:
       - name: Prepare Benches (Candidate)
         run: |
           # Ensure we are on the PR commit and prep again if needed
-          just prepare-benches
+          just bench prepare-benches
 
       - name: Run Benchmarks Candidate Branch
         env:

@@ -14,7 +14,7 @@ jobs:
       - name: Install System Dependencies
         run: |
           apt-get update
-          apt-get install -y git-lfs build-essential cmake default-jre-headless clang libclang-dev
+          apt-get install -y git-lfs build-essential cmake clang libclang-dev
           git lfs install
 
       - name: Setup Rust
@@ -35,9 +35,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+          submodules: true
 
       - name: Prepare Benches for Tests
-        run: just prepare-benches-tests
+        run: just bench prepare-benches-tests
 
       - name: Tests
         run: just test

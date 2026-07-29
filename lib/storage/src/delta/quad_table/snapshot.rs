@@ -143,7 +143,7 @@ mod tests {
     use crate::delta::quad_table::DeltaQuadsQuadTable;
     use crate::quad_tables::QuadTableName;
     use datafusion::prelude::{SessionConfig, SessionContext};
-    use deltalake::delta_datafusion::{DeltaScanConfig, DeltaTableProvider};
+    use deltalake::delta_datafusion::TableProviderBuilder;
     use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
     use object_store::memory::InMemory;
     use rdf_fusion_common::{
@@ -343,14 +343,13 @@ mod tests {
         expected_count: usize,
     ) {
         let quad_table = quad_table.snapshot().await.unwrap();
-        let table_provider = DeltaTableProvider::try_new(
-            quad_table.eager_snapshot().clone(),
-            Arc::clone(quad_table.log_store()),
-            DeltaScanConfig::default(),
-        )
-        .unwrap();
+        let table_provider = TableProviderBuilder::default()
+            .with_eager_snapshot(quad_table.eager_snapshot().clone())
+            .with_log_store(Arc::clone(quad_table.log_store()))
+            .await
+            .unwrap();
         let count = session_context
-            .read_table(Arc::new(table_provider))
+            .read_table(table_provider)
             .unwrap()
             .count()
             .await

@@ -1,3 +1,5 @@
+mod bench
+
 # List available commands
 default:
     @just --list
@@ -34,8 +36,6 @@ test-examples:
 rustdoc:
     RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
 
-import 'bench/justfile'
-
 # Starts a webserver that can answer SPARQL queries
 serve location="memory:///" profile="profiling-nonlto":
     RUSTFLAGS="-C target-cpu=native" cargo run --profile {{profile}} --bin rdf-fusion -- --location {{location}} serve --bind 0.0.0.0:7878 --cors
@@ -55,7 +55,7 @@ prepare-release:
     echo "Source archive created. Move the archive to a new folder and extract it. Then run just release.";
 
 # Runs all checks and releases all crates to crates.io
-release: lint prepare-benches-tests test test-examples rustdoc
+release: lint bench::prepare-benches-tests test test-examples rustdoc
     (cd lib/common && cargo publish)
     (cd lib/encoding && cargo publish)
     (cd lib/compute && cargo publish)

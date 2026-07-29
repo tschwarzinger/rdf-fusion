@@ -127,7 +127,9 @@ impl RdfFileScanOptions {
         mut self,
         base_iri: impl Into<String>,
     ) -> Result<Self, IriParseError> {
-        let base_iri = Iri::parse(base_iri.into())?;
+        let base_iri_str = base_iri.into();
+        let _ = rdf_fusion_common::NamedNode::new(&base_iri_str)?;
+        let base_iri = Iri::parse(base_iri_str).unwrap();
         self.base_iri = Some(base_iri);
         Ok(self)
     }

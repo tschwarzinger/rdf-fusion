@@ -556,7 +556,7 @@ mod tests {
     use datafusion::physical_plan::collect;
     use datafusion::prelude::{SessionConfig, SessionContext};
     use deltalake::arrow::util::pretty::pretty_format_batches;
-    use deltalake::delta_datafusion::DeltaTableProvider;
+    use deltalake::delta_datafusion::TableProviderBuilder;
     use insta::assert_snapshot;
     use rdf_fusion_common::NamedNodeRef;
     use rdf_fusion_encoding::plain_term::{
@@ -889,14 +889,13 @@ mod tests {
         // Lock the table properly to read its state
         let table_lock = log.table.read().await;
 
-        let provider = DeltaTableProvider::try_new(
-            table_lock.snapshot().unwrap().snapshot().clone(),
-            table_lock.log_store(),
-            Default::default(),
-        )
-        .unwrap();
+        let provider = TableProviderBuilder::default()
+            .with_eager_snapshot(table_lock.snapshot().unwrap().snapshot().clone())
+            .with_log_store(table_lock.log_store())
+            .await
+            .unwrap();
 
-        let df = ctx.read_table(Arc::new(provider)).unwrap();
+        let df = ctx.read_table(provider).unwrap();
         let results = df.collect().await.unwrap();
 
         pretty_format_batches(&results).unwrap().to_string()

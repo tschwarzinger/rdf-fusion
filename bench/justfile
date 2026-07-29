@@ -1,24 +1,67 @@
-[working-directory('bench')]
-prepare-benches-tests:
-    cargo run --profile test prepare bsbm-explore --num-products 1000 # BSBM use cases share the data
+set shell := ["bash", "-c"]
+set unstable := true
 
-[working-directory('bench')]
-prepare-benches:
-    cargo run --profile profiling-nonlto prepare bsbm-explore --num-products 10000 # BSBM use cases share the data
+prepare-benches-tests: (prepare-bsbm "1000")
+    @echo "BSBM use cases share the data"
+
+prepare-benches: (prepare-bsbm "10000")
+    @echo "BSBM use cases share the data"
+
+# Prepares the BSBM Explore benchmarks
+[script('bash')]
+prepare-bsbm num_products:
+    set -e
+
+    num_products="{{ num_products }}"
+    DATA_DIR="data/bsbm-${num_products}"
+
+    echo "Cleaning and creating directory $DATA_DIR ..."
+
+    # Clean and recreate data directory
+    rm -rf "$DATA_DIR"
+    mkdir -p "$DATA_DIR"
+
+    if [ "$num_products" = "1000" ]; then
+        echo "Downloading pre-built dataset for 1000 products..."
+        curl -sSL "https://hel1.your-objectstorage.com/rdf-fusion-public/ci/bsbm-1000.zip" -o "$DATA_DIR/bsbm-1000.zip"
+        unzip -q -o "$DATA_DIR/bsbm-1000.zip" -d "$DATA_DIR"
+        rm "$DATA_DIR/bsbm-1000.zip"
+    else
+        # 1. Download BSBM tools
+        echo "Downloading BSBM tools..."
+        curl -sSL "https://github.com/Tpt/bsbm-tools/archive/59d0a8a605b26f21506789fa1a713beb5abf1cab.zip" -o "$DATA_DIR/bsbm-tools.zip"
+        unzip -q -o "$DATA_DIR/bsbm-tools.zip" -d "$DATA_DIR"
+        mv "$DATA_DIR/bsbm-tools-59d0a8a605b26f21506789fa1a713beb5abf1cab" "$DATA_DIR/bsbmtools"
+        rm "$DATA_DIR/bsbm-tools.zip"
+
+        # 2. Generate dataset
+        echo "Generating BSBM dataset for $num_products products..."
+        cd "$DATA_DIR/bsbmtools"
+        ./generate -fc -pc "$num_products" -dir ../td_data -fn ../dataset
+        cd - > /dev/null
+
+        # 3. Copy pre-generated queries
+        echo "Copying explore queries..."
+        bzcat "bench_files/bsbm_queries/explore-${num_products}.csv.bz2" > "$DATA_DIR/queries_explore.csv"
+        echo "Copying BI queries..."
+        bzcat "bench_files/bsbm_queries/businessIntelligence-${num_products}.csv.bz2" > "$DATA_DIR/queries_bi.csv"
+    fi
+
+    echo "Benchmarks prepared."
 
 # Executes the BSBM Explore benchmark against Parquet files with multiple sort orders.
+[script('bash')]
 [working-directory('bench')]
 bench-bsbm-explore num_products="10000" max_query_count="" parallel_tasks="" sort_orders="Native(SPO) Native(POS) Native(OSP)":
-    #!/usr/bin/env bash
     set -e
 
     num_products="10000"
     max_query_count=""
     parallel_tasks=""
     sort_orders="Native(SPO) Native(POS) Native(OSP)"
-    
-    args=("{{num_products}}" "{{max_query_count}}" "{{parallel_tasks}}" "{{sort_orders}}")
-    
+
+    args=("{{ num_products }}" "{{ max_query_count }}" "{{ parallel_tasks }}" "{{ sort_orders }}")
+
     if [[ "${args[0]}" == *=* ]]; then
         for arg in "${args[@]}"; do
             if [[ "$arg" == *=* ]]; then

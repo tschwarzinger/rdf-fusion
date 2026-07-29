@@ -129,11 +129,6 @@ async fn for_all_explanations(
             .explain_query_opt(query.text(), QueryOptions::default())
             .await
             .unwrap();
-        println!(
-            "{}:\n{}",
-            benchmark_name,
-            displayable(explanation.execution_plan.as_ref()).indent(false)
-        );
 
         run_plan_assertions(|| assertion(benchmark_name, explanation));
     }
