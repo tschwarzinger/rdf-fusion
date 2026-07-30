@@ -8,8 +8,8 @@ prepare-benches: (prepare-bsbm "10000")
     @echo "BSBM use cases share the data"
 
 # Prepares the BSBM Explore benchmarks
-[script('bash')]
 prepare-bsbm num_products:
+    #!/usr/bin/env bash
     set -e
 
     num_products="{{ num_products }}"
@@ -50,9 +50,8 @@ prepare-bsbm num_products:
     echo "Benchmarks prepared."
 
 # Executes the BSBM Explore benchmark against Parquet files with multiple sort orders.
-[script('bash')]
-[working-directory('bench')]
 bench-bsbm-explore num_products="10000" max_query_count="" parallel_tasks="" sort_orders="Native(SPO) Native(POS) Native(OSP)":
+    #!/usr/bin/env bash
     set -e
 
     num_products="10000"

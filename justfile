@@ -38,11 +38,22 @@ rustdoc:
 
 # Starts a webserver that can answer SPARQL queries
 serve location="memory:///" profile="profiling-nonlto":
-    RUSTFLAGS="-C target-cpu=native" cargo run --profile {{profile}} --bin rdf-fusion -- --location {{location}} serve --bind 0.0.0.0:7878 --cors
+    RUSTFLAGS="-C target-cpu=native" cargo run --profile {{ profile }} --bin rdf-fusion -- --location {{ location }} serve --bind 0.0.0.0:7878 --cors
 
 #
 # Releases
 #
+
+# Check that the crate version matches the release tag
+ci-check-version ref_name:
+    #!/usr/bin/env bash
+    VERSION=$(grep -m 1 "^version = " cargo.toml | cut -d '"' -f 2)
+    EXPECTED_VERSION=$(echo "{{ ref_name }}" | sed 's|^release/||' | sed 's/^v//')
+    if [ "$VERSION" != "$EXPECTED_VERSION" ]; then \
+      echo "Error: Version mismatch. cargo.toml has $VERSION, but tag is {{ ref_name }} (expected $EXPECTED_VERSION)"; \
+      exit 1; \
+    fi
+    echo "Version $VERSION matches tag {{ ref_name }}"
 
 # Creates a tarball from the current version of the repository
 prepare-release:
@@ -58,15 +69,29 @@ prepare-release:
 release: lint bench::prepare-benches-tests test test-examples rustdoc
     (cd lib/common && cargo publish)
     (cd lib/encoding && cargo publish)
-    (cd lib/compute && cargo publish)
     (cd lib/extensions && cargo publish)
+    (cd lib/compute && cargo publish)
     (cd lib/functions && cargo publish)
     (cd lib/logical && cargo publish)
     (cd lib/physical && cargo publish)
-    (cd lib/storage && cargo publish)
     (cd lib/execution && cargo publish)
+    (cd lib/storage && cargo publish)
     (cd lib/rdf-fusion && cargo publish)
     (cd lib/web && cargo publish)
     (cd cli && cargo publish)
     (cd bench && cargo publish)
-    echo "All crates release. Please rename the archive, upload the tarball to GitHub, and create a Git tag."
+
+# CI: Build the release binary and package it
+ci-build-binary target:
+    #!/usr/bin/env bash
+    VERSION=$(grep -m 1 "^version = " Cargo.toml | cut -d '"' -f 2)
+    cargo build --profile release --bin rdf-fusion --target {{ target }}
+    BINARY_DIR="target/{{ target }}/release"
+    TARBALL="target/rdf-fusion-$VERSION-{{ target }}.tar.gz"
+    tar -czf "$TARBALL" -C "$BINARY_DIR" rdf-fusion
+    echo "Created $TARBALL"
+
+# CI: Package the source code
+ci-package-source:
+    git archive --format=tar.gz -o target/rdf-fusion-source.tar.gz HEAD
+    echo "Source archive created at target/rdf-fusion-source.tar.gz"
