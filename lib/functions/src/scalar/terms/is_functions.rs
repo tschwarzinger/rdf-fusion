@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, BooleanArray};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
@@ -28,7 +28,7 @@ use std::fmt::{Debug, Formatter};
 pub fn is_blank_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(IsSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(IsSparqlUDF::new(
         IsOpType::Blank,
         encodings,
     )))
@@ -41,7 +41,7 @@ pub fn is_blank_udf(
 pub fn is_iri_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(IsSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(IsSparqlUDF::new(
         IsOpType::Iri,
         encodings,
     )))
@@ -54,7 +54,7 @@ pub fn is_iri_udf(
 pub fn is_literal_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(IsSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(IsSparqlUDF::new(
         IsOpType::Literal,
         encodings,
     )))
@@ -67,7 +67,7 @@ pub fn is_literal_udf(
 pub fn is_numeric_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(IsSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(IsSparqlUDF::new(
         IsOpType::Numeric,
         encodings,
     )))
@@ -94,26 +94,26 @@ impl IsOpType {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct IsSparqlOp {
+struct IsSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
     op_type: IsOpType,
 }
 
-impl Debug for IsSparqlOp {
+impl Debug for IsSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IsSparqlOp")
+        f.debug_struct("IsSparqlUDF")
             .field("op_type", &self.op_type)
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl IsSparqlOp {
+impl IsSparqlUDF {
     /// Create a new generic `is*` op.
     fn new(op_type: IsOpType, encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .build();
@@ -140,22 +140,26 @@ impl IsSparqlOp {
 
         let bool_array = match self.op_type {
             IsOpType::Blank => {
-                if let DowncastTypedFamilyArray::Resource(res) = downcasted {
-                    res.is_blank_node()
+                if let DowncastTypedFamilyArray::BlankNode(_) = downcasted {
+                    BooleanArray::from_iter(repeat_n(true, child_len))
                 } else {
                     BooleanArray::from_iter(repeat_n(false, child_len))
                 }
             }
             IsOpType::Iri => {
-                if let DowncastTypedFamilyArray::Resource(res) = downcasted {
-                    res.is_named_node() // Assuming this exists on your Resource array
+                if let DowncastTypedFamilyArray::Iri(_) = downcasted {
+                    BooleanArray::from_iter(repeat_n(true, child_len))
                 } else {
                     BooleanArray::from_iter(repeat_n(false, child_len))
                 }
             }
             IsOpType::Literal => {
                 // Everything that isn't a Resource (and isn't explicitly null) is a literal
-                if let DowncastTypedFamilyArray::Resource(_) = downcasted {
+                if matches!(
+                    downcasted,
+                    DowncastTypedFamilyArray::Iri(_)
+                        | DowncastTypedFamilyArray::BlankNode(_)
+                ) {
                     BooleanArray::from_iter(repeat_n(false, child_len))
                 } else {
                     BooleanArray::from_iter(repeat_n(true, child_len))
@@ -174,7 +178,7 @@ impl IsSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for IsSparqlOp {
+impl ScalarUDFImpl for IsSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -239,9 +243,9 @@ mod tests {
         | input                                                                                        | isBLANK(?table?.input)     |
         +----------------------------------------------------------------------------------------------+----------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}         |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=false} |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=true}  |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=false} |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=false} |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=false} |
@@ -268,9 +272,9 @@ mod tests {
         | input                                                                                        | isIRI(?table?.input)       |
         +----------------------------------------------------------------------------------------------+----------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}         |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=true}  |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=false} |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.boolean=false} |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=false} |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=false} |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=false} |
@@ -297,9 +301,9 @@ mod tests {
         | input                                                                                        | isLITERAL(?table?.input)   |
         +----------------------------------------------------------------------------------------------+----------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}         |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=false} |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=false} |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.boolean=false} |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=true}  |
@@ -326,9 +330,9 @@ mod tests {
         | input                                                                                        | isNUMERIC(?table?.input)   |
         +----------------------------------------------------------------------------------------------+----------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}         |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=false} |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=false} |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.boolean=false} |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.boolean=false} |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=true}  |

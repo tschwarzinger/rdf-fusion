@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::Array;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
@@ -25,28 +25,28 @@ use std::fmt::{Debug, Formatter};
 pub fn tz_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(TzSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(TzSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct TzSparqlOp {
+struct TzSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for TzSparqlOp {
+impl Debug for TzSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TzSparqlOp")
+        f.debug_struct("TzSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl TzSparqlOp {
-    /// Create a new [`TzSparqlOp`].
+impl TzSparqlUDF {
+    /// Create a new [`TzSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .build();
@@ -58,7 +58,7 @@ impl TzSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for TzSparqlOp {
+impl ScalarUDFImpl for TzSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -124,9 +124,9 @@ mod tests {
         | input                                                                                        | TZ(?table?.input)                           |
         +----------------------------------------------------------------------------------------------+---------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                          |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                          |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                          |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                          |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                          |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                          |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                          |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}                          |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}                          |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}                          |

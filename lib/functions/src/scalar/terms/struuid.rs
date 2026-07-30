@@ -1,5 +1,5 @@
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::StringArray;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::logical_expr::{
@@ -21,30 +21,30 @@ use uuid::Uuid;
 pub fn struuid_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(StrUuidSparqlOp::new(Arc::clone(
+    Ok(ScalarUDF::new_from_impl(StrUuidSparqlUDF::new(Arc::clone(
         encodings.typed_family(),
     ))))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct StrUuidSparqlOp {
+struct StrUuidSparqlUDF {
     encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
 }
 
-impl Debug for StrUuidSparqlOp {
+impl Debug for StrUuidSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StrUuidSparqlOp")
+        f.debug_struct("StrUuidSparqlUDF")
             .field("encoding", &self.encoding)
             .finish()
     }
 }
 
-impl StrUuidSparqlOp {
-    /// Create a new [`StrUuidSparqlOp`].
+impl StrUuidSparqlUDF {
+    /// Create a new [`StrUuidSparqlUDF`].
     fn new(encoding: TypedFamilyEncodingRef) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encoding.as_ref())
             .with_nullary_arity()
             .build();
@@ -56,7 +56,7 @@ impl StrUuidSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for StrUuidSparqlOp {
+impl ScalarUDFImpl for StrUuidSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

@@ -10,7 +10,7 @@ DecodeObjectIds: columns=[offer, price, productLabel, rating1, rating2, revName,
           SubqueryAlias: lhs
             QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801> <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel]
           SubqueryAlias: rhs
-            BasicGraphPattern: columns_to_decode=[date], filters=[EBV(GT(ENC_TF(date), Union 5:{date_time_type:0,value:63349516800.000000000000000000,offset:}))]
+            BasicGraphPattern: columns_to_decode=[date], filters=[EBV(GT(ENC_TF(date), Union 6:{date_time_type:0,value:63349516800.000000000000000000,offset:}))]
               QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801>]
               QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
               QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendor]

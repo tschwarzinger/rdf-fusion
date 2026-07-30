@@ -387,7 +387,7 @@ mod tests {
 
         assert_snapshot!(displayable(plan_not_pushed.as_ref()).indent(true), @"
         ProjectionExec: expr=[ENC_PT(s@0) as s]
-          FilterExec: EBV(EQ(LCASE(ENC_TF(STR(ENC_PT(o@1)))), 2:{value:http://example.org/o1,language:})), projection=[s@0]
+          FilterExec: EBV(EQ(LCASE(ENC_TF(STR(ENC_PT(o@1)))), 3:{value:http://example.org/o1,language:})), projection=[s@0]
             ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p1>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@2, required_guarantees=[predicate in (<http://example.org/p1>)]
         ");
     }

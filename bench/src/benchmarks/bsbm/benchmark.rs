@@ -6,7 +6,7 @@ use crate::benchmarks::bsbm::use_case::BsbmUseCase;
 use crate::benchmarks::bsbm::{BusinessIntelligenceUseCase, ExploreUseCase, NumProducts};
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::BenchmarkContext;
-use crate::operation::{SparqlOperation, SparqlRawOperation};
+use crate::operation::{SparqlRawOperation, SparqlUDFeration};
 use crate::report::BenchmarkReport;
 use crate::requirement::BenchRequirement;
 use crate::utils::print_store_stats;
@@ -89,7 +89,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
     pub fn list_operations(
         &self,
         ctx: &BenchmarkContext,
-    ) -> anyhow::Result<Vec<SparqlOperation<TUseCase::QueryName>>> {
+    ) -> anyhow::Result<Vec<SparqlUDFeration<TUseCase::QueryName>>> {
         println!("Loading queries ...");
 
         let result = match self.max_query_count {
@@ -248,7 +248,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
 
 async fn execute_benchmark<TUseCase: BsbmUseCase>(
     context: &BenchmarkContext<'_>,
-    operations: Vec<SparqlOperation<TUseCase::QueryName>>,
+    operations: Vec<SparqlUDFeration<TUseCase::QueryName>>,
     memory_store: &Store,
 ) -> anyhow::Result<BsbmReport<TUseCase>>
 where

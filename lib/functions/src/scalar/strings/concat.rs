@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use arrow_string::concat_elements::concat_elements_utf8_many;
 use datafusion::arrow::array::{Array, BooleanArray, StringArray};
 use datafusion::arrow::compute::kernels::cmp::distinct;
@@ -32,28 +32,28 @@ use std::sync::Arc;
 pub fn concat_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(ConcatSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(ConcatSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct ConcatSparqlOp {
+struct ConcatSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for ConcatSparqlOp {
+impl Debug for ConcatSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConcatSparqlOp")
+        f.debug_struct("ConcatSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl ConcatSparqlOp {
-    /// Create a new [`ConcatSparqlOp`].
+impl ConcatSparqlUDF {
+    /// Create a new [`ConcatSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_variadic_arity()
             .build();
@@ -65,7 +65,7 @@ impl ConcatSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for ConcatSparqlOp {
+impl ScalarUDFImpl for ConcatSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -116,7 +116,7 @@ impl ScalarUDFImpl for ConcatSparqlOp {
     }
 }
 
-impl ConcatSparqlOp {
+impl ConcatSparqlUDF {
     /// Implements the actual logic of handling typed family arrays.
     fn map_children_typed_family(
         &self,

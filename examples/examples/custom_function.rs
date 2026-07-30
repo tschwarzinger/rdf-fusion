@@ -5,7 +5,6 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
-use rdf_fusion::api::functions::FunctionName;
 use rdf_fusion::common::{DFResult, NamedNode, RdfFormat};
 use rdf_fusion::encoding::typed_family::{BooleanFamilyArray, DowncastTypedFamilyArray};
 use rdf_fusion::encoding::{
@@ -13,8 +12,9 @@ use rdf_fusion::encoding::{
     detect_encoding_from_types,
 };
 use rdf_fusion::execution::results::QueryResultsFormat;
+use rdf_fusion::extensions::functions::FunctionName;
 use rdf_fusion::functions::scalar::args::ScalarSparqlFunctionArgs;
-use rdf_fusion::functions::scalar::signature::SparqlOpTypeSignatureBuilder;
+use rdf_fusion::functions::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 use std::any::Any;
@@ -78,7 +78,7 @@ pub struct ContainsSpiderUDF {
 impl ContainsSpiderUDF {
     /// Creates a new [ContainsSpiderUDF].
     pub fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .build();
@@ -136,7 +136,8 @@ impl ScalarUDFImpl for ContainsSpiderUDF {
                         // If the input is null or a resource, return null. The output is a
                         // TypedFamilyEncoding array with nulls.
                         DowncastTypedFamilyArray::Null(_)
-                        | DowncastTypedFamilyArray::Resource(_) => self
+                        | DowncastTypedFamilyArray::Iri(_)
+                        | DowncastTypedFamilyArray::BlankNode(_) => self
                             .encodings
                             .typed_family()
                             .create_null_array(child.to_array().len()),

@@ -1,7 +1,7 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpArity;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFArity;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, StringBuilder};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
@@ -30,31 +30,31 @@ use std::sync::Arc;
 pub fn replace_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(ReplaceSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(ReplaceSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct ReplaceSparqlOp {
+struct ReplaceSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for ReplaceSparqlOp {
+impl Debug for ReplaceSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ReplaceSparqlOp")
+        f.debug_struct("ReplaceSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl ReplaceSparqlOp {
-    /// Create a new [`ReplaceSparqlOp`].
+impl ReplaceSparqlUDF {
+    /// Create a new [`ReplaceSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_ternary_arity()
-            .with_arity(SparqlOpArity::Fixed(NonZeroUsize::new(4).unwrap()))
+            .with_arity(SparqlUDFArity::Fixed(NonZeroUsize::new(4).unwrap()))
             .build();
         Self {
             encodings,
@@ -64,7 +64,7 @@ impl ReplaceSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for ReplaceSparqlOp {
+impl ScalarUDFImpl for ReplaceSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

@@ -2,7 +2,7 @@ use datafusion::common::DataFusionError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-#[error("Could not create SparqlOp implementation. {0}")]
+#[error("Could not create SparqlUDF implementation. {0}")]
 pub struct SparqlUDFCreationError(String);
 
 impl SparqlUDFCreationError {

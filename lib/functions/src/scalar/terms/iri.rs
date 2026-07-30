@@ -1,8 +1,8 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, StringBuilder};
-use datafusion::arrow::compute::filter;
+
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
@@ -10,9 +10,8 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_common::{AResult, DFResult, Iri};
 use rdf_fusion_encoding::typed_family::{
-    DowncastTypedFamilyArray, NullFamilyArray, ResourceFamily, ResourceFamilyArray,
-    StringFamilyArray, TypedFamilyArray, TypedFamilyArrayBuilder, TypedFamilyEncoding,
-    TypedFamilyEncodingRef, TypedFamilyId,
+    DowncastTypedFamilyArray, IriFamily, StringFamilyArray, TypedFamilyArray,
+    TypedFamilyEncodingRef,
 };
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
@@ -21,7 +20,6 @@ use rdf_fusion_encoding::{
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 
 /// Implementation of the SPARQL `IRI` function.
 ///
@@ -30,28 +28,28 @@ use std::sync::Arc;
 pub fn iri_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(IriSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(IriSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct IriSparqlOp {
+struct IriSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for IriSparqlOp {
+impl Debug for IriSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IriSparqlOp")
+        f.debug_struct("IriSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl IriSparqlOp {
-    /// Create a new [`IriSparqlOp`].
+impl IriSparqlUDF {
+    /// Create a new [`IriSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .with_binary_arity()
@@ -64,7 +62,7 @@ impl IriSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for IriSparqlOp {
+impl ScalarUDFImpl for IriSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -115,9 +113,9 @@ impl ScalarUDFImpl for IriSparqlOp {
                         [DowncastTypedFamilyArray::String(i_arr)] => {
                             iri_string_impl(tf_encoding, i_arr, None)
                         }
-                        // Unary Resource (If the argument is an IRI, it is returned)
-                        [DowncastTypedFamilyArray::Resource(r_arr)] => {
-                            iri_resource_impl(tf_encoding, r_arr)
+                        // Unary Iri (If the argument is an IRI, it is returned)
+                        [DowncastTypedFamilyArray::Iri(i_arr)] => {
+                            tf_encoding.create_array_from_family(i_arr.clone())
                         }
                         _ => tf_encoding.create_null_array(family_len),
                     }
@@ -164,41 +162,8 @@ fn iri_string_impl(
         }
     }
 
-    let iris = ResourceFamily::create_named_nodes_array(res_values.finish())?;
+    let iris = IriFamily::create_array(res_values.finish())?;
     encoding.create_array_from_family(iris)
-}
-
-fn iri_resource_impl(
-    encoding: &TypedFamilyEncodingRef,
-    r_arr: &ResourceFamilyArray,
-) -> AResult<TypedFamilyArray> {
-    let mut res_tids = Vec::with_capacity(r_arr.inner().len());
-    let mut res_offsets = Vec::with_capacity(r_arr.inner().len());
-    let mut null_count = 0;
-    let mut resource_count = 0;
-
-    for i in 0..r_arr.inner().len() {
-        if r_arr.is_named_node().value(i) {
-            res_tids.push(
-                encoding
-                    .find_typed_family_type_id(TypedFamilyId::Resource)
-                    .unwrap(),
-            );
-            res_offsets.push(resource_count);
-            resource_count += 1;
-        } else {
-            res_tids.push(TypedFamilyEncoding::NULL_TYPE_ID);
-            res_offsets.push(null_count as i32);
-            null_count += 1;
-        }
-    }
-
-    let filtered_resource = filter(r_arr.inner(), &r_arr.is_named_node())?;
-
-    TypedFamilyArrayBuilder::new(Arc::clone(encoding), res_tids, res_offsets)?
-        .with_nulls(NullFamilyArray::new(null_count))?
-        .with_array(TypedFamilyId::Resource, Some(filtered_resource))?
-        .finish()
 }
 
 #[cfg(test)]
@@ -253,13 +218,13 @@ mod tests {
 
         assert_snapshot!(
             result.to_string().await.unwrap(),
-            @r"
-        +-------------------------------------------------------------+
-        | IRI(?table?.input,?table?.base)                             |
-        +-------------------------------------------------------------+
-        | {rdf-fusion.resources={named_node=http://example.org/test}} |
-        | {rdf-fusion.resources={named_node=http://example.org/bar}}  |
-        +-------------------------------------------------------------+
+            @"
+        +------------------------------------------+
+        | IRI(?table?.input,?table?.base)          |
+        +------------------------------------------+
+        | {rdf-fusion.iri=http://example.org/test} |
+        | {rdf-fusion.iri=http://example.org/bar}  |
+        +------------------------------------------+
         "
         );
     }

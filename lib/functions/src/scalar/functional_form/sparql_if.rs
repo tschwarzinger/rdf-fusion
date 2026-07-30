@@ -1,5 +1,5 @@
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, new_null_array};
 use datafusion::arrow::compute::interleave;
 use datafusion::arrow::datatypes::DataType;
@@ -21,30 +21,30 @@ use std::sync::Arc;
 pub fn sparql_if_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(SparqlIfSparqlOp::new(Arc::clone(
-        encodings.typed_family(),
-    ))))
+    Ok(ScalarUDF::new_from_impl(SparqlIfSparqlUDF::new(
+        Arc::clone(encodings.typed_family()),
+    )))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct SparqlIfSparqlOp {
+struct SparqlIfSparqlUDF {
     encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
 }
 
-impl Debug for SparqlIfSparqlOp {
+impl Debug for SparqlIfSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SparqlIfSparqlOp")
+        f.debug_struct("SparqlIfSparqlUDF")
             .field("encoding", &self.encoding)
             .finish()
     }
 }
 
-impl SparqlIfSparqlOp {
-    /// Create a new [`SparqlIfSparqlOp`].
+impl SparqlIfSparqlUDF {
+    /// Create a new [`SparqlIfSparqlUDF`].
     fn new(encoding: TypedFamilyEncodingRef) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encoding.as_ref())
             .with_ternary_arity()
             .build();
@@ -56,7 +56,7 @@ impl SparqlIfSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for SparqlIfSparqlOp {
+impl ScalarUDFImpl for SparqlIfSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -174,9 +174,9 @@ mod tests {
         | test                                                                                         | if_true                                        | if_false                                        | IF(?table?.test,?table?.if_true,?table?.if_false) |
         +----------------------------------------------------------------------------------------------+------------------------------------------------+-------------------------------------------------+---------------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.null=}                                |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.null=}                                |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.null=}                                |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.null=}                                |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.null=}                                |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.null=}                                |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.null=}                                |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.strings={value: TRUE, language: }}    |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.strings={value: TRUE, language: }}    |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.strings={value: TRUE, language: }} | {rdf-fusion.strings={value: FALSE, language: }} | {rdf-fusion.strings={value: FALSE, language: }}   |

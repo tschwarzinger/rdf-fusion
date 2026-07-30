@@ -5,7 +5,7 @@ expression: "&explanation.optimized_logical_plan.to_string()"
 Sort: AS_SORTABLE_BYTES(ENC_TF(reviewDate)) DESC NULLS FIRST, fetch=20
   Projection: title, text, reviewDate, reviewer, reviewerName, rating1, rating2, rating3, rating4
     DecodeObjectIds: columns=[rating1, rating2, rating3, rating4, review, reviewDate, reviewer, reviewerName, title]
-      Filter: EBV(LANGMATCHES(ENC_TF(LANG(text)), Union 2:{value:EN,language:}))
+      Filter: EBV(LANGMATCHES(ENC_TF(LANG(text)), Union 3:{value:EN,language:}))
         DecodeObjectIds: columns=[text]
           Projection: lhs.review AS review, lhs.title AS title, lhs.text AS text, lhs.reviewDate AS reviewDate, lhs.reviewer AS reviewer, lhs.reviewerName AS reviewerName, lhs.rating1 AS rating1, lhs.rating2 AS rating2, lhs.rating3 AS rating3, rhs.rating4 AS rating4
             Left Join: lhs.review = rhs.review

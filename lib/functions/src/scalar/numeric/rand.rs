@@ -20,26 +20,26 @@ use std::fmt::{Debug, Formatter};
 pub fn rand_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(RandSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(RandSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct RandSparqlOp {
+struct RandSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for RandSparqlOp {
+impl Debug for RandSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RandSparqlOp")
+        f.debug_struct("RandSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl RandSparqlOp {
-    /// Create a new [`RandSparqlOp`].
+impl RandSparqlUDF {
+    /// Create a new [`RandSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
         Self {
             encodings,
@@ -49,7 +49,7 @@ impl RandSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for RandSparqlOp {
+impl ScalarUDFImpl for RandSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

@@ -51,8 +51,8 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 ///
 /// The object id encoding is very well suited for evaluating joins, as instead of joining
 /// variable-length RDF terms, we can directly join the object ids. While we do not have recent
-/// numbers for the performance gains, the [original pull request](https://github.com/tobixdev/rdf-fusion/pull/27)
-/// quadrupled the performance of some queries (with relatively small datasets!).
+/// numbers for the performance gains, the original pull request quadrupled the performance of
+/// some queries (with relatively small datasets!).
 ///
 /// However, this also introduces the necessity of decoding the object ids back to RDF terms. For
 /// example, by converting it to the [`PlainTermEncoding`](crate::plain_term::PlainTermEncoding).
@@ -65,12 +65,6 @@ pub type ObjectIdEncodingRef = Arc<ObjectIdEncoding>;
 /// # Equality
 ///
 /// The equality and hashing functions check for pointer equality of the underlying mapping.
-///
-/// # Current Limitation
-///
-/// Currently, this id is fixed to being a 32-bit integer. However, we have an
-/// [issue](https://github.com/tobixdev/rdf-fusion/issues/50) that tracks the progress on limiting
-/// this limitation.
 #[derive(Clone)]
 pub struct ObjectIdEncoding {
     /// The data type of the object ids.

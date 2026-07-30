@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::StringArray;
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::datatypes::DataType;
@@ -26,28 +26,28 @@ use std::fmt::{Debug, Formatter};
 pub fn strdt_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(StrDtSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(StrDtSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct StrDtSparqlOp {
+struct StrDtSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for StrDtSparqlOp {
+impl Debug for StrDtSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StrDtSparqlOp")
+        f.debug_struct("StrDtSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl StrDtSparqlOp {
-    /// Create a new [`StrDtSparqlOp`].
+impl StrDtSparqlUDF {
+    /// Create a new [`StrDtSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -59,7 +59,7 @@ impl StrDtSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for StrDtSparqlOp {
+impl ScalarUDFImpl for StrDtSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -107,7 +107,7 @@ impl ScalarUDFImpl for StrDtSparqlOp {
     }
 }
 
-impl StrDtSparqlOp {
+impl StrDtSparqlUDF {
     fn compute_plain_term(
         &self,
         lhs: &PlainTermArray,
@@ -165,8 +165,8 @@ mod tests {
     use insta::assert_snapshot;
     use rdf_fusion_common::vocab::xsd;
     use rdf_fusion_encoding::typed_family::{
-        FamilyArray, ResourceFamily, StringFamily, StringFamilyArray,
-        TypedFamilyArrayBuilder, TypedFamilyId,
+        FamilyArray, IriFamily, StringFamily, StringFamilyArray, TypedFamilyArrayBuilder,
+        TypedFamilyId,
     };
     use rdf_fusion_encoding::{EncodingArray, EncodingScalar};
     use std::sync::Arc;
@@ -200,10 +200,8 @@ mod tests {
         let dt_array = encodings
             .typed_family()
             .create_array_from_family(
-                ResourceFamily::create_named_nodes_array(StringArray::from(vec![
-                    xsd::INTEGER.as_str(),
-                ]))
-                .unwrap(),
+                IriFamily::create_array(StringArray::from(vec![xsd::INTEGER.as_str()]))
+                    .unwrap(),
             )
             .unwrap();
         let dt_scalar = dt_array.try_as_scalar(0).unwrap();
@@ -216,13 +214,13 @@ mod tests {
         );
         assert_snapshot!(
             result.to_string().await.unwrap(),
-            @r"
-        +-----------------------------------------------+-------------------------------------------------------------------------+
-        | input                                         | STRDT(?table?.input,Union 1:0:http://www.w3.org/2001/XMLSchema#integer) |
-        +-----------------------------------------------+-------------------------------------------------------------------------+
-        | {rdf-fusion.strings={value: 123, language: }} | {rdf-fusion.numeric={integer=123}}                                      |
-        | {rdf-fusion.strings={value: abc, language: }} | {rdf-fusion.null=}                                                      |
-        +-----------------------------------------------+-------------------------------------------------------------------------+
+            @"
+        +-----------------------------------------------+-----------------------------------------------------------------------+
+        | input                                         | STRDT(?table?.input,Union 2:http://www.w3.org/2001/XMLSchema#integer) |
+        +-----------------------------------------------+-----------------------------------------------------------------------+
+        | {rdf-fusion.strings={value: 123, language: }} | {rdf-fusion.numeric={integer=123}}                                    |
+        | {rdf-fusion.strings={value: abc, language: }} | {rdf-fusion.null=}                                                    |
+        +-----------------------------------------------+-----------------------------------------------------------------------+
         "
         )
     }

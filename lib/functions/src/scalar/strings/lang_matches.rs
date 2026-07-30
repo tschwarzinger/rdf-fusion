@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::Array;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
@@ -24,30 +24,30 @@ use std::fmt::{Debug, Formatter};
 pub fn lang_matches_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(LangMatchesSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(LangMatchesSparqlUDF::new(
         encodings,
     )))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct LangMatchesSparqlOp {
+struct LangMatchesSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for LangMatchesSparqlOp {
+impl Debug for LangMatchesSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LangMatchesSparqlOp")
+        f.debug_struct("LangMatchesSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl LangMatchesSparqlOp {
-    /// Create a new [`LangMatchesSparqlOp`].
+impl LangMatchesSparqlUDF {
+    /// Create a new [`LangMatchesSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -59,7 +59,7 @@ impl LangMatchesSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for LangMatchesSparqlOp {
+impl ScalarUDFImpl for LangMatchesSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

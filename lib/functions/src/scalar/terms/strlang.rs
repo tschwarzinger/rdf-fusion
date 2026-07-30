@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::StringArray;
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::datatypes::DataType;
@@ -27,28 +27,28 @@ use std::fmt::{Debug, Formatter};
 pub fn strlang_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(StrLangSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(StrLangSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct StrLangSparqlOp {
+struct StrLangSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for StrLangSparqlOp {
+impl Debug for StrLangSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StrLangSparqlOp")
+        f.debug_struct("StrLangSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl StrLangSparqlOp {
-    /// Create a new [`StrLangSparqlOp`].
+impl StrLangSparqlUDF {
+    /// Create a new [`StrLangSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -60,7 +60,7 @@ impl StrLangSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for StrLangSparqlOp {
+impl ScalarUDFImpl for StrLangSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -107,7 +107,7 @@ impl ScalarUDFImpl for StrLangSparqlOp {
     }
 }
 
-impl StrLangSparqlOp {
+impl StrLangSparqlUDF {
     fn compute_plain_term(
         &self,
         lhs: &PlainTermArray,
@@ -227,9 +227,9 @@ mod tests {
         );
         assert_snapshot!(
             result.to_string().await.unwrap(),
-            @r"
+            @"
         +-----------------------------------------------+-----------------------------------------------------+
-        | input                                         | STRLANG(?table?.input,Union 2:{value:en,language:}) |
+        | input                                         | STRLANG(?table?.input,Union 3:{value:en,language:}) |
         +-----------------------------------------------+-----------------------------------------------------+
         | {rdf-fusion.strings={value: abc, language: }} | {rdf-fusion.strings={value: abc, language: en}}     |
         +-----------------------------------------------+-----------------------------------------------------+

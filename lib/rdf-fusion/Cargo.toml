@@ -6,7 +6,7 @@ license.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
-repository = "https://github.com/tobixdev/rdf-fusion"
+repository = "https://codeberg.org/tschwarzinger/rdf-fusion"
 documentation = "https://docs.rs/rdf-fusion"
 description = """
 a SPARQL database and RDF toolkit
@@ -18,6 +18,8 @@ rust-version.workspace = true
 datafusion.workspace = true
 deltalake.workspace = true
 rdf-fusion-extensions.workspace = true
+rdf-fusion-compute.workspace = true
+rdf-fusion-physical.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-functions.workspace = true
 rdf-fusion-common.workspace = true

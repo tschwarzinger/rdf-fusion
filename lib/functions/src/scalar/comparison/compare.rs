@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
@@ -131,7 +131,7 @@ impl Debug for CompareSparqlUdf {
 impl CompareSparqlUdf {
     /// Create a new [`CompareSparqlUdf`].
     pub fn new(encodings: RdfFusionEncodings, name: String, op: CompareOperator) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -209,8 +209,8 @@ mod tests {
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+--------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}             |
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}             |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=true}      |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=false}     |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=true}      |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}             |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=true}      |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=true}      |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=false}     |
@@ -236,8 +236,8 @@ mod tests {
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+--------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}             |
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}             |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=false}     |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=true}      |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=false}     |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}             |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=false}     |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=false}     |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=true}      |
@@ -263,8 +263,8 @@ mod tests {
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+---------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}              |
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}              |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=true}       |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=true}       |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=true}       |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}              |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=true}       |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=true}       |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=true}       |
@@ -290,8 +290,8 @@ mod tests {
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+--------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}             |
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}             |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=false}     |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=false}     |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=false}     |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}             |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=false}     |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=false}     |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=false}     |
@@ -317,8 +317,8 @@ mod tests {
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+---------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}              |
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}              |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=true}       |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=false}      |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=true}       |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}              |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=true}       |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=true}       |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=false}      |

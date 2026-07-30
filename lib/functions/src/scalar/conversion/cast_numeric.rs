@@ -1,6 +1,6 @@
 use crate::scalar::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, ArrayRef};
 use datafusion::arrow::compute::cast;
 use datafusion::arrow::datatypes::DataType;
@@ -115,7 +115,7 @@ impl CastNumericSparqlUdf {
         name: String,
         target_type: DataType,
     ) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .build();
@@ -232,9 +232,9 @@ mod tests {
         | input                                                                                        | xsd:int(?table?.input)         |
         +----------------------------------------------------------------------------------------------+--------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}             |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}             |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}             |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}             |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}             |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}             |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}             |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={int=10}}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={int=10}}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={int=0}}   |
@@ -261,9 +261,9 @@ mod tests {
         | input                                                                                        | xsd:integer(?table?.input)         |
         +----------------------------------------------------------------------------------------------+------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                 |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                 |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                 |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                 |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                 |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                 |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                 |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={integer=10}}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={integer=0}}   |
@@ -289,9 +289,9 @@ mod tests {
         | input                                                                                        | xsd:float(?table?.input)           |
         +----------------------------------------------------------------------------------------------+------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                 |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                 |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                 |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                 |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                 |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                 |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                 |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={float=10.0}}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=10.0}}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}   |
@@ -318,9 +318,9 @@ mod tests {
         | input                                                                                        | xsd:double(?table?.input)           |
         +----------------------------------------------------------------------------------------------+-------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                  |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                  |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                  |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                  |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                  |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                  |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                  |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={double=10.0}}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={double=10.0}}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={double=0.0}}   |
@@ -347,9 +347,9 @@ mod tests {
         | input                                                                                        | xsd:decimal(?table?.input)                            |
         +----------------------------------------------------------------------------------------------+-------------------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                    |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                                    |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                                    |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                                    |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                                    |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                                    |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                                    |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={decimal=10.000000000000000000}}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={decimal=10.000000000000000000}}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={decimal=0.000000000000000000}}   |

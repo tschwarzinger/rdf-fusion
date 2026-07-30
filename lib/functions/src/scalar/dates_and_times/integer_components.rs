@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
@@ -23,7 +23,7 @@ use std::fmt::{Debug, Formatter};
 pub fn minutes_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlUDF::new(
         DateTimeIntegerPart::Minutes,
         encodings,
     )))
@@ -36,7 +36,7 @@ pub fn minutes_udf(
 pub fn hours_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlUDF::new(
         DateTimeIntegerPart::Hours,
         encodings,
     )))
@@ -49,7 +49,7 @@ pub fn hours_udf(
 pub fn day_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlUDF::new(
         DateTimeIntegerPart::Day,
         encodings,
     )))
@@ -62,7 +62,7 @@ pub fn day_udf(
 pub fn month_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlUDF::new(
         DateTimeIntegerPart::Month,
         encodings,
     )))
@@ -75,14 +75,14 @@ pub fn month_udf(
 pub fn year_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(DateTimeIntegerPartSparqlUDF::new(
         DateTimeIntegerPart::Year,
         encodings,
     )))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct DateTimeIntegerPartSparqlOp {
+struct DateTimeIntegerPartSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
@@ -111,19 +111,19 @@ impl DateTimeIntegerPart {
     }
 }
 
-impl Debug for DateTimeIntegerPartSparqlOp {
+impl Debug for DateTimeIntegerPartSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DateTimePartSparqlOp")
+        f.debug_struct("DateTimePartSparqlUDF")
             .field("part", &self.part)
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl DateTimeIntegerPartSparqlOp {
+impl DateTimeIntegerPartSparqlUDF {
     /// Create a new generic date/time extraction op.
     fn new(part: DateTimeIntegerPart, encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .build();
@@ -136,7 +136,7 @@ impl DateTimeIntegerPartSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for DateTimeIntegerPartSparqlOp {
+impl ScalarUDFImpl for DateTimeIntegerPartSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -210,9 +210,9 @@ mod tests {
         | input                                                                                        | MINUTES(?table?.input)           |
         +----------------------------------------------------------------------------------------------+----------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}               |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}               |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}               |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}               |
@@ -239,9 +239,9 @@ mod tests {
         | input                                                                                        | HOURS(?table?.input)              |
         +----------------------------------------------------------------------------------------------+-----------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}                |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}                |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}                |
@@ -268,9 +268,9 @@ mod tests {
         | input                                                                                        | DAY(?table?.input)               |
         +----------------------------------------------------------------------------------------------+----------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}               |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}               |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}               |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}               |
@@ -297,9 +297,9 @@ mod tests {
         | input                                                                                        | MONTH(?table?.input)             |
         +----------------------------------------------------------------------------------------------+----------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}               |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}               |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}               |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}               |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}               |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}               |
@@ -326,9 +326,9 @@ mod tests {
         | input                                                                                        | YEAR(?table?.input)                 |
         +----------------------------------------------------------------------------------------------+-------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                  |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                  |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                  |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                  |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                  |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                  |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                  |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}                  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}                  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}                  |

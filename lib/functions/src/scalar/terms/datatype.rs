@@ -1,13 +1,13 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
-use rdf_fusion_encoding::typed_family::ResourceFamily;
+use rdf_fusion_encoding::typed_family::IriFamily;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
     detect_encoding_from_types,
@@ -23,28 +23,28 @@ use std::fmt::{Debug, Formatter};
 pub fn datatype_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(DatatypeSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(DatatypeSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct DatatypeSparqlOp {
+struct DatatypeSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for DatatypeSparqlOp {
+impl Debug for DatatypeSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DatatypeSparqlOp")
+        f.debug_struct("DatatypeSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl DatatypeSparqlOp {
-    /// Create a new [`DatatypeSparqlOp`].
+impl DatatypeSparqlUDF {
+    /// Create a new [`DatatypeSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_supported_encoding(encodings.plain_term().as_ref())
             .with_unary_arity()
@@ -57,7 +57,7 @@ impl DatatypeSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for DatatypeSparqlOp {
+impl ScalarUDFImpl for DatatypeSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -90,9 +90,7 @@ impl ScalarUDFImpl for DatatypeSparqlOp {
         let result = match args.downcast_arrays() {
             Some(DowncastEncodingArgs::TypedFamily(tf_args)) => {
                 let array = tf_args.get(0);
-                let iris = ResourceFamily::create_named_nodes_array(
-                    array.literal_data_types()?,
-                )?;
+                let iris = IriFamily::create_array(array.literal_data_types()?)?;
 
                 self.encodings
                     .typed_family()
@@ -134,25 +132,25 @@ mod tests {
         assert_snapshot!(
             result.to_string().await.unwrap(),
             @"
-        +----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-        | input                                                                                        | DATATYPE(?table?.input)                                                                   |
-        +----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-        | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                        |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                                                                        |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                                                                        |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                                                                        |
-        | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#integer}}              |
-        | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#float}}                |
-        | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#float}}                |
-        | {rdf-fusion.numeric={double=20.0}}                                                           | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#double}}               |
-        | {rdf-fusion.numeric={decimal=30.000000000000000000}}                                         | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#decimal}}              |
-        | {rdf-fusion.numeric={int=40}}                                                                | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#int}}                  |
-        | {rdf-fusion.strings={value: b1, language: }}                                                 | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#string}}               |
-        | {rdf-fusion.strings={value: just a string, language: }}                                      | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#string}}               |
-        | {rdf-fusion.strings={value: hello, language: en}}                                            | {rdf-fusion.resources={named_node=http://www.w3.org/1999/02/22-rdf-syntax-ns#langString}} |
-        | {rdf-fusion.strings={value: 123, language: }}                                                | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#string}}               |
-        | {rdf-fusion.date-time={date_time_type: 0, value: 63808171200.000000000000000000, offset: 0}} | {rdf-fusion.resources={named_node=http://www.w3.org/2001/XMLSchema#dateTime}}             |
-        +----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
+        +----------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
+        | input                                                                                        | DATATYPE(?table?.input)                                                |
+        +----------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
+        | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                     |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                                                     |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                                                     |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                                                     |
+        | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#integer}              |
+        | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#float}                |
+        | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#float}                |
+        | {rdf-fusion.numeric={double=20.0}}                                                           | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#double}               |
+        | {rdf-fusion.numeric={decimal=30.000000000000000000}}                                         | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#decimal}              |
+        | {rdf-fusion.numeric={int=40}}                                                                | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#int}                  |
+        | {rdf-fusion.strings={value: b1, language: }}                                                 | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#string}               |
+        | {rdf-fusion.strings={value: just a string, language: }}                                      | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#string}               |
+        | {rdf-fusion.strings={value: hello, language: en}}                                            | {rdf-fusion.iri=http://www.w3.org/1999/02/22-rdf-syntax-ns#langString} |
+        | {rdf-fusion.strings={value: 123, language: }}                                                | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#string}               |
+        | {rdf-fusion.date-time={date_time_type: 0, value: 63808171200.000000000000000000, offset: 0}} | {rdf-fusion.iri=http://www.w3.org/2001/XMLSchema#dateTime}             |
+        +----------------------------------------------------------------------------------------------+------------------------------------------------------------------------+
         "
         )
     }

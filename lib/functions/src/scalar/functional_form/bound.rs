@@ -1,5 +1,5 @@
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::compute::is_not_null;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::logical_expr::{
@@ -18,20 +18,20 @@ use std::any::Any;
 pub fn bound_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(BoundSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(BoundSparqlUDF::new(encodings)))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct BoundSparqlOp {
+struct BoundSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl BoundSparqlOp {
-    /// Create a new [`BoundSparqlOp`].
+impl BoundSparqlUDF {
+    /// Create a new [`BoundSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let mut type_signature_builder = SparqlOpTypeSignatureBuilder::new()
+        let mut type_signature_builder = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.plain_term().as_ref())
             .with_supported_encoding(encodings.typed_family().as_ref());
 
@@ -50,7 +50,7 @@ impl BoundSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for BoundSparqlOp {
+impl ScalarUDFImpl for BoundSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -100,9 +100,9 @@ mod tests {
         | input                                                                                        | BOUND(?table?.input)       |
         +----------------------------------------------------------------------------------------------+----------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.boolean=false} |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.boolean=true}  |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.boolean=true}  |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.boolean=true}  |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.boolean=true}  |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.boolean=true}  |

@@ -7,7 +7,7 @@ DecodeObjectIdsExec: projections=[decode(productLabel) as productLabel, decode(o
     NestedLoopJoinExec: join_type=Left
       ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer17/Product801> <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel], blank_node_mode=Variable, file_groups={1 group: [[databases/bsbm-1000/quad-tables/GSPO/delta-parquet-file.parquet]]}, projection=[object@3 as productLabel], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 21381 AND predicate@2 = 1610, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 21381 AND 21381 <= subject_max@2 AND predicate_null_count@7 != row_count@4 AND predicate_min@5 <= 1610 AND 1610 <= predicate_max@6, required_guarantees=[predicate in (1610), subject in (21381)]
       ProjectionExec: expr=[offer@2 as offer, price@3 as price, vendor@0 as vendor, vendorTitle@1 as vendorTitle]
-        FilterExec: EBV(GT(ENC_TF(date@4), 5:{date_time_type:0,value:63349516800.000000000000000000,offset:})), projection=[vendor@0, vendorTitle@1, offer@2, price@3]
+        FilterExec: EBV(GT(ENC_TF(date@4), 6:{date_time_type:0,value:63349516800.000000000000000000,offset:})), projection=[vendor@0, vendorTitle@1, offer@2, price@3]
           DecodeObjectIdsExec: projections=[vendor, vendorTitle, offer, price, decode(date) as date]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(vendor@0, vendor@1), (offer@2, offer@0)], projection=[vendor@0, vendorTitle@1, offer@2, price@3, date@4]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@2, offer@0)], projection=[vendor@0, vendorTitle@1, offer@2, price@3, date@5]

@@ -1,5 +1,5 @@
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, BooleanArray, make_comparator};
 use datafusion::arrow::compute::kernels::cmp::not_distinct;
 use datafusion::arrow::compute::{SortOptions, is_null, or};
@@ -20,30 +20,30 @@ use std::sync::Arc;
 pub fn is_compatible_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(IsCompatibleSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(IsCompatibleSparqlUDF::new(
         encodings,
     )))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct IsCompatibleSparqlOp {
+struct IsCompatibleSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for IsCompatibleSparqlOp {
+impl Debug for IsCompatibleSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IsCompatibleSparqlOp")
+        f.debug_struct("IsCompatibleSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl IsCompatibleSparqlOp {
-    /// Create a new [`IsCompatibleSparqlOp`].
+impl IsCompatibleSparqlUDF {
+    /// Create a new [`IsCompatibleSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.plain_term().as_ref())
             .with_supported_encoding_opt(encodings.object_id().map(|e| e.as_ref()))
             .with_supported_encoding(encodings.string_encoding().as_ref())
@@ -57,7 +57,7 @@ impl IsCompatibleSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for IsCompatibleSparqlOp {
+impl ScalarUDFImpl for IsCompatibleSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

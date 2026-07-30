@@ -1,5 +1,5 @@
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, StringArray, StringBuilder};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::logical_expr::{
@@ -7,7 +7,7 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_common::{BlankNode, BlankNodeRef, DFResult};
 use rdf_fusion_encoding::typed_family::{
-    DowncastTypedFamilyArray, ResourceFamily, TypedFamilyEncodingRef,
+    BlankNodeFamily, DowncastTypedFamilyArray, TypedFamilyEncodingRef,
 };
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
@@ -22,30 +22,30 @@ use std::sync::Arc;
 pub fn bnode_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(BNodeSparqlOp::new(Arc::clone(
+    Ok(ScalarUDF::new_from_impl(BNodeSparqlUDF::new(Arc::clone(
         encodings.typed_family(),
     ))))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct BNodeSparqlOp {
+struct BNodeSparqlUDF {
     encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
 }
 
-impl Debug for BNodeSparqlOp {
+impl Debug for BNodeSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BNodeSparqlOp")
+        f.debug_struct("BNodeSparqlUDF")
             .field("encoding", &self.encoding)
             .finish()
     }
 }
 
-impl BNodeSparqlOp {
-    /// Create a new [`BNodeSparqlOp`].
+impl BNodeSparqlUDF {
+    /// Create a new [`BNodeSparqlUDF`].
     fn new(encoding: TypedFamilyEncodingRef) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encoding.as_ref())
             .with_nullary_arity()
             .with_unary_arity()
@@ -58,7 +58,7 @@ impl BNodeSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for BNodeSparqlOp {
+impl ScalarUDFImpl for BNodeSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -80,7 +80,7 @@ impl ScalarUDFImpl for BNodeSparqlOp {
         if args.args.is_empty() {
             let bnodes = (0..num_rows).map(|_| BlankNode::default().to_string());
             let bnodes_array = StringArray::from_iter_values(bnodes);
-            let resource_array = ResourceFamily::create_blank_nodes_array(bnodes_array)?;
+            let resource_array = BlankNodeFamily::create_array(bnodes_array)?;
             let result = self.encoding.create_array_from_family(resource_array)?;
             return Ok(ColumnarValue::Array(result.into_array_ref()));
         }
@@ -107,8 +107,7 @@ impl ScalarUDFImpl for BNodeSparqlOp {
                     }
                 }
 
-                let resource_array =
-                    ResourceFamily::create_blank_nodes_array(bnodes.finish())?;
+                let resource_array = BlankNodeFamily::create_array(bnodes.finish())?;
                 self.encoding.create_array_from_family(resource_array)
             }
             _ => self.encoding.create_null_array(child.to_array().len()),
@@ -137,25 +136,25 @@ mod tests {
         assert_snapshot!(
             result.to_string().await.unwrap(),
             @"
-        +----------------------------------------------------------------------------------------------+-----------------------------------------+
-        | input                                                                                        | BNODE(?table?.input)                    |
-        +----------------------------------------------------------------------------------------------+-----------------------------------------+
-        | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                      |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                      |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                      |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                      |
-        | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}                      |
-        | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}                      |
-        | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}                      |
-        | {rdf-fusion.numeric={double=20.0}}                                                           | {rdf-fusion.null=}                      |
-        | {rdf-fusion.numeric={decimal=30.000000000000000000}}                                         | {rdf-fusion.null=}                      |
-        | {rdf-fusion.numeric={int=40}}                                                                | {rdf-fusion.null=}                      |
-        | {rdf-fusion.strings={value: b1, language: }}                                                 | {rdf-fusion.resources={blank_node=b1}}  |
-        | {rdf-fusion.strings={value: just a string, language: }}                                      | {rdf-fusion.null=}                      |
-        | {rdf-fusion.strings={value: hello, language: en}}                                            | {rdf-fusion.null=}                      |
-        | {rdf-fusion.strings={value: 123, language: }}                                                | {rdf-fusion.resources={blank_node=123}} |
-        | {rdf-fusion.date-time={date_time_type: 0, value: 63808171200.000000000000000000, offset: 0}} | {rdf-fusion.null=}                      |
-        +----------------------------------------------------------------------------------------------+-----------------------------------------+
+        +----------------------------------------------------------------------------------------------+-----------------------------+
+        | input                                                                                        | BNODE(?table?.input)        |
+        +----------------------------------------------------------------------------------------------+-----------------------------+
+        | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}          |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}          |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}          |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}          |
+        | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.null=}          |
+        | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.null=}          |
+        | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.null=}          |
+        | {rdf-fusion.numeric={double=20.0}}                                                           | {rdf-fusion.null=}          |
+        | {rdf-fusion.numeric={decimal=30.000000000000000000}}                                         | {rdf-fusion.null=}          |
+        | {rdf-fusion.numeric={int=40}}                                                                | {rdf-fusion.null=}          |
+        | {rdf-fusion.strings={value: b1, language: }}                                                 | {rdf-fusion.blank-node=b1}  |
+        | {rdf-fusion.strings={value: just a string, language: }}                                      | {rdf-fusion.null=}          |
+        | {rdf-fusion.strings={value: hello, language: en}}                                            | {rdf-fusion.null=}          |
+        | {rdf-fusion.strings={value: 123, language: }}                                                | {rdf-fusion.blank-node=123} |
+        | {rdf-fusion.date-time={date_time_type: 0, value: 63808171200.000000000000000000, offset: 0}} | {rdf-fusion.null=}          |
+        +----------------------------------------------------------------------------------------------+-----------------------------+
         "
         )
     }
@@ -172,6 +171,6 @@ mod tests {
         );
         let result_str = result.to_string().await.unwrap();
         // Since BNODE() is volatile, we just check that it produces results.
-        assert!(result_str.contains("blank_node"));
+        assert!(result_str.contains("blank-node"));
     }
 }

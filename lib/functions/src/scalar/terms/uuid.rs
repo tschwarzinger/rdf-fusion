@@ -1,12 +1,12 @@
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::StringArray;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
-use rdf_fusion_encoding::typed_family::{ResourceFamily, TypedFamilyEncodingRef};
+use rdf_fusion_encoding::typed_family::{IriFamily, TypedFamilyEncodingRef};
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::any::Any;
@@ -21,30 +21,30 @@ use uuid::Uuid;
 pub fn uuid_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(UuidSparqlOp::new(Arc::clone(
+    Ok(ScalarUDF::new_from_impl(UuidSparqlUDF::new(Arc::clone(
         encodings.typed_family(),
     ))))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct UuidSparqlOp {
+struct UuidSparqlUDF {
     encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
 }
 
-impl Debug for UuidSparqlOp {
+impl Debug for UuidSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UuidSparqlOp")
+        f.debug_struct("UuidSparqlUDF")
             .field("encoding", &self.encoding)
             .finish()
     }
 }
 
-impl UuidSparqlOp {
-    /// Create a new [`UuidSparqlOp`].
+impl UuidSparqlUDF {
+    /// Create a new [`UuidSparqlUDF`].
     fn new(encoding: TypedFamilyEncodingRef) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encoding.as_ref())
             .with_nullary_arity()
             .build();
@@ -56,7 +56,7 @@ impl UuidSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for UuidSparqlOp {
+impl ScalarUDFImpl for UuidSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -77,7 +77,7 @@ impl ScalarUDFImpl for UuidSparqlOp {
         let num_rows = args.number_rows;
         let uuids = (0..num_rows).map(|_| format!("urn:uuid:{}", Uuid::new_v4()));
         let values_array = StringArray::from_iter_values(uuids);
-        let resource_array = ResourceFamily::create_named_nodes_array(values_array)?;
+        let resource_array = IriFamily::create_array(values_array)?;
         let result = self.encoding.create_array_from_family(resource_array)?;
         Ok(ColumnarValue::Array(result.into_array_ref()))
     }
@@ -99,6 +99,6 @@ mod tests {
         let udf = Arc::new(uuid_udf(encodings).unwrap());
         let result = evaluate_function_with_args_for_test(test_vector, udf, vec![]);
         let result_str = result.to_string().await.unwrap();
-        assert!(result_str.contains("rdf-fusion.resources={named_node=urn:uuid:"));
+        assert!(result_str.contains("rdf-fusion.iri=urn:uuid:"));
     }
 }

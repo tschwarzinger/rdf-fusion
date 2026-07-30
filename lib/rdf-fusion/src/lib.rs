@@ -28,7 +28,7 @@
 //! For instance, users can register custom SPARQL functions, similar to those found in other SPARQL engines.
 //! Additional extension points are planned for future releases.
 //!
-//! See the [examples](https://github.com/tobixdev/rdf-fusion/tree/main/examples) directory for
+//! See the [examples](https://codeberg.org/tschwarzinger/rdf-fusion/src/branch/main/examples) directory for
 //! demonstrations of the `Store` API in action.
 //!
 //! ## Library Use
@@ -41,7 +41,7 @@
 //! a single query.
 //! Users who want to *build new systems* using RDF Fusion's SPARQL implementation are encouraged to use this API.
 //!
-//! See the [examples](https://github.com/tobixdev/rdf-fusion/tree/main/examples) directory for more
+//! See the [examples](https://codeberg.org/tschwarzinger/rdf-fusion/src/branch/main/examples) directory for more
 //! details.
 //!
 //! # Background
@@ -396,28 +396,36 @@
 pub mod error;
 pub mod store;
 
-pub mod api {
-    pub use rdf_fusion_extensions::*;
+pub mod common {
+    pub use rdf_fusion_common::*;
+}
+
+pub mod compute {
+    pub use rdf_fusion_compute::*;
 }
 
 pub mod encoding {
     pub use rdf_fusion_encoding::*;
 }
 
-pub mod functions {
-    pub use rdf_fusion_functions::*;
+pub mod execution {
+    pub use rdf_fusion_execution::*;
 }
 
-pub mod common {
-    pub use rdf_fusion_common::*;
+pub mod extensions {
+    pub use rdf_fusion_extensions::*;
+}
+
+pub mod functions {
+    pub use rdf_fusion_functions::*;
 }
 
 pub mod logical {
     pub use rdf_fusion_logical::*;
 }
 
-pub mod execution {
-    pub use rdf_fusion_execution::*;
+pub mod pyhsical {
+    pub use rdf_fusion_physical::*;
 }
 
 pub mod storage {

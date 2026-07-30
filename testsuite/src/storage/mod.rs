@@ -2,7 +2,7 @@ use crate::test::{Test, TestOutcome};
 use crate::testsuite::{TestSuite, TestSuiteBuilder};
 use anyhow::Result;
 use async_trait::async_trait;
-use rdf_fusion::api::storage::QuadStorage;
+use rdf_fusion::extensions::storage::QuadStorage;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;

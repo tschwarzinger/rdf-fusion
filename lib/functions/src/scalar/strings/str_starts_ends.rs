@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use arrow_string::like::{ends_with, starts_with};
 use datafusion::arrow::array::Array;
 use datafusion::arrow::datatypes::DataType;
@@ -31,7 +31,7 @@ enum StringAffixOperation {
 pub fn str_starts_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(StringAffixSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(StringAffixSparqlUDF::new(
         encodings,
         StringAffixOperation::Starts,
     )))
@@ -44,33 +44,33 @@ pub fn str_starts_udf(
 pub fn str_ends_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(StringAffixSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(StringAffixSparqlUDF::new(
         encodings,
         StringAffixOperation::Ends,
     )))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct StringAffixSparqlOp {
+struct StringAffixSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
     op: StringAffixOperation,
 }
 
-impl Debug for StringAffixSparqlOp {
+impl Debug for StringAffixSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StringAffixSparqlOp")
+        f.debug_struct("StringAffixSparqlUDF")
             .field("encodings", &self.encodings)
             .field("op", &self.op)
             .finish()
     }
 }
 
-impl StringAffixSparqlOp {
-    /// Create a new [`StringAffixSparqlOp`].
+impl StringAffixSparqlUDF {
+    /// Create a new [`StringAffixSparqlUDF`].
     fn new(encodings: RdfFusionEncodings, op: StringAffixOperation) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -89,7 +89,7 @@ impl StringAffixSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for StringAffixSparqlOp {
+impl ScalarUDFImpl for StringAffixSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

@@ -5,8 +5,10 @@ use std::fmt::{Display, Formatter};
 pub enum TypedFamilyId {
     /// The null family.
     Null,
-    /// The resource family.
-    Resource,
+    /// The IRI family.
+    Iri,
+    /// The Blank Node family.
+    BlankNode,
     /// The string family.
     String,
     /// The boolean family.
@@ -28,7 +30,8 @@ impl TypedFamilyId {
     pub fn as_str(&self) -> &str {
         match self {
             TypedFamilyId::Null => "rdf-fusion.null",
-            TypedFamilyId::Resource => "rdf-fusion.resources",
+            TypedFamilyId::Iri => "rdf-fusion.iri",
+            TypedFamilyId::BlankNode => "rdf-fusion.blank-node",
             TypedFamilyId::String => "rdf-fusion.strings",
             TypedFamilyId::Boolean => "rdf-fusion.boolean",
             TypedFamilyId::Numeric => "rdf-fusion.numeric",

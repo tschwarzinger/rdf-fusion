@@ -60,7 +60,7 @@ use std::sync::{Arc, RwLock};
 /// DataFusion UDFs and UDAFs.
 ///
 /// # Additional Resources
-/// - [SPARQL 1.1 Query Language - Function Library](https://www.w3.org/TR/sparql11-query/#SparqlOps)
+/// - [SPARQL 1.1 Query Language - Function Library](https://www.w3.org/TR/sparql11-query/#SparqlUDFs)
 pub struct DefaultRdfFusionFunctionRegistry {
     /// The registered encodings.
     encodings: RdfFusionEncodings,
@@ -191,13 +191,13 @@ fn supported_encodings(
     }
 }
 
-fn renamed<TSparqlOp>(
+fn renamed<TSparqlUDF>(
     name: &FunctionName,
-    udf_impl: TSparqlOp,
+    udf_impl: TSparqlUDF,
     signature_override: Option<Signature>,
 ) -> ScalarUDF
 where
-    TSparqlOp: ScalarUDFImpl + 'static,
+    TSparqlUDF: ScalarUDFImpl + 'static,
 {
     let renamed = RenamedScalarUdfImpl::new(name.to_string(), udf_impl);
     let renamed = match signature_override {

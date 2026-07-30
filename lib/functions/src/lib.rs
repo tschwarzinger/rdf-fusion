@@ -41,10 +41,10 @@ mod test_utils {
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::{
-        DateTimeFamily, DateTimeFamilyArray, FamilyArray, NullFamilyArray, NumericFamily,
-        NumericFamilyArrayBuilder, ResourceArrayBuilder, StringFamilyArray,
-        TypedFamilyArrayBuilder, TypedFamilyEncoding, TypedFamilyEncodingRef,
-        TypedFamilyId,
+        BlankNodeFamilyArray, DateTimeFamily, DateTimeFamilyArray, FamilyArray,
+        IriFamilyArray, NullFamilyArray, NumericFamily, NumericFamilyArrayBuilder,
+        StringFamilyArray, TypedFamilyArrayBuilder, TypedFamilyEncoding,
+        TypedFamilyEncodingRef, TypedFamilyId,
     };
     use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings};
     use std::sync::Arc;
@@ -69,18 +69,15 @@ mod test_utils {
         // Null
         let null_array = NullFamilyArray::new(1);
 
-        // Resources
-        let resources_array =
-            ResourceArrayBuilder::new(vec![0, 1, 1].into(), vec![0, 0, 1].into())
-                .with_named_nodes(StringArray::from_iter_values([
-                    "http://example.com/test",
-                ]))
-                .with_blank_nodes(StringArray::from_iter_values([
-                    "my-blank-node",
-                    "123456",
-                ]))
-                .finish()
-                .unwrap();
+        // Iris and Blank Nodes
+        let iris_array = IriFamilyArray::new(StringArray::from_iter_values([
+            "http://example.com/test",
+        ]));
+        let blank_nodes_array =
+            BlankNodeFamilyArray::new(StringArray::from_iter_values([
+                "my-blank-node",
+                "123456",
+            ]));
 
         // Numeric
         let numeric_array = NumericFamilyArrayBuilder::new(
@@ -135,8 +132,11 @@ mod test_utils {
         ) as ArrayRef;
 
         // Final array
-        let resource_type_id = encoding
-            .find_typed_family_type_id(TypedFamilyId::Resource)
+        let iri_type_id = encoding
+            .find_typed_family_type_id(TypedFamilyId::Iri)
+            .unwrap();
+        let bnode_type_id = encoding
+            .find_typed_family_type_id(TypedFamilyId::BlankNode)
             .unwrap();
         let numeric_type_id = encoding
             .find_typed_family_type_id(TypedFamilyId::Numeric)
@@ -149,9 +149,9 @@ mod test_utils {
             .unwrap();
         let type_ids = vec![
             TypedFamilyEncoding::NULL_TYPE_ID,
-            resource_type_id,
-            resource_type_id,
-            resource_type_id,
+            iri_type_id,
+            bnode_type_id,
+            bnode_type_id,
             numeric_type_id,
             numeric_type_id,
             numeric_type_id,
@@ -164,13 +164,15 @@ mod test_utils {
             string_type_id,
             date_time_type_id,
         ];
-        let offset = vec![0, 0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 0];
+        let offset = vec![0, 0, 0, 1, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 0];
         TypedFamilyArrayBuilder::new(Arc::clone(encoding), type_ids, offset)
             .unwrap()
             .with_nulls(null_array)
             .unwrap()
-            .with_family_array(Some(resources_array))
-            .expect("Error adding resource array")
+            .with_family_array(Some(iris_array))
+            .expect("Error adding iri array")
+            .with_family_array(Some(blank_nodes_array))
+            .expect("Error adding blank node array")
             .with_family_array(Some(numeric_array))
             .expect("Error adding numeric array")
             .with_family_array(Some(strings_array))

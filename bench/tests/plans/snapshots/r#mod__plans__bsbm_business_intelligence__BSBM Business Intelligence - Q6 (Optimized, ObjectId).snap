@@ -6,7 +6,7 @@ Projection: reviewer AS reviewer, ENC_PT(reviewerAvgScore) AS reviewerAvgScore
   DecodeObjectIds: columns=[reviewer]
     Projection: reviewer, reviewerAvgScore
       Projection: reviewer, <uuid>, <uuid>, <uuid> AS reviewerAvgScore
-        Filter: EBV(GT(<uuid>, MUL(<uuid>, Union 4:2:Some(1500000000000000000),36,18)))
+        Filter: EBV(GT(<uuid>, MUL(<uuid>, Union 5:2:Some(1500000000000000000),36,18)))
           Aggregate: groupBy=[[reviewer AS reviewer]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>, MIN(avgScore) AS <uuid>]]
             DecodeObjectIds: columns=[score]
               Projection: lhs.avgScore AS avgScore, lhs.product AS product, lhs.review AS review, lhs.reviewer AS reviewer, rhs.score AS score

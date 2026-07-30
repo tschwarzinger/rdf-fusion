@@ -9,7 +9,7 @@ ProjectionExec: expr=[first_value(offer) ORDER BY [AS_SORTABLE_BYTES(xsd:double(
         SortExec: expr=[AS_SORTABLE_BYTES(xsd:double(ENC_TF(STR(price@1)))) ASC], preserve_partitioning=[false]
           ProjectionExec: expr=[offer@0 as offer, price@2 as price]
             DecodeObjectIdsExec: projections=[decode(offer) as offer, deliveryDays, decode(price) as price, date]
-              FilterExec: EBV(GT(ENC_TF(date@3), 5:{date_time_type:0,value:63349516800.000000000000000000,offset:})) AND EBV(LEQ(ENC_TF(deliveryDays@1), 4:4:3))
+              FilterExec: EBV(GT(ENC_TF(date@3), 6:{date_time_type:0,value:63349516800.000000000000000000,offset:})) AND EBV(LEQ(ENC_TF(deliveryDays@1), 5:4:3))
                 DecodeObjectIdsExec: projections=[offer, decode(deliveryDays) as deliveryDays, price, decode(date) as date]
                   HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0), (vendor@1, vendor@1)], projection=[offer@0, deliveryDays@2, price@3, date@4]
                     HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(offer@0, offer@0)], projection=[offer@0, vendor@1, deliveryDays@2, price@3, date@5]

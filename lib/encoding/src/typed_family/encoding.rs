@@ -1,7 +1,7 @@
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray, PlainTermType};
 use crate::typed_family::families::{
-    BooleanFamily, DateTimeFamily, DurationFamily, NullFamily, NumericFamily,
-    ResourceFamily, StringFamily, TypedFamilyRef, UnknownFamily,
+    BlankNodeFamily, BooleanFamily, DateTimeFamily, DurationFamily, IriFamily,
+    NullFamily, NumericFamily, StringFamily, TypedFamilyRef, UnknownFamily,
 };
 use crate::typed_family::{
     FamilyArray, NullFamilyArray, TypeClaim, TypedFamily, TypedFamilyArray,
@@ -59,7 +59,8 @@ impl TypedFamilyEncoding {
     pub fn new() -> Self {
         let families = vec![
             TypedFamilyRef::new::<NullFamily>(),
-            TypedFamilyRef::new::<ResourceFamily>(),
+            TypedFamilyRef::new::<BlankNodeFamily>(),
+            TypedFamilyRef::new::<IriFamily>(),
             TypedFamilyRef::new::<StringFamily>(),
             TypedFamilyRef::new::<BooleanFamily>(),
             TypedFamilyRef::new::<NumericFamily>(),
@@ -89,14 +90,19 @@ impl TypedFamilyEncoding {
         }
     }
 
-    /// Returns the type id of the [`ResourceFamily`].
-    pub fn resource_family_type_id(&self) -> i8 {
+    /// Returns the type id of the [`IriFamily`].
+    pub fn iri_family_type_id(&self) -> i8 {
+        2
+    }
+
+    /// Returns the type id of the [`BlankNodeFamily`].
+    pub fn blank_node_family_type_id(&self) -> i8 {
         1
     }
 
-    /// Returns the type id of the [`ResourceFamily`].
+    /// Returns the type id of the [`UnknownFamily`].
     pub fn unknown_family_type_id(&self) -> i8 {
-        7
+        8
     }
 
     /// Encodes terms from a [`PlainTermArray`] into a [`TypedFamilyArray`].
@@ -152,9 +158,8 @@ impl TypedFamilyEncoding {
                 let datatype = parts.data_type.value(i);
 
                 let family_info = match term_type {
-                    PlainTermType::NamedNode | PlainTermType::BlankNode => {
-                        encoding.resource_family_type_id()
-                    }
+                    PlainTermType::NamedNode => encoding.iri_family_type_id(),
+                    PlainTermType::BlankNode => encoding.blank_node_family_type_id(),
                     PlainTermType::Literal => {
                         encoding.find_type_family_for_datatype(datatype).0
                     }
@@ -193,8 +198,11 @@ impl TypedFamilyEncoding {
             }
 
             // Since all rows map to the exact same family, we can process the whole array at once
-            if first_family == encoding.resource_family_type_id() {
-                let family = ResourceFamily::create_array_from_plain_term(array)?;
+            if first_family == encoding.iri_family_type_id() {
+                let family = IriFamily::create_array_from_plain_term(array)?;
+                Ok(Some(encoding.create_array_from_family(family)?))
+            } else if first_family == encoding.blank_node_family_type_id() {
+                let family = BlankNodeFamily::create_array_from_plain_term(array)?;
                 Ok(Some(encoding.create_array_from_family(family)?))
             } else {
                 let family = &encoding.families[first_family as usize];
@@ -328,9 +336,14 @@ impl TypedFamilyEncoding {
         TypedFamilyEncoding::NULL_TYPE_ID
     }
 
-    /// Returns the type ID for the resource family.
-    pub fn resource_type_id(&self) -> i8 {
-        self.find_typed_family_type_id(TypedFamilyId::Resource)
+    /// Returns the type ID for the IRI family.
+    pub fn iri_type_id(&self) -> i8 {
+        self.find_typed_family_type_id(TypedFamilyId::Iri).unwrap()
+    }
+
+    /// Returns the type ID for the Blank Node family.
+    pub fn blank_node_type_id(&self) -> i8 {
+        self.find_typed_family_type_id(TypedFamilyId::BlankNode)
             .unwrap()
     }
 

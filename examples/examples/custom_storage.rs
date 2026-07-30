@@ -11,10 +11,6 @@ use datafusion::optimizer::OptimizerRule;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use datafusion::prelude::SessionConfig;
-use rdf_fusion::api::RdfFusionContextView;
-use rdf_fusion::api::storage::{
-    QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
-};
 use rdf_fusion::common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion::common::{GraphName, NamedNode, Quad, StorageError, TermPattern};
 use rdf_fusion::encoding::object_id::ObjectIdDictionary;
@@ -23,6 +19,10 @@ use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion::encoding::{EncodingArray, QuadStorageEncoding};
 use rdf_fusion::execution::RdfFusionContext;
 use rdf_fusion::execution::results::QueryResultsFormat;
+use rdf_fusion::extensions::RdfFusionContextView;
+use rdf_fusion::extensions::storage::{
+    QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
+};
 use rdf_fusion::logical::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion::logical::patterns::PatternLoweringRule;
 use rdf_fusion::logical::quad_pattern::QuadPatternNode;

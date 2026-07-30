@@ -1,7 +1,7 @@
 use anyhow::{Error, Result};
 use datafusion::prelude::SessionConfig;
-use rdf_fusion::api::storage::QuadStorage;
 use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::extensions::storage::QuadStorage;
 use rdf_fusion::storage::delta::DeltaQuadsStorage;
 use rdf_fusion::storage::quad_tables::QuadTableName;
 use rdf_fusion_testsuite::storage::StorageTestSuiteBuilder;

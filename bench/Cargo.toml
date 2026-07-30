@@ -4,7 +4,7 @@ version.workspace = true
 authors.workspace = true
 license.workspace = true
 readme = "README.md"
-repository = "https://github.com/tobixdev/rdf-fusion/tree/main/bench"
+repository = "https://codeberg.org/tschwarzinger/rdf-fusion/src/branch/main/bench"
 description = """
 RDF Fusion benchmarking tool
 """

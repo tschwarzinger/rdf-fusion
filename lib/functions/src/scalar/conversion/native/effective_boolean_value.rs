@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
@@ -23,29 +23,29 @@ pub fn effective_boolean_value_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
     Ok(ScalarUDF::new_from_impl(
-        EffectiveBooleanValueSparqlOp::new(encodings),
+        EffectiveBooleanValueSparqlUDF::new(encodings),
     ))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct EffectiveBooleanValueSparqlOp {
+struct EffectiveBooleanValueSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for EffectiveBooleanValueSparqlOp {
+impl Debug for EffectiveBooleanValueSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("EffectiveBooleanValueSparqlOp")
+        f.debug_struct("EffectiveBooleanValueSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl EffectiveBooleanValueSparqlOp {
-    /// Create a new [`EffectiveBooleanValueSparqlOp`].
+impl EffectiveBooleanValueSparqlUDF {
+    /// Create a new [`EffectiveBooleanValueSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .build();
@@ -57,7 +57,7 @@ impl EffectiveBooleanValueSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for EffectiveBooleanValueSparqlOp {
+impl ScalarUDFImpl for EffectiveBooleanValueSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -125,9 +125,9 @@ mod tests {
         | input                                                                                        | EBV(?table?.input) |
         +----------------------------------------------------------------------------------------------+--------------------+
         | {rdf-fusion.null=}                                                                           |                    |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  |                    |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            |                    |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   |                    |
+        | {rdf-fusion.iri=http://example.com/test}                                                     |                    |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        |                    |
+        | {rdf-fusion.blank-node=123456}                                                               |                    |
         | {rdf-fusion.numeric={integer=10}}                                                            | true               |
         | {rdf-fusion.numeric={float=10.0}}                                                            | true               |
         | {rdf-fusion.numeric={float=0.0}}                                                             | false              |

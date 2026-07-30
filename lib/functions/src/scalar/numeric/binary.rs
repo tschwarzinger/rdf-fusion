@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
@@ -18,7 +18,7 @@ use std::fmt::{Debug, Formatter};
 pub fn add_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlUDF::new(
         encodings,
         BuiltinName::Add.to_string(),
         NumericBinaryOp::Add,
@@ -28,7 +28,7 @@ pub fn add_udf(
 pub fn sub_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlUDF::new(
         encodings,
         BuiltinName::Sub.to_string(),
         NumericBinaryOp::Sub,
@@ -38,7 +38,7 @@ pub fn sub_udf(
 pub fn mul_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlUDF::new(
         encodings,
         BuiltinName::Mul.to_string(),
         NumericBinaryOp::Mul,
@@ -48,7 +48,7 @@ pub fn mul_udf(
 pub fn div_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericBinarySparqlUDF::new(
         encodings,
         BuiltinName::Div.to_string(),
         NumericBinaryOp::Div,
@@ -56,16 +56,16 @@ pub fn div_udf(
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct NumericBinarySparqlOp {
+struct NumericBinarySparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     op_type: NumericBinaryOp,
     signature: Signature,
 }
 
-impl Debug for NumericBinarySparqlOp {
+impl Debug for NumericBinarySparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NumericBinarySparqlOp")
+        f.debug_struct("NumericBinarySparqlUDF")
             .field("name", &self.name)
             .field("op_type", &self.op_type)
             .field("encodings", &self.encodings)
@@ -73,13 +73,13 @@ impl Debug for NumericBinarySparqlOp {
     }
 }
 
-impl NumericBinarySparqlOp {
+impl NumericBinarySparqlUDF {
     fn new(
         encodings: RdfFusionEncodings,
         name: String,
         op_type: NumericBinaryOp,
     ) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -92,7 +92,7 @@ impl NumericBinarySparqlOp {
     }
 }
 
-impl ScalarUDFImpl for NumericBinarySparqlOp {
+impl ScalarUDFImpl for NumericBinarySparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -148,9 +148,9 @@ mod tests {
         | left                                                                                         | right                                                                                        | ADD(?table?.left,?table?.right)                      |
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+------------------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                   |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                                   |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                                   |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                                   |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                                   |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                                   |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                                   |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=20}}                    |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=20.0}}                    |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                     |
@@ -179,9 +179,9 @@ mod tests {
         | left                                                                                         | right                                                                                        | SUB(?table?.left,?table?.right)                     |
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+-----------------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                  |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                                  |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                                  |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                                  |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                                  |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                                  |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                                  |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=0}}                    |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=0.0}}                    |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                    |
@@ -209,9 +209,9 @@ mod tests {
         | left                                                                                         | right                                                                                        | MUL(?table?.left,?table?.right)                       |
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+-------------------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                    |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                                    |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                                    |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                                    |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                                    |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                                    |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                                    |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=100}}                    |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=100.0}}                    |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                      |
@@ -239,9 +239,9 @@ mod tests {
         | left                                                                                         | right                                                                                        | DIV(?table?.left,?table?.right)                     |
         +----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------+-----------------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                  |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                                  |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                                  |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                                  |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                                  |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                                  |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                                  |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={decimal=1.000000000000000000}} |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=1.0}}                    |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=NaN}}                    |

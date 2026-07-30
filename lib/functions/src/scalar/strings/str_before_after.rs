@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
@@ -29,7 +29,7 @@ enum StringSplitOperation {
 pub fn str_after_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(StringSplitSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(StringSplitSparqlUDF::new(
         encodings,
         StringSplitOperation::After,
     )))
@@ -42,33 +42,33 @@ pub fn str_after_udf(
 pub fn str_before_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(StringSplitSparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(StringSplitSparqlUDF::new(
         encodings,
         StringSplitOperation::Before,
     )))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct StringSplitSparqlOp {
+struct StringSplitSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
     op: StringSplitOperation,
 }
 
-impl Debug for StringSplitSparqlOp {
+impl Debug for StringSplitSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StringSplitSparqlOp")
+        f.debug_struct("StringSplitSparqlUDF")
             .field("encodings", &self.encodings)
             .field("op", &self.op)
             .finish()
     }
 }
 
-impl StringSplitSparqlOp {
-    /// Create a new [`StringSplitSparqlOp`].
+impl StringSplitSparqlUDF {
+    /// Create a new [`StringSplitSparqlUDF`].
     fn new(encodings: RdfFusionEncodings, op: StringSplitOperation) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -87,7 +87,7 @@ impl StringSplitSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for StringSplitSparqlOp {
+impl ScalarUDFImpl for StringSplitSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

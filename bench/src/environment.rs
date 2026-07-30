@@ -347,7 +347,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
             }
         };
 
-        let storage_backend: Arc<dyn rdf_fusion::api::storage::QuadStorage> =
+        let storage_backend: Arc<dyn rdf_fusion::extensions::storage::QuadStorage> =
             match self.context.config.storage_type {
                 BenchQuadStorageTypeArg::DeltaQuads => {
                     let url = Url::parse(&base_url).unwrap();

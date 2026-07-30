@@ -1,8 +1,8 @@
 use crate::encoding::EncodingArray;
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray};
 use crate::typed_family::{
-    BooleanFamilyArray, DateTimeFamilyArray, DurationFamilyArray, FamilyArray,
-    NullFamilyArray, NumericFamilyArray, ResourceFamilyArray, StringFamilyArray,
+    BlankNodeFamilyArray, BooleanFamilyArray, DateTimeFamilyArray, DurationFamilyArray,
+    FamilyArray, IriFamilyArray, NullFamilyArray, NumericFamilyArray, StringFamilyArray,
     TypedFamilyArgs, TypedFamilyChild, TypedFamilyEncoding, TypedFamilyEncodingRef,
     TypedFamilyId, UnknownFamilyArray,
 };
@@ -192,7 +192,8 @@ impl TypedFamilyArray {
                 DowncastTypedFamilyArray::Null(null_array) => {
                     Ok(Arc::clone(null_array.inner_ref()))
                 }
-                DowncastTypedFamilyArray::Resource(_) => Ok(Arc::new(
+                DowncastTypedFamilyArray::Iri(_)
+                | DowncastTypedFamilyArray::BlankNode(_) => Ok(Arc::new(
                     BooleanArray::from_iter(repeat_n(false, child.number_rows)),
                 )),
                 _ => Ok(Arc::new(BooleanArray::from_iter(repeat_n(
@@ -340,8 +341,10 @@ impl TypedFamilyArray {
 pub enum DowncastTypedFamilyArray {
     /// The null family.
     Null(NullFamilyArray),
-    /// The resource family.
-    Resource(ResourceFamilyArray),
+    /// The IRI family.
+    Iri(IriFamilyArray),
+    /// The Blank Node family.
+    BlankNode(BlankNodeFamilyArray),
     /// The string family.
     String(StringFamilyArray),
     /// The boolean family.
@@ -362,8 +365,10 @@ pub enum DowncastTypedFamilyArray {
 pub enum DowncastTypedFamilyDatum {
     /// The null family.
     Null(Box<dyn FamilyDatum<NullFamilyArray>>),
-    /// The resource family.
-    Resource(Box<dyn FamilyDatum<ResourceFamilyArray>>),
+    /// The IRI family.
+    Iri(Box<dyn FamilyDatum<IriFamilyArray>>),
+    /// The Blank Node family.
+    BlankNode(Box<dyn FamilyDatum<BlankNodeFamilyArray>>),
     /// The string family.
     String(Box<dyn FamilyDatum<StringFamilyArray>>),
     /// The boolean family.

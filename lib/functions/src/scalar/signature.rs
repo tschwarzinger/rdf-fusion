@@ -7,19 +7,19 @@ use std::num::NonZeroUsize;
 
 /// Defines the arity of a SPARQL operation and provides helper methods for creating signatures.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub enum SparqlOpArity {
+pub enum SparqlUDFArity {
     /// No arguments.
     Nullary,
     /// A fixed number of arguments.
     Fixed(NonZeroUsize),
-    /// One of the given [SparqlOpArity].
-    OneOf(Vec<SparqlOpArity>),
+    /// One of the given [SparqlUDFArity].
+    OneOf(Vec<SparqlUDFArity>),
     /// Any number of arguments (including zero).
     Variadic,
 }
 
-impl SparqlOpArity {
-    /// Returns a [TypeSignature] for the given [SparqlOpArity].
+impl SparqlUDFArity {
+    /// Returns a [TypeSignature] for the given [SparqlUDFArity].
     pub fn type_signature<TEncoding: TermEncoding>(
         &self,
         encoding: &TEncoding,
@@ -27,21 +27,21 @@ impl SparqlOpArity {
         self.type_signature_for_data_type(encoding.data_type())
     }
 
-    /// Returns a [TypeSignature] for the given [SparqlOpArity].
+    /// Returns a [TypeSignature] for the given [SparqlUDFArity].
     pub fn type_signature_for_data_type(&self, data_type: &DataType) -> TypeSignature {
         match self {
-            SparqlOpArity::Nullary => TypeSignature::Nullary,
-            SparqlOpArity::Fixed(n) => {
+            SparqlUDFArity::Nullary => TypeSignature::Nullary,
+            SparqlUDFArity::Fixed(n) => {
                 TypeSignature::Uniform(n.get(), vec![data_type.clone()])
             }
-            SparqlOpArity::OneOf(ns) => {
+            SparqlUDFArity::OneOf(ns) => {
                 let inner = ns
                     .iter()
                     .map(|n| n.type_signature_for_data_type(data_type))
                     .collect::<Vec<_>>();
                 TypeSignature::OneOf(inner)
             }
-            SparqlOpArity::Variadic => TypeSignature::OneOf(vec![
+            SparqlUDFArity::Variadic => TypeSignature::OneOf(vec![
                 TypeSignature::Nullary,
                 TypeSignature::Variadic(vec![data_type.clone()]),
             ]),
@@ -60,21 +60,21 @@ pub struct HasEncodings;
 ///
 /// ```
 /// use datafusion::logical_expr_common::signature::{Signature, Volatility};
-/// use rdf_fusion_functions::scalar::SparqlOpTypeSignatureBuilder;
+/// use rdf_fusion_functions::scalar::SparqlUDFTypeSignatureBuilder;
 /// use rdf_fusion_encoding::RdfFusionEncodings;
 ///
 /// #[derive(Clone, PartialEq, Eq, Hash)]
 /// # #[allow(dead_code)]
-/// struct MySparqlOp {
+/// struct MySparqlUDF {
 ///     name: String,
 ///     signature: Signature,
 /// }
 ///
-/// impl MySparqlOp {
+/// impl MySparqlUDF {
 ///     # #[allow(dead_code)]
 ///     fn new(encodings: RdfFusionEncodings) -> Self {
 ///         // Convenient builder for the type signature
-///         let type_signature = SparqlOpTypeSignatureBuilder::new()
+///         let type_signature = SparqlUDFTypeSignatureBuilder::new()
 ///             .with_supported_encoding(encodings.typed_family().as_ref())
 ///             .with_unary_arity()
 ///             .with_binary_arity()
@@ -88,46 +88,46 @@ pub struct HasEncodings;
 ///
 /// // ... Implement the rest of the operation
 /// ```
-pub struct SparqlOpTypeSignatureBuilder<State = NoEncodings> {
+pub struct SparqlUDFTypeSignatureBuilder<State = NoEncodings> {
     supported_data_types: Vec<DataType>,
-    supported_arities: BTreeSet<SparqlOpArity>,
+    supported_arities: BTreeSet<SparqlUDFArity>,
     _marker: PhantomData<State>,
 }
 
-impl<State> SparqlOpTypeSignatureBuilder<State> {
+impl<State> SparqlUDFTypeSignatureBuilder<State> {
     /// Adds a specific arity.
-    pub fn with_arity(mut self, arity: SparqlOpArity) -> Self {
+    pub fn with_arity(mut self, arity: SparqlUDFArity) -> Self {
         self.supported_arities.insert(arity);
         self
     }
 
     /// Adds support for nullary function calls.
     pub fn with_nullary_arity(self) -> Self {
-        self.with_arity(SparqlOpArity::Nullary)
+        self.with_arity(SparqlUDFArity::Nullary)
     }
 
     /// Adds support for unary function calls.
     pub fn with_unary_arity(self) -> Self {
-        self.with_arity(SparqlOpArity::Fixed(NonZeroUsize::new(1).unwrap()))
+        self.with_arity(SparqlUDFArity::Fixed(NonZeroUsize::new(1).unwrap()))
     }
 
     /// Adds support for binary function calls.
     pub fn with_binary_arity(self) -> Self {
-        self.with_arity(SparqlOpArity::Fixed(NonZeroUsize::new(2).unwrap()))
+        self.with_arity(SparqlUDFArity::Fixed(NonZeroUsize::new(2).unwrap()))
     }
 
     /// Adds support for ternary function calls.
     pub fn with_ternary_arity(self) -> Self {
-        self.with_arity(SparqlOpArity::Fixed(NonZeroUsize::new(3).unwrap()))
+        self.with_arity(SparqlUDFArity::Fixed(NonZeroUsize::new(3).unwrap()))
     }
 
     /// Adds support for variadic function calls.
     pub fn with_variadic_arity(self) -> Self {
-        self.with_arity(SparqlOpArity::Variadic)
+        self.with_arity(SparqlUDFArity::Variadic)
     }
 }
 
-impl SparqlOpTypeSignatureBuilder<NoEncodings> {
+impl SparqlUDFTypeSignatureBuilder<NoEncodings> {
     /// Creates a completely empty builder.
     pub fn new() -> Self {
         Self {
@@ -141,9 +141,9 @@ impl SparqlOpTypeSignatureBuilder<NoEncodings> {
     pub fn with_supported_encoding<TEncoding: TermEncoding>(
         mut self,
         encoding: &TEncoding,
-    ) -> SparqlOpTypeSignatureBuilder<HasEncodings> {
+    ) -> SparqlUDFTypeSignatureBuilder<HasEncodings> {
         self.supported_data_types.push(encoding.data_type().clone());
-        SparqlOpTypeSignatureBuilder {
+        SparqlUDFTypeSignatureBuilder {
             supported_data_types: self.supported_data_types,
             supported_arities: self.supported_arities,
             _marker: PhantomData,
@@ -151,13 +151,13 @@ impl SparqlOpTypeSignatureBuilder<NoEncodings> {
     }
 }
 
-impl Default for SparqlOpTypeSignatureBuilder<NoEncodings> {
+impl Default for SparqlUDFTypeSignatureBuilder<NoEncodings> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SparqlOpTypeSignatureBuilder<HasEncodings> {
+impl SparqlUDFTypeSignatureBuilder<HasEncodings> {
     /// Adds support for additional typed family encodings.
     /// Stays in the `HasEncodings` state.
     pub fn with_supported_encoding<TEncoding: TermEncoding>(
@@ -172,7 +172,7 @@ impl SparqlOpTypeSignatureBuilder<HasEncodings> {
     pub fn with_supported_encoding_opt<TEncoding: TermEncoding>(
         self,
         encoding: Option<&TEncoding>,
-    ) -> SparqlOpTypeSignatureBuilder<HasEncodings> {
+    ) -> SparqlUDFTypeSignatureBuilder<HasEncodings> {
         if let Some(encoding) = encoding {
             self.with_supported_encoding(encoding)
         } else {

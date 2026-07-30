@@ -27,15 +27,15 @@ async fn test_bgp_planner_filter() {
 
     let (logical, physical) = ctx.get_query_plans(query).await;
     assert_plan_snapshot!(logical, @"
-        DecodeObjectIds: columns=[s]
-          Projection: s
-            Filter: EBV(EQ(ENC_TF(STR(o)), Union 2:{value:target,language:}))
-              DecodeObjectIds: columns=[o]
-                QuadPattern: triple_pattern=[?s <http://example.org/p1> ?o]
-        ");
+    DecodeObjectIds: columns=[s]
+      Projection: s
+        Filter: EBV(EQ(ENC_TF(STR(o)), Union 3:{value:target,language:}))
+          DecodeObjectIds: columns=[o]
+            QuadPattern: triple_pattern=[?s <http://example.org/p1> ?o]
+    ");
     assert_plan_snapshot!(physical, @"
     DecodeObjectIdsExec: projections=[decode(s) as s]
-      FilterExec: EBV(EQ(ENC_TF(STR(o@1)), 2:{value:target,language:})), projection=[s@0]
+      FilterExec: EBV(EQ(ENC_TF(STR(o@1)), 3:{value:target,language:})), projection=[s@0]
         DecodeObjectIdsExec: projections=[s, decode(o) as o]
           ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GPOS/<file>.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
     ");
@@ -97,16 +97,16 @@ async fn test_bgp_planner_complex_filter() {
 
     let (logical, physical) = ctx.get_query_plans(query).await;
     assert_plan_snapshot!(logical, @"
-        BasicGraphPattern: projection=[city, name], columns_to_decode=[city, code, name, pop], filters=[EBV(GT(ENC_TF(pop), Union 4:4:1000000)) AND EBV(EQ(ENC_TF(STR(code)), Union 2:{value:75001,language:})) AS EBV(BOOLEAN_AS_TERM(EBV(GT(ENC_TF(pop),ENC_TF(Struct({term_type:2,value:1000000,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))) AND EBV(EQ(ENC_TF(STR(code)),ENC_TF(Struct({term_type:2,value:75001,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))]
-          QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>]
-          QuadPattern: triple_pattern=[?city <http://schema.org/population> ?pop]
-          QuadPattern: triple_pattern=[?city <http://schema.org/postalCode> ?code]
-          QuadPattern: triple_pattern=[?city <http://schema.org/name> ?name]
-        ");
+    BasicGraphPattern: projection=[city, name], columns_to_decode=[city, code, name, pop], filters=[EBV(GT(ENC_TF(pop), Union 5:4:1000000)) AND EBV(EQ(ENC_TF(STR(code)), Union 3:{value:75001,language:})) AS EBV(BOOLEAN_AS_TERM(EBV(GT(ENC_TF(pop),ENC_TF(Struct({term_type:2,value:1000000,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))) AND EBV(EQ(ENC_TF(STR(code)),ENC_TF(Struct({term_type:2,value:75001,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))]
+      QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>]
+      QuadPattern: triple_pattern=[?city <http://schema.org/population> ?pop]
+      QuadPattern: triple_pattern=[?city <http://schema.org/postalCode> ?code]
+      QuadPattern: triple_pattern=[?city <http://schema.org/name> ?name]
+    ");
     assert_plan_snapshot!(physical, @"
     ProjectionExec: expr=[city@0 as city, name@3 as name]
       DecodeObjectIdsExec: projections=[decode(city) as city, pop, code, decode(name) as name]
-        FilterExec: EBV(EQ(ENC_TF(STR(code@2)), 2:{value:75001,language:})) AND EBV(GT(ENC_TF(pop@1), 4:4:1000000))
+        FilterExec: EBV(EQ(ENC_TF(STR(code@2)), 3:{value:75001,language:})) AND EBV(GT(ENC_TF(pop@1), 5:4:1000000))
           DecodeObjectIdsExec: projections=[city, decode(pop) as pop, decode(code) as code, name]
             HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, pop@1, code@2, name@4]
               HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, pop@1, code@3]
@@ -136,12 +136,12 @@ async fn test_bgp_planner_filter_on_join_column_bsbm_explore_5() {
 
     let (logical, physical) = ctx.get_query_plans(query).await;
     assert_plan_snapshot!(logical, @"
-        BasicGraphPattern: projection=[city, name], columns_to_decode=[city, name, type], filters=[EBV(EQ(ENC_TF(STR(city)), Union 2:{value:http://www.wikidata.org/entity/Q90,language:})) AND EBV(EQ(ENC_TF(STR(name)), Union 2:{value:Paris,language:})) AND EBV(EQ(ENC_TF(STR(type)), Union 2:{value:http://schema.org/City,language:})) AS EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(STR(city)),ENC_TF(Struct({term_type:2,value:http://www.wikidata.org/entity/Q90,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))) AND EBV(EQ(ENC_TF(STR(name)),ENC_TF(Struct({term_type:2,value:Paris,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))))) AND EBV(EQ(ENC_TF(STR(type)),ENC_TF(Struct({term_type:2,value:http://schema.org/City,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))]
-          QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type]
-          QuadPattern: triple_pattern=[?city <http://schema.org/name> ?name]
-        ");
+    BasicGraphPattern: projection=[city, name], columns_to_decode=[city, name, type], filters=[EBV(EQ(ENC_TF(STR(city)), Union 3:{value:http://www.wikidata.org/entity/Q90,language:})) AND EBV(EQ(ENC_TF(STR(name)), Union 3:{value:Paris,language:})) AND EBV(EQ(ENC_TF(STR(type)), Union 3:{value:http://schema.org/City,language:})) AS EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(STR(city)),ENC_TF(Struct({term_type:2,value:http://www.wikidata.org/entity/Q90,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))) AND EBV(EQ(ENC_TF(STR(name)),ENC_TF(Struct({term_type:2,value:Paris,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))))) AND EBV(EQ(ENC_TF(STR(type)),ENC_TF(Struct({term_type:2,value:http://schema.org/City,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))]
+      QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type]
+      QuadPattern: triple_pattern=[?city <http://schema.org/name> ?name]
+    ");
     assert_plan_snapshot!(physical, @"
-    FilterExec: EBV(EQ(ENC_TF(STR(name@2)), 2:{value:Paris,language:})) AND EBV(EQ(ENC_TF(STR(type@1)), 2:{value:http://schema.org/City,language:})) AND EBV(EQ(ENC_TF(STR(city@0)), 2:{value:http://www.wikidata.org/entity/Q90,language:})), projection=[city@0, name@2]
+    FilterExec: EBV(EQ(ENC_TF(STR(name@2)), 3:{value:Paris,language:})) AND EBV(EQ(ENC_TF(STR(type@1)), 3:{value:http://schema.org/City,language:})) AND EBV(EQ(ENC_TF(STR(city@0)), 3:{value:http://www.wikidata.org/entity/Q90,language:})), projection=[city@0, name@2]
       DecodeObjectIdsExec: projections=[decode(city) as city, decode(type) as type, decode(name) as name]
         HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0, type@1, name@3]
           ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GPOS/<file>.parquet]]}, projection=[subject@1 as city, object@3 as type], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
@@ -169,12 +169,12 @@ async fn test_bgp_planner_filter_pushdown_with_object_id() {
 
     let (logical, physical) = ctx.get_query_plans(query).await;
     assert_plan_snapshot!(logical, @"
-    BasicGraphPattern: projection=[city], columns_to_decode=[city], filters=[EBV(EQ(ENC_TF(city), Union 1:0:http://www.wikidata.org/entity/Q90)) AS EBV(EQ(ENC_TF(city),ENC_TF(Struct({term_type:0,value:http://www.wikidata.org/entity/Q90,data_type:,language_tag:}))))]
+    BasicGraphPattern: projection=[city], columns_to_decode=[city], filters=[EBV(EQ(ENC_TF(city), Union 2:http://www.wikidata.org/entity/Q90)) AS EBV(EQ(ENC_TF(city),ENC_TF(Struct({term_type:0,value:http://www.wikidata.org/entity/Q90,data_type:,language_tag:}))))]
       QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>]
       QuadPattern: triple_pattern=[?city <http://schema.org/population> ?pop], projection=[0]
     ");
     assert_plan_snapshot!(physical, @"
-    FilterExec: EBV(EQ(ENC_TF(city@0), 1:0:http://www.wikidata.org/entity/Q90))
+    FilterExec: EBV(EQ(ENC_TF(city@0), 2:http://www.wikidata.org/entity/Q90))
       DecodeObjectIdsExec: projections=[decode(city) as city]
         HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(city@0, city@0)], projection=[city@0]
           ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GPOS/<file>.parquet]]}, projection=[subject@1 as city], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND object@3 = 8, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= 8 AND 8 <= object_max@6, required_guarantees=[object in (8), predicate in (1)]

@@ -492,8 +492,11 @@ impl TypedFamilyChild {
             TypedFamilyId::Null => DowncastTypedFamilyArray::Null(
                 NullFamilyArray::from_array_unchecked(array),
             ),
-            TypedFamilyId::Resource => DowncastTypedFamilyArray::Resource(
-                ResourceFamilyArray::from_array_unchecked(array),
+            TypedFamilyId::Iri => {
+                DowncastTypedFamilyArray::Iri(IriFamilyArray::from_array_unchecked(array))
+            }
+            TypedFamilyId::BlankNode => DowncastTypedFamilyArray::BlankNode(
+                BlankNodeFamilyArray::from_array_unchecked(array),
             ),
             TypedFamilyId::String => DowncastTypedFamilyArray::String(
                 StringFamilyArray::from_array_unchecked(array),
@@ -526,8 +529,11 @@ impl TypedFamilyChild {
             TypedFamilyId::Null => DowncastTypedFamilyDatum::Null(
                 self.wrap_in_datum(NullFamilyArray::from_array_unchecked(array)),
             ),
-            TypedFamilyId::Resource => DowncastTypedFamilyDatum::Resource(
-                self.wrap_in_datum(ResourceFamilyArray::from_array_unchecked(array)),
+            TypedFamilyId::Iri => DowncastTypedFamilyDatum::Iri(
+                self.wrap_in_datum(IriFamilyArray::from_array_unchecked(array)),
+            ),
+            TypedFamilyId::BlankNode => DowncastTypedFamilyDatum::BlankNode(
+                self.wrap_in_datum(BlankNodeFamilyArray::from_array_unchecked(array)),
             ),
             TypedFamilyId::String => DowncastTypedFamilyDatum::String(
                 self.wrap_in_datum(StringFamilyArray::from_array_unchecked(array)),
@@ -636,17 +642,16 @@ mod tests {
 
         let iris_array =
             StringArray::from(vec!["https://example.com/1", "https://example.com/2"]);
-        let resource_array =
-            ResourceFamily::create_named_nodes_array(iris_array).unwrap();
+        let iris_array = IriFamily::create_array(iris_array).unwrap();
         let array1 = TypedFamilyArrayBuilder::new(
             Arc::clone(&encoding),
-            vec![0, 1, 0, 1],
+            vec![0, 2, 0, 2],
             vec![0, 0, 1, 1],
         )
         .unwrap()
         .with_nulls(NullFamilyArray::new(2))
         .unwrap()
-        .with_family_array(Some(resource_array))
+        .with_family_array(Some(iris_array))
         .unwrap()
         .finish()
         .unwrap();
@@ -671,14 +676,14 @@ mod tests {
         assert_snapshot!(
             result,
             @"
-        +----------------------+
-        | result               |
-        +----------------------+
-        | rdf-fusion.null      |
-        | rdf-fusion.resources |
-        | rdf-fusion.null      |
-        | rdf-fusion.resources |
-        +----------------------+
+        +-----------------+
+        | result          |
+        +-----------------+
+        | rdf-fusion.null |
+        | rdf-fusion.iri  |
+        | rdf-fusion.null |
+        | rdf-fusion.iri  |
+        +-----------------+
         "
         )
     }

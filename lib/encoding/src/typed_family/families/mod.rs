@@ -11,23 +11,25 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
+mod blank_node;
 mod boolean;
 mod date_time;
 mod duration;
+mod iri;
 mod null;
 mod numeric;
-mod resource;
 mod string;
 mod unknown;
 
 use crate::plain_term::PlainTermArray;
+pub use blank_node::*;
 pub use boolean::*;
 use datafusion::arrow::array::BinaryArray;
 pub use date_time::*;
 pub use duration::*;
+pub use iri::*;
 pub use null::*;
 pub use numeric::*;
-pub use resource::*;
 pub use string::*;
 pub use unknown::*;
 
@@ -130,8 +132,10 @@ pub type FamilyComparator = Box<dyn Fn(usize, usize) -> Option<Ordering> + Send 
 /// [`NumericFamily`] claims `xsd:integer`, `xsd:float`, etc.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypeClaim {
-    /// Claims the responsibility for IRIs and blank node identifiers.
-    Resources,
+    /// Claims the responsibility for IRIs.
+    Iri,
+    /// Claims the responsibility for blank node identifiers.
+    BlankNode,
     /// A claim for a set of literal types.
     Literal(BTreeSet<NamedNode>),
     /// A claim for all literal types that are not covered by other claims.
@@ -144,7 +148,8 @@ impl TypeClaim {
     /// Checks whether this type is responsible for the given datatype.
     pub fn is_responsible_for_datatype(&self, datatype: &str) -> bool {
         match self {
-            TypeClaim::Resources => false,
+            TypeClaim::Iri => false,
+            TypeClaim::BlankNode => false,
             TypeClaim::Literal(types) => types.iter().any(|t| t.as_str() == datatype),
             TypeClaim::UnknownLiterals => true,
             TypeClaim::Null => false,

@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
 use datafusion::logical_expr::{
@@ -18,7 +18,7 @@ use std::fmt::{Debug, Formatter};
 pub fn abs_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlUDF::new(
         encodings,
         BuiltinName::Abs.to_string(),
         NumericUnaryOperation::Abs,
@@ -28,7 +28,7 @@ pub fn abs_udf(
 pub fn ceil_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlUDF::new(
         encodings,
         BuiltinName::Ceil.to_string(),
         NumericUnaryOperation::Ceil,
@@ -38,7 +38,7 @@ pub fn ceil_udf(
 pub fn floor_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlUDF::new(
         encodings,
         BuiltinName::Floor.to_string(),
         NumericUnaryOperation::Floor,
@@ -48,7 +48,7 @@ pub fn floor_udf(
 pub fn round_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlUDF::new(
         encodings,
         BuiltinName::Round.to_string(),
         NumericUnaryOperation::Round,
@@ -58,7 +58,7 @@ pub fn round_udf(
 pub fn unary_minus_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlUDF::new(
         encodings,
         BuiltinName::UnaryMinus.to_string(),
         NumericUnaryOperation::Minus,
@@ -68,7 +68,7 @@ pub fn unary_minus_udf(
 pub fn unary_plus_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlOp::new(
+    Ok(ScalarUDF::new_from_impl(NumericUnarySparqlUDF::new(
         encodings,
         BuiltinName::UnaryPlus.to_string(),
         NumericUnaryOperation::Plus,
@@ -86,16 +86,16 @@ enum NumericUnaryOperation {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct NumericUnarySparqlOp {
+struct NumericUnarySparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     op: NumericUnaryOperation,
     signature: Signature,
 }
 
-impl Debug for NumericUnarySparqlOp {
+impl Debug for NumericUnarySparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NumericUnarySparqlOp")
+        f.debug_struct("NumericUnarySparqlUDF")
             .field("name", &self.name)
             .field("op", &self.op)
             .field("encodings", &self.encodings)
@@ -103,13 +103,13 @@ impl Debug for NumericUnarySparqlOp {
     }
 }
 
-impl NumericUnarySparqlOp {
+impl NumericUnarySparqlUDF {
     fn new(
         encodings: RdfFusionEncodings,
         name: String,
         op: NumericUnaryOperation,
     ) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_unary_arity()
             .build();
@@ -122,7 +122,7 @@ impl NumericUnarySparqlOp {
     }
 }
 
-impl ScalarUDFImpl for NumericUnarySparqlOp {
+impl ScalarUDFImpl for NumericUnarySparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -190,9 +190,9 @@ mod tests {
         | input                                                                                        | ABS(?table?.input)                                   |
         +----------------------------------------------------------------------------------------------+------------------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                                   |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                                   |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                                   |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                                   |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                                   |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                                   |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                                   |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.numeric={integer=10}}                    |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.numeric={float=10.0}}                    |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.numeric={float=0.0}}                     |

@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, BooleanBuilder};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
@@ -29,28 +29,28 @@ use std::fmt::{Debug, Formatter};
 pub fn regex_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(RegexSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(RegexSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct RegexSparqlOp {
+struct RegexSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for RegexSparqlOp {
+impl Debug for RegexSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RegexSparqlOp")
+        f.debug_struct("RegexSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl RegexSparqlOp {
-    /// Create a new [`RegexSparqlOp`].
+impl RegexSparqlUDF {
+    /// Create a new [`RegexSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .with_ternary_arity()
@@ -63,7 +63,7 @@ impl RegexSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for RegexSparqlOp {
+impl ScalarUDFImpl for RegexSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

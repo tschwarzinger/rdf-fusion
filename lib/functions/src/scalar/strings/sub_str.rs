@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, AsArray, StringBuilder};
 use datafusion::arrow::datatypes::{DataType, Int64Type};
 use datafusion::common::exec_err;
@@ -29,28 +29,28 @@ use std::sync::Arc;
 pub fn sub_str_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(SubStrSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(SubStrSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct SubStrSparqlOp {
+struct SubStrSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for SubStrSparqlOp {
+impl Debug for SubStrSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SubStrSparqlOp")
+        f.debug_struct("SubStrSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl SubStrSparqlOp {
-    /// Create a new [`SubStrSparqlOp`].
+impl SubStrSparqlUDF {
+    /// Create a new [`SubStrSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .with_ternary_arity()
@@ -63,7 +63,7 @@ impl SubStrSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for SubStrSparqlOp {
+impl ScalarUDFImpl for SubStrSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

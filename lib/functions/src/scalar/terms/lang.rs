@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, StringArray, StringBuilder};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::exec_err;
@@ -28,28 +28,28 @@ use std::sync::Arc;
 pub fn lang_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(LangSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(LangSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct LangSparqlOp {
+struct LangSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for LangSparqlOp {
+impl Debug for LangSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LangSparqlOp")
+        f.debug_struct("LangSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl LangSparqlOp {
-    /// Create a new [`LangSparqlOp`].
+impl LangSparqlUDF {
+    /// Create a new [`LangSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_supported_encoding(encodings.plain_term().as_ref())
             .with_unary_arity()
@@ -62,7 +62,7 @@ impl LangSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for LangSparqlOp {
+impl ScalarUDFImpl for LangSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -109,7 +109,8 @@ impl ScalarUDFImpl for LangSparqlOp {
                             )
                     }
                     DowncastTypedFamilyArray::Null(_)
-                    | DowncastTypedFamilyArray::Resource(_) => self
+                    | DowncastTypedFamilyArray::Iri(_)
+                    | DowncastTypedFamilyArray::BlankNode(_) => self
                         .encodings
                         .typed_family()
                         .create_null_array(child.to_array().len()),
@@ -191,9 +192,9 @@ mod tests {
         | input                                                                                        | LANG(?table?.input)                          |
         +----------------------------------------------------------------------------------------------+----------------------------------------------+
         | {rdf-fusion.null=}                                                                           | {rdf-fusion.null=}                           |
-        | {rdf-fusion.resources={named_node=http://example.com/test}}                                  | {rdf-fusion.null=}                           |
-        | {rdf-fusion.resources={blank_node=my-blank-node}}                                            | {rdf-fusion.null=}                           |
-        | {rdf-fusion.resources={blank_node=123456}}                                                   | {rdf-fusion.null=}                           |
+        | {rdf-fusion.iri=http://example.com/test}                                                     | {rdf-fusion.null=}                           |
+        | {rdf-fusion.blank-node=my-blank-node}                                                        | {rdf-fusion.null=}                           |
+        | {rdf-fusion.blank-node=123456}                                                               | {rdf-fusion.null=}                           |
         | {rdf-fusion.numeric={integer=10}}                                                            | {rdf-fusion.strings={value: , language: }}   |
         | {rdf-fusion.numeric={float=10.0}}                                                            | {rdf-fusion.strings={value: , language: }}   |
         | {rdf-fusion.numeric={float=0.0}}                                                             | {rdf-fusion.strings={value: , language: }}   |

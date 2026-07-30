@@ -343,12 +343,13 @@ mod tests {
             .unwrap();
         let separator_lit = create_separator_lit(&encoding, ";");
 
-        assert_snapshot!(run_test(typed_array, separator_lit).await, @r"
+        assert_snapshot!(run_test(typed_array, separator_lit).await, @"
         +-----------------------------------------------------+
-        | GROUP_CONCAT(?table?.a,Union 2:{value:;,language:}) |
+        | GROUP_CONCAT(?table?.a,Union 3:{value:;,language:}) |
         +-----------------------------------------------------+
         | {rdf-fusion.strings={value: a;b;c, language: }}     |
-        +-----------------------------------------------------+");
+        +-----------------------------------------------------+
+        ");
     }
 
     #[tokio::test]
@@ -361,9 +362,9 @@ mod tests {
         );
         let separator_lit = create_separator_lit(&encoding, " ");
 
-        assert_snapshot!(run_test(typed_array, separator_lit).await, @r"
+        assert_snapshot!(run_test(typed_array, separator_lit).await, @"
         +---------------------------------------------------------+
-        | GROUP_CONCAT(?table?.a,Union 2:{value: ,language:})     |
+        | GROUP_CONCAT(?table?.a,Union 3:{value: ,language:})     |
         +---------------------------------------------------------+
         | {rdf-fusion.strings={value: hello world, language: en}} |
         +---------------------------------------------------------+
@@ -380,9 +381,9 @@ mod tests {
         );
         let separator_lit = create_separator_lit(&encoding, "-");
 
-        assert_snapshot!(run_test(typed_array, separator_lit).await, @r"
+        assert_snapshot!(run_test(typed_array, separator_lit).await, @"
         +---------------------------------------------------------+
-        | GROUP_CONCAT(?table?.a,Union 2:{value:-,language:})     |
+        | GROUP_CONCAT(?table?.a,Union 3:{value:-,language:})     |
         +---------------------------------------------------------+
         | {rdf-fusion.strings={value: bonjour-world, language: }} |
         +---------------------------------------------------------+

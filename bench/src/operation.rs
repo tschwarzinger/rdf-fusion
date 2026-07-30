@@ -22,25 +22,25 @@ impl<QueryName: Clone> SparqlRawOperation<QueryName> {
         }
     }
 
-    pub fn parse(&self) -> anyhow::Result<SparqlOperation<QueryName>> {
+    pub fn parse(&self) -> anyhow::Result<SparqlUDFeration<QueryName>> {
         match self {
             SparqlRawOperation::Query(query_name, query) => {
                 let query = query.parse()?;
-                Ok(SparqlOperation::Query(query_name.clone(), query))
+                Ok(SparqlUDFeration::Query(query_name.clone(), query))
             }
         }
     }
 }
 
 #[derive(Clone)]
-pub enum SparqlOperation<QueryName> {
+pub enum SparqlUDFeration<QueryName> {
     Query(QueryName, RdfFusionQuery),
 }
 
-impl<QueryName> SparqlOperation<QueryName> {
+impl<QueryName> SparqlUDFeration<QueryName> {
     pub fn query(&self) -> &RdfFusionQuery {
         match self {
-            SparqlOperation::Query(_, query) => query,
+            SparqlUDFeration::Query(_, query) => query,
         }
     }
 
@@ -53,7 +53,7 @@ impl<QueryName> SparqlOperation<QueryName> {
         let mut num_results = 0;
         let options = QueryOptions::default();
         let explanation = match &self {
-            SparqlOperation::Query(_, q) => {
+            SparqlUDFeration::Query(_, q) => {
                 let (result, explanation) =
                     store.explain_query_opt(q.clone(), options.clone()).await?;
                 match result {
@@ -80,10 +80,10 @@ impl<QueryName> SparqlOperation<QueryName> {
     }
 }
 
-impl<QueryName: Clone> SparqlOperation<QueryName> {
+impl<QueryName: Clone> SparqlUDFeration<QueryName> {
     pub fn query_name(&self) -> QueryName {
         match self {
-            SparqlOperation::Query(name, _) => name.clone(),
+            SparqlUDFeration::Query(name, _) => name.clone(),
         }
     }
 }

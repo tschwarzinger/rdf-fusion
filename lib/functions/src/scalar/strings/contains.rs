@@ -1,6 +1,6 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::signature::SparqlOpTypeSignatureBuilder;
+use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use arrow_string::like::contains;
 use datafusion::arrow::array::Array;
 use datafusion::arrow::datatypes::DataType;
@@ -27,28 +27,28 @@ use std::fmt::{Debug, Formatter};
 pub fn contains_udf(
     encodings: RdfFusionEncodings,
 ) -> Result<ScalarUDF, SparqlUDFCreationError> {
-    Ok(ScalarUDF::new_from_impl(ContainsSparqlOp::new(encodings)))
+    Ok(ScalarUDF::new_from_impl(ContainsSparqlUDF::new(encodings)))
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct ContainsSparqlOp {
+struct ContainsSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
 }
 
-impl Debug for ContainsSparqlOp {
+impl Debug for ContainsSparqlUDF {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ContainsSparqlOp")
+        f.debug_struct("ContainsSparqlUDF")
             .field("encodings", &self.encodings)
             .finish()
     }
 }
 
-impl ContainsSparqlOp {
-    /// Create a new [`ContainsSparqlOp`].
+impl ContainsSparqlUDF {
+    /// Create a new [`ContainsSparqlUDF`].
     fn new(encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlOpTypeSignatureBuilder::new()
+        let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
             .with_binary_arity()
             .build();
@@ -60,7 +60,7 @@ impl ContainsSparqlOp {
     }
 }
 
-impl ScalarUDFImpl for ContainsSparqlOp {
+impl ScalarUDFImpl for ContainsSparqlUDF {
     fn as_any(&self) -> &dyn Any {
         self
     }

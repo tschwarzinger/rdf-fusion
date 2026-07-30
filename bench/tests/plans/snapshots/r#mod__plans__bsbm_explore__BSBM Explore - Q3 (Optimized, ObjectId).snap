@@ -5,7 +5,7 @@ expression: "&explanation.optimized_logical_plan.to_string()"
 Sort: AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST, fetch=10
   Projection: product, label
     DecodeObjectIds: columns=[label, product]
-      Filter: EBV(GT(ENC_TF(p1), Union 4:4:156)) AND EBV(LT(ENC_TF(p3), Union 4:4:152)) AND NOT EBV(BOUND(testVar))
+      Filter: EBV(GT(ENC_TF(p1), Union 5:4:156)) AND EBV(LT(ENC_TF(p3), Union 5:4:152)) AND NOT EBV(BOUND(testVar))
         DecodeObjectIds: columns=[p1, p3, testVar]
           Projection: lhs.product AS product, lhs.label AS label, lhs.p1 AS p1, lhs.p3 AS p3, rhs.testVar AS testVar
             Left Join: lhs.product = rhs.product

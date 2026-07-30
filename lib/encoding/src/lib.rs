@@ -30,16 +30,6 @@
 //! must provide an [EncodingArray] and an [EncodingScalar]. These two types wrap regular Arrow
 //! arrays (or scalars) that adhere to a particular encoding. If you want to pass an array to
 //! a function that is guaranteed to be of a certain encoding, use these data types.
-//!
-//! # Future Plans
-//!
-//! In the future, we would like that encodings are parameterizable. For example, this [GitHub issue](https://github.com/tobixdev/rdf-fusion/issues/50)
-//! tracks the progress of allowing users to specify custom object id lengths. As these parameters
-//! will influence what kind of arrays/scalars are valid instances of a given encoding. For example,
-//! if the object id contains 4 bytes, an array with 6 bytes is not a valid values. This state needs
-//! to be considered when validating arrays/scalars. Therefore, you should use [TermEncoding::try_new_array]
-//! or [TermEncoding::try_new_scalar] for creating datum instances, as the static way of creating
-//! them will no longer work at some point.
 
 pub mod compute;
 mod encoding;
