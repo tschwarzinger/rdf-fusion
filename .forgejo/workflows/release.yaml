@@ -11,6 +11,12 @@ jobs:
     runs-on: tuw-runner
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97
+      - name: Rust Cache
+        uses: https://github.com/Swatinem/rust-cache@v2
       - name: Install Just
         run: cargo install just
       - name: Check Version
@@ -69,6 +75,12 @@ jobs:
     runs-on: tuw-runner
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: https://github.com/dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97
+      - name: Rust Cache
+        uses: https://github.com/Swatinem/rust-cache@v2
       - name: Install Just
         run: cargo install just
       - name: Package Source
