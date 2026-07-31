@@ -17,10 +17,8 @@ jobs:
           toolchain: 1.97
       - name: Rust Cache
         uses: https://github.com/Swatinem/rust-cache@v2
-      - name: Install Just
-        run: cargo install just
       - name: Check Version
-        run: just ci-check-version ${{ github.ref_name }}
+        run: bash misc/ci/check-version.sh ${{ github.ref_name }}
 
   publish-crates:
     name: Publish to Crates.io
@@ -36,8 +34,10 @@ jobs:
         uses: https://github.com/Swatinem/rust-cache@v2
       - name: Install Just
         run: cargo install just
+      - name: Run Tests
+        run: just lint bench::prepare-benches-tests test test-examples rustdoc
       - name: Publish
-        run: just ci-publish-crates
+        run: bash misc/ci/publish-crates.sh
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
@@ -59,12 +59,10 @@ jobs:
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      - name: Install Just
-        run: cargo install just
       - name: Build Binary
-        run: just ci-build-binary ${{ matrix.target }}
+        run: bash misc/ci/build-binary.sh ${{ matrix.target }}
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: binary-${{ matrix.target }}
           path: target/rdf-fusion-*.tar.gz
@@ -75,18 +73,10 @@ jobs:
     runs-on: tuw-runner
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: https://github.com/dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.97
-      - name: Rust Cache
-        uses: https://github.com/Swatinem/rust-cache@v2
-      - name: Install Just
-        run: cargo install just
       - name: Package Source
-        run: just ci-package-source
+        run: bash misc/ci/package-source.sh
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: source-tarball
           path: target/rdf-fusion-source.tar.gz
@@ -98,13 +88,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
-          pattern: binary-*
           path: artifacts
-          merge-multiple: true
       - name: Download Source
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: source-tarball
           path: artifacts
