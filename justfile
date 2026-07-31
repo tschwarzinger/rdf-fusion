@@ -47,10 +47,10 @@ serve location="memory:///" profile="profiling-nonlto":
 # Check that the crate version matches the release tag
 ci-check-version ref_name:
     #!/usr/bin/env bash
-    VERSION=$(grep -m 1 "^version = " cargo.toml | cut -d '"' -f 2)
+    VERSION=$(grep -m 1 "^version = " Cargo.toml | cut -d '"' -f 2)
     EXPECTED_VERSION=$(echo "{{ ref_name }}" | sed 's|^release/||' | sed 's/^v//')
     if [ "$VERSION" != "$EXPECTED_VERSION" ]; then \
-      echo "Error: Version mismatch. cargo.toml has $VERSION, but tag is {{ ref_name }} (expected $EXPECTED_VERSION)"; \
+      echo "Error: Version mismatch. Cargo.toml has $VERSION, but tag is {{ ref_name }} (expected $EXPECTED_VERSION)"; \
       exit 1; \
     fi
     echo "Version $VERSION matches tag {{ ref_name }}"
