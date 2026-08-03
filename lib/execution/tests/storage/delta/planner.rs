@@ -63,11 +63,11 @@ async fn test_no_quad_table_with_change() {
     )])
     .await;
 
-    assert_plan_snapshot!(ctx.get_plan_string().await, @"
-        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-          FilterExec: graph@0 IS NULL AND subject@1 = 1
-            DataSourceExec: partitions=1, partition_sizes=[1]
-        ");
+    assert_plan_snapshot!(ctx.get_plan_string().await, @r"
+    ProjectionExec: expr=[predicate@0 as p, object@1 as o]
+      FilterExec: graph@0 IS NULL AND subject@1 = 1, projection=[predicate@2, object@3]
+        DataSourceExec: partitions=1, partition_sizes=[1]
+    ");
 }
 
 #[tokio::test]
@@ -314,6 +314,8 @@ impl PlannerTestContext {
         let context = RdfFusionContextBuilder::new(
             Arc::clone(&self.storage) as Arc<dyn QuadStorage>
         )
+        .with_session_config(Some(self.session.copied_config()))
+        .with_runtime_env(Some(self.session.runtime_env()))
         .build()
         .unwrap();
         let session_context = context.session_context();
