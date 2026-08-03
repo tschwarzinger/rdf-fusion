@@ -55,7 +55,7 @@ jobs:
         run: just lint bench::prepare-benches-tests test test-examples rustdoc
 
       - name: Publish
-        run: bash misc/ci/publish-crates.sh
+        run: cargo publish --workspace
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
