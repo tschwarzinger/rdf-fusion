@@ -14,7 +14,7 @@ jobs:
       - name: Setup Rust
         uses: https://github.com/dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.97
+          toolchain: 1.95
       - name: Rust Cache
         uses: https://github.com/Swatinem/rust-cache@v2
       - name: Check Version
@@ -25,17 +25,35 @@ jobs:
     needs: validate
     runs-on: tuw-runner
     steps:
-      - uses: actions/checkout@v4
+      - name: Install System Dependencies
+        run: |
+          apt-get update
+          apt-get install -y git-lfs build-essential cmake clang libclang-dev
+          git lfs install
+
       - name: Setup Rust
         uses: https://github.com/dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.97
+          toolchain: 1.95
+          components: rustfmt, clippy
+
       - name: Rust Cache
         uses: https://github.com/Swatinem/rust-cache@v2
-      - name: Install Just
-        run: cargo install just
+
+      - name: Install Cargo Dependencies
+        run: |
+          cargo install just
+          cargo install taplo-cli
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+
       - name: Run Tests
         run: just lint bench::prepare-benches-tests test test-examples rustdoc
+
       - name: Publish
         run: bash misc/ci/publish-crates.sh
         env:
@@ -49,18 +67,38 @@ jobs:
       matrix:
         target: [ x86_64-unknown-linux-gnu ]
     steps:
-      - uses: actions/checkout@v4
+      - name: Install System Dependencies
+        run: |
+          apt-get update
+          apt-get install -y git-lfs build-essential cmake clang libclang-dev
+          git lfs install
+
       - name: Setup Rust
         uses: https://github.com/dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.97
+          toolchain: 1.95
+          components: rustfmt, clippy
           targets: ${{ matrix.target }}
+
       - name: Rust Cache
         uses: https://github.com/Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+
+      - name: Install Cargo Dependencies
+        run: |
+          cargo install just
+          cargo install taplo-cli
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
+
       - name: Build Binary
         run: bash misc/ci/build-binary.sh ${{ matrix.target }}
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:
