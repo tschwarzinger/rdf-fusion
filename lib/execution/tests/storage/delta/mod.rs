@@ -17,6 +17,7 @@ use url::Url;
 
 mod object_ids;
 mod persistence;
+mod planner;
 mod refresh;
 
 fn create_test_log_store() -> Arc<dyn LogStore> {

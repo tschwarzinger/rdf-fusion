@@ -4844,7 +4844,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "criterion",
  "datafusion",
@@ -4871,7 +4871,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-bench"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4901,7 +4901,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4927,7 +4927,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-common"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "datafusion",
  "object_store",
@@ -4943,7 +4943,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-compute"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "criterion",
  "datafusion",
@@ -4955,7 +4955,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-encoding"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ahash",
  "async-trait",
@@ -4969,7 +4969,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-examples"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4982,12 +4982,13 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-execution"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "datafusion",
  "deltalake",
  "futures",
+ "insta",
  "itertools 0.15.0",
  "object_store",
  "oxrdfio",
@@ -5008,7 +5009,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-extensions"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -5020,7 +5021,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-functions"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "arrow-string",
  "async-trait",
@@ -5046,7 +5047,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-logical"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "datafusion",
  "futures",
@@ -5061,7 +5062,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-physical"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "criterion",
@@ -5077,7 +5078,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-storage"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5094,7 +5095,6 @@ dependencies = [
  "rand 0.10.2",
  "rdf-fusion-common",
  "rdf-fusion-encoding",
- "rdf-fusion-execution",
  "rdf-fusion-extensions",
  "rdf-fusion-logical",
  "rdf-fusion-physical",
@@ -5129,7 +5129,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-web"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "axum",

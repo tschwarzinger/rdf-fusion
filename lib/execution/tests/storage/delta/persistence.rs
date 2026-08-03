@@ -1,4 +1,4 @@
-use crate::delta::{
+use crate::storage::delta::{
     create_context, create_test_log_store, create_test_session_context, populate_storage,
 };
 use datafusion::arrow::datatypes::{Field, Schema};

@@ -15,4 +15,3 @@ mod object_store;
 pub mod parquet;
 pub mod quad_tables;
 pub mod rdf_files;
-pub mod utils;
