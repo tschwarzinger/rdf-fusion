@@ -100,24 +100,10 @@ jobs:
         run: bash misc/ci/build-binary.sh ${{ matrix.target }}
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+      - uses: https://data.forgejo.org/forgejo/upload-artifact@v4
         with:
-          name: binary-${{ matrix.target }}
+          name: rdf-fusion-${{ matrix.target }}
           path: target/rdf-fusion-*.tar.gz
-
-  build-source:
-    name: Build Source Tarball
-    needs: validate
-    runs-on: tuw-runner
-    steps:
-      - uses: actions/checkout@v4
-      - name: Package Source
-        run: bash misc/ci/package-source.sh
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: source-tarball
-          path: target/rdf-fusion-source.tar.gz
 
   create-release:
     name: Create Forgejo Release
@@ -128,11 +114,6 @@ jobs:
       - name: Download Binaries
         uses: actions/download-artifact@v3
         with:
-          path: artifacts
-      - name: Download Source
-        uses: actions/download-artifact@v3
-        with:
-          name: source-tarball
           path: artifacts
       - name: Create Release
         uses: https://github.com/softprops/action-gh-release@v2
