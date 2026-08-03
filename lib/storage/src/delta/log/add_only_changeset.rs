@@ -274,16 +274,27 @@ mod tests {
     use crate::delta::DeltaQuadsStorageBuilder;
     use datafusion::physical_plan::collect;
     use datafusion::prelude::SessionContext;
+    use object_store::memory::InMemory;
     use rdf_fusion_common::{GraphName, NamedNode, Quad};
-    use rdf_fusion_encoding::quads_to_plain_term_dataframe;
+    use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
     use rdf_fusion_extensions::storage::QuadStorage;
     use std::sync::Arc;
+    use url::Url;
 
     #[tokio::test]
     async fn test_as_eager_changeset_conversion() -> Result<(), Box<dyn std::error::Error>>
     {
-        let storage = Arc::new(DeltaQuadsStorageBuilder::new().build().await?);
+        let storage = Arc::new(
+            DeltaQuadsStorageBuilder::new()
+                .with_encoding(QuadStorageEncodingName::PlainTerm)
+                .build()
+                .await?,
+        );
         let context = SessionContext::new();
+        context.runtime_env().register_object_store(
+            &Url::parse("memory:///").unwrap(),
+            Arc::new(InMemory::new()),
+        );
         let state = context.state();
 
         let txn = storage.begin_transaction(&state).await?;
