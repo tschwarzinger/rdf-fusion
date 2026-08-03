@@ -100,7 +100,7 @@ jobs:
         run: bash misc/ci/build-binary.sh ${{ matrix.target }}
 
       - name: Upload Artifact
-      - uses: https://data.forgejo.org/forgejo/upload-artifact@v4
+        uses: https://data.forgejo.org/forgejo/upload-artifact@v4
         with:
           name: rdf-fusion-${{ matrix.target }}
           path: target/rdf-fusion-*.tar.gz
