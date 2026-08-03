@@ -121,9 +121,8 @@ jobs:
       - name: Create Release
         uses: https://code.forgejo.org/actions/forgejo-release@v2
         with:
-          files: artifacts/**
-          name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          direction: upload
+          release-dir: artifacts
+          title: RDF Fusion ${{ github.ref_name }}
+          tag: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
