@@ -111,15 +111,17 @@ jobs:
     runs-on: tuw-runner
     steps:
       - uses: actions/checkout@v4
+
       - name: Download Binaries
-        uses: actions/download-artifact@v3
+        uses: https://data.forgejo.org/forgejo/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: true
+
       - name: Create Release
-        uses: https://github.com/softprops/action-gh-release@v2
+        uses: https://code.forgejo.org/actions/forgejo-release@v2
         with:
-          files: artifacts/*
-          tag_name: ${{ github.ref_name }}
+          files: artifacts/**
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
