@@ -107,7 +107,7 @@ jobs:
 
   create-release:
     name: Create Forgejo Release
-    needs: [ build-binaries, build-source ]
+    needs: [ build-binaries ]
     runs-on: tuw-runner
     steps:
       - uses: actions/checkout@v4
