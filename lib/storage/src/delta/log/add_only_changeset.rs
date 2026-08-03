@@ -273,9 +273,9 @@ mod tests {
     use super::*;
     use crate::delta::DeltaQuadsStorageBuilder;
     use datafusion::physical_plan::collect;
+    use datafusion::prelude::SessionContext;
     use rdf_fusion_common::{GraphName, NamedNode, Quad};
     use rdf_fusion_encoding::quads_to_plain_term_dataframe;
-    use rdf_fusion_execution::RdfFusionContextBuilder;
     use rdf_fusion_extensions::storage::QuadStorage;
     use std::sync::Arc;
 
@@ -283,14 +283,12 @@ mod tests {
     async fn test_as_eager_changeset_conversion() -> Result<(), Box<dyn std::error::Error>>
     {
         let storage = Arc::new(DeltaQuadsStorageBuilder::new().build().await?);
-        let context =
-            RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
-                .build()?;
+        let context = SessionContext::new();
+        let state = context.state();
 
-        let state = context.session_context().state();
         let txn = storage.begin_transaction(&state).await?;
         txn.insert(quads_to_plain_term_dataframe(
-            context.session_context(),
+            &context,
             &[Quad::new(
                 NamedNode::new_unchecked("https://my.com/s"),
                 NamedNode::new_unchecked("https://my.com/p"),

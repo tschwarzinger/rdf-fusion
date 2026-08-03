@@ -73,10 +73,11 @@ use rdf_fusion_execution::sparql::{
     QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate, UpdateOptions,
 };
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
-use rdf_fusion_extensions::storage::QuadStorageGraphTarget;
+use rdf_fusion_extensions::storage::{
+    QuadStorageGraphTarget, graph_target_to_plain_term_dataframe,
+};
 use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
-use rdf_fusion_storage::utils::graph_target_to_plain_term_dataframe;
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
 use tokio::runtime::Handle;

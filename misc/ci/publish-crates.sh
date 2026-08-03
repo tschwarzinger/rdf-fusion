@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-
 # Publish
 (cd lib/common && cargo publish)
 (cd lib/encoding && cargo publish)

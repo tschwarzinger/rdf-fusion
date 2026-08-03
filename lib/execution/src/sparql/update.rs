@@ -21,9 +21,10 @@ use rdf_fusion_common::{
 };
 
 use rdf_fusion_encoding::quads_to_plain_term_dataframe;
-use rdf_fusion_extensions::storage::QuadStorageTransaction;
+use rdf_fusion_extensions::storage::{
+    QuadStorageTransaction, graph_target_to_plain_term_dataframe,
+};
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
-use rdf_fusion_storage::utils::graph_target_to_plain_term_dataframe;
 use sparesults::QuerySolution;
 use std::collections::HashMap;
 use std::io;

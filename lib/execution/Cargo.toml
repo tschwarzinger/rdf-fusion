@@ -12,7 +12,6 @@ RDF Fusion Execution Engine
 [dependencies]
 async-trait.workspace = true
 datafusion.workspace = true
-deltalake.workspace = true
 itertools.workspace = true
 object_store.workspace = true
 rdf-fusion-extensions.workspace = true
@@ -30,6 +29,10 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 url.workspace = true
+
+[dev-dependencies]
+deltalake.workspace = true
+insta.workspace = true
 
 [lints]
 workspace = true
