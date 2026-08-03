@@ -1,0 +1,55 @@
+{{ define "main" }}
+<section class="py-5 my-5">
+  <div class="container" style="max-width: 800px">
+    <header class="mb-5 text-center text-md-start">
+      <h1 class="display-4 fw-bold text-green mb-4">Blog</h1>
+    </header>
+
+    <div class="row g-4">
+      {{ range .Pages }}
+      <div class="col-md-6">
+        <a href="{{ .Permalink }}" class="text-decoration-none h-100 d-block">
+          <div class="custom-card h-100 d-flex flex-column">
+            <h2
+              class="h4 fw-bold text-green mb-3"
+              style="transition: color 0.2s"
+              onmouseover="this.classList.replace('text-green', 'text-brown')"
+              onmouseout="this.classList.replace('text-brown', 'text-green')"
+            >
+              {{ .Title }}
+            </h2>
+
+            <div
+              class="d-flex flex-wrap align-items-center gap-2 text-brown fw-bold text-uppercase mb-3"
+              style="font-size: 0.75rem; letter-spacing: 0.05em; opacity: 0.8"
+            >
+              <span>{{ .Date.Format "2006-01-02" }}</span>
+              <span>&bull;</span>
+              <span>{{ .Params.author }}</span>
+            </div>
+
+            <p class="text-muted mb-0">{{ .Params.abstract }}</p>
+
+            {{ with .GetTerms "tags" }}
+            <div class="mt-auto pt-4 d-flex flex-wrap gap-2">
+              {{ range . }}
+              <span
+                class="badge bg-brown text-white rounded-pill px-2 py-1"
+                style="
+                  font-size: 0.7rem;
+                  font-weight: normal;
+                  letter-spacing: 0.05em;
+                "
+                >{{ .LinkTitle }}</span
+              >
+              {{ end }}
+            </div>
+            {{ end }}
+          </div>
+        </a>
+      </div>
+      {{ end }}
+    </div>
+  </div>
+</section>
+{{ end }}

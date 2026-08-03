@@ -1,0 +1,78 @@
+<nav
+  class="navbar navbar-expand-md bg-white border-bottom sticky-top py-3 shadow-sm"
+>
+  <div class="container">
+    <a
+      class="navbar-brand d-flex align-items-center gap-2"
+      href="{{ site.Home.RelPermalink }}"
+    >
+      <img
+        src='{{ "images/birdie.png" | relURL }}'
+        alt="RDF Fusion Logo"
+        style="width: 32px; height: 32px"
+      />
+      <span class="fs-5 fw-bold text-green mb-0">RDF Fusion</span>
+    </a>
+
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#navbarContent"
+      aria-controls="navbarContent"
+      aria-expanded="false"
+      aria-label="Toggle navigation"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarContent">
+      <div class="navbar-nav mx-auto gap-4">
+        <a class="nav-link nav-link-custom" href="{{ site.Home.RelPermalink }}"
+          >Home</a
+        >
+        <a
+          class="nav-link nav-link-custom"
+          href="https://docs.rs/rdf-fusion"
+          target="_blank"
+          >Docs</a
+        >
+        <a class="nav-link nav-link-custom" href='{{ "blog/" | relURL }}'
+          >Blog</a
+        >
+      </div>
+
+      <div class="d-flex align-items-center">
+        <a
+          href="https://codeberg.org/tschwarzinger/rdf-fusion/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-sm bg-green text-white fw-bold text-uppercase d-flex align-items-center gap-2"
+          style="font-size: 0.65rem; letter-spacing: 0.1em"
+        >
+          <i class="fa-solid fa-database" style="font-size: 14px"></i>
+          Repository
+        </a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- Experimental Prototype Banner -->
+<div
+  class="py-2 px-3 d-flex align-items-center justify-content-center gap-2 border-bottom"
+  style="
+    background-color: rgba(27, 48, 34, 0.05);
+    border-color: rgba(230, 204, 178, 0.2);
+  "
+>
+  <i
+    class="fa-solid fa-triangle-exclamation"
+    style="font-size: 16px; color: var(--brand-brown)"
+  ></i>
+  <span
+    class="fw-bold text-uppercase text-brown text-center"
+    style="font-size: 0.65rem; letter-spacing: 0.2em"
+    >Caution: Experimental Research Prototype</span
+  >
+</div>

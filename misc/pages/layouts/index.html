@@ -1,0 +1,129 @@
+{{ define "main" }}
+<div
+  class="container d-flex align-items-center"
+  style="min-height: calc(100vh - 8rem)"
+>
+  <main class="row w-100 py-5">
+    <!-- Left Branding / Hero Column -->
+    <div class="col-lg-4 d-flex flex-column justify-content-center py-4">
+      <h1 class="display-4 fw-bold text-green mb-4">
+        <span
+          class="text-brown"
+          style="
+            text-decoration: underline;
+            text-decoration-color: rgba(93, 58, 36, 0.3);
+            text-underline-offset: 8px;
+          "
+          >RDF Fusion</span
+        >
+      </h1>
+      <p class="fs-5 mb-5 text-muted" style="max-width: 400px">
+        RDF Fusion is an embeddable SPARQL engine based on
+        <a href="https://datafusion.apache.org/" class="text-brown fw-bold"
+          >Apache DataFusion</a
+        >. Our main goal is to provide a performant SPARQL engine that
+        integrates with modern data ecosystems. We also aim to provide support
+        for non-graph data models (e.g., time series) in the future.
+      </p>
+    </div>
+
+    <!-- Right Feature Grid Column -->
+    <div class="col-lg-8">
+      <div class="row g-4">
+        <!-- Feature 1 -->
+        <div class="col-md-6">
+          <div class="custom-card h-100">
+            <h3 class="h5 fw-bold mb-3">Open Source Ecosystem</h3>
+            <p class="text-muted mb-0">
+              Built on top of projects like
+              <a href="https://arrow.apache.org/" class="text-brown fw-bold"
+                >Arrow</a
+              >
+              and
+              <a
+                href="https://datafusion.apache.org/"
+                class="text-brown fw-bold"
+                >DataFusion</a
+              >
+              we can enhance the interoperability between projects.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="col-md-6">
+          <div class="custom-card h-100">
+            <h3 class="h5 fw-bold mb-3">Embeddable</h3>
+            <p class="text-muted mb-0">
+              Integrate RDF Fusion directly into your Rust applications. No
+              server infrastructure required.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="col-md-6">
+          <div class="custom-card h-100">
+            <h3 class="h5 fw-bold mb-3">Disaggregated Storage</h3>
+            <p class="text-muted mb-0">
+              We are investigating the use of technologies pioneered for
+              analytical "Big Data" workloads in the context of RDF and SPARQL.
+              Query RDF data stored in
+              <a href="https://parquet.apache.org/" class="text-brown fw-bold"
+                >Parquet</a
+              >
+              files, or use
+              <a href="https://delta.io/" class="text-brown fw-bold"
+                >Delta Lake</a
+              >
+              for an updatable RDF store. Both can be queried while residing in
+              an object store.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="col-md-6">
+          <div class="custom-card h-100">
+            <h3 class="h5 fw-bold mb-3">Customizable</h3>
+            <p class="text-muted mb-0">
+              Extend functionality via custom functions, aggregate functions,
+              and optimization rules. We try to provide a framework for
+              customization, inspired by the extensibility of DataFusion.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="col-md-6">
+          <div class="custom-card h-100">
+            <h3 class="h5 fw-bold mb-3">Performance</h3>
+            <p class="text-muted mb-0">
+              We are building on the shoulders of giants: DataFusion is among
+              the best performing single-node query engines out there. There are
+              certain areas where we can improve performance (e.g., query
+              planning) but you should be able to get solid performance out of
+              the box.
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 6: Vision CTA -->
+        <div class="col-md-6">
+          <div
+            class="bg-green rounded p-4 h-100 d-flex flex-column justify-content-center align-items-center text-center shadow-sm"
+            style="transition: transform 0.2s"
+          >
+            <a
+              href="mailto:tobias.schwarzinger@tuwien.ac.at"
+              class="h4 fw-bold text-white text-decoration-none"
+            >
+              Contact via E-Mail
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+{{ end }}

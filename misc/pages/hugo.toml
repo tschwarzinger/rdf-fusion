@@ -1,0 +1,6 @@
+baseURL = 'https://tschwarzinger.codeberg.page/rdf-fusion/'
+locale = 'en-us'
+title = 'RDF Fusion'
+
+[permalinks]
+blog = "/blog/:slug/"

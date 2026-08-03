@@ -8,11 +8,13 @@ default:
 fmt:
     cargo fmt
     taplo fmt **.toml
+    npx --yes prettier@3 --write "**/*.{css,html}"
 
 # Run all lints (e.g., formatting, clippy)
 lint:
     cargo fmt --all -- --check
     taplo fmt **.toml --check
+    npx --yes prettier@3 --check "**/*.{css,html}"
     cargo clippy --workspace --all-targets -- -D warnings -D clippy::all
 
 # Run all tests

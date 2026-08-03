@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content="RDF Fusion" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/png" href='{{ "favicon.png" | relURL }}' />
+    <meta name="generator" content="Hugo {{ hugo.Version }}" />
+    <title>{{ block "title" . }}{{ .Title }} | RDF Fusion{{ end }}</title>
+    {{ $bootstrap := resources.Get "vendor/bootstrap/css/bootstrap.min.css" }}
+    {{ $fa := resources.Get "vendor/fontawesome-css/all.min.css" }} {{ $style :=
+    resources.Get "css/style.css" }} {{ $css := slice $bootstrap $fa $style |
+    resources.Concat "css/bundle.css" | minify }}
+    <link rel="stylesheet" href="{{ $css.RelPermalink }}" />
+  </head>
+  <body class="d-flex flex-column min-vh-100 bg-light">
+    {{ partial "nav.html" . }}
+    <main class="flex-grow-1">{{ block "main" . }}{{ end }}</main>
+    {{ partial "footer.html" . }} {{ $bsJs := resources.Get
+    "vendor/bootstrap/js/bootstrap.bundle.min.js" }}
+    <script src="{{ $bsJs.RelPermalink }}"></script>
+  </body>
+</html>

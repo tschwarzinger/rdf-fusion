@@ -1,0 +1,60 @@
+{{ define "main" }}
+<section class="py-5 my-5 bg-white text-green">
+  <div class="container" style="max-width: 800px">
+    <header class="mb-5">
+      <a
+        href='{{ "blog/" | relURL }}'
+        class="d-inline-flex align-items-center gap-2 text-brown fw-bold text-uppercase mb-5 text-decoration-none"
+        style="font-size: 0.75rem; letter-spacing: 0.1em"
+      >
+        <i class="fa-solid fa-chevron-left" style="font-size: 16px"></i>
+        Back to Blog
+      </a>
+      <h1 class="display-4 fw-bold text-green mb-4">{{ .Title }}</h1>
+      <div
+        class="d-flex flex-wrap align-items-center gap-3 text-brown fw-bold text-uppercase mb-4"
+        style="font-size: 0.75rem; letter-spacing: 0.1em"
+      >
+        <span>{{ .Date.Format "2006-01-02" }}</span>
+        <span
+          style="
+            width: 4px;
+            height: 4px;
+            background-color: var(--brand-brown);
+            border-radius: 50%;
+          "
+        ></span>
+        <span>By {{ .Params.author }}</span>
+      </div>
+
+      {{ with .GetTerms "tags" }}
+      <div class="d-flex flex-wrap gap-2 mb-4">
+        {{ range . }}
+        <a
+          href="{{ .Permalink }}"
+          class="badge bg-brown text-white text-decoration-none rounded-pill px-3 py-2"
+          style="
+            font-size: 0.75rem;
+            font-weight: normal;
+            letter-spacing: 0.05em;
+            transition: opacity 0.2s;
+          "
+          onmouseover="this.style.opacity = '0.8'"
+          onmouseout="this.style.opacity = '1'"
+          >{{ .LinkTitle }}</a
+        >
+        {{ end }}
+      </div>
+      {{ end }}
+      <p
+        class="fs-5 text-green text-opacity-75 fw-medium fst-italic ps-4 border-start border-4"
+        style="border-color: rgba(93, 58, 36, 0.3) !important"
+      >
+        {{ .Params.abstract }}
+      </p>
+    </header>
+
+    <div class="prose fs-5 lh-lg">{{ .Content }}</div>
+  </div>
+</section>
+{{ end }}
