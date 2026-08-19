@@ -1,5 +1,5 @@
 use crate::delta::quad_table::{is_named_node_bound, is_term_bound};
-use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
+use crate::parquet::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use crate::quad_tables::QuadTableName;
 use deltalake::kernel::{Add, EagerSnapshot};
 use deltalake::logstore::LogStoreRef;

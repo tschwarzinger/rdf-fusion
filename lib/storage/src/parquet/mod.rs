@@ -1,15 +1,15 @@
 mod loader;
 mod planner;
-pub(crate) mod reader;
-pub(crate) mod scan;
-pub(crate) mod scan_builder;
+mod reader;
+mod scan;
+mod scan_builder;
 mod snapshot;
 mod storage;
 mod writer_properties;
 
-pub use loader::{
-    RdfParquetLoader, RdfParquetLoaderCreationError, RdfParquetLoadingError,
-};
+pub use loader::*;
+pub use reader::*;
+pub use scan_builder::*;
 pub use snapshot::*;
-pub use storage::ParquetQuadStorage;
-pub use writer_properties::RdfFusionParquetWriterProperties;
+pub use storage::*;
+pub use writer_properties::*;

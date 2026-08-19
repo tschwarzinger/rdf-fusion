@@ -16,7 +16,6 @@ rust-version.workspace = true
 
 [dependencies]
 datafusion.workspace = true
-deltalake.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-compute.workspace = true
 rdf-fusion-physical.workspace = true
@@ -31,6 +30,9 @@ rdf-fusion-storage.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
+
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+deltalake.workspace = true
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }

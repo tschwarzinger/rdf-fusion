@@ -1,11 +1,11 @@
+use crate::block_cache::BlockCache;
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::{
     ChangesetContext, DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef,
     DeltaStorageLogVersionRange,
 };
 use crate::delta::quad_table::DeltaQuadsQuadTableSnapshot;
-use crate::object_store::CachedObjectStore;
-use crate::parquet::scan_builder::{
+use crate::parquet::{
     ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
 };
 use crate::quad_tables::QuadTableName;
@@ -59,7 +59,7 @@ pub struct DeltaQuadsStorageScanPlanBuilder {
     quad_table: Option<DeltaQuadsQuadTableSnapshot>,
     changeset: Option<DeltaQuadsStorageLogChangesetRef>,
     projection_indices: Option<Vec<usize>>,
-    object_store: Option<Arc<CachedObjectStore>>,
+    cache: Option<Arc<BlockCache>>,
 }
 
 impl DeltaQuadsStorageScanPlanBuilder {
@@ -75,7 +75,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
             quad_table: None,
             changeset: None,
             projection_indices: None,
-            object_store: None,
+            cache: None,
         }
     }
 
@@ -112,8 +112,8 @@ impl DeltaQuadsStorageScanPlanBuilder {
         self
     }
 
-    pub fn with_object_store(mut self, object_store: Arc<CachedObjectStore>) -> Self {
-        self.object_store = Some(object_store);
+    pub fn with_cache(mut self, cache: Arc<BlockCache>) -> Self {
+        self.cache = Some(cache);
         self
     }
 
@@ -476,9 +476,10 @@ impl DeltaQuadsStorageScanPlanBuilder {
         let custom_factory = ParquetQuadScanReaderFactoryType::Preloaded(
             quad_table.parquet_metadata().clone(),
             quad_table.bloom_filters().clone(),
+            self.cache.clone(),
         );
 
-        let mut plan = ParquetQuadScanBuilder::new(
+        let plan = ParquetQuadScanBuilder::new(
             &self.session_state,
             self.encoding.clone(),
             table_uri.as_object_store_url(),
@@ -488,13 +489,9 @@ impl DeltaQuadsStorageScanPlanBuilder {
         .with_quad_pattern(self.pattern.clone())
         .with_pushdown_projection(pushdown_projection)
         .with_reader_factory_type(custom_factory)
-        .with_eager_pruning(true);
-
-        if let Some(object_store) = &self.object_store {
-            plan = plan.with_object_store(Arc::clone(object_store) as _);
-        }
-
-        let plan = plan.build().await?;
+        .with_eager_pruning(true)
+        .build()
+        .await?;
 
         Ok(Some(plan))
     }

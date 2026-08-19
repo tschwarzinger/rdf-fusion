@@ -23,6 +23,7 @@ mod rdf;
 mod sort_order;
 pub mod sparql;
 mod typed_value;
+mod url;
 pub mod vocab;
 mod xsd;
 
@@ -34,6 +35,7 @@ pub use quad_component::*;
 pub use rdf::*;
 pub use sort_order::*;
 pub use typed_value::*;
+pub use url::*;
 pub use xsd::*;
 
 // Re-export some oxrdf types.

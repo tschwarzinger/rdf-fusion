@@ -1,3 +1,4 @@
+use crate::block_cache::BlockCache;
 use crate::delta::DeltaQuadsStorage;
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::quad_tables::QuadTableName;
@@ -31,6 +32,7 @@ pub struct DeltaQuadsStorageBuilder {
     encoding: QuadStorageEncodingName,
     quad_tables: Vec<QuadTableName>,
     log_max_age: Option<Duration>,
+    cache: Option<Arc<BlockCache>>,
 }
 
 impl DeltaQuadsStorageBuilder {
@@ -47,6 +49,7 @@ impl DeltaQuadsStorageBuilder {
                 QuadTableName::GOSP,
             ],
             log_max_age: None,
+            cache: None,
         }
     }
 
@@ -86,6 +89,12 @@ impl DeltaQuadsStorageBuilder {
         self
     }
 
+    /// Sets the block cache for caching Parquet file reads.
+    pub fn with_cache(mut self, cache: Option<Arc<BlockCache>>) -> Self {
+        self.cache = cache;
+        self
+    }
+
     /// Tries to create the builder.
     pub async fn build(self) -> Result<DeltaQuadsStorage, DeltaQuadsStorageError> {
         let log_store = self.log_store.unwrap_or_else(|| {
@@ -122,9 +131,10 @@ impl DeltaQuadsStorageBuilder {
                     );
 
                     let options = self.options.unwrap_or_default();
-                    let result =
-                        DeltaQuadsStorage::try_load(&session, &options, log_store)
-                            .await?;
+                    let result = DeltaQuadsStorage::try_load_with_cache(
+                        &session, &options, log_store, self.cache,
+                    )
+                    .await?;
                     result.set_transaction_max_age(self.log_max_age).await;
                     Ok(result)
                 }
@@ -143,11 +153,12 @@ impl DeltaQuadsStorageBuilder {
                 .map(|s| s.config().rdf_fusion_options_or_from_env())
                 .unwrap_or_else(RdfFusionOptions::from_env)?;
 
-            let result = DeltaQuadsStorage::new_at_location(
+            let result = DeltaQuadsStorage::new_at_location_with_cache(
                 &options,
                 self.encoding,
                 self.quad_tables,
                 log_store,
+                self.cache,
             )
             .await?;
             result.set_transaction_max_age(self.log_max_age).await;

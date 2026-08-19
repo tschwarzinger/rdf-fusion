@@ -1,31 +1,33 @@
-name: Deploy to Pages
+name: Web
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  deploy:
+  lint:
     runs-on: tuw-runner
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Setup Hugo
-        uses: https://github.com/peaceiris/actions-hugo@v3
+      - name: Setup Node
+        uses: https://github.com/actions/setup-node@v4
         with:
-          hugo-version: '0.123.7'
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: misc/pages/package-lock.json
 
-      - name: Build
-        run: hugo --minify
+      - name: Install Frontend Dependencies
+        run: npm ci
         working-directory: misc/pages
 
-      - name: Deploy to Codeberg Pages
-        uses: https://codeberg.org/git-pages/action@v2
-        with:
-          site: https://tschwarzinger.codeberg.page/rdf-fusion/
-          token: ${{ forge.token }}
-          source: misc/pages/public/
+      - name: Lint HTML & CSS
+        run: npx --yes prettier@3 --check "**/*.{css,html}"
+
+      - name: Lint JS & Svelte
+        run: npm run lint
+        working-directory: misc/pages

@@ -38,7 +38,7 @@ impl DeltaQuadsStoragePlanner {
             node.quad_pattern().clone(),
             self.snapshot.encoding().clone(),
         )
-        .with_object_store(Arc::clone(self.snapshot.cached_store()))
+        .with_cache(Arc::clone(self.snapshot.cache()))
         .with_best_quad_table(self.snapshot.quad_tables())?
         .with_changeset_for_log(self.snapshot.log(), Some(self.snapshot.version()))
         .await?

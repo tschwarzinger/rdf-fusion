@@ -1,3 +1,4 @@
+use crate::block_cache::BlockCache;
 use crate::parquet::planner::ParquetQuadStoragePlanner;
 use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use crate::parquet::scan_builder::{
@@ -19,11 +20,10 @@ use datafusion::physical_plan::aggregates::{
     AggregateExec, AggregateMode, PhysicalGroupBy,
 };
 use datafusion::physical_planner::ExtensionPlanner;
-use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use futures::StreamExt;
 use object_store::ObjectMeta;
-use rdf_fusion_common::StorageError;
 use rdf_fusion_common::quads::COL_GRAPH;
+use rdf_fusion_common::{StorageError, url_to_object_store_url};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
@@ -40,6 +40,7 @@ pub struct ParquetQuadStorageSnapshot {
     object_meta: ObjectMeta,
     parquet_meta: Arc<ParquetMetaData>,
     bloom_filter_cache: PreloadedBloomFilters,
+    block_cache: Option<Arc<BlockCache>>,
 }
 
 impl ParquetQuadStorageSnapshot {
@@ -50,6 +51,7 @@ impl ParquetQuadStorageSnapshot {
         object_meta: ObjectMeta,
         parquet_meta: Arc<ParquetMetaData>,
         bloom_filter_cache: PreloadedBloomFilters,
+        block_cache: Option<Arc<BlockCache>>,
     ) -> Self {
         Self {
             encoding,
@@ -57,6 +59,7 @@ impl ParquetQuadStorageSnapshot {
             object_meta,
             parquet_meta,
             bloom_filter_cache,
+            block_cache,
         }
     }
 
@@ -76,6 +79,7 @@ impl ParquetQuadStorageSnapshot {
         let custom_factory = ParquetQuadScanReaderFactoryType::Preloaded(
             cache,
             self.bloom_filter_cache.clone(),
+            self.block_cache.clone(),
         );
 
         let partitioned_file = PartitionedFile::new_from_meta(self.object_meta.clone());
@@ -83,7 +87,7 @@ impl ParquetQuadStorageSnapshot {
         let plan = ParquetQuadScanBuilder::new(
             session_state,
             self.encoding.clone(),
-            self.url.as_object_store_url(),
+            url_to_object_store_url(&self.url)?,
             vec![FileGroup::new(vec![partitioned_file])],
         )
         .with_quad_pattern(pattern.clone())

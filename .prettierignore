@@ -3,3 +3,4 @@ testsuite/suites/
 node_modules/
 .idea/
 misc/pages/public/
+misc/pages/static/generated

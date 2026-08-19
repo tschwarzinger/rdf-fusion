@@ -1,12 +1,14 @@
 mod claim;
 mod error;
 mod in_memory;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 mod lmdb;
 mod traits;
 
 pub use claim::{ObjectIdClaim, ObjectIdClaimer, StaticObjectIdClaimer};
 pub use error::LocalObjectIdError;
 pub use in_memory::InMemoryObjectIdDictionary;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub use lmdb::LmdbObjectIdDictionary;
 pub use quick_cache::sync::Cache;
 pub use traits::{

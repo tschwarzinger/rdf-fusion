@@ -12,6 +12,7 @@ use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_execution::sparql::QueryOptions;
 use rdf_fusion_execution::sparql::RdfFusionQuery;
 use rdf_fusion_extensions::storage::QuadStorage;
+use rdf_fusion_storage::block_cache::BlockCache;
 use rdf_fusion_storage::parquet::ParquetQuadStorage;
 use std::sync::Arc;
 use url::Url;
@@ -111,10 +112,65 @@ async fn test_parquet_bloom_filter_cache_hits() {
     assert_eq!(hits, 1);
 }
 
+#[tokio::test]
+async fn test_parquet_scan_with_caching() {
+    let cache = Arc::new(BlockCache::new(4096, 128));
+    let (rdf_context, storage) = prepare_test_store_with_cache(
+        &[
+            (
+                "http://example.org/s1",
+                "http://example.org/p1",
+                "http://example.org/o1",
+            ),
+            (
+                "http://example.org/s2",
+                "http://example.org/p2",
+                "http://example.org/o2",
+            ),
+        ],
+        false,
+        "cached_test.parquet",
+        Some(Arc::clone(&cache)),
+    )
+    .await;
+
+    assert!(storage.cache().is_some());
+
+    let query: RdfFusionQuery = "SELECT ?s ?o WHERE { ?s <http://example.org/p1> ?o . }"
+        .try_into()
+        .unwrap();
+    let (results, _) = rdf_context
+        .execute_query(&query, QueryOptions::default())
+        .await
+        .unwrap();
+
+    if let rdf_fusion_execution::results::QueryResults::Solutions(mut solutions) = results
+    {
+        use futures::StreamExt;
+        let mut count = 0;
+        while let Some(row) = solutions.next().await {
+            row.unwrap();
+            count += 1;
+        }
+        assert_eq!(count, 1);
+    } else {
+        panic!("Expected solutions");
+    }
+}
+
 async fn prepare_test_store(
     quads: &[(&str, &str, &str)],
     enable_bloom: bool,
     filename: &str,
+) -> (RdfFusionContext, Arc<ParquetQuadStorage>) {
+    prepare_test_store_with_cache(quads, enable_bloom, filename, None).await
+}
+
+async fn prepare_test_store_with_cache(
+    quads: &[(&str, &str, &str)],
+    enable_bloom: bool,
+    filename: &str,
+    cache: Option<Arc<BlockCache>>,
 ) -> (RdfFusionContext, Arc<ParquetQuadStorage>) {
     let session_config = SessionConfig::default();
     let context = SessionContext::new_with_config(session_config);
@@ -151,19 +207,21 @@ async fn prepare_test_store(
         .await
         .unwrap();
 
-    let storage = Arc::new(
-        ParquetQuadStorage::try_load(
-            Url::parse(&path).unwrap(),
-            QuadStorageEncodingName::String,
-            context.runtime_env().object_store_registry.as_ref(),
-        )
-        .await
-        .unwrap(),
-    );
+    let runtime = context.runtime_env();
+    let mut storage_builder = ParquetQuadStorage::builder(Url::parse(&path).unwrap())
+        .with_encoding(QuadStorageEncodingName::String)
+        .with_object_store_registry(runtime.object_store_registry.as_ref());
+
+    if let Some(cache) = cache {
+        storage_builder = storage_builder.with_cache(Some(cache));
+    }
+
+    let storage = Arc::new(storage_builder.build().await.unwrap());
 
     let rdf_context =
         RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
             .with_single_partition_session_config()
+            .with_runtime_env(Some(Arc::clone(&context.runtime_env())))
             .build()
             .unwrap();
 

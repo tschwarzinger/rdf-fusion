@@ -27,6 +27,8 @@ pub struct GraphPatternRewriter {
     dataset: QueryDataset,
     /// The base IRI used for resolving relative IRIs in the query.
     base_iri: Option<Iri<String>>,
+    /// The encoding that should be used for the output of the rewritten query.
+    output_encoding_name: Option<EncodingName>,
     /// The current state of the rewriting process.
     state: RefCell<RewritingState>,
 }
@@ -40,8 +42,9 @@ impl GraphPatternRewriter {
     /// * `base_iri` - The base IRI used for resolving relative IRIs in the query
     pub fn new(
         builder_context: RdfFusionLogicalPlanBuilderContext,
-        dataset: QueryDataset, // TODO: Moving dataset and base_iri to rewrite allows reusing
+        dataset: QueryDataset,
         base_iri: Option<Iri<String>>,
+        output_encoding_name: Option<EncodingName>,
     ) -> Self {
         let active_graph = compute_default_active_graph(&dataset);
         let state = RewritingState::default().with_active_graph(active_graph);
@@ -49,17 +52,18 @@ impl GraphPatternRewriter {
             builder_context,
             dataset,
             base_iri,
+            output_encoding_name,
             state: RefCell::new(state),
         }
     }
 
     /// Rewrites a SPARQL graph pattern into a DataFusion logical plan.
     ///
-    /// The method ensures that all results are encoded as plain terms and can be displayed to
-    /// users.
+    /// The method ensures that all results are encoded as the requested output encoding, or plain terms by default.
     pub fn rewrite(&self, pattern: &GraphPattern) -> DFResult<LogicalPlan> {
         let plan = self.rewrite_graph_pattern(pattern)?;
-        plan.with_plain_terms()?.build()
+        let encoding = self.output_encoding_name.unwrap_or(EncodingName::PlainTerm);
+        plan.with_encoding(encoding)?.build()
     }
 
     /// Similar to [Self::rewrite] but does not transform all columns into the plain term encoding.

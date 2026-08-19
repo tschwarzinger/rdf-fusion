@@ -1,0 +1,56 @@
+name: Wasm
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: tuw-runner
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Environment
+        uses: ./.forgejo/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          tools: 'just'
+
+      - name: Lint Wasm
+        run: just lint-wasm
+
+  test:
+    runs-on: tuw-runner
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Environment
+        uses: ./.forgejo/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          components: ''
+          tools: 'just'
+
+      - name: Setup Node
+        uses: https://github.com/actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firefox
+        run: |
+          apt-get update
+          apt-get install -y firefox-esr
+
+      - name: Install wasm-pack
+        uses: https://github.com/jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'latest'
+
+      - name: Run web-pack test
+        run: just test-web

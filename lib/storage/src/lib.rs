@@ -8,10 +8,11 @@
 
 //! Contains storage layer implementations for [RDF Fusion](https://docs.rs/rdf-fusion/).
 
+pub mod block_cache;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub mod delta;
-mod exec;
+pub mod exec;
 pub mod local_object_ids;
-mod object_store;
 pub mod parquet;
 pub mod quad_tables;
 pub mod rdf_files;

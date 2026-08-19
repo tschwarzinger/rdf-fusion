@@ -1,0 +1,61 @@
+name: Nightly Wasm Build
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  nightly-wasm:
+    name: Build and Publish Nightly Wasm
+    runs-on: tuw-runner
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            CHANGES=$(git log --oneline --since="24 hours ago")
+            if [ -z "$CHANGES" ]; then
+              echo "No changes in the last 24 hours. Skipping nightly build."
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Setup Rust Environment
+        if: steps.check_changes.outputs.skip != 'true'
+        uses: ./.forgejo/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          components: ''
+          tools: ''
+
+      - name: Install wasm-pack
+        if: steps.check_changes.outputs.skip != 'true'
+        uses: https://github.com/jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'latest'
+
+      - name: Build WebAssembly
+        if: steps.check_changes.outputs.skip != 'true'
+        run: wasm-pack build --target web --release lib/wasm
+
+      - name: Upload to S3 (Hetzner)
+        if: steps.check_changes.outputs.skip != 'true'
+        env:
+          # Note: Adjust AWS_ACCESS_KEY_ID if you have a separate Access Key!
+          AWS_ACCESS_KEY_ID: ${{ secrets.RDF_FUSION_PUBLIC_S3_ACCESS_TOKEN }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RDF_FUSION_PUBLIC_S3_SECRET_ACCESS_TOKEN }}
+          AWS_DEFAULT_REGION: hel1
+        run: |
+          BUCKET_NAME="rdf-fusion-public"
+          ENDPOINT_URL="https://hel1.your-objectstorage.com"
+          
+          aws s3 cp lib/wasm/pkg/rdf_fusion_wasm.js s3://$BUCKET_NAME/latest/rdf_fusion_wasm.js --endpoint-url $ENDPOINT_URL
+          aws s3 cp lib/wasm/pkg/rdf_fusion_wasm_bg.wasm s3://$BUCKET_NAME/latest/rdf_fusion_wasm_bg.wasm --endpoint-url $ENDPOINT_URL

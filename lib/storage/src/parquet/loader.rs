@@ -7,11 +7,12 @@ use datafusion::logical_expr::LogicalPlan;
 use datafusion::parquet::arrow::AsyncArrowWriter;
 use datafusion::parquet::errors::ParquetError;
 use datafusion::prelude::*;
-use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use futures::StreamExt;
 use object_store::buffered::BufWriter;
 use object_store::path::Path;
-use rdf_fusion_common::{RdfFormat, RdfInput, RdfInputSource, RdfSortOrder};
+use rdf_fusion_common::{
+    RdfFormat, RdfInput, RdfInputSource, RdfSortOrder, url_to_object_store_url,
+};
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
@@ -64,7 +65,7 @@ impl RdfParquetLoader {
         inputs: Vec<RdfInput>,
         output_url: Url,
     ) -> Result<(), RdfParquetLoadingError> {
-        let object_store_url = output_url.as_object_store_url();
+        let object_store_url = url_to_object_store_url(&output_url)?;
         let object_store = self
             .session_context
             .runtime_env()

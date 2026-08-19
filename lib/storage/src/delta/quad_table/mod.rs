@@ -6,7 +6,7 @@ use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::DeltaQuadsStorageLogChangesetRef;
 use crate::delta::quad_table::update::DeltaStorageQuadTableUpdater;
 use crate::delta::quad_table::validation::validate_quad_table;
-use crate::parquet::reader::{
+use crate::parquet::{
     PreloadedBloomFilters, PreloadedParquetMetadata,
     load_parquet_metadata_and_bloom_filters,
 };

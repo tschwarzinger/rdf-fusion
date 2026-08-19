@@ -39,15 +39,20 @@ pub enum PushdownProjection {
     Yes(Option<Vec<usize>>),
 }
 
-pub type EagerPruningResult =
-    (ParquetAccessPlan, Option<Arc<dyn PhysicalExpr>>, Statistics);
+use crate::block_cache::BlockCache;
+
+type EagerPruningResult = (ParquetAccessPlan, Option<Arc<dyn PhysicalExpr>>, Statistics);
 
 /// Defines which [`ParquetFileReaderFactory`] should be used during scanning.
 pub enum ParquetQuadScanReaderFactoryType {
     /// Uses the default DataFusion parquet reader
     Default,
     /// Create a cached reader that already knows the parquet metadata
-    Preloaded(PreloadedParquetMetadata, PreloadedBloomFilters),
+    Preloaded(
+        PreloadedParquetMetadata,
+        PreloadedBloomFilters,
+        Option<Arc<BlockCache>>,
+    ),
 }
 
 /// A builder for constructing `ParquetQuadScanExec` with optional predicate pushdown and projection.
@@ -239,13 +244,16 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             .reader_factory_type
         {
             ParquetQuadScanReaderFactoryType::Default => Arc::clone(&default_reader) as _,
-            ParquetQuadScanReaderFactoryType::Preloaded(cache, bloom_filter_cache) => {
-                Arc::new(PreLoadedMetadataReaderFactory::new(
-                    default_reader,
-                    cache.clone(),
-                    bloom_filter_cache.clone(),
-                ))
-            }
+            ParquetQuadScanReaderFactoryType::Preloaded(
+                cache,
+                bloom_filter_cache,
+                block_cache,
+            ) => Arc::new(PreLoadedMetadataReaderFactory::new(
+                default_reader,
+                cache.clone(),
+                bloom_filter_cache.clone(),
+                block_cache.clone(),
+            )),
         };
 
         let mut parquet_source = ParquetSource::new(table_schema)
@@ -293,7 +301,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             ParquetQuadScanReaderFactoryType::Default => {
                 return Ok((self.file_groups.clone(), None));
             }
-            ParquetQuadScanReaderFactoryType::Preloaded(cache, _) => cache,
+            ParquetQuadScanReaderFactoryType::Preloaded(cache, _, _) => cache,
         };
 
         let total_file_count: usize =

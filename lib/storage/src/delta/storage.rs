@@ -1,3 +1,4 @@
+use crate::block_cache::BlockCache;
 use crate::delta::DeltaQuadsStorageBuilder;
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::{DeltaQuadsStorageLog, DeltaStorageLogVersionRange};
@@ -6,7 +7,6 @@ use crate::delta::quad_table::{DeltaQuadsQuadTable, DeltaQuadsQuadTableSnapshot}
 use crate::delta::refresh::DeltaTableRefresher;
 use crate::delta::snapshot::DeltaQuadsStorageSnapshot;
 use crate::delta::transaction::DeltaQuadsStorageTransaction;
-use crate::object_store::CachedObjectStore;
 use crate::quad_tables::QuadTableName;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::DataType;
@@ -48,7 +48,7 @@ pub struct DeltaQuadsStorage {
     /// Options
     options: DeltaStorageOptions,
     /// Cached object store
-    cached_store: Arc<CachedObjectStore>,
+    cache: Arc<BlockCache>,
 }
 
 impl DeltaQuadsStorage {
@@ -58,6 +58,24 @@ impl DeltaQuadsStorage {
         encoding: QuadStorageEncodingName,
         quad_table_configurations: Vec<QuadTableName>,
         base_log_store: LogStoreRef,
+    ) -> Result<Self, DeltaQuadsStorageError> {
+        Self::new_at_location_with_cache(
+            options,
+            encoding,
+            quad_table_configurations,
+            base_log_store,
+            None,
+        )
+        .await
+    }
+
+    /// Creates a new [`DeltaQuadsStorage`] at the given `base_location` with an optional [`BlockCache`].
+    pub async fn new_at_location_with_cache(
+        options: &RdfFusionOptions,
+        encoding: QuadStorageEncodingName,
+        quad_table_configurations: Vec<QuadTableName>,
+        base_log_store: LogStoreRef,
+        cache: Option<Arc<BlockCache>>,
     ) -> Result<Self, DeltaQuadsStorageError> {
         let storage_config = base_log_store.config().options().clone();
         let base_url = base_log_store.config().location().clone();
@@ -128,6 +146,13 @@ impl DeltaQuadsStorage {
             quad_tables.push(Arc::new(new_quad_table));
         }
 
+        let cache = cache.unwrap_or_else(|| {
+            Arc::new(BlockCache::new(
+                options.storage.delta.data_cache_block_size,
+                options.storage.delta.data_cache_num_blocks,
+            ))
+        });
+
         Ok(Self {
             log: Arc::new(log),
             storage_encoding,
@@ -135,11 +160,7 @@ impl DeltaQuadsStorage {
             object_id_mapping,
             refresher: Arc::new(DeltaTableRefresher::new(None)),
             options: options.storage.delta.clone(),
-            cached_store: Arc::new(CachedObjectStore::new(
-                base_log_store.root_object_store(None),
-                options.storage.delta.data_cache_block_size,
-                options.storage.delta.data_cache_num_blocks,
-            )),
+            cache,
         })
     }
 
@@ -161,6 +182,16 @@ impl DeltaQuadsStorage {
         state: &SessionState,
         options: &RdfFusionOptions,
         base_log_store: LogStoreRef,
+    ) -> Result<Self, DeltaQuadsStorageError> {
+        Self::try_load_with_cache(state, options, base_log_store, None).await
+    }
+
+    /// Tries to load an existing [`DeltaQuadsStorage`] based on the given `base_location` with an optional [`BlockCache`].
+    pub async fn try_load_with_cache(
+        state: &SessionState,
+        options: &RdfFusionOptions,
+        base_log_store: LogStoreRef,
+        cache: Option<Arc<BlockCache>>,
     ) -> Result<Self, DeltaQuadsStorageError> {
         let log_storage_config = base_log_store.config().options().clone();
         let base_url = base_log_store.config().location().clone();
@@ -243,6 +274,13 @@ impl DeltaQuadsStorage {
             quad_tables.push(Arc::new(new_quad_table));
         }
 
+        let cache = cache.unwrap_or_else(|| {
+            Arc::new(BlockCache::new(
+                options.storage.delta.data_cache_block_size,
+                options.storage.delta.data_cache_num_blocks,
+            ))
+        });
+
         Ok(Self {
             log: Arc::new(log),
             storage_encoding,
@@ -250,12 +288,13 @@ impl DeltaQuadsStorage {
             object_id_mapping,
             refresher: Arc::new(DeltaTableRefresher::new(None)),
             options: options.storage.delta.clone(),
-            cached_store: Arc::new(CachedObjectStore::new(
-                base_log_store.root_object_store(None),
-                options.storage.delta.data_cache_block_size,
-                options.storage.delta.data_cache_num_blocks,
-            )),
+            cache,
         })
+    }
+
+    /// Returns the [`BlockCache`] of the storage.
+    pub fn cache(&self) -> &Arc<BlockCache> {
+        &self.cache
     }
 
     /// Returns the log that records the changes made to the storage.
@@ -320,7 +359,7 @@ impl DeltaQuadsStorage {
             self.object_id_mapping.clone(),
             self.options.clone(),
             version,
-            Arc::clone(&self.cached_store),
+            Arc::clone(&self.cache),
         ))
     }
 }

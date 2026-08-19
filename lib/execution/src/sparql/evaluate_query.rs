@@ -16,6 +16,7 @@ use rdf_fusion_common::sparql::Query;
 use rdf_fusion_common::sparql::algebra::GraphPattern;
 use rdf_fusion_common::{Iri, TriplePattern};
 use rdf_fusion_common::{MeasurePoll, Variable};
+use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 use std::sync::Arc;
@@ -74,6 +75,7 @@ pub async fn evaluate_query_with_snapshot(
                 query,
                 pattern,
                 base_iri,
+                options.output_encoding_name,
             ))
             .await?;
             Ok((QueryResults::Solutions(stream), explanation))
@@ -90,6 +92,7 @@ pub async fn evaluate_query_with_snapshot(
                 query,
                 pattern,
                 base_iri,
+                options.output_encoding_name,
             ))
             .await?;
             Ok((
@@ -106,6 +109,7 @@ pub async fn evaluate_query_with_snapshot(
                 query,
                 pattern,
                 base_iri,
+                options.output_encoding_name,
             ))
             .await?;
             let count = stream.next().await;
@@ -150,6 +154,7 @@ pub async fn evaluate_query_with_snapshot(
                 query,
                 &pattern,
                 base_iri,
+                options.output_encoding_name,
             ))
             .await?;
 
@@ -168,12 +173,19 @@ async fn graph_pattern_to_stream(
     query: &RdfFusionQuery,
     pattern: &GraphPattern,
     base_iri: &Option<Iri<String>>,
+    output_encoding_name: Option<EncodingName>,
 ) -> Result<(QuerySolutionStream, QueryExplanation), QueryEvaluationError> {
     let task = state.task_ctx();
 
-    let (execution_plan, explanation) =
-        create_execution_plan(state, builder_context, &query.dataset, pattern, base_iri)
-            .await?;
+    let (execution_plan, explanation) = create_execution_plan(
+        state,
+        builder_context,
+        &query.dataset,
+        pattern,
+        base_iri,
+        output_encoding_name,
+    )
+    .await?;
     let variables = create_variables(&execution_plan.schema());
 
     let batch_record_stream = execute_stream(execution_plan, task)?;
@@ -189,15 +201,20 @@ async fn create_execution_plan(
     dataset: &QueryDataset,
     pattern: &GraphPattern,
     base_iri: &Option<Iri<String>>,
+    output_encoding_name: Option<EncodingName>,
 ) -> Result<(Arc<dyn ExecutionPlan>, QueryExplanation), QueryEvaluationError> {
     let planning_compute = Time::new();
     let handle = planning_compute.timer();
 
     let planning_time_start = Instant::now();
-    let logical_plan =
-        GraphPatternRewriter::new(builder_context, dataset.clone(), base_iri.clone())
-            .rewrite(pattern)
-            .map_err(|e| e.context("Cannot rewrite SPARQL query"))?;
+    let logical_plan = GraphPatternRewriter::new(
+        builder_context,
+        dataset.clone(),
+        base_iri.clone(),
+        output_encoding_name,
+    )
+    .rewrite(pattern)
+    .map_err(|e| e.context("Cannot rewrite SPARQL query"))?;
     let optimized_plan = state.optimize(&logical_plan)?;
     drop(handle); // Add synchronous computation to the planning time
 

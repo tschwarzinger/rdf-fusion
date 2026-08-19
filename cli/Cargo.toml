@@ -28,7 +28,7 @@ rdf-fusion.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-web.workspace = true
 snmalloc-rs.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros", "parking_lot", "rt", "rt-multi-thread", "sync"] }
 console-subscriber = { workspace = true, optional = true }
 tokio-util.workspace = true
 tracing.workspace = true

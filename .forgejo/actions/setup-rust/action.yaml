@@ -1,0 +1,57 @@
+name: 'Setup Rust Environment'
+description: 'Set up system packages, Rust toolchain, caching, cargo-binstall, and CLI tools'
+
+inputs:
+  toolchain:
+    description: 'Rust toolchain version'
+    required: false
+    default: 'stable'
+  components:
+    description: 'Rust components (e.g. rustfmt, clippy)'
+    required: false
+    default: 'rustfmt, clippy'
+  targets:
+    description: 'Rust target architectures (e.g. wasm32-unknown-unknown)'
+    required: false
+    default: ''
+  cache:
+    description: 'Enable rust-cache'
+    required: false
+    default: 'true'
+  extra-system-packages:
+    description: 'Additional apt packages to install (e.g. nodejs npm default-jre-headless)'
+    required: false
+    default: ''
+  tools:
+    description: 'Space-separated list of tools to install via cargo-binstall (e.g. "just taplo-cli critcmp")'
+    required: false
+    default: 'just'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install System Dependencies
+      shell: bash
+      run: |
+        apt-get update
+        apt-get install -y build-essential cmake clang libclang-dev ${{ inputs.extra-system-packages }}
+
+    - name: Setup Rust
+      uses: https://github.com/dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - name: Rust Cache
+      uses: https://github.com/Swatinem/rust-cache@v2
+
+    - name: Install Tools via cargo-binstall
+      if: inputs.tools != ''
+      shell: bash
+      run: |
+        if ! command -v cargo-binstall &> /dev/null; then
+          echo "Installing cargo-binstall..."
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+        fi
+        cargo binstall --no-confirm ${{ inputs.tools }}

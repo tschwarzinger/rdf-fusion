@@ -1,2 +1,5 @@
 public
+node_modules
 .hugo_build.lock
+static/generated/
+static/webfonts/

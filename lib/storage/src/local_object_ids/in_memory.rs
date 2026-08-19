@@ -8,9 +8,9 @@ use crate::local_object_ids::traits::{
     LocalObjectIdDictionary, LocalObjectIdDictionarySnapshot, LocalObjectIdTransaction,
 };
 use async_trait::async_trait;
+use datafusion::arrow::array::Int64Builder;
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, Int64Array, RecordBatch};
 use datafusion::arrow::datatypes::Int64Type;
-use deltalake::arrow::array::Int64Builder;
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::{
     PlainTermArray, PlainTermArrayElementBuilder, PlainTermScalar,

@@ -1,3 +1,4 @@
+use crate::block_cache::BlockCache;
 use crate::delta::log::{
     DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef, DeltaStorageLogVersionRange,
 };
@@ -5,7 +6,6 @@ use crate::delta::objectids::DeltaObjectIdDictionary;
 use crate::delta::planner::DeltaQuadsStoragePlanner;
 use crate::delta::quad_table::DeltaQuadsQuadTableSnapshot;
 use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
-use crate::object_store::CachedObjectStore;
 use async_trait::async_trait;
 use datafusion::common::Result as DFResult;
 use datafusion::common::stats::Precision;
@@ -34,7 +34,7 @@ pub struct DeltaQuadsStorageSnapshot {
     version: u64,
     options: DeltaStorageOptions,
     transactional_changeset: Option<DeltaQuadsStorageLogChangesetRef>,
-    cached_store: Arc<CachedObjectStore>,
+    cache: Arc<BlockCache>,
 }
 
 impl DeltaQuadsStorageSnapshot {
@@ -46,7 +46,7 @@ impl DeltaQuadsStorageSnapshot {
         object_id_mapping: Option<Arc<DeltaObjectIdDictionary>>,
         options: DeltaStorageOptions,
         version: u64,
-        cached_store: Arc<CachedObjectStore>,
+        cache: Arc<BlockCache>,
     ) -> Self {
         Self {
             log,
@@ -56,7 +56,7 @@ impl DeltaQuadsStorageSnapshot {
             version,
             options,
             transactional_changeset: None,
-            cached_store,
+            cache,
         }
     }
 
@@ -64,8 +64,8 @@ impl DeltaQuadsStorageSnapshot {
         &self.log
     }
 
-    pub fn cached_store(&self) -> &Arc<CachedObjectStore> {
-        &self.cached_store
+    pub fn cache(&self) -> &Arc<BlockCache> {
+        &self.cache
     }
 
     pub fn quad_tables(&self) -> &[DeltaQuadsQuadTableSnapshot] {
@@ -144,7 +144,7 @@ impl QuadStorageSnapshot for DeltaQuadsStorageSnapshot {
             QuadPattern::all_quads(),
             self.encoding.clone(),
         )
-        .with_object_store(Arc::clone(&self.cached_store))
+        .with_cache(Arc::clone(&self.cache))
         .with_best_quad_table(&self.quad_tables)
         .map_err(|e| StorageError::Other(Box::new(e)))?
         .with_changeset_for_log(&self.log, Some(self.version))

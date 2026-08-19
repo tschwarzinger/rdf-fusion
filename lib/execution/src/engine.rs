@@ -34,9 +34,10 @@ use std::sync::Arc;
 /// Represents a connection to an instance of an RDF Fusion engine.
 ///
 /// An RDF Fusion instance consists of:
-/// - A [SessionContext]. This is the primary interaction point with DataFusion.
-/// - An [RdfFusionFunctionRegistry] that holds the currently registered RDF Fusion built-ins.
-/// - A reference to a quad storage.
+/// - A [`SessionContext`]. This is the primary interaction point with DataFusion.
+/// - An [`RdfFusionFunctionRegistry`] that holds the currently registered RDF Fusion built-ins.
+/// - A [`RdfFusionEncodings`] that defines the used encodings.
+/// - A reference to a [`QuadStorage`].
 #[derive(Clone)]
 pub struct RdfFusionContext {
     /// The DataFusion [SessionContext].

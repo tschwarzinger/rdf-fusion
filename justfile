@@ -10,16 +10,33 @@ fmt:
     taplo fmt **.toml
     npx --yes prettier@3 --write "**/*.{css,html}"
 
-# Run all lints (e.g., formatting, clippy)
-lint:
+# Run all Rust lints (e.g., formatting, clippy)
+lint: lint-rust
+
+# Run all Rust lints (e.g., formatting, clippy)
+lint-rust:
     cargo fmt --all -- --check
     taplo fmt **.toml --check
-    npx --yes prettier@3 --check "**/*.{css,html}"
     cargo clippy --workspace --all-targets -- -D warnings -D clippy::all
 
-# Run all tests
+# Lint the Wasm bindings (requires a Rust toolchain + wasm32 target).
+# Only used by the wasm CI workflow.
+lint-wasm:
+    cargo clippy --package rdf-fusion-wasm --target wasm32-unknown-unknown -- -D warnings -D clippy::all
+
+# Lint the web app / playground frontend (no Rust toolchain required; needs `npm ci` in misc/pages first).
+# Only used by the web CI workflow.
+lint-web:
+    npx --yes prettier@3 --check "**/*.{css,html}"
+    npm run lint --prefix misc/pages
+
+# Run all regular tests
 test:
-    cargo test --workspace --exclude rdf-fusion-examples
+    cargo test --workspace --exclude rdf-fusion-examples --exclude rdf-fusion-wasm
+
+# Run the tests related to RDF Fusion's Wasm bindings and the playground
+test-web:
+    wasm-pack test --firefox --headless ./lib/wasm
 
 # Runs all examples to see whether they fail
 test-examples:

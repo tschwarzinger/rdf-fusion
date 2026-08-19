@@ -1,0 +1,64 @@
+[package]
+name = "rdf-fusion-wasm"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "JavaScript and WebAssembly bindings for RDF Fusion"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+async-stream.workspace = true
+rdf-fusion.workspace = true
+datafusion.workspace = true
+url.workspace = true
+console_error_panic_hook = "0.1"
+object_store = { workspace = true, features = ["http"] }
+oneshot.workspace = true
+bytes = { workspace = true }
+async-trait.workspace = true
+futures.workspace = true
+js-sys.workspace = true
+rdf-fusion-encoding.workspace = true
+thiserror.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
+  "Window",
+  "IdbFactory",
+  "Blob",
+  "BlobPropertyBag",
+  "IdbDatabase",
+  "IdbTransaction",
+  "IdbTransactionMode",
+  "IdbObjectStore",
+  "IdbRequest",
+  "IdbOpenDbRequest",
+  "EventTarget",
+  "Event",
+  "DomException",
+  "DomStringList",
+  "WorkerGlobalScope",
+  "DedicatedWorkerGlobalScope",
+] }
+tokio.workspace = true
+
+# Feature patches for wasm
+chrono = { workspace = true, features = ["wasmbind"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
+getrandom_0_3 = { package = "getrandom", version = "0.3", features = [
+  "wasm_js",
+] }
+getrandom_0_2 = { package = "getrandom", version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O3", "--all-features"]
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = ["--all-features"]

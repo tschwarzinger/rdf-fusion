@@ -43,7 +43,6 @@ use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
-use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use futures::StreamExt;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_common::{CorruptionError, RdfDumpFormat, RdfInputSource, StorageError};
@@ -57,31 +56,22 @@ use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::arrow::record_batch::RecordBatch;
-use datafusion::datasource::object_store::{
-    DefaultObjectStoreRegistry, ObjectStoreRegistry,
-};
-use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use object_store::ObjectStore;
-use object_store::memory::InMemory;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
     QuadStorageEncoding, TermEncoding, quads_to_plain_term_dataframe,
 };
+use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
 use rdf_fusion_execution::sparql::error::QueryEvaluationError;
 use rdf_fusion_execution::sparql::{
     QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate, UpdateOptions,
 };
-use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::{
     QuadStorageGraphTarget, graph_target_to_plain_term_dataframe,
 };
-use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
-use tokio::runtime::Handle;
-use url::Url;
 
 static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
     Arc::new([
@@ -139,9 +129,22 @@ impl Store {
     /// Creates a [`Store`] with an in-memory storage.
     ///
     /// For more control over the query engine and the storage backend, see [`Self::new`] and
-    /// [`RdfFusionContextBuilder`] and the implementation of the used quad storage (e.g.
-    /// [`DeltaQuadsStorageBuilder`]).
+    /// [`RdfFusionContextBuilder`](rdf_fusion_execution::RdfFusionContextBuilder) and the
+    /// implementation of the used quad storage (e.g. [`DeltaQuadsStorageBuilder`](rdf_fusion_storage::delta::DeltaQuadsStorageBuilder)).
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub async fn new_in_memory() -> Store {
+        use datafusion::datasource::object_store::{
+            DefaultObjectStoreRegistry, ObjectStoreRegistry,
+        };
+        use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+        use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
+        use object_store::ObjectStore;
+        use object_store::memory::InMemory;
+        use rdf_fusion_execution::RdfFusionContextBuilder;
+        use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
+        use tokio::runtime::Handle;
+        use url::Url;
+
         let memory_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
         let registry = DefaultObjectStoreRegistry::new();
         registry.register_store(

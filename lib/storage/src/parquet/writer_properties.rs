@@ -1,9 +1,9 @@
 use datafusion::parquet::basic::Encoding;
+use datafusion::parquet::basic::{Compression, ZstdLevel};
 use datafusion::parquet::file::metadata::SortingColumn;
+use datafusion::parquet::file::properties::EnabledStatistics;
 use datafusion::parquet::file::properties::{WriterProperties, WriterPropertiesBuilder};
 use datafusion::parquet::schema::types::ColumnPath;
-use deltalake::parquet::basic::{Compression, ZstdLevel};
-use deltalake::parquet::file::properties::EnabledStatistics;
 use rdf_fusion_common::{QuadComponent, RdfSortOrder, RdfSortOrderName};
 use rdf_fusion_encoding::QuadStorageEncoding;
 

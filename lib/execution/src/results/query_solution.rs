@@ -1,13 +1,14 @@
 use crate::sparql::error::QueryEvaluationError;
-use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::array::{ArrayRef, RecordBatch};
 use datafusion::common::exec_err;
 use datafusion::execution::SendableRecordBatchStream;
 use datafusion::prelude::DataFrame;
 use futures::{Stream, StreamExt};
-use rdf_fusion_common::DFResult;
 use rdf_fusion_common::Variable;
+use rdf_fusion_common::{DFResult, Term};
 use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
 use rdf_fusion_encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermEncoding};
+use rdf_fusion_encoding::string::{STRING_ENCODING, StringEncoding};
 use rdf_fusion_encoding::{TermDecoder, TermEncoding};
 pub use sparesults::QuerySolution;
 use std::pin::Pin;
@@ -30,16 +31,20 @@ pub struct QuerySolutionStream {
 }
 
 impl QuerySolutionStream {
-    /// Construct a new iterator of solutions from an ordered list of solution variables and an iterator of solution tuples
-    /// (each tuple using the same ordering as the variable list such that tuple element 0 is the value for the variable 0...)
+    /// Construct a new stream of solutions from an ordered list of variables and a stream of
+    /// solution tuples.
     pub fn try_new(
         variables: Arc<[Variable]>,
         inner: SendableRecordBatchStream,
     ) -> DFResult<Self> {
         for field in inner.schema().fields() {
-            if &PlainTermEncoding::data_type() != field.data_type() {
+            let is_supported_datatype = &PlainTermEncoding::data_type()
+                == field.data_type()
+                || &StringEncoding::data_type() == field.data_type();
+            if !is_supported_datatype {
                 return exec_err!(
-                    "Field {field} has unsupported type {} for query solution.",
+                    "Field '{}' has unsupported type '{}' for query solution.",
+                    field.name(),
                     field.data_type()
                 );
             }
@@ -151,27 +156,7 @@ fn to_query_solution(
             ))
         })?;
 
-        // Convert the column to a PlainTermEncoding array
-        let array = PLAIN_TERM_ENCODING
-            .try_new_array(Arc::clone(column))
-            .map_err(|e| {
-                QueryEvaluationError::InternalError(format!(
-                    "Failed to convert column to PlainTermEncoding: {e}"
-                ))
-            })?;
-
-        // Decode all terms for this column at once
-        let terms = DefaultPlainTermDecoder::decode_terms(&array)
-            .map(|t| match t {
-                Ok(t) => Ok(Some(t.into_owned())),
-                Err(_) => Ok(None),
-            })
-            .collect::<DFResult<Vec<_>>>()
-            .map_err(|e| {
-                QueryEvaluationError::InternalError(format!(
-                    "Failed to decode terms: {e}"
-                ))
-            })?;
+        let terms = to_terms_vec(column)?;
 
         column_terms.push(terms.into_iter());
     }
@@ -193,6 +178,43 @@ fn to_query_solution(
     }
 
     Ok(result.into_iter())
+}
+
+fn to_terms_vec(column: &ArrayRef) -> Result<Vec<Option<Term>>, QueryEvaluationError> {
+    let plain_term_array = if column.data_type() == &PlainTermEncoding::data_type() {
+        PLAIN_TERM_ENCODING
+            .try_new_array(Arc::clone(column))
+            .map_err(|e| {
+                QueryEvaluationError::InternalError(format!(
+                    "Failed to convert column to PlainTermEncoding: {e}"
+                ))
+            })?
+    } else {
+        STRING_ENCODING
+            .try_new_array(Arc::clone(column))
+            .map_err(|e| {
+                QueryEvaluationError::InternalError(format!(
+                    "Failed to convert column to StringEncoding: {e}"
+                ))
+            })?
+            .as_plain_term_array()
+            .map_err(|e| {
+                QueryEvaluationError::InternalError(format!(
+                    "Failed to convert string array to plain term array: {e}"
+                ))
+            })?
+    };
+
+    let terms = DefaultPlainTermDecoder::decode_terms(&plain_term_array)
+        .map(|t| match t {
+            Ok(t) => Ok(Some(t.into_owned())),
+            Err(_) => Ok(None),
+        })
+        .collect::<DFResult<Vec<_>>>()
+        .map_err(|e| {
+            QueryEvaluationError::InternalError(format!("Failed to decode terms: {e}"))
+        })?;
+    Ok(terms)
 }
 
 #[cfg(test)]

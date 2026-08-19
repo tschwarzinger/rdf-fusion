@@ -4,10 +4,11 @@ use datafusion::dataframe::DataFrame;
 use datafusion::datasource::sink::DataSink;
 use datafusion::logical_expr::col;
 use datafusion::physical_plan::execute_stream;
-use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_common::{GraphName, RdfDumpFormat, RdfSortOrder};
+use rdf_fusion_common::{
+    GraphName, RdfDumpFormat, RdfSortOrder, url_to_object_store_url,
+};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_storage::parquet::RdfFusionParquetWriterProperties;
 use rdf_fusion_storage::rdf_files::{RdfFileDataSink, RdfParquetDataSink};
@@ -143,7 +144,7 @@ pub(crate) async fn dump_store(
     let physical_plan = session.create_physical_plan(&optimized_plan).await?;
 
     let runtime_env = session.runtime_env();
-    let object_store_url = url.as_object_store_url();
+    let object_store_url = url_to_object_store_url(&url)?;
     let object_store = runtime_env.object_store(&object_store_url)?;
 
     let sink_schema = physical_plan.schema();

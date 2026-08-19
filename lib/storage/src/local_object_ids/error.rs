@@ -19,6 +19,7 @@ pub enum LocalObjectIdError {
     DataFusion(#[from] DataFusionError),
 }
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 impl From<heed::Error> for LocalObjectIdError {
     fn from(error: heed::Error) -> Self {
         LocalObjectIdError::Storage(error.to_string())

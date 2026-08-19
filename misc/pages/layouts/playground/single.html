@@ -1,0 +1,17 @@
+{{ define "title" }}Playground{{ end }} {{ define "main" }}
+<link rel="stylesheet" href='{{ "generated/playground.css" | relURL }}' />
+<div id="svelte-app">
+  <!-- Svelte will mount the Playground here -->
+  <div
+    class="d-flex justify-content-center align-items-center"
+    style="min-height: 50vh"
+  >
+    <div class="text-center text-muted">
+      <i class="fa-solid fa-circle-notch fa-spin fa-3x mb-3"></i>
+      <h5>Loading RDF Fusion Playground...</h5>
+    </div>
+  </div>
+</div>
+
+<script src='{{ "generated/playground.js" | relURL }}?v={{ now.Unix }}'></script>
+{{ end }}

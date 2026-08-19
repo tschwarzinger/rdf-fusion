@@ -37,10 +37,27 @@ pub struct StorageOptions {
 }
 
 /// Parquet storage configuration for RDF Fusion.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParquetStorageOptions {
     /// The sort order for the Parquet files.
     pub sort_order: Option<RdfSortOrder>,
+    /// Whether data caching is enabled for Parquet storage.
+    pub data_cache_enabled: bool,
+    /// The size of the blocks used for caching object store reads in bytes.
+    pub data_cache_block_size: usize,
+    /// The number of blocks to cache for object store reads.
+    pub data_cache_num_blocks: usize,
+}
+
+impl Default for ParquetStorageOptions {
+    fn default() -> Self {
+        Self {
+            sort_order: None,
+            data_cache_enabled: false,
+            data_cache_block_size: 2 * 1024 * 1024, // 2 MiB
+            data_cache_num_blocks: 1024,
+        }
+    }
 }
 
 /// Delta storage configuration for RDF Fusion.
@@ -174,6 +191,26 @@ impl ExtensionOptions for RdfFusionOptions {
                 })?;
                 self.storage.parquet.sort_order = Some(value);
             }
+            "storage.parquet.data_cache_enabled" => {
+                let value: bool = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.parquet.data_cache_enabled: {e}"
+                    ))
+                })?;
+                self.storage.parquet.data_cache_enabled = value;
+            }
+            "storage.parquet.data_cache_block_size" => {
+                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
+                    key, value,
+                )?;
+                self.storage.parquet.data_cache_block_size = size;
+            }
+            "storage.parquet.data_cache_num_blocks" => {
+                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
+                    key, value,
+                )?;
+                self.storage.parquet.data_cache_num_blocks = size;
+            }
             "storage.rdf.assume_quads_unique_in_single_file" => {
                 let value: bool = value.parse().map_err(|e| {
                     DataFusionError::Configuration(format!(
@@ -251,6 +288,21 @@ impl ExtensionOptions for RdfFusionOptions {
                     .map(|so| so.to_string())
                     .clone(),
                 description: "The sort order for the Parquet files.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.parquet.data_cache_enabled", Self::PREFIX),
+                value: Some(self.storage.parquet.data_cache_enabled.to_string()),
+                description: "Whether data caching is enabled for Parquet storage.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.parquet.data_cache_block_size", Self::PREFIX),
+                value: Some(self.storage.parquet.data_cache_block_size.to_string()),
+                description: "The size of the blocks used for caching object store reads in bytes.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.parquet.data_cache_num_blocks", Self::PREFIX),
+                value: Some(self.storage.parquet.data_cache_num_blocks.to_string()),
+                description: "The number of blocks to cache for object store reads.",
             },
             ConfigEntry {
                 key: format!(
@@ -384,6 +436,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 11);
+        assert_eq!(entries.len(), 14);
     }
 }

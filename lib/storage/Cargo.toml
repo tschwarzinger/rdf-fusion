@@ -21,15 +21,17 @@ datafusion.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-physical.workspace = true
-heed.workspace = true
 quick_cache.workspace = true
 serde_json.workspace = true
-deltalake.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
 md-5.workspace = true
+
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+deltalake.workspace = true
+heed.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

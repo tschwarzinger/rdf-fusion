@@ -23,7 +23,8 @@
           >Apache DataFusion</a
         >. Our main goal is to provide a performant SPARQL engine that
         integrates with modern data ecosystems. We also aim to provide support
-        for non-graph data models (e.g., time series) in the future.
+        for non-graph data models (e.g., time series) in the future. Note that
+        RDF Fusion is still in an early stage of development.
       </p>
     </div>
 
@@ -68,16 +69,15 @@
             <p class="text-muted mb-0">
               We are investigating the use of technologies pioneered for
               analytical "Big Data" workloads in the context of RDF and SPARQL.
-              Query RDF data stored in
+              RDF Fusion can store data in
               <a href="https://parquet.apache.org/" class="text-brown fw-bold"
                 >Parquet</a
               >
-              files, or use
+              files and
               <a href="https://delta.io/" class="text-brown fw-bold"
                 >Delta Lake</a
               >
-              for an updatable RDF store. Both can be queried while residing in
-              an object store.
+              tables. Both can be queried while residing in an object store.
             </p>
           </div>
         </div>
@@ -88,7 +88,8 @@
             <h3 class="h5 fw-bold mb-3">Customizable</h3>
             <p class="text-muted mb-0">
               Extend functionality via custom functions and optimization rules.
-              We try to provide a framework for customization, inspired by the extensibility of DataFusion.
+              We try to provide a framework for customization, inspired by the
+              extensibility of DataFusion.
             </p>
           </div>
         </div>

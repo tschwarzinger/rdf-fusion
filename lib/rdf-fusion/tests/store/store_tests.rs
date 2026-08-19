@@ -2,7 +2,9 @@
 #![allow(clippy::panic_in_result_fn)]
 
 use crate::store::create_store_for_result;
+use deltalake::arrow::util::pretty::pretty_format_batches;
 use futures::StreamExt;
+use insta::assert_snapshot;
 use rdf_fusion::common::vocab::{rdf, xsd};
 use rdf_fusion::common::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::execution::results::QueryResults;
@@ -10,7 +12,8 @@ use rdf_fusion::store::{RdfDumpOptions, Store};
 use rdf_fusion_common::{
     BlankNode, GraphName, NamedNode, Quad, RdfDumpFormat, RdfFormat,
 };
-use rdf_fusion_encoding::QuadStorageEncodingName;
+use rdf_fusion_encoding::{EncodingName, QuadStorageEncodingName};
+use rdf_fusion_execution::sparql::QueryOptions;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::error::Error;
 use tokio::fs::File;
@@ -257,5 +260,39 @@ async fn test_construct_with_duplicate_triples() -> Result<(), Box<dyn Error>> {
     }
     assert_eq!(res.len(), 1);
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn query_with_string_encoding_option() -> Result<(), Box<dyn Error>> {
+    let store = Store::new_in_memory().await;
+    let ex = NamedNode::new_unchecked("http://example.com");
+    let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
+    store.insert(&quad).await?;
+
+    let options = QueryOptions {
+        output_encoding_name: Some(EncodingName::String),
+        ..Default::default()
+    };
+    let (results, _) = store
+        .explain_query_opt("SELECT ?s WHERE { ?s ?p ?o }", options)
+        .await?;
+
+    let QueryResults::Solutions(solutions) = results else {
+        panic!("Expected QueryResults::Solutions");
+    };
+
+    let mut stream = solutions.into_record_batch_stream()?;
+    let batch = stream.next().await.unwrap()?;
+    assert_snapshot!(
+        pretty_format_batches(&[batch])?,
+        @"
+    +----------------------+
+    | s                    |
+    +----------------------+
+    | <http://example.com> |
+    +----------------------+
+    "
+    );
     Ok(())
 }

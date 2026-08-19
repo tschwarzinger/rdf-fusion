@@ -31,8 +31,10 @@ tokio-util.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-deltalake.workspace = true
 insta.workspace = true
+
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+deltalake.workspace = true
 
 [lints]
 workspace = true

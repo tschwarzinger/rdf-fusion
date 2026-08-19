@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ main ]
     # Trigger when PR is updated or when labels are added/removed
-    types: [opened, synchronize, labeled, unlabeled]
+    types: [ opened, synchronize, labeled, unlabeled ]
 
 jobs:
   benchmark:
@@ -12,29 +12,24 @@ jobs:
     if: contains(join(github.event.pull_request.labels.*.name, ','), 'bench')
 
     steps:
-      - name: Install System Dependencies
+      - name: Install git-lfs
         run: |
           apt-get update
-          apt-get install -y git-lfs build-essential cmake default-jre-headless clang libclang-dev
-          git lfs install
-
-      - name: Setup Rust
-        uses: https://github.com/dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95
-
-      - name: Rust Cache
-        uses: https://github.com/Swatinem/rust-cache@v2
-
-      - name: Install Cargo Dependencies
-        run: |
-          cargo install just taplo-cli critcmp
+          apt-get install -y git-lfs
+          git lfs install --skip-repo
 
       - name: Checkout PR Code
         uses: actions/checkout@v4
         with:
           lfs: true
           fetch-depth: 0 # Required to checkout the base SHA later
+
+      - name: Setup Rust Environment
+        uses: ./.forgejo/actions/setup-rust
+        with:
+          system-deps: 'true'
+          extra-system-packages: 'default-jre-headless'
+          tools: 'just taplo-cli critcmp'
 
       - name: Cache Main Baselines
         id: cache-main-benches

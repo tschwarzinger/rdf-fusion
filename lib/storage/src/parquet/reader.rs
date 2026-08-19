@@ -19,7 +19,7 @@ use std::ops::Range;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, RwLock};
 
-pub type PreloadedMetadataCacheMap =
+type PreloadedMetadataCacheMap =
     HashMap<object_store::path::Path, (Arc<ParquetMetaData>, ObjectMeta)>;
 
 /// Contains a list of preloaded parquet metadata for a given path.
@@ -56,8 +56,8 @@ impl PreloadedParquetMetadata {
     }
 }
 
-pub type PreloadedBloomFiltersList = Vec<(Range<u64>, Bytes)>;
-pub type PreloadedBloomFiltersMap =
+type PreloadedBloomFiltersList = Vec<(Range<u64>, Bytes)>;
+type PreloadedBloomFiltersMap =
     HashMap<object_store::path::Path, Arc<PreloadedBloomFiltersList>>;
 
 /// Contains a list of preloaded bloom filters for given URLs.
@@ -126,6 +126,12 @@ impl PreloadedBloomFilters {
         self.hit_counter.load(std::sync::atomic::Ordering::Relaxed)
     }
 
+    /// Returns true if the cache is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the number of bloom filters in the cache.
     pub fn len(&self) -> usize {
         let cache = self.cache.read().expect("poisoned lock");
         cache.values().map(|v| v.len()).sum()
@@ -175,13 +181,17 @@ pub async fn load_parquet_metadata_and_bloom_filters(
     Ok((parquet_meta, filters))
 }
 
+use crate::block_cache::BlockCache;
+
 /// A custom [`AsyncFileReader`] that serves ParquetMetaData from memory, but delegates actual byte
-/// reading to the underlying storage reader.
-pub struct PreloadedMetadataReader {
+/// reading to the underlying storage reader, with optional block caching.
+struct PreloadedMetadataReader {
     inner: Box<dyn AsyncFileReader + Send>,
     path: object_store::path::Path,
+    file_size: u64,
     metadata: Arc<ParquetMetaData>,
     bloom_filter_cache: PreloadedBloomFilters,
+    block_cache: Option<Arc<BlockCache>>,
 }
 
 impl AsyncFileReader for PreloadedMetadataReader {
@@ -192,6 +202,39 @@ impl AsyncFileReader for PreloadedMetadataReader {
         if let Some(bytes) = self.bloom_filter_cache.get(&self.path, &range) {
             return Box::pin(async move { Ok(bytes) });
         }
+
+        if let Some(block_cache) = &self.block_cache {
+            if range.start >= range.end {
+                return Box::pin(async move { Ok(Bytes::new()) });
+            }
+            let block_size = block_cache.block_size();
+            let start_block = range.start / block_size;
+            let end_block = range.end.saturating_sub(1) / block_size;
+
+            if start_block == end_block {
+                let block_start = start_block * block_size;
+                let block_end = (block_start + block_size).min(self.file_size);
+                let slice_start = (range.start - block_start) as usize;
+                let slice_end = (range.end - block_start) as usize;
+
+                if let Some(block) = block_cache.get(&self.path, start_block) {
+                    let slice = block.slice(slice_start..slice_end.min(block.len()));
+                    return Box::pin(async move { Ok(slice) });
+                }
+
+                let path = self.path.clone();
+                let block_cache = Arc::clone(block_cache);
+                let inner_fut = self.inner.get_bytes(block_start..block_end);
+
+                return Box::pin(async move {
+                    let block = inner_fut.await?;
+                    block_cache.insert(path, start_block, block.clone());
+                    let slice = block.slice(slice_start..slice_end.min(block.len()));
+                    Ok(slice)
+                });
+            }
+        }
+
         self.inner.get_bytes(range)
     }
 
@@ -199,24 +242,104 @@ impl AsyncFileReader for PreloadedMetadataReader {
         &mut self,
         ranges: Vec<Range<u64>>,
     ) -> BoxFuture<'_, Result<Vec<Bytes>, ParquetError>> {
-        let mut uncached_ranges = Vec::new();
+        let mut results: Vec<Option<Bytes>> = vec![None; ranges.len()];
         let mut uncached_indices = Vec::new();
-        let mut results = vec![None; ranges.len()];
 
-        for (idx, range) in ranges.into_iter().enumerate() {
-            if let Some(bytes) = self.bloom_filter_cache.get(&self.path, &range) {
+        for (idx, range) in ranges.iter().enumerate() {
+            if let Some(bytes) = self.bloom_filter_cache.get(&self.path, range) {
                 results[idx] = Some(bytes);
             } else {
-                uncached_ranges.push(range);
                 uncached_indices.push(idx);
             }
         }
 
-        if uncached_ranges.is_empty() {
+        if uncached_indices.is_empty() {
             let bytes = results.into_iter().map(Option::unwrap).collect();
             return Box::pin(async move { Ok(bytes) });
         }
 
+        if let Some(block_cache) = &self.block_cache {
+            let block_size = block_cache.block_size();
+            let mut missing_blocks: HashMap<u64, Range<u64>> = HashMap::new();
+
+            for &idx in &uncached_indices {
+                let range = &ranges[idx];
+                if range.start >= range.end {
+                    continue;
+                }
+                let start_block = range.start / block_size;
+                let end_block = range.end.saturating_sub(1) / block_size;
+
+                for block_idx in start_block..=end_block {
+                    if block_cache.get(&self.path, block_idx).is_none() {
+                        let block_start = block_idx * block_size;
+                        let block_end = (block_start + block_size).min(self.file_size);
+                        missing_blocks
+                            .entry(block_idx)
+                            .or_insert(block_start..block_end);
+                    }
+                }
+            }
+
+            let block_cache = Arc::clone(block_cache);
+            let path = self.path.clone();
+            let file_size = self.file_size;
+
+            if missing_blocks.is_empty() {
+                for idx in uncached_indices {
+                    let range = &ranges[idx];
+                    if range.start >= range.end {
+                        results[idx] = Some(Bytes::new());
+                        continue;
+                    }
+                    let bytes = assemble_range_from_cache(
+                        &block_cache,
+                        &path,
+                        range,
+                        block_size,
+                        file_size,
+                    );
+                    results[idx] = Some(bytes);
+                }
+                let bytes = results.into_iter().map(Option::unwrap).collect();
+                return Box::pin(async move { Ok(bytes) });
+            }
+
+            let block_indices: Vec<u64> = missing_blocks.keys().copied().collect();
+            let fetch_ranges: Vec<Range<u64>> =
+                missing_blocks.values().cloned().collect();
+            let fut = self.inner.get_byte_ranges(fetch_ranges);
+
+            return Box::pin(async move {
+                let fetched = fut.await?;
+                for (block_idx, bytes) in block_indices.into_iter().zip(fetched) {
+                    block_cache.insert(path.clone(), block_idx, bytes);
+                }
+
+                for idx in uncached_indices {
+                    let range = &ranges[idx];
+                    if range.start >= range.end {
+                        results[idx] = Some(Bytes::new());
+                        continue;
+                    }
+                    let bytes = assemble_range_from_cache(
+                        &block_cache,
+                        &path,
+                        range,
+                        block_size,
+                        file_size,
+                    );
+                    results[idx] = Some(bytes);
+                }
+
+                Ok(results.into_iter().map(Option::unwrap).collect())
+            });
+        }
+
+        let uncached_ranges: Vec<Range<u64>> = uncached_indices
+            .iter()
+            .map(|&idx| ranges[idx].clone())
+            .collect();
         let fut = self.inner.get_byte_ranges(uncached_ranges);
         Box::pin(async move {
             let fetched = fut.await?;
@@ -238,12 +361,50 @@ impl AsyncFileReader for PreloadedMetadataReader {
     }
 }
 
+fn assemble_range_from_cache(
+    block_cache: &BlockCache,
+    path: &object_store::path::Path,
+    range: &Range<u64>,
+    block_size: u64,
+    _file_size: u64,
+) -> Bytes {
+    let start_block = range.start / block_size;
+    let end_block = range.end.saturating_sub(1) / block_size;
+
+    if start_block == end_block {
+        let block_start = start_block * block_size;
+        let block = block_cache
+            .get(path, start_block)
+            .expect("Block must be in cache");
+        let slice_start = (range.start - block_start) as usize;
+        let slice_end = (range.end - block_start) as usize;
+        block.slice(slice_start..slice_end.min(block.len()))
+    } else {
+        let mut combined = Vec::with_capacity((range.end - range.start) as usize);
+        for block_idx in start_block..=end_block {
+            let block = block_cache
+                .get(path, block_idx)
+                .expect("Block must be in cache");
+            let block_start = block_idx * block_size;
+            let slice_start = range.start.saturating_sub(block_start) as usize;
+            let slice_end = if block_start + block_size > range.end {
+                (range.end - block_start) as usize
+            } else {
+                block.len()
+            };
+            combined.extend_from_slice(&block[slice_start..slice_end.min(block.len())]);
+        }
+        Bytes::from(combined)
+    }
+}
+
 /// A factory that verifies the file path and injects the preloaded metadata.
 #[derive(Debug, Clone)]
 pub struct PreLoadedMetadataReaderFactory {
     inner_factory: Arc<dyn ParquetFileReaderFactory>,
     cache: PreloadedParquetMetadata,
     bloom_filter_cache: PreloadedBloomFilters,
+    block_cache: Option<Arc<BlockCache>>,
 }
 
 impl PreLoadedMetadataReaderFactory {
@@ -251,11 +412,13 @@ impl PreLoadedMetadataReaderFactory {
         inner_factory: Arc<dyn ParquetFileReaderFactory>,
         cache: PreloadedParquetMetadata,
         bloom_filter_cache: PreloadedBloomFilters,
+        block_cache: Option<Arc<BlockCache>>,
     ) -> Self {
         Self {
             inner_factory,
             cache,
             bloom_filter_cache,
+            block_cache,
         }
     }
 }
@@ -292,8 +455,10 @@ impl ParquetFileReaderFactory for PreLoadedMetadataReaderFactory {
         Ok(Box::new(PreloadedMetadataReader {
             inner: inner_reader,
             path: file.object_meta.location.clone(),
+            file_size: file.object_meta.size,
             metadata: preloaded_parquet_meta,
             bloom_filter_cache: self.bloom_filter_cache.clone(),
+            block_cache: self.block_cache.clone(),
         }))
     }
 }

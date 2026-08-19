@@ -10,13 +10,15 @@ jobs:
     name: Validate Version
     runs-on: tuw-runner
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: https://github.com/dtolnay/rust-toolchain@stable
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Environment
+        uses: ./.forgejo/actions/setup-rust
         with:
-          toolchain: 1.95
-      - name: Rust Cache
-        uses: https://github.com/Swatinem/rust-cache@v2
+          components: ''
+          tools: ''
+
       - name: Check Version
         run: bash misc/ci/check-version.sh ${{ github.ref_name }}
 
@@ -25,31 +27,22 @@ jobs:
     needs: validate
     runs-on: tuw-runner
     steps:
-      - name: Install System Dependencies
+      - name: Install git-lfs
         run: |
           apt-get update
-          apt-get install -y git-lfs build-essential cmake clang libclang-dev
-          git lfs install
-
-      - name: Setup Rust
-        uses: https://github.com/dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95
-          components: rustfmt, clippy
-
-      - name: Rust Cache
-        uses: https://github.com/Swatinem/rust-cache@v2
-
-      - name: Install Cargo Dependencies
-        run: |
-          cargo install just
-          cargo install taplo-cli
+          apt-get install -y git-lfs
+          git lfs install --skip-repo
 
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           lfs: true
           submodules: true
+
+      - name: Setup Rust Environment
+        uses: ./.forgejo/actions/setup-rust
+        with:
+          tools: 'just taplo-cli'
 
       - name: Run Tests
         run: just lint bench::prepare-benches-tests test test-examples rustdoc
@@ -67,34 +60,25 @@ jobs:
       matrix:
         target: [ x86_64-unknown-linux-gnu ]
     steps:
-      - name: Install System Dependencies
+      - name: Install git-lfs
         run: |
           apt-get update
-          apt-get install -y git-lfs build-essential cmake clang libclang-dev
-          git lfs install
-
-      - name: Setup Rust
-        uses: https://github.com/dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95
-          components: rustfmt, clippy
-          targets: ${{ matrix.target }}
-
-      - name: Rust Cache
-        uses: https://github.com/Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-
-      - name: Install Cargo Dependencies
-        run: |
-          cargo install just
-          cargo install taplo-cli
+          apt-get install -y git-lfs
+          git lfs install --skip-repo
 
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           lfs: true
           submodules: true
+
+      - name: Setup Rust Environment
+        uses: ./.forgejo/actions/setup-rust
+        with:
+          system-deps: 'true'
+          cache: false
+          targets: ${{ matrix.target }}
+          tools: 'just taplo-cli'
 
       - name: Build Binary
         run: bash misc/ci/build-binary.sh ${{ matrix.target }}
@@ -105,12 +89,45 @@ jobs:
           name: rdf-fusion-${{ matrix.target }}
           path: target/rdf-fusion-*.tar.gz
 
-  create-release:
-    name: Create Forgejo Release
-    needs: [ build-binaries ]
+  build-wasm:
+    name: Build Wasm Bindings
+    needs: validate
     runs-on: tuw-runner
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Environment
+        uses: ./.forgejo/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
+          components: ''
+          tools: ''
+
+      - name: Install wasm-pack
+        uses: https://github.com/jetli/wasm-pack-action@v0.4.0
+        with:
+          version: 'latest'
+
+      - name: Build WebAssembly
+        run: |
+          mkdir -p target
+          wasm-pack build --target web --release lib/wasm
+          tar -czvf target/rdf-fusion-wasm.tar.gz -C lib/wasm pkg
+
+      - name: Upload Artifact
+        uses: https://data.forgejo.org/forgejo/upload-artifact@v4
+        with:
+          name: rdf-fusion-wasm
+          path: target/rdf-fusion-wasm.tar.gz
+
+  create-release:
+    name: Create Forgejo Release
+    needs: [ build-binaries, build-wasm ]
+    runs-on: tuw-runner
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Download Binaries
         uses: https://data.forgejo.org/forgejo/download-artifact@v4

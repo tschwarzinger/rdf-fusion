@@ -15,6 +15,8 @@ pub use optimizer::{create_optimizer_rules, create_pyhsical_optimizer_rules};
 pub use rdf_fusion_common::{Variable, VariableNameParseError};
 pub use update::evaluate_update;
 
+use rdf_fusion_encoding::EncodingName;
+
 /// Defines how many optimizations the query optimizer should apply.
 ///
 /// Currently, the default value is [OptimizationLevel::Full], as we are still searching for a
@@ -37,6 +39,8 @@ pub enum OptimizationLevel {
 pub struct QueryOptions {
     /// The defined optimization level
     pub optimization_level: OptimizationLevel,
+    /// The encoding to use for output terms
+    pub output_encoding_name: Option<EncodingName>,
 }
 
 /// Options for SPARQL update evaluation.
