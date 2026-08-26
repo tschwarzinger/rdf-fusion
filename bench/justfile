@@ -42,9 +42,9 @@ prepare-bsbm num_products:
 
         # 3. Copy pre-generated queries
         echo "Copying explore queries..."
-        bzcat "bench_files/bsbm_queries/explore-${num_products}.csv.bz2" > "$DATA_DIR/queries_explore.csv"
+        bzcat "bench_files/bsbm_queries/explore-${num_products}.csv.bz2" > "$DATA_DIR/queries-explore.csv"
         echo "Copying BI queries..."
-        bzcat "bench_files/bsbm_queries/businessIntelligence-${num_products}.csv.bz2" > "$DATA_DIR/queries_bi.csv"
+        bzcat "bench_files/bsbm_queries/businessIntelligence-${num_products}.csv.bz2" > "$DATA_DIR/queries-bi.csv"
     fi
 
     echo "Benchmarks prepared."

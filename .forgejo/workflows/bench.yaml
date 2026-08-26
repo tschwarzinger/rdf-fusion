@@ -1,17 +1,46 @@
-name: Performance Comparison
+name: Benchmark on Comment
 
 on:
-  pull_request:
-    branches: [ main ]
-    # Trigger when PR is updated or when labels are added/removed
-    types: [ opened, synchronize, labeled, unlabeled ]
+  issue_comment:
+    types: [ created ]
 
 jobs:
   benchmark:
     runs-on: tuw-runner
-    if: contains(join(github.event.pull_request.labels.*.name, ','), 'bench')
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/bench') &&
+      contains(fromJson('["tschwarzinger"]'), github.actor)
 
     steps:
+      # --- 1. SETUP & PARSING ---
+      - name: Parse Comment for Suites
+        id: parse
+        env:
+          COMMENT: ${{ github.event.comment.body }}
+        run: |
+          # Extract arguments after /bench (ignoring the command itself)
+          SUITES=$(echo "$COMMENT" | sed -n 's/^\/bench\s*//p' | tr -d ' ')
+          
+          # Fallback to defaults if none specified
+          if [ -z "$SUITES" ]; then
+            SUITES="bsbm-bi,bsbm-explore"
+          fi
+
+          echo "Target suites: $SUITES"
+          echo "suites=$SUITES" >> "$GITHUB_OUTPUT"
+
+      # Acknowledge the command quickly with a reaction (Optional but nice UX)
+      - name: React to comment
+        env:
+          TOKEN: ${{ secrets.BENCHMARKING_BOT_TOKEN }}
+        run: |
+          curl -s -X POST "${{ github.api_url }}/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -H "Authorization: token $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"content": "rocket"}'
+
+      # --- 2. CHECKOUT & GIT METADATA ---
       - name: Install git-lfs
         run: |
           apt-get update
@@ -21,59 +50,106 @@ jobs:
       - name: Checkout PR Code
         uses: actions/checkout@v4
         with:
+          # In issue_comment, we must explicitly check out the PR ref
+          ref: refs/pull/${{ github.event.issue.number }}/head
           lfs: true
-          fetch-depth: 0 # Required to checkout the base SHA later
+          fetch-depth: 0
 
       - name: Setup Rust Environment
         uses: ./.forgejo/actions/setup-rust
         with:
           system-deps: 'true'
-          extra-system-packages: 'default-jre-headless'
+          extra-system-packages: 'default-jre-headless jq'
           tools: 'just taplo-cli critcmp'
 
+      - name: Determine Target Base Commit
+        id: base-commit
+        run: |
+          # Find the common ancestor between the PR branch and origin/main
+          git fetch origin main
+          BASE_SHA=$(git merge-base HEAD origin/main)
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+      # --- 3. BENCHMARKING (Main vs PR) ---
       - name: Cache Main Baselines
         id: cache-main-benches
         uses: actions/cache@v4
         with:
-          # Caching the entire Criterion directory will cache both main and old candidate runs.
-          # The candidate runs will just get overwritten later in the workflow.
           path: target/criterion
-          key: benchmark-main-${{ github.event.pull_request.base.sha }}
+          key: benchmark-main-${{ steps.base-commit.outputs.base_sha }}
 
       - name: Compute Main Baselines (On Cache Miss)
         if: steps.cache-main-benches.outputs.cache-hit != 'true'
         env:
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          TARGET_SUITES: ${{ steps.parse.outputs.suites }}
         run: |
-          echo "No cached main benchmarks found. Computing them now..."
+          cp misc/ci/run-benches.sh /tmp/run-benches.sh
           
-          cp misc/run_ci_benches.sh /tmp/run_ci_benches.sh
-          
-          # 1. Switch to the commit on main that this PR targets
-          git checkout ${{ github.event.pull_request.base.sha }}
+          # Switch to base commit to calculate baseline
+          git checkout ${{ steps.base-commit.outputs.base_sha }}
           git clean -fd
           
-          # 2. Run benches for main
           just bench prepare-benches
-          /tmp/run_ci_benches.sh main "$PR_LABELS"
+          /tmp/run-benches.sh main "$TARGET_SUITES"
           
-          # 3. Switch back to the PR merge commit to continue
-          git checkout ${{ github.sha }} 
+          # Switch back to the PR code
+          git checkout -
           git clean -fd
 
-      - name: Prepare Benches (Candidate)
-        run: |
-          # Ensure we are on the PR commit and prep again if needed
-          just bench prepare-benches
+      - name: Prepare Benches (PR Code)
+        run: just bench prepare-benches
 
       - name: Run Benchmarks Candidate Branch
         env:
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          TARGET_SUITES: ${{ steps.parse.outputs.suites }}
         run: |
-          ./misc/run_ci_benches.sh candidate "$PR_LABELS"
+          ./misc/ci/run-benches.sh candidate "$TARGET_SUITES"
 
       - name: Compare Benchmarks
+        id: compare
         env:
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          TARGET_SUITES: ${{ steps.parse.outputs.suites }}
         run: |
-          ./misc/run_ci_benches.sh compare "$PR_LABELS"
+          # Run compare and use `tee` to print to console AND save to a file
+          ./misc/ci/run-benches.sh compare "$TARGET_SUITES" | tee critcmp_output.txt
+
+      # --- 4. POST RESULTS BACK TO PR ---
+      - name: Post Results Comment
+        if: always()
+        env:
+          TOKEN: ${{ secrets.BENCHMARKING_BOT_TOKEN }}
+          TARGET_SUITES: ${{ steps.parse.outputs.suites }}
+        run: |
+          # 1. Construct the Markdown body for the comment
+          cat << 'EOF' > comment_body.md
+          ### 📊 Benchmark Results Complete
+
+          **Target Suites:** `TARGET_SUITES`
+
+          <details><summary>Click to expand <code>critcmp</code> output</summary>
+          
+          ```text
+          EOF
+          
+          # Expand the target suites placeholder
+          sed -i "s/TARGET_SUITES/${TARGET_SUITES}/" comment_body.md
+          
+          # Append the actual tool output
+          if [ -f critcmp_output.txt ]; then
+            cat critcmp_output.txt >> comment_body.md
+          else
+            echo "Error: critcmp output not found or benchmark failed." >> comment_body.md
+          fi
+          
+          # Close the markdown blocks
+          echo '```' >> comment_body.md
+          echo '</details>' >> comment_body.md
+
+          # 2. Use jq to safely escape the multiline markdown into a JSON string
+          jq -n --arg body "$(cat comment_body.md)" '{body: $body}' > payload.json
+
+          # 3. Post the comment via Forgejo/Codeberg API
+          curl -s -X POST "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+            -H "Authorization: token $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @payload.json

@@ -4,33 +4,40 @@ set -eo pipefail
 STEP=$1
 LABELS=$2
 
-ALL_BENCHMARKS=("scalar" "scalar_binary" "store" "bsbm_explore" "bsbm_business_intelligence")
 BSBM_SUITE=("bsbm_explore" "bsbm_business_intelligence")
 SCALAR_UDFS_SUITE=("scalar" "scalar_binary")
 
-RUN_ALL=0
-BENCHES_TO_RUN=()
+all_benchmarks() {
+    cargo bench --no-run --message-format=json 2>/dev/null \
+        | jq -r 'select(.reason == "compiler-artifact" and (.target.kind | index("bench"))) | .target.name' \
+        | sort -u
+}
 
-# LABELS is comma separated, e.g., "bug,bench/bsbm,enhancement"
+BENCHES_TO_RUN=()
+# LABELS is comma separated, e.g., "bsbm,scalar-udfs"
 IFS=',' read -ra LABEL_ARRAY <<< "$LABELS"
 for label in "${LABEL_ARRAY[@]}"; do
-    if [[ "$label" == "bench" ]]; then
-        RUN_ALL=1
-    elif [[ "$label" == bench/* ]]; then
-        bench_name="${label#bench/}"
-        if [[ "$bench_name" == "bsbm" ]]; then
+    case "$label" in
+        all)
+            BENCHES_TO_RUN+=($(all_benchmarks))
+            ;;
+        bsbm)
             BENCHES_TO_RUN+=("${BSBM_SUITE[@]}")
-        elif [[ "$bench_name" == "scalar_udfs" ]]; then
+            ;;
+        scalar-udfs)
             BENCHES_TO_RUN+=("${SCALAR_UDFS_SUITE[@]}")
-        else
-            BENCHES_TO_RUN+=("$bench_name")
-        fi
-    fi
+            ;;
+        bsbm-explore)
+            BENCHES_TO_RUN+=("bsbm_explore")
+            ;;
+        bsbm-bi)
+            BENCHES_TO_RUN+=("bsbm_business_intelligence")
+            ;;
+        *)
+            BENCHES_TO_RUN+=("$label")
+            ;;
+    esac
 done
-
-if [[ $RUN_ALL -eq 1 ]]; then
-    BENCHES_TO_RUN=("${ALL_BENCHMARKS[@]}")
-fi
 
 if [[ ${#BENCHES_TO_RUN[@]} -eq 0 ]]; then
     echo "No benchmarks to run."
