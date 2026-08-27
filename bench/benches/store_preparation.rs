@@ -3,13 +3,13 @@
 
 mod utils;
 
-use crate::utils::{benchmark_storage_configs, create_runtime};
+use crate::utils::{benchmark_configs, create_runtime};
 use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
 
 fn bench_bsbm_store_prepare(c: &mut Criterion) {
-    for storage_configuration in benchmark_storage_configs() {
+    for storage_configuration in benchmark_configs() {
         let benchmarking_context = storage_configuration.bench_context();
         let name = rdf_fusion_bench::benchmarks::BenchmarkName::BsbmExplore {
             num_products: NumProducts::N10_000,

@@ -81,13 +81,6 @@ impl BenchmarkingConfig {
         Self::default()
     }
 
-    /// Creates a new [BenchmarkingConfig] for use in Criterion benchmarks.
-    pub fn new_for_criterion() -> Self {
-        Self::new()
-            .with_storage_location(QuadStorageLocationArg::InMemory)
-            .with_storage_type(BenchQuadStorageTypeArg::Parquet)
-    }
-
     /// Initializes a [BenchmarkingConfig] from environment variables.
     pub fn from_env() -> Result<Self, BenchmarkingConfigError> {
         let mut config = Self::new();

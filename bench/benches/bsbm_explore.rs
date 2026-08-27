@@ -24,10 +24,6 @@ fn bench_planning(c: &mut Criterion) {
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
             .build();
-    let target_partitions = benchmarking_context
-        .options()
-        .data_fusion_config
-        .target_partitions();
     let name = BenchmarkName::BsbmExplore {
         num_products: NumProducts::N10_000,
         max_query_count: None,
@@ -43,9 +39,7 @@ fn bench_planning(c: &mut Criterion) {
     let verbose = is_verbose();
 
     for (query_name, query_text) in queries {
-        let benchmark_name = format!(
-            "Planning (partitions={target_partitions}): BSBM Explore 10000 - {query_name}"
-        );
+        let benchmark_name = format!("Plan BSBM Explore 10000 - {query_name}");
         if verbose {
             runtime
                 .block_on(print_query_details(
@@ -66,12 +60,8 @@ fn bench_planning(c: &mut Criterion) {
 }
 
 fn bench_full_execution(c: &mut Criterion) {
-    for storage_config in utils::benchmark_storage_configs() {
+    for storage_config in utils::benchmark_configs() {
         let benchmarking_context = storage_config.bench_context();
-        let target_partitions = benchmarking_context
-            .options()
-            .data_fusion_config
-            .target_partitions();
         let name = BenchmarkName::BsbmExplore {
             num_products: NumProducts::N10_000,
             max_query_count: None,
@@ -89,9 +79,8 @@ fn bench_full_execution(c: &mut Criterion) {
         let queries = get_queries(&benchmark, &benchmark_context);
 
         for (query_name, query_text) in queries {
-            let benchmark_name = format!(
-                "Execution ({storage_config}, partitions={target_partitions}): BSBM Explore 10000 - {query_name}",
-            );
+            let benchmark_name =
+                format!("BSBM Explore 10000 - {storage_config} - {query_name}",);
             c.bench_function(&benchmark_name, |b| {
                 b.to_async(&runtime).iter(|| async {
                     let result = store

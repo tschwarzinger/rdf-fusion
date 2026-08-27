@@ -9,7 +9,7 @@ use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{
     GraphName, RdfDumpFormat, RdfSortOrder, url_to_object_store_url,
 };
-use rdf_fusion_encoding::QuadStorageEncoding;
+use rdf_fusion_encoding::{EncodingName, QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_storage::parquet::RdfFusionParquetWriterProperties;
 use rdf_fusion_storage::rdf_files::{RdfFileDataSink, RdfParquetDataSink};
 use std::sync::Arc;
@@ -23,6 +23,24 @@ pub enum DumpEncoding {
     PlainTerm,
     /// Use the string encoding.
     String,
+}
+
+impl From<DumpEncoding> for EncodingName {
+    fn from(value: DumpEncoding) -> Self {
+        match value {
+            DumpEncoding::PlainTerm => EncodingName::PlainTerm,
+            DumpEncoding::String => EncodingName::String,
+        }
+    }
+}
+
+impl From<DumpEncoding> for QuadStorageEncodingName {
+    fn from(value: DumpEncoding) -> Self {
+        match value {
+            DumpEncoding::PlainTerm => QuadStorageEncodingName::PlainTerm,
+            DumpEncoding::String => QuadStorageEncodingName::String,
+        }
+    }
 }
 
 /// Options for dumping a store.
@@ -119,9 +137,7 @@ pub(crate) async fn dump_store(
     }
     builder = match options.encoding {
         DumpEncoding::PlainTerm => builder.with_plain_terms()?,
-        DumpEncoding::String => {
-            builder.with_encoding(rdf_fusion_encoding::EncodingName::String)?
-        }
+        DumpEncoding::String => builder.with_encoding(EncodingName::String)?,
     };
 
     let mut df = DataFrame::new(

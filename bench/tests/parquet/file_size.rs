@@ -22,7 +22,7 @@ async fn test_parquet_file_and_bloom_filter_size() {
 
     let configs = vec![
         ParquetTestConfig::new(
-            "NativeOrder([Subject, Predicate, Object])",
+            "String(SPO)",
             RdfDumpOptions::default()
                 .with_encoding(DumpEncoding::String)
                 .with_sort_by(Some(RdfSortOrder::NativeOrder(vec![
@@ -32,7 +32,7 @@ async fn test_parquet_file_and_bloom_filter_size() {
                 ]))),
         ),
         ParquetTestConfig::new(
-            "NativeOrder([Predicate, Object, Subject])",
+            "String(POS)",
             RdfDumpOptions::default()
                 .with_encoding(DumpEncoding::String)
                 .with_sort_by(Some(RdfSortOrder::NativeOrder(vec![
@@ -42,20 +42,30 @@ async fn test_parquet_file_and_bloom_filter_size() {
                 ]))),
         ),
         ParquetTestConfig::new(
-            "NativeOrder([Object, Subject, Predicate])",
+            "String(OSP)",
             RdfDumpOptions::default()
                 .with_encoding(DumpEncoding::String)
                 .with_sort_by(Some(RdfSortOrder::NativeOrder(vec![
                     QuadComponent::Object,
                     QuadComponent::Subject,
                     QuadComponent::Predicate,
+                ]))),
+        ),
+        ParquetTestConfig::new(
+            "PlainTerm(POS)",
+            RdfDumpOptions::default()
+                .with_encoding(DumpEncoding::PlainTerm)
+                .with_sort_by(Some(RdfSortOrder::NativeOrder(vec![
+                    QuadComponent::Predicate,
+                    QuadComponent::Object,
+                    QuadComponent::Subject,
                 ]))),
         ),
     ];
 
     let mut table = Table::new();
     table.add_row(row![
-        "Sort Order",
+        "Configuration",
         "File Size (Bytes)",
         "Footer Size (Bytes)",
         "Total Data Size (Bytes)",
@@ -88,15 +98,17 @@ async fn test_parquet_file_and_bloom_filter_size() {
     }
 
     insta::assert_snapshot!(table.to_string(), @"
-    +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
-    | Sort Order                                | File Size (Bytes) | Footer Size (Bytes) | Total Data Size (Bytes) | Page Index Size (Bytes) | Bloom Filter Size (Bytes) |
-    +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
-    | NativeOrder([Subject, Predicate, Object]) | 9 968 850         | 10 266              | 9 688 907               | 174 126                 | 95 539                    |
-    +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
-    | NativeOrder([Predicate, Object, Subject]) | 10 019 518        | 11 295              | 9 663 754               | 191 556                 | 152 901                   |
-    +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
-    | NativeOrder([Object, Subject, Predicate]) | 10 243 886        | 10 855              | 9 943 073               | 190 310                 | 99 636                    |
-    +-------------------------------------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
+    +----------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
+    | Configuration  | File Size (Bytes) | Footer Size (Bytes) | Total Data Size (Bytes) | Page Index Size (Bytes) | Bloom Filter Size (Bytes) |
+    +----------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
+    | String(SPO)    | 9 968 850         | 10 266              | 9 688 907               | 174 126                 | 95 539                    |
+    +----------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
+    | String(POS)    | 10 019 518        | 11 295              | 9 663 754               | 191 556                 | 152 901                   |
+    +----------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
+    | String(OSP)    | 10 243 886        | 10 855              | 9 943 073               | 190 310                 | 99 636                    |
+    +----------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
+    | PlainTerm(POS) | 10 083 710        | 28 894              | 9 768 002               | 286 802                 | 0                         |
+    +----------------+-------------------+---------------------+-------------------------+-------------------------+---------------------------+
     ");
 }
 

@@ -6,7 +6,7 @@ use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
-use rdf_fusion::common::config::RdfFusionSessionConfigExt;
+use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
@@ -73,7 +73,20 @@ impl RdfFusionBenchContextBuilder {
         self
     }
 
-    pub fn build(self) -> RdfFusionBenchContext {
+    pub fn build(mut self) -> RdfFusionBenchContext {
+        if self
+            .config
+            .data_fusion_config
+            .get_extension::<RdfFusionOptions>()
+            .is_none()
+        {
+            self.config
+                .data_fusion_config
+                .options_mut()
+                .extensions
+                .insert(RdfFusionOptions::default());
+        }
+
         RdfFusionBenchContext {
             config: self.config,
             bench_files_dir: self.bench_files_dir,
@@ -112,8 +125,13 @@ impl RdfFusionBenchContext {
         config.options_mut().execution.target_partitions = target_partitions;
         config.options_mut().execution.parquet.pushdown_filters = true;
 
-        let options = BenchmarkingConfig::new_for_criterion()
+        let mut options = RdfFusionOptions::default();
+        options.storage.delta.assume_single_node = true;
+        config.options_mut().extensions.insert(options);
+
+        let options = BenchmarkingConfig::new()
             .with_storage_encoding(storage_encoding)
+            .with_storage_location(QuadStorageLocationArg::InMemory)
             .with_storage_type(BenchQuadStorageTypeArg::DeltaQuads)
             .with_data_fusion_config(config);
 
@@ -223,22 +241,14 @@ impl<'ctx> BenchmarkContext<'ctx> {
     }
 
     /// Returns the RDF Fusion configuration.
-    pub fn get_rdf_fusion_config(&self) -> rdf_fusion::common::config::RdfFusionOptions {
-        let mut opts = self
-            .context
+    pub fn rdf_fusion_config(&self) -> &RdfFusionOptions {
+        self.context
             .config
             .data_fusion_config
-            .rdf_fusion_options_or_from_env()
-            .expect("Failed to get RDF Fusion options");
-
-        opts.local.work_dir = Some(
-            self.databases_dir()
-                .join("work")
-                .to_str()
-                .unwrap()
-                .to_string(),
-        );
-        opts
+            .options()
+            .extensions
+            .get::<RdfFusionOptions>()
+            .expect("Failed to get RDF Fusion options")
     }
 
     /// Creates a [RuntimeEnv] with the configured memory limits and caching.
@@ -295,18 +305,10 @@ impl<'ctx> BenchmarkContext<'ctx> {
         };
         let url = Url::parse(&url_raw).expect("Invalid URL");
 
-        let mut rdf_fusion_config = self.get_rdf_fusion_config();
-        rdf_fusion_config.storage.parquet.sort_order = sort_order;
-
         let delta_storage = Arc::new(DeltaQuadsStorageBuilder::new().build().await?);
         let runtime_env = self.create_runtime_env().await;
 
-        let mut session_config = self.context.config.data_fusion_config.clone();
-        session_config
-            .options_mut()
-            .extensions
-            .insert(rdf_fusion_config);
-
+        let session_config = self.context.config.data_fusion_config.clone();
         let context = RdfFusionContextBuilder::new(delta_storage)
             .with_session_config(Some(session_config))
             .with_runtime_env(Some(runtime_env))
@@ -316,7 +318,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
             context.session_context().clone(),
             context.create_view(),
             QuadStorageEncodingName::String,
-            context.options().storage.parquet.sort_order.clone(),
+            sort_order,
         )?;
         let inputs: Vec<_> = sources
             .into_iter()
@@ -331,7 +333,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
     pub async fn create_store(&self) -> Store {
         let runtime_env = self.create_runtime_env().await;
-        let rdf_fusion_config = self.get_rdf_fusion_config();
+        let rdf_fusion_config = self.rdf_fusion_config();
 
         let (base_url, object_store_url) = match self.context.config.storage_location {
             QuadStorageLocationArg::InMemory => (

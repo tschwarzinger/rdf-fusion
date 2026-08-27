@@ -14,13 +14,14 @@ use tokio::runtime::{Builder, Runtime};
 
 pub mod verbose;
 
-pub struct BenchmarkStorageConfig {
+pub struct BenchmarkConfig {
+    pub name: String,
     pub storage_type: BenchQuadStorageTypeArg,
     pub storage_location: QuadStorageLocationArg,
     pub encoding: QuadStorageEncodingName,
 }
 
-impl BenchmarkStorageConfig {
+impl BenchmarkConfig {
     pub fn bench_context(&self) -> RdfFusionBenchContext {
         RdfFusionBenchContext::new_for_criterion(
             PathBuf::from("./data"),
@@ -33,7 +34,7 @@ impl BenchmarkStorageConfig {
     }
 }
 
-impl Display for BenchmarkStorageConfig {
+impl Display for BenchmarkConfig {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -43,22 +44,37 @@ impl Display for BenchmarkStorageConfig {
     }
 }
 
-pub fn benchmark_storage_configs() -> Vec<BenchmarkStorageConfig> {
+pub fn benchmark_configs() -> Vec<BenchmarkConfig> {
     vec![
-        BenchmarkStorageConfig {
+        BenchmarkConfig {
+            name: "DQ-ObjectId".to_string(),
             storage_type: BenchQuadStorageTypeArg::DeltaQuads,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::ObjectId,
         },
-        BenchmarkStorageConfig {
+        BenchmarkConfig {
+            name: "DQ-String".to_string(),
             storage_type: BenchQuadStorageTypeArg::DeltaQuads,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::String,
         },
-        BenchmarkStorageConfig {
+        BenchmarkConfig {
+            name: "DQ-PlainTerm".to_string(),
+            storage_type: BenchQuadStorageTypeArg::DeltaQuads,
+            storage_location: QuadStorageLocationArg::OnDisk,
+            encoding: QuadStorageEncodingName::PlainTerm,
+        },
+        BenchmarkConfig {
+            name: "Parquet-String".to_string(),
             storage_type: BenchQuadStorageTypeArg::Parquet,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::String,
+        },
+        BenchmarkConfig {
+            name: "Parquet-PlainTerm".to_string(),
+            storage_type: BenchQuadStorageTypeArg::Parquet,
+            storage_location: QuadStorageLocationArg::OnDisk,
+            encoding: QuadStorageEncodingName::PlainTerm,
         },
     ]
 }
