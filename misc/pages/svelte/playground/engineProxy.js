@@ -134,6 +134,14 @@ export function createEngineProxy({ onCrash = null } = {}) {
         return rpc('setDataset', { dataset });
     }
 
+    async function convertRdf({ dbName, inputKey, outputKey, encoding, sortOrder }) {
+        await cancelSettled;
+        if (dead) throw new Error(DEAD_MESSAGE);
+        const healthy = await ensureHealthy();
+        if (!healthy || dead) throw new Error(DEAD_MESSAGE);
+        return rpc('convertRdf', { dbName, inputKey, outputKey, encoding, sortOrder });
+    }
+
     // Returns true when a query can run. A dead/hung worker returns false so
     // the query fails fast (the app resets and the user restarts) rather than
     // hanging on a corpse.
@@ -167,6 +175,7 @@ export function createEngineProxy({ onCrash = null } = {}) {
     return {
         init,
         setDataset,
+        convertRdf,
         runQuery,
         cancelQuery,
         terminate: () => worker && worker.terminate()

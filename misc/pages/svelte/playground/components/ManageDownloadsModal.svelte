@@ -1,9 +1,27 @@
 <script>
     import { onMount } from 'svelte';
-    import { getAllLocalVersions, deleteLocalVersion, getDownloadedDatasets, deleteDownloadedDataset, getCustomDatasets, deleteCustomDataset } from '../db.js';
+    import { getAllLocalVersions, deleteLocalVersion, getDownloadedDatasets, deleteDownloadedDataset, getCustomDatasets, deleteCustomDataset, getBlob } from '../db.js';
     import { activeVersionMetadata, activeDatasetMetadata, jsStore, wasmModule, downloadedDatasets, customDatasets, localVersions, reloadStoreTrigger, setStatus } from '../store.js';
 
     let totalItemsCount = $derived($localVersions.length + $downloadedDatasets.length + $customDatasets.length);
+
+    async function exportParquetFile(id, name) {
+        try {
+            const blob = await getBlob(id);
+            if (!blob) throw new Error("Dataset Parquet file not found in storage.");
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${name.replace(/[^a-zA-Z0-9_-]/g, '_')}.parquet`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            setStatus('Failed to export Parquet file: ' + e, 'fa-bug', 'danger');
+        }
+    }
 
     async function loadAllDownloads() {
         try {
@@ -70,14 +88,14 @@
     });
 </script>
 
-<!-- Manage Downloads Modal -->
+<!-- Manage Local Data Modal -->
 <div class="modal fade" id="manageDownloadsModal" tabindex="-1" aria-labelledby="manageDownloadsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-light border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-2">
-                    <i class="fa-solid fa-download text-brown fs-5"></i>
-                    <h5 class="modal-title pane-heading mb-0" id="manageDownloadsModalLabel">Manage Downloads</h5>
+                    <i class="fa-solid fa-hard-drive text-brown fs-5"></i>
+                    <h5 class="modal-title pane-heading mb-0" id="manageDownloadsModalLabel">Manage Local Data</h5>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -86,7 +104,7 @@
                 {#if totalItemsCount === 0}
                     <div class="p-4 text-center text-muted bg-light rounded-3">
                         <i class="fa-solid fa-hard-drive fa-2x mb-2 text-secondary opacity-50"></i>
-                        <p class="mb-0">No downloaded engine builds or datasets found in offline storage.</p>
+                        <p class="mb-0">No engine builds, downloaded datasets, or custom datasets found in local storage.</p>
                     </div>
                 {:else}
                     <!-- Engine Versions Section -->
@@ -198,18 +216,35 @@
                                                 </div>
                                                 <div class="small text-muted" style="font-size: 0.8rem;">
                                                     {ds.sourceType === 'file' ? 'Local File' : 'Custom URL'}
+                                                    {#if ds.encoding}
+                                                        • {ds.encoding}
+                                                    {/if}
+                                                    {#if ds.sortOrder}
+                                                        • {ds.sortOrder}
+                                                    {/if}
                                                     {#if (ds.size ?? ds.fileBlob?.size)}
                                                         • {(((ds.size ?? ds.fileBlob?.size ?? 0)) / (1024 * 1024)).toFixed(2)} MB
                                                     {/if}
                                                 </div>
                                             </div>
-                                            <button 
-                                                class="btn btn-sm btn-outline-danger" 
-                                                onclick={() => handleDeleteCustomDataset(ds.id)} 
-                                                title="Delete custom dataset"
-                                                aria-label="Delete custom dataset">
-                                                <i class="fa-solid fa-trash"></i>
-                                            </button>
+                                            <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                                {#if ds.sourceType === 'file'}
+                                                    <button 
+                                                        class="btn btn-sm btn-outline-secondary" 
+                                                        onclick={() => exportParquetFile(ds.id, ds.name)} 
+                                                        title="Export Parquet file"
+                                                        aria-label="Export Parquet file">
+                                                        <i class="fa-solid fa-file-arrow-down"></i>
+                                                    </button>
+                                                {/if}
+                                                <button 
+                                                    class="btn btn-sm btn-outline-danger" 
+                                                    onclick={() => handleDeleteCustomDataset(ds.id)} 
+                                                    title="Delete custom dataset"
+                                                    aria-label="Delete custom dataset">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                            </div>
                                         </li>
                                     {/each}
                                 </ul>

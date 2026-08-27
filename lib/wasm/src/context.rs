@@ -4,24 +4,26 @@ use datafusion::datasource::object_store::{
     DefaultObjectStoreRegistry, ObjectStoreRegistry,
 };
 use datafusion::execution::DiskManager;
+use datafusion::execution::SessionState;
 use datafusion::execution::disk_manager::DiskManagerMode;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::prelude::{SessionConfig, SessionContext};
+use datafusion::physical_plan::ExecutionPlan;
+use datafusion::physical_planner::ExtensionPlanner;
+use datafusion::prelude::SessionConfig;
 use object_store::ObjectStoreExt;
 use object_store::http::HttpBuilder;
 use object_store::memory::InMemory;
 use rdf_fusion::common::config::RdfFusionOptions;
-use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
+use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder, StorageError};
 use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::encoding::object_id::ObjectIdDictionary;
 use rdf_fusion::execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion::extensions::RdfFusionContextView;
-use rdf_fusion::extensions::functions::RdfFusionFunctionRegistry;
-use rdf_fusion::functions::registry::DefaultRdfFusionFunctionRegistry;
+use rdf_fusion::extensions::storage::{
+    QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
+};
 use rdf_fusion::storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
-use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-use rdf_fusion_encoding::string::STRING_ENCODING;
-use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
-use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings};
+use rdf_fusion_encoding::QuadStorageEncoding;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -193,6 +195,70 @@ pub async fn create_parquet_context_from_indexeddb(
     create_parquet_context(url, encoding, settings, registry).await
 }
 
+// TODO: Replace this dummy QuadStorage with an in-memory quad storage in the future.
+#[derive(Debug)]
+struct DummyQuadStorage {
+    encoding: QuadStorageEncoding,
+}
+
+#[async_trait::async_trait]
+impl QuadStorage for DummyQuadStorage {
+    fn encoding(&self) -> QuadStorageEncoding {
+        self.encoding.clone()
+    }
+
+    fn object_id_mapping(&self) -> Option<Arc<dyn ObjectIdDictionary>> {
+        None
+    }
+
+    async fn snapshot(&self) -> Result<Arc<dyn QuadStorageSnapshot>, StorageError> {
+        Ok(Arc::new(DummyQuadStorageSnapshot))
+    }
+
+    async fn begin_transaction(
+        &self,
+        _session: &SessionState,
+    ) -> Result<Box<dyn QuadStorageTransaction>, StorageError> {
+        Err(StorageError::Other(
+            "DummyQuadStorage does not support transactions".into(),
+        ))
+    }
+
+    async fn optimize(&self, _state: &SessionState) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    async fn validate(&self, _state: &SessionState) -> Result<(), StorageError> {
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct DummyQuadStorageSnapshot;
+
+#[async_trait::async_trait]
+impl QuadStorageSnapshot for DummyQuadStorageSnapshot {
+    async fn planners(
+        &self,
+        _context: &RdfFusionContextView,
+    ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
+        vec![]
+    }
+
+    async fn named_graphs(
+        &self,
+        _state: &SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        Err(StorageError::Other(
+            "DummyQuadStorage has no named graphs".into(),
+        ))
+    }
+
+    async fn len(&self, _state: &SessionState) -> Result<usize, StorageError> {
+        Ok(0)
+    }
+}
+
 /// Converts a custom RDF file stored in IndexedDB into a Parquet v0.1 blob and streams it into the given db.
 #[wasm_bindgen]
 pub async fn convert_rdf_to_parquet_stream(
@@ -202,22 +268,9 @@ pub async fn convert_rdf_to_parquet_stream(
     encoding: JsQuadStorageEncoding,
     sort_order_str: Option<String>,
 ) -> Result<(), JsValue> {
-    let session_context = SessionContext::new();
-    let registry = session_context.runtime_env().object_store_registry.clone();
-
     let idb_store = Arc::new(IndexedDbObjectStore::new(db_name.clone()));
+    let registry = Arc::new(DefaultObjectStoreRegistry::new());
     registry.register_store(&Url::parse("indexeddb://").unwrap(), idb_store);
-
-    let typed_family_encoding = Arc::new(TypedFamilyEncoding::default());
-    let encodings = RdfFusionEncodings::new(
-        Arc::clone(&PLAIN_TERM_ENCODING),
-        typed_family_encoding,
-        None,
-        Arc::clone(&STRING_ENCODING),
-    );
-
-    let function_registry: Arc<dyn RdfFusionFunctionRegistry> =
-        Arc::new(DefaultRdfFusionFunctionRegistry::new(encodings.clone()));
 
     let quad_storage_encoding = match encoding {
         JsQuadStorageEncoding::PlainTerm => QuadStorageEncoding::PlainTerm,
@@ -229,14 +282,33 @@ pub async fn convert_rdf_to_parquet_stream(
         }
     };
 
-    let context_view =
-        RdfFusionContextView::new(function_registry, encodings, quad_storage_encoding);
-
-    let sort_order = if let Some(s) = sort_order_str {
-        Some(RdfSortOrder::from_str(&s).map_err(|e| JsValue::from_str(&e.to_string()))?)
-    } else {
-        None
+    let sort_order = match sort_order_str {
+        Some(ref s) if !s.trim().is_empty() && !s.trim().eq_ignore_ascii_case("none") => {
+            Some(
+                RdfSortOrder::from_str(s.trim())
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?,
+            )
+        }
+        _ => None,
     };
+
+    let runtime = RuntimeEnvBuilder::default()
+        .with_object_store_registry(registry)
+        .build_arc()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let dummy_storage = Arc::new(DummyQuadStorage {
+        encoding: quad_storage_encoding,
+    });
+
+    let context = RdfFusionContextBuilder::new(dummy_storage)
+        .with_single_partition_session_config()
+        .with_runtime_env(Some(runtime))
+        .build()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let session_context = context.session_context().clone();
+    let context_view = context.create_view();
 
     let loader = RdfParquetLoader::try_new(
         session_context,

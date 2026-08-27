@@ -1,6 +1,6 @@
 import { getLocalVersion, storeLocalVersion } from './db.js';
 import { createEngineProxy } from './engineProxy.js';
-import { jsStore, wasmModule, activeVersionMetadata, reloadStoreTrigger, setStatus } from './store.js';
+import { jsStore, wasmModule, activeVersionMetadata, setStatus } from './store.js';
 import { OFFICIAL_VERSIONS } from './data_engine_versions.js';
 
 // engine.js is the single source of truth for activating engine versions.
@@ -80,7 +80,6 @@ export async function initializeWasm(localData) {
     if (proxy.runQuery) {
         wasmModule.set(proxy);
         jsStore.set(null);
-        reloadStoreTrigger.update(n => n + 1);
     } else {
         wasmModule.set(null);
         jsStore.set(null);
@@ -112,10 +111,24 @@ export async function activateVersion(versionId, { localVersion = null, localVer
 
     let metadata;
     if (vInfo) {
-        metadata = { id: versionId, name: vInfo.name, isCustom: false, size, supportedStorage: vInfo.supportedStorage || [] };
+        metadata = {
+            id: versionId,
+            name: vInfo.name,
+            isCustom: false,
+            size,
+            supportedStorage: vInfo.supportedStorage || [],
+            capabilities: vInfo.capabilities || []
+        };
     } else {
         const customVer = localVersions.find(v => v.id === versionId);
-        metadata = { id: versionId, name: customVer?.customName || versionId, isCustom: true, size, supportedStorage: [] };
+        metadata = {
+            id: versionId,
+            name: customVer?.customName || versionId,
+            isCustom: true,
+            size,
+            supportedStorage: [],
+            capabilities: customVer?.capabilities || ['rdf-conversion']
+        };
     }
     activeVersionMetadata.set(metadata);
 

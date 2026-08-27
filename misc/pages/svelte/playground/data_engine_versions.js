@@ -4,13 +4,15 @@ export const OFFICIAL_VERSIONS = [
         name: "Latest Nightly",
         jsUrl: "https://rdf-fusion-public.hel1.your-objectstorage.com/wasm/latest/rdf_fusion_wasm.js",
         wasmUrl: "https://rdf-fusion-public.hel1.your-objectstorage.com/wasm/latest/rdf_fusion_wasm_bg.wasm",
-        supportedStorage: [{ type: "parquet", version: "0.1" }]
+        supportedStorage: [{ type: "parquet", version: "0.1" }],
+        capabilities: ["rdf-conversion"]
     },
     {
         id: "initial",
         name: "Initial Wasm Build (~v0.2.1)",
         jsUrl: "https://rdf-fusion-public.hel1.your-objectstorage.com/wasm/initial/rdf_fusion_wasm.js",
         wasmUrl: "https://rdf-fusion-public.hel1.your-objectstorage.com/wasm/initial/rdf_fusion_wasm_bg.wasm",
-        supportedStorage: [{ type: "parquet", version: "0.1" }]
+        supportedStorage: [{ type: "parquet", version: "0.1" }],
+        capabilities: []
     }
 ];

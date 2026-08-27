@@ -165,9 +165,9 @@
         <div class="d-flex align-items-center gap-2 align-self-stretch align-self-md-auto justify-content-end flex-wrap">
             <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
                     data-bs-toggle="modal" data-bs-target="#manageDownloadsModal"
-                    title="Manage downloaded engine builds and datasets stored locally">
-                <i class="fa-solid fa-download"></i>
-                <span>Manage Downloads</span>
+                    title="Manage downloaded engine builds, custom datasets, and library data stored locally">
+                <i class="fa-solid fa-hard-drive"></i>
+                <span>Manage Local Data</span>
             </button>
             {#if showRecreate}
                 <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"

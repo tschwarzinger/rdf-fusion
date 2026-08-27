@@ -97,7 +97,7 @@ async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
     let store = Store::new_in_memory().await;
     store
         .load_from_reader(
-            File::open("../../examples/data/paris-graph.ttl")
+            File::open("../../examples/data/paris-graph.trig")
                 .await
                 .unwrap(),
             RdfFileScanOptions::with_format(RdfFormat::TriG),

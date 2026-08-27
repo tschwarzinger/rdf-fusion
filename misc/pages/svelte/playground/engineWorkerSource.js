@@ -103,6 +103,30 @@ async function handle(type, data) {
         activeStore = new wasm.JsStore(context);
         return true;
     }
+    if (type === 'convertRdf') {
+        if (!wasm) {
+            throw new Error('Engine not initialized');
+        }
+        if (!wasm.convert_rdf_to_parquet_stream) {
+            throw new Error('Active engine build does not support RDF to Parquet conversion.');
+        }
+        const dbName = data.dbName;
+        const inputKey = data.inputKey;
+        const outputKey = data.outputKey;
+        const encodingStr = data.encoding || 'String';
+        const encoding = (wasm.JsQuadStorageEncoding && wasm.JsQuadStorageEncoding[encodingStr] != null)
+            ? wasm.JsQuadStorageEncoding[encodingStr]
+            : 1;
+        const sortOrder = data.sortOrder || null;
+        await wasm.convert_rdf_to_parquet_stream(
+            dbName,
+            inputKey,
+            outputKey,
+            encoding,
+            sortOrder
+        );
+        return true;
+    }
     if (type === 'runQuery') {
         if (!activeStore) {
             throw new Error('No dataset loaded');

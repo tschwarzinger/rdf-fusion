@@ -3,7 +3,7 @@
     import { slide } from 'svelte/transition';
     import { cubicInOut, cubicOut } from 'svelte/easing';
     import { jsStore, wasmModule, activeVersionMetadata, activeDatasetMetadata, downloadedDatasets, customDatasets, isDatasetLoading, setStatus, engineSettings, reloadStoreTrigger, clearQueryResults, queryResults, expandedStatusSection } from '../store.js';
-    import { getCustomDatasets, saveCustomDataset, deleteCustomDataset, getDownloadedDatasets, saveDownloadedDataset, putBlob, deleteBlob, DB_NAME } from '../db.js';
+    import { getCustomDatasets, saveCustomDataset, getDownloadedDatasets, saveDownloadedDataset, putBlob, getBlob, deleteBlob, DB_NAME } from '../db.js';
     import { DATASETS } from '../data_datasets.js';
 
     const datasets = DATASETS;
@@ -15,13 +15,32 @@
     let selectedDistribution = $state(null);
     let selectedCustomDataset = $state(null);
 
-    // Custom Dataset Creation State
-    let customName = $state("");
-    let customLocation = $state("url"); // 'url' or 'file'
-    let customUrl = $state("");
-    let customFiles = $state(null);
-    let isSaving = $state(false);
-    let customErrorMsg = $state("");
+    // 1. Add Parquet Dataset Modal State
+    let parquetName = $state("");
+    let parquetLocation = $state("file"); // 'file' or 'url'
+    let parquetUrl = $state("");
+    let parquetFiles = $state(null);
+    let isParquetSaving = $state(false);
+    let parquetErrorMsg = $state("");
+
+    // 2. Convert Traditional RDF Modal State
+    let rdfName = $state("");
+    let rdfFiles = $state(null);
+    let rdfEncoding = $state("String"); // 'String' or 'PlainTerm'
+    let rdfSortOrder = $state("GPOS"); // 'GPOS', 'GSPO', 'SPOG', 'POSG', 'OSPG', 'None', 'custom'
+    let rdfSortOrderCustom = $state("");
+    let isRdfConverting = $state(false);
+    let rdfErrorMsg = $state("");
+
+    const RDF_EXTENSIONS = ['ttl', 'nt', 'nq', 'trig', 'rdf', 'owl', 'xml', 'n3'];
+
+    function getFileExtension(filename) {
+        if (!filename) return '';
+        const parts = filename.split('.');
+        return parts.length > 1 ? parts.pop().toLowerCase() : '';
+    }
+
+    let isSaving = $derived(isParquetSaving || isRdfConverting);
 
     let draftSelectedDistribution = $derived.by(() => {
         if (!draftDistributionId) return null;
@@ -39,23 +58,44 @@
 
     let hasDatasetChanges = $derived(draftDistributionId !== selectedDistributionId && draftDistributionId !== "");
 
-    let downloadingDatasetId = $state(null);
-    let lastLoadedKey = $state("");
-
-    function handleFileChange(e) {
-        const file = e.target.files?.[0];
-        if (file && !customName.trim()) {
-            customName = file.name.replace(/\.[^/.]+$/, "");
+    let canConvertRdf = $derived.by(() => {
+        if (!$wasmModule || !$activeVersionMetadata) return false;
+        const caps = $activeVersionMetadata.capabilities;
+        if (Array.isArray(caps)) {
+            return caps.includes('rdf-conversion') || caps.includes('rdf_conversion');
         }
+        return !!$activeVersionMetadata.isCustom;
+    });
+
+    let convertRdfTooltip = $derived.by(() => {
+        if (!$wasmModule || !$activeVersionMetadata) {
+            return "Please select and load a WASM query engine first.";
+        }
+        if (!canConvertRdf) {
+            return `The selected engine version (${$activeVersionMetadata.name || $activeVersionMetadata.id}) does not support RDF conversion. Please select a compatible build.`;
+        }
+        return "Upload traditional RDF data (.ttl, .nt, etc.) and convert to Parquet";
+    });
+
+    let downloadingDatasetId = $state(null);
+    let lastLoadedSignature = $state("");
+    let currentLoadSeq = 0;
+
+    function handleParquetFileChange(e) {
+        const file = e.target.files?.[0];
+        if (file && !parquetName.trim()) {
+            parquetName = file.name.replace(/\.[^/.]+$/, "");
+        }
+        parquetErrorMsg = "";
     }
 
-    function handleUrlBlur() {
-        if (customUrl.trim() && !customName.trim()) {
+    function handleParquetUrlBlur() {
+        if (parquetUrl.trim() && !parquetName.trim()) {
             try {
-                const pathname = new URL(customUrl.trim()).pathname;
+                const pathname = new URL(parquetUrl.trim()).pathname;
                 const base = pathname.split('/').filter(Boolean).pop() || "";
                 if (base) {
-                    customName = decodeURIComponent(base).replace(/\.[^/.]+$/, "");
+                    parquetName = decodeURIComponent(base).replace(/\.[^/.]+$/, "");
                 }
             } catch {
                 // Ignore invalid URL parsing
@@ -63,12 +103,29 @@
         }
     }
 
-    function resetCustomForm() {
-        customName = "";
-        customLocation = "url";
-        customUrl = "";
-        customFiles = null;
-        customErrorMsg = "";
+    function resetParquetForm() {
+        parquetName = "";
+        parquetLocation = "file";
+        parquetUrl = "";
+        parquetFiles = null;
+        parquetErrorMsg = "";
+    }
+
+    function handleRdfFileChange(e) {
+        const file = e.target.files?.[0];
+        if (file && !rdfName.trim()) {
+            rdfName = file.name.replace(/\.[^/.]+$/, "");
+        }
+        rdfErrorMsg = "";
+    }
+
+    function resetRdfForm() {
+        rdfName = "";
+        rdfFiles = null;
+        rdfEncoding = "String";
+        rdfSortOrder = "GPOS";
+        rdfSortOrderCustom = "";
+        rdfErrorMsg = "";
     }
 
     function syncDraftState() {
@@ -79,7 +136,8 @@
             const first = datasets[0]?.distributions[0];
             if (first) draftDistributionId = first.id;
         }
-        customErrorMsg = "";
+        parquetErrorMsg = "";
+        rdfErrorMsg = "";
     }
 
     $effect(() => {
@@ -96,35 +154,53 @@
         $expandedStatusSection = null;
     }
 
-    async function handleSaveCustomDataset() {
-        customErrorMsg = "";
-        if (!customName.trim()) {
-            customErrorMsg = "Dataset name is required.";
+    async function exportParquetFile(id, name) {
+        try {
+            const blob = await getBlob(id);
+            if (!blob) throw new Error("Dataset Parquet file not found in storage.");
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${name.replace(/[^a-zA-Z0-9_-]/g, '_')}.parquet`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            setStatus('Failed to export Parquet file: ' + e, 'fa-bug', 'danger');
+        }
+    }
+
+    async function handleSaveParquetDataset() {
+        parquetErrorMsg = "";
+        if (!parquetName.trim()) {
+            parquetErrorMsg = "Dataset name is required.";
             return;
         }
 
-        if (customLocation === 'url' && !customUrl.trim()) {
-            customErrorMsg = "Parquet dataset URL is required.";
+        if (parquetLocation === 'url' && !parquetUrl.trim()) {
+            parquetErrorMsg = "Parquet dataset URL is required.";
             return;
         }
         
-        if (customLocation === 'file' && (!customFiles || customFiles.length === 0)) {
-            customErrorMsg = "Please select a .parquet file to upload.";
+        if (parquetLocation === 'file' && (!parquetFiles || parquetFiles.length === 0)) {
+            parquetErrorMsg = "Please select a .parquet file to upload.";
             return;
         }
 
-        isSaving = true;
+        isParquetSaving = true;
         try {
             let finalBlob = null;
             let finalEncoding = "String";
-            let finalSourceType = customLocation;
-            let finalUrl = customLocation === 'url' ? customUrl.trim() : null;
+            let finalSourceType = parquetLocation;
+            let finalUrl = parquetLocation === 'url' ? parquetUrl.trim() : null;
             const id = "custom-" + Date.now();
 
-            if (customLocation === 'file') {
-                finalBlob = customFiles[0];
+            if (parquetLocation === 'file') {
+                finalBlob = parquetFiles[0];
                 if (!finalBlob.name.toLowerCase().endsWith('.parquet')) {
-                    throw new Error("Only .parquet files are supported.");
+                    throw new Error("Only .parquet files are supported in this dialog. To convert .ttl, .nt, etc., use 'Convert Dataset'.");
                 }
 
                 await putBlob(id, finalBlob);
@@ -166,7 +242,7 @@
 
             const newDataset = {
                 id,
-                name: customName.trim(),
+                name: parquetName.trim(),
                 sourceType: finalSourceType,
                 url: finalUrl,
                 fileBlob: finalBlob,
@@ -181,9 +257,9 @@
 
             draftDistributionId = newDataset.id;
             selectedDistributionId = newDataset.id;
-            resetCustomForm();
+            resetParquetForm();
 
-            const modalEl = document.getElementById('customDatasetModal');
+            const modalEl = document.getElementById('parquetDatasetModal');
             if (modalEl) {
                 const modal = window.bootstrap.Modal.getInstance(modalEl);
                 modal?.hide();
@@ -194,10 +270,98 @@
             setStatus(`Custom dataset '${newDataset.name}' loaded.`, 'fa-check-circle', 'success');
         } catch (e) {
             console.error(e);
-            customErrorMsg = e.message || String(e);
+            parquetErrorMsg = e.message || String(e);
             setStatus('Failed to save dataset: ' + e, 'fa-bug', 'danger');
         } finally {
-            isSaving = false;
+            isParquetSaving = false;
+        }
+    }
+
+    async function handleConvertRdfDataset() {
+        rdfErrorMsg = "";
+        if (!rdfName.trim()) {
+            rdfErrorMsg = "Dataset name is required.";
+            return;
+        }
+
+        if (!rdfFiles || rdfFiles.length === 0) {
+            rdfErrorMsg = "Please select an RDF file (.ttl, .nt, .nq, .trig, .rdf, .xml, .n3) to convert.";
+            return;
+        }
+
+        const file = rdfFiles[0];
+        const ext = getFileExtension(file.name);
+        if (!ext || !RDF_EXTENSIONS.includes(ext)) {
+            rdfErrorMsg = `Unsupported file format '.${ext || 'unknown'}'. Please select a valid RDF file (.ttl, .nt, .nq, .trig, .rdf, .xml, .n3).`;
+            return;
+        }
+
+        if (!$wasmModule) {
+            rdfErrorMsg = "A loaded WASM query engine is required to convert RDF files to Parquet. Please select an engine version first.";
+            return;
+        }
+
+        isRdfConverting = true;
+        const id = "custom-" + Date.now();
+        const tempInputKey = `convert-temp-${id}.${ext}`;
+        const finalSortOrder = rdfSortOrder === 'custom' ? (rdfSortOrderCustom.trim() || "GPOS") : rdfSortOrder;
+        const sortOrderParam = finalSortOrder === 'None' ? null : finalSortOrder;
+
+        try {
+            setStatus(`Uploading and converting RDF file '${file.name}' to Parquet (${rdfEncoding}, ${sortOrderParam || 'None'})...`, 'fa-cog fa-spin', 'brown');
+
+            await putBlob(tempInputKey, file);
+
+            await $wasmModule.convertRdf({
+                dbName: DB_NAME,
+                inputKey: tempInputKey,
+                outputKey: id,
+                encoding: rdfEncoding,
+                sortOrder: sortOrderParam
+            });
+
+            const convertedBlob = await getBlob(id);
+            if (!convertedBlob) {
+                throw new Error("Parquet conversion finished but output was not found in storage.");
+            }
+
+            const newDataset = {
+                id,
+                name: rdfName.trim(),
+                sourceType: 'file',
+                url: null,
+                fileBlob: null,
+                format: "parquet",
+                encoding: rdfEncoding,
+                sortOrder: finalSortOrder,
+                size: convertedBlob.size,
+                originalFormat: ext,
+                convertedFrom: file.name
+            };
+
+            await saveCustomDataset(newDataset);
+            await reloadCustomDatasets();
+
+            draftDistributionId = newDataset.id;
+            selectedDistributionId = newDataset.id;
+            resetRdfForm();
+
+            const modalEl = document.getElementById('convertRdfModal');
+            if (modalEl) {
+                const modal = window.bootstrap.Modal.getInstance(modalEl);
+                modal?.hide();
+            }
+
+            handleDistributionSelect();
+            $expandedStatusSection = null;
+            setStatus(`RDF dataset '${newDataset.name}' converted to Parquet and loaded.`, 'fa-check-circle', 'success');
+        } catch (e) {
+            console.error(e);
+            rdfErrorMsg = e.message || String(e);
+            setStatus('Failed to convert RDF dataset: ' + e, 'fa-bug', 'danger');
+        } finally {
+            await deleteBlob(tempInputKey).catch(() => {});
+            isRdfConverting = false;
         }
     }
 
@@ -219,23 +383,6 @@
     });
 
     $effect(() => {
-        const trigger = $reloadStoreTrigger;
-        if (trigger > 0) {
-            untrack(() => {
-                lastLoadedKey = "";
-                const storedId = localStorage.getItem('rdfFusionLastDataset');
-                if (storedId && selectedDistributionId !== storedId) {
-                    selectedDistributionId = storedId;
-                    draftDistributionId = storedId;
-                }
-                if (selectedDistribution || selectedCustomDataset || selectedDistributionId) {
-                    handleDistributionSelect();
-                }
-            });
-        }
-    });
-
-    $effect(() => {
         const distId = selectedDistributionId;
         if (distId) {
             localStorage.setItem('rdfFusionLastDataset', distId);
@@ -245,14 +392,20 @@
     $effect(() => {
         const wasm = $wasmModule;
         const distId = selectedDistributionId;
-        if (wasm && distId) {
-            const key = `${distId}`;
-            if (key !== lastLoadedKey) {
-                lastLoadedKey = key;
-                untrack(() => {
-                    handleDistributionSelect();
-                });
-            }
+        const trigger = $reloadStoreTrigger;
+        const settingsStr = JSON.stringify($engineSettings);
+
+        if (!wasm || !distId) {
+            lastLoadedSignature = "";
+            return;
+        }
+
+        const sig = `${distId}::${settingsStr}::${trigger}`;
+        if (sig !== lastLoadedSignature) {
+            lastLoadedSignature = sig;
+            untrack(() => {
+                handleDistributionSelect();
+            });
         }
     });
 
@@ -283,7 +436,7 @@
         if (meta && dist && !isSupported(dist)) {
             untrack(() => {
                 selectedDistributionId = "";
-                lastLoadedKey = "";
+                lastLoadedSignature = "";
                 handleDistributionSelect();
             });
         }
@@ -299,7 +452,10 @@
             await reloadDownloadedDatasets();
             setStatus('Download complete.', 'fa-check-circle', 'green');
             
-            if (selectedDistributionId === id) handleDistributionSelect();
+            if (selectedDistributionId === id) {
+                lastLoadedSignature = "";
+                handleDistributionSelect();
+            }
         } catch (e) {
             setStatus('Failed to download: ' + e, 'fa-bug', 'danger');
         } finally {
@@ -308,6 +464,7 @@
     }
 
     async function handleDistributionSelect() {
+        const thisSeq = ++currentLoadSeq;
         $jsStore = null;
         if (!$queryResults?.isExecuting) {
             clearQueryResults();
@@ -442,25 +599,16 @@
             }
 
             await $wasmModule.setDataset(datasetSpec);
+            if (thisSeq !== currentLoadSeq) return;
             $jsStore = true;
             setStatus('Store initialized and ready for queries.', 'fa-circle-check', 'green');
         } catch (e) {
+            if (thisSeq !== currentLoadSeq) return;
             console.error("Store initialization error:", e);
             setStatus('Failed to initialize dataset: ' + e, 'fa-bug', 'danger', e);
         } finally {
-            $isDatasetLoading = false;
-        }
-    }
-
-    async function handleDeleteCustom(id) {
-        if (confirm("Are you sure you want to delete this custom dataset?")) {
-            await deleteCustomDataset(id);
-            await reloadCustomDatasets();
-            if (selectedDistributionId === id) {
-                selectedDistributionId = "";
-                draftDistributionId = "";
-                $jsStore = null;
-                $activeDatasetMetadata = null;
+            if (thisSeq === currentLoadSeq) {
+                $isDatasetLoading = false;
             }
         }
     }
@@ -525,18 +673,15 @@
                         <button class="btn btn-sm btn-secondary" disabled>
                             <i class="fa-solid fa-spinner fa-spin me-1"></i> Downloading...
                         </button>
-                    {:else if $downloadedDatasets.find(d => d.id === draftSelectedCustomDataset.id)}
-                        <span class="text-success" title="Downloaded (Available locally)" style="font-size: 1.1rem; cursor: default;">
-                            <i class="fa-solid fa-hard-drive"></i>
-                        </span>
+                    {:else if draftSelectedCustomDataset.sourceType === 'file' || $downloadedDatasets.find(d => d.id === draftSelectedCustomDataset.id)}
+                        <button class="btn btn-sm btn-outline-secondary" onclick={() => exportParquetFile(draftSelectedCustomDataset.id, draftSelectedCustomDataset.name)} title="Export / Download Parquet file">
+                            <i class="fa-solid fa-file-arrow-down me-1"></i> Export Parquet
+                        </button>
                     {:else if draftSelectedCustomDataset.sourceType === 'url'}
                         <button class="btn btn-sm btn-outline-secondary" onclick={() => downloadDatasetUrl(draftSelectedCustomDataset.id, draftSelectedCustomDataset.name, draftSelectedCustomDataset.url)} title="Download for faster offline loading">
                             <i class="fa-solid fa-download me-1"></i> Download
                         </button>
                     {/if}
-                    <button class="btn btn-sm btn-outline-danger" onclick={() => handleDeleteCustom(draftSelectedCustomDataset.id)} title="Delete Dataset">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
                 {/if}
             </div>
 
@@ -550,15 +695,29 @@
 
         <!-- Inline Actions -->
         <div class="d-flex justify-content-between align-items-center gap-2 pt-2 border-top flex-wrap">
-            <button 
-                type="button" 
-                class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2"
-                data-bs-toggle="modal"
-                data-bs-target="#customDatasetModal"
-                title="Add custom Parquet dataset">
-                <i class="fa-solid fa-plus"></i>
-                <span>Add Custom Dataset</span>
-            </button>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button 
+                    type="button" 
+                    class="btn btn-sm btn-outline-primary d-flex align-items-center gap-2"
+                    data-bs-toggle="modal"
+                    data-bs-target="#parquetDatasetModal"
+                    title="Add an existing Parquet dataset (URL or file)">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Add Dataset</span>
+                </button>
+                <span class="d-inline-block" title={convertRdfTooltip}>
+                    <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline-brown d-flex align-items-center gap-2"
+                        data-bs-toggle="modal"
+                        data-bs-target="#convertRdfModal"
+                        disabled={!canConvertRdf || isSaving}
+                        title={convertRdfTooltip}>
+                        <i class="fa-solid fa-wand-magic-sparkles text-brown"></i>
+                        <span>Convert Dataset</span>
+                    </button>
+                </span>
+            </div>
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-sm btn-secondary px-3" onclick={() => $expandedStatusSection = null} disabled={isSaving}>Close</button>
                 <button 
@@ -574,68 +733,170 @@
     </div>
 {/if}
 
-<!-- Dedicated Add Custom Parquet Dataset Modal -->
-<div class="modal fade" id="customDatasetModal" tabindex="-1" aria-labelledby="customDatasetModalLabel" aria-hidden="true">
+<!-- 1. Dedicated Add Parquet Dataset Modal -->
+<div class="modal fade" id="parquetDatasetModal" tabindex="-1" aria-labelledby="parquetDatasetModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-light border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-2">
-                    <i class="fa-solid fa-file-arrow-up text-brown fs-5"></i>
-                    <h5 class="modal-title pane-heading mb-0" id="customDatasetModalLabel">Add Custom Parquet Dataset</h5>
+                    <i class="fa-solid fa-file-circle-plus text-primary fs-5"></i>
+                    <h5 class="modal-title pane-heading mb-0" id="parquetDatasetModalLabel">Add Parquet Dataset</h5>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
             <div class="modal-body p-4 d-flex flex-column gap-3">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom pb-2">
-                    <strong class="text-dark small">Dataset Source:</strong>
+                    <strong class="text-dark small">Parquet Source:</strong>
                     <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn {customLocation === 'url' ? 'btn-primary' : 'btn-secondary'}" onclick={() => customLocation = 'url'}>
-                            <i class="fa-solid fa-link me-1"></i> Remote URL
+                        <button type="button" class="btn {parquetLocation === 'file' ? 'btn-primary' : 'btn-secondary'}" onclick={() => parquetLocation = 'file'}>
+                            <i class="fa-solid fa-upload me-1"></i> Upload File (.parquet)
                         </button>
-                        <button type="button" class="btn {customLocation === 'file' ? 'btn-primary' : 'btn-secondary'}" onclick={() => customLocation = 'file'}>
-                            <i class="fa-solid fa-upload me-1"></i> Local File
+                        <button type="button" class="btn {parquetLocation === 'url' ? 'btn-primary' : 'btn-secondary'}" onclick={() => parquetLocation = 'url'}>
+                            <i class="fa-solid fa-link me-1"></i> Remote Parquet URL
                         </button>
                     </div>
                 </div>
 
-                {#if customErrorMsg}
+                {#if parquetErrorMsg}
                     <div class="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mb-0">
                         <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
-                        <span>{customErrorMsg}</span>
+                        <span>{parquetErrorMsg}</span>
                     </div>
                 {/if}
 
                 <div>
-                    <label for="customDsName" class="form-label small fw-bold">Dataset Name <span class="text-danger">*</span></label>
-                    <input id="customDsName" type="text" class="form-control form-control-sm" bind:value={customName} placeholder="e.g. My Benchmark 2026">
+                    <label for="parquetDsName" class="form-label small fw-bold">Dataset Name <span class="text-danger">*</span></label>
+                    <input id="parquetDsName" type="text" class="form-control form-control-sm" bind:value={parquetName} placeholder="e.g. BSBM 1M Parquet">
                 </div>
 
                 <div>
-                    <label for={customLocation === 'url' ? 'customDsUrl' : 'customDsFile'} class="form-label small fw-bold">
-                        {customLocation === 'url' ? 'Dataset URL' : 'Upload File'} <span class="text-danger">*</span>
+                    <label for={parquetLocation === 'url' ? 'parquetDsUrl' : 'parquetDsFile'} class="form-label small fw-bold">
+                        {parquetLocation === 'url' ? 'Dataset URL' : 'Select .parquet File'} <span class="text-danger">*</span>
                     </label>
-                    {#if customLocation === 'url'}
-                        <input id="customDsUrl" type="url" class="form-control form-control-sm" bind:value={customUrl} onblur={handleUrlBlur} placeholder="https://example.com/dataset.parquet">
-                        <div class="text-muted mt-1" style="font-size: 0.72rem;">Supports Parquet (.parquet) files from CORS-enabled URLs.</div>
+                    {#if parquetLocation === 'url'}
+                        <input id="parquetDsUrl" type="url" class="form-control form-control-sm" bind:value={parquetUrl} onblur={handleParquetUrlBlur} placeholder="https://example.com/dataset.parquet">
+                        <div class="text-muted mt-1" style="font-size: 0.72rem;">Supports Parquet (<code>.parquet</code>) files from CORS-enabled URLs.</div>
                     {:else}
-                        <input id="customDsFile" type="file" class="form-control form-control-sm" bind:files={customFiles} onchange={handleFileChange} accept=".parquet">
-                        <div class="text-muted mt-1" style="font-size: 0.72rem;">Select a valid .parquet file with RDF terms.</div>
+                        <input id="parquetDsFile" type="file" class="form-control form-control-sm" bind:files={parquetFiles} onchange={handleParquetFileChange} accept=".parquet">
+                        <div class="text-muted mt-1" style="font-size: 0.72rem;">Select a valid <code>.parquet</code> RDF dataset file.</div>
                     {/if}
                 </div>
             </div>
 
             <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end align-items-center gap-2">
-                <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal" disabled={isSaving}>Cancel</button>
+                <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal" disabled={isParquetSaving}>Cancel</button>
                 <button 
                     type="button" 
                     class="btn btn-sm btn-primary px-3 fw-semibold d-flex align-items-center gap-2" 
-                    onclick={handleSaveCustomDataset} 
-                    disabled={isSaving || !customName.trim() || (customLocation === 'url' ? !customUrl.trim() : !customFiles || customFiles.length === 0)}>
-                    {#if isSaving}
+                    onclick={handleSaveParquetDataset} 
+                    disabled={isParquetSaving || !parquetName.trim() || (parquetLocation === 'url' ? !parquetUrl.trim() : !parquetFiles || parquetFiles.length === 0)}>
+                    {#if isParquetSaving}
                         <i class="fa-solid fa-spinner fa-spin"></i> Saving...
                     {:else}
                         <i class="fa-solid fa-check"></i> Save & Select
+                    {/if}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. Dedicated Convert Traditional RDF Dataset Modal -->
+<div class="modal fade" id="convertRdfModal" tabindex="-1" aria-labelledby="convertRdfModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-brown fs-5"></i>
+                    <h5 class="modal-title pane-heading mb-0" id="convertRdfModalLabel">Convert RDF Dataset to Parquet</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body p-4 d-flex flex-column gap-3">
+                {#if rdfErrorMsg}
+                    <div class="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mb-0">
+                        <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+                        <span>{rdfErrorMsg}</span>
+                    </div>
+                {/if}
+
+                <div>
+                    <label for="rdfDsFile" class="form-label small fw-bold">Upload RDF File <span class="text-danger">*</span></label>
+                    <input id="rdfDsFile" type="file" class="form-control form-control-sm" bind:files={rdfFiles} onchange={handleRdfFileChange} accept=".ttl,.nt,.nq,.trig,.rdf,.owl,.xml,.n3">
+                    <div class="text-muted mt-1" style="font-size: 0.72rem;">
+                        Supported RDF formats: Turtle (<code>.ttl</code>), N-Triples (<code>.nt</code>), N-Quads (<code>.nq</code>), TriG (<code>.trig</code>), RDF/XML (<code>.rdf</code>, <code>.xml</code>), Notation3 (<code>.n3</code>).
+                    </div>
+                </div>
+
+                <div>
+                    <label for="rdfDsName" class="form-label small fw-bold">Target Dataset Name <span class="text-danger">*</span></label>
+                    <input id="rdfDsName" type="text" class="form-control form-control-sm" bind:value={rdfName} placeholder="e.g. LUBM 100K">
+                </div>
+
+                <div class="border rounded-3 p-3 bg-light d-flex flex-column gap-3">
+                    <div class="d-flex align-items-center justify-content-between border-bottom pb-2">
+                        <strong class="text-dark small d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-sliders text-brown"></i>
+                            Parquet Target Options
+                        </strong>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                            Output: Parquet
+                        </span>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label for="rdfEncodingSelect" class="form-label small fw-bold mb-1">Quad Storage Encoding</label>
+                            <select id="rdfEncodingSelect" class="form-select form-select-sm" bind:value={rdfEncoding}>
+                                <option value="String">String (Standard string representation)</option>
+                                <option value="PlainTerm">PlainTerm (Structured datatype &amp; value fields)</option>
+                            </select>
+                            <div class="text-muted mt-1" style="font-size: 0.72rem;">Specifies how RDF terms are stored within Parquet columns.</div>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="rdfSortOrderSelect" class="form-label small fw-bold mb-1">Quad Sort Order</label>
+                            <select id="rdfSortOrderSelect" class="form-select form-select-sm" bind:value={rdfSortOrder}>
+                                <option value="GPOS">GPOS (Graph, Predicate, Object, Subject - Default)</option>
+                                <option value="GSPO">GSPO (Graph, Subject, Predicate, Object)</option>
+                                <option value="SPOG">SPOG (Subject, Predicate, Object, Graph)</option>
+                                <option value="POSG">POSG (Predicate, Object, Subject, Graph)</option>
+                                <option value="OSPG">OSPG (Object, Subject, Predicate, Graph)</option>
+                                <option value="None">None (Unsorted)</option>
+                                <option value="custom">Custom Expression...</option>
+                            </select>
+                            <div class="text-muted mt-1" style="font-size: 0.72rem;">Sort order for dictionary compression and filter pushdown.</div>
+                        </div>
+
+                        {#if rdfSortOrder === 'custom'}
+                            <div class="col-12">
+                                <label for="rdfSortOrderCustom" class="form-label small fw-bold mb-1">Custom Sort Order Expression</label>
+                                <input id="rdfSortOrderCustom" type="text" class="form-control form-control-sm" bind:value={rdfSortOrderCustom} placeholder="e.g. Native(GPOS) or SPO">
+                                <div class="text-muted mt-1" style="font-size: 0.72rem;">Specify sequence of quad components (G, S, P, O) or a Native() expression.</div>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="small text-muted d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-info"></i>
+                        <span>The RDF file is parsed and converted entirely locally in your browser using WebAssembly.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal" disabled={isRdfConverting}>Cancel</button>
+                <button 
+                    type="button" 
+                    class="btn btn-sm btn-primary px-3 fw-semibold d-flex align-items-center gap-2" 
+                    onclick={handleConvertRdfDataset} 
+                    disabled={isRdfConverting || !rdfName.trim() || !rdfFiles || rdfFiles.length === 0}>
+                    {#if isRdfConverting}
+                        <i class="fa-solid fa-spinner fa-spin"></i> Converting...
+                    {:else}
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Convert & Select
                     {/if}
                 </button>
             </div>
