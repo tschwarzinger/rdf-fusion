@@ -1,6 +1,7 @@
 use datafusion::arrow::error::ArrowError;
 use datafusion::common::DataFusionError;
 use rdf_fusion_common::StorageError;
+use rdf_fusion_encoding::object_id::ObjectIdDictionaryError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -19,9 +20,38 @@ pub enum LocalObjectIdError {
     DataFusion(#[from] DataFusionError),
 }
 
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-impl From<heed::Error> for LocalObjectIdError {
-    fn from(error: heed::Error) -> Self {
+impl From<redb::Error> for LocalObjectIdError {
+    fn from(error: redb::Error) -> Self {
+        LocalObjectIdError::Storage(error.to_string())
+    }
+}
+
+impl From<redb::DatabaseError> for LocalObjectIdError {
+    fn from(error: redb::DatabaseError) -> Self {
+        LocalObjectIdError::Storage(error.to_string())
+    }
+}
+
+impl From<redb::TransactionError> for LocalObjectIdError {
+    fn from(error: redb::TransactionError) -> Self {
+        LocalObjectIdError::Storage(error.to_string())
+    }
+}
+
+impl From<redb::TableError> for LocalObjectIdError {
+    fn from(error: redb::TableError) -> Self {
+        LocalObjectIdError::Storage(error.to_string())
+    }
+}
+
+impl From<redb::CommitError> for LocalObjectIdError {
+    fn from(error: redb::CommitError) -> Self {
+        LocalObjectIdError::Storage(error.to_string())
+    }
+}
+
+impl From<redb::StorageError> for LocalObjectIdError {
+    fn from(error: redb::StorageError) -> Self {
         LocalObjectIdError::Storage(error.to_string())
     }
 }
@@ -35,5 +65,11 @@ impl From<LocalObjectIdError> for DataFusionError {
 impl From<LocalObjectIdError> for StorageError {
     fn from(error: LocalObjectIdError) -> Self {
         StorageError::Other(Box::new(error))
+    }
+}
+
+impl From<LocalObjectIdError> for ObjectIdDictionaryError {
+    fn from(value: LocalObjectIdError) -> Self {
+        ObjectIdDictionaryError::Storage(Box::new(value))
     }
 }

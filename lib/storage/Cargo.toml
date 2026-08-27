@@ -13,6 +13,7 @@ RDF Fusion Storage Layers
 async-trait.workspace = true
 bytes.workspace = true
 futures.workspace = true
+md-5.workspace = true
 object_store.workspace = true
 oxrdfio.workspace = true
 rdf-fusion-extensions.workspace = true
@@ -27,11 +28,11 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
-md-5.workspace = true
+redb.workspace = true
+redb-derive.workspace = true
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 deltalake.workspace = true
-heed.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

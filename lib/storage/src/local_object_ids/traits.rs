@@ -1,4 +1,4 @@
-use super::OwnedTermTuple;
+use crate::local_object_ids::LocalDictionaryTerm;
 use crate::local_object_ids::error::LocalObjectIdError;
 use async_trait::async_trait;
 use datafusion::arrow::array::{ArrayRef, Int64Array, RecordBatch};
@@ -32,7 +32,10 @@ pub trait LocalObjectIdDictionarySnapshot: Send + Sync {
 
     async fn is_empty(&self) -> Result<bool, LocalObjectIdError>;
 
-    async fn get_id_by_term(&self, term: &PlainTermScalar) -> Option<i64>;
+    async fn get_id_by_term(
+        &self,
+        term: &PlainTermScalar,
+    ) -> Result<Option<i64>, LocalObjectIdError>;
 
     async fn get_synced_version(&self) -> Result<Option<u64>, LocalObjectIdError>;
 }
@@ -56,5 +59,5 @@ pub trait LocalObjectIdTransaction: Send + Sync {
 
     async fn abort(self: Box<Self>) -> Result<(), LocalObjectIdError>;
 
-    fn pending_ids(&self) -> &HashMap<i64, Arc<OwnedTermTuple>>;
+    fn pending_ids(&self) -> &HashMap<i64, Arc<LocalDictionaryTerm>>;
 }

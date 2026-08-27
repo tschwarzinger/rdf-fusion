@@ -72,7 +72,7 @@ pub struct DeltaStorageOptions {
     /// Maximum number of pending IDs to buffer before committing.
     pub max_buffered_ids: Option<usize>,
     /// The size of the cache in the local object id dictionary.
-    pub object_id_cache_size: usize,
+    pub object_id_cache_size: Option<usize>,
     /// Whether the system can assume that no other node is writing to the storage.
     pub assume_single_node: bool,
     /// The size of the blocks used for caching object store reads.
@@ -88,7 +88,7 @@ impl Default for DeltaStorageOptions {
             object_id_claim_size: 100_000,
             max_buffered_rows: None,
             max_buffered_ids: None,
-            object_id_cache_size: 1_000_000, // 1m items
+            object_id_cache_size: Some(100_000),
             assume_single_node: false,
             data_cache_block_size: 2 * 1024 * 1024, // 2 MiB
             data_cache_num_blocks: 1024,
@@ -161,7 +161,7 @@ impl ExtensionOptions for RdfFusionOptions {
                 let size = datafusion::prelude::SessionContext::parse_capacity_limit(
                     key, value,
                 )?;
-                self.storage.delta.object_id_cache_size = size;
+                self.storage.delta.object_id_cache_size = Some(size);
             }
             "storage.delta.assume_single_node" => {
                 let value: bool = value.parse().map_err(|e| {
@@ -260,7 +260,11 @@ impl ExtensionOptions for RdfFusionOptions {
             },
             ConfigEntry {
                 key: format!("{}.storage.delta.object_id_cache_size", Self::PREFIX),
-                value: Some(self.storage.delta.object_id_cache_size.to_string()),
+                value: self
+                    .storage
+                    .delta
+                    .object_id_cache_size
+                    .map(|i| i.to_string()),
                 description: "The size of the cache in the local object id dictionary.",
             },
             ConfigEntry {

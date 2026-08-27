@@ -1,31 +1,23 @@
 mod claim;
 mod error;
-mod in_memory;
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-mod lmdb;
+mod redb;
 mod traits;
 
 pub use claim::{ObjectIdClaim, ObjectIdClaimer, StaticObjectIdClaimer};
 pub use error::LocalObjectIdError;
-pub use in_memory::InMemoryObjectIdDictionary;
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-pub use lmdb::LmdbObjectIdDictionary;
-pub use quick_cache::sync::Cache;
+pub use redb::*;
 pub use traits::{
     LocalObjectIdDictionary, LocalObjectIdDictionarySnapshot, LocalObjectIdTransaction,
 };
 
+/// Represents a term stored in the redb database.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct OwnedTermTuple {
+pub struct LocalDictionaryTerm {
     pub term_type: i8,
     pub value: String,
     pub data_type: Option<String>,
     pub language: Option<String>,
 }
-
-pub(crate) const SYNCED_VERSION_KEY: &str = "synced_version";
-pub(crate) const NEXT_FREE_ID_KEY: &str = "next_free_id";
-pub(crate) const LAST_FREE_ID_KEY: &str = "last_free_id";
 
 pub(crate) fn validate_initial_claim(
     next_free_id: Option<i64>,

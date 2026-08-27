@@ -56,7 +56,8 @@ tokio-util = { version = "0.7", features = ["io"] }
 url = "2.5"
 uuid = "1.24"
 quick_cache = "0.7"
-heed = "0.22"
+redb = "4.2.0"
+redb-derive = "0.1.0"
 oneshot = "0.2"
 
 # DataFusion and Related Dependencies (we try to keep them in-sync with DataFusion)

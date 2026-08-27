@@ -8,8 +8,7 @@ use datafusion::arrow::array::Int64Array;
 use rdf_fusion_common::{Literal, NamedNode, Term};
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use rdf_fusion_storage::local_object_ids::{
-    InMemoryObjectIdDictionary, LmdbObjectIdDictionary, LocalObjectIdDictionary,
-    StaticObjectIdClaimer,
+    LocalObjectIdDictionary, RedbObjectIdDictionaryBuilder, StaticObjectIdClaimer,
 };
 
 fn generate_term_array(num_terms: usize, term_type: Option<&str>) -> PlainTermArray {
@@ -59,47 +58,48 @@ impl Drop for BenchEnv {
 
 fn get_envs() -> Vec<BenchEnv> {
     let path1 = std::env::temp_dir().join(format!(
-        "rdf-fusion-bench-rocksdb-{}",
+        "rdf-fusion-bench-redb-{}.redb",
         rand::random::<u64>()
     ));
     let path2 = std::env::temp_dir().join(format!(
-        "rdf-fusion-bench-rocksdb-{}",
+        "rdf-fusion-bench-redb-{}.redb",
         rand::random::<u64>()
     ));
-    let _ = std::fs::remove_dir_all(&path1);
-    let _ = std::fs::remove_dir_all(&path2);
+    let _ = std::fs::remove_file(&path1);
+    let _ = std::fs::remove_file(&path2);
 
-    let lmdb = LmdbObjectIdDictionary::try_new(
-        path1.clone(),
-        1024 * 1024 * 10,
-        Arc::new(StaticObjectIdClaimer),
-    )
-    .unwrap();
+    let redb = RedbObjectIdDictionaryBuilder::new_on_disk(path1.clone())
+        .with_cache_size(Some(1024 * 1024 * 10))
+        .with_claimer(Some(Arc::new(StaticObjectIdClaimer)))
+        .finish()
+        .unwrap();
 
-    let lmdb_no_cache = LmdbObjectIdDictionary::try_new(
-        path2.clone(),
-        0,
-        Arc::new(StaticObjectIdClaimer),
-    )
-    .unwrap();
+    let redb_no_cache = RedbObjectIdDictionaryBuilder::new_on_disk(path2.clone())
+        .with_claimer(Some(Arc::new(StaticObjectIdClaimer)))
+        .finish()
+        .unwrap();
 
-    let in_memory = InMemoryObjectIdDictionary::new(Arc::new(StaticObjectIdClaimer));
+    let redb_in_memory = RedbObjectIdDictionaryBuilder::new_in_memory()
+        .with_cache_size(Some(1024 * 1024 * 10))
+        .with_claimer(Some(Arc::new(StaticObjectIdClaimer)))
+        .finish()
+        .unwrap();
 
     vec![
         BenchEnv {
-            name: "in_memory",
-            dict: Arc::new(in_memory),
-            rocksdb_path: None,
-        },
-        BenchEnv {
-            name: "lmdb",
-            dict: Arc::new(lmdb),
+            name: "redb",
+            dict: Arc::new(redb),
             rocksdb_path: Some(path1),
         },
         BenchEnv {
-            name: "lmdb_no_cache",
-            dict: Arc::new(lmdb_no_cache),
+            name: "redb_no_cache",
+            dict: Arc::new(redb_no_cache),
             rocksdb_path: Some(path2),
+        },
+        BenchEnv {
+            name: "redb_in_memory",
+            dict: Arc::new(redb_in_memory),
+            rocksdb_path: None,
         },
     ]
 }
@@ -186,7 +186,11 @@ fn bench_encode_array_non_existing(c: &mut Criterion) {
     let mut group = c.benchmark_group("LocalObjectIdDictionary_Encode_in_memory");
     group.bench_function("encode_array_non_existing_10k_terms", |b| {
         b.to_async(&rt).iter(async || {
-            let dict = InMemoryObjectIdDictionary::new(Arc::new(StaticObjectIdClaimer));
+            let dict = RedbObjectIdDictionaryBuilder::new_in_memory()
+                .with_cache_size(Some(1024 * 1024 * 10))
+                .with_claimer(Some(Arc::new(StaticObjectIdClaimer)))
+                .finish()
+                .unwrap();
             let mut txn = dict.transaction().await.unwrap();
             let decoded = txn
                 .encode_array(std::hint::black_box(&plain_term_array))
@@ -198,19 +202,18 @@ fn bench_encode_array_non_existing(c: &mut Criterion) {
     });
     group.finish();
 
-    let mut group = c.benchmark_group("LocalObjectIdDictionary_Encode_rocksdb");
+    let mut group = c.benchmark_group("LocalObjectIdDictionary_Encode_redb");
     group.bench_function("encode_array_non_existing_10k_terms", |b| {
         b.to_async(&rt).iter(async || {
             let path = std::env::temp_dir().join(format!(
-                "rdf-fusion-bench-rocksdb-non-ex-{}",
+                "rdf-fusion-bench-redb-non-ex-{}.redb",
                 rand::random::<u64>()
             ));
-            let dict = LmdbObjectIdDictionary::try_new(
-                path.clone(),
-                1024 * 1024 * 10,
-                Arc::new(StaticObjectIdClaimer),
-            )
-            .unwrap();
+            let dict = RedbObjectIdDictionaryBuilder::new_on_disk(path.clone())
+                .with_cache_size(Some(1024 * 1024 * 10))
+                .with_claimer(Some(Arc::new(StaticObjectIdClaimer)))
+                .finish()
+                .unwrap();
 
             let mut txn = dict.transaction().await.unwrap();
             let decoded = txn
@@ -220,7 +223,7 @@ fn bench_encode_array_non_existing(c: &mut Criterion) {
             txn.commit(0).await.unwrap();
             std::hint::black_box(decoded);
 
-            let _ = std::fs::remove_dir_all(&path);
+            let _ = std::fs::remove_file(&path);
         })
     });
     group.finish();

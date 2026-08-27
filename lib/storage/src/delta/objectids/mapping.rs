@@ -2,8 +2,7 @@ use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::objectids::encoding::writer::DeltaObjectIdDictionaryWriter;
 use crate::delta::objectids::{DeltaObjectIdClaimer, ObjectIdClaimerPutMode};
 use crate::local_object_ids::{
-    InMemoryObjectIdDictionary, LmdbObjectIdDictionary, LocalObjectIdDictionary,
-    LocalObjectIdTransaction,
+    LocalObjectIdDictionary, LocalObjectIdTransaction, RedbObjectIdDictionaryBuilder,
 };
 use async_trait::async_trait;
 use datafusion::arrow::array::{Array, ArrayRef, Int64Array, Int64Builder, RecordBatch};
@@ -39,7 +38,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-fn get_lmdb_path(
+fn get_redb_path(
     options: &RdfFusionOptions,
     location: &url::Url,
 ) -> Option<std::path::PathBuf> {
@@ -61,13 +60,14 @@ fn get_lmdb_path(
         let dir_name = hash.to_string();
 
         info!(
-            "Using lmdb environment in directory '{dir_name}' for location '{location}'."
+            "Using redb database file '{dir_name}/dictionary.redb' for location '{location}'."
         );
 
         Some(
             std::path::PathBuf::from(work_dir)
                 .join("dictionaries")
-                .join(dir_name),
+                .join(dir_name)
+                .join("dictionary.redb"),
         )
     } else {
         None
@@ -78,7 +78,7 @@ fn get_lmdb_path(
 #[derive(Debug)]
 pub struct DeltaObjectIdDictionary {
     /// The in-memory mapping.
-    local_mapping: Arc<dyn LocalObjectIdDictionary>,
+    local_dictionary: Arc<dyn LocalObjectIdDictionary>,
     /// The durable Delta table storing the mapping
     table: Arc<RwLock<DeltaTable>>,
     /// The schema of the table.
@@ -112,7 +112,7 @@ impl DeltaObjectIdDictionary {
             .await?;
         let table_schema = Arc::new(Schema::new(arrow_columns));
 
-        let db_path = get_lmdb_path(options, table.log_store().config().location());
+        let db_path = get_redb_path(options, table.log_store().config().location());
         let put_mode = match options.storage.delta.assume_single_node {
             true => ObjectIdClaimerPutMode::AlwaysOverwrite,
             false => ObjectIdClaimerPutMode::EnsureVersion,
@@ -122,31 +122,28 @@ impl DeltaObjectIdDictionary {
             options.storage.delta.object_id_claim_size,
             put_mode,
         ));
-        let local_mapping: Arc<dyn LocalObjectIdDictionary> = if let Some(path) = db_path
-        {
-            info!(
-                "Creating lmdb local dictionary at directory '{}'.",
-                path.display()
-            );
-            Arc::new(LmdbObjectIdDictionary::try_new(
-                path,
-                options.storage.delta.object_id_cache_size,
-                claimer,
-            )?)
-        } else {
-            info!("Creating in-memory local dictionary at directory.");
-            Arc::new(InMemoryObjectIdDictionary::new(claimer))
+
+        let builder = match &db_path {
+            None => RedbObjectIdDictionaryBuilder::new_in_memory(),
+            Some(path) => RedbObjectIdDictionaryBuilder::new_on_disk(path),
         };
+
+        let local_dictionary = builder
+            .with_cache_size(options.storage.delta.object_id_cache_size)
+            .with_claimer(Some(claimer))
+            .finish()?;
+        let local_dictionary: Arc<dyn LocalObjectIdDictionary> =
+            Arc::new(local_dictionary);
 
         let table = Arc::new(RwLock::new(table));
         let delta_version = table.read().await.version().unwrap_or(0) as u64;
         let writer = Arc::new(DeltaObjectIdDictionaryWriter::new(
-            Arc::clone(&local_mapping),
+            Arc::clone(&local_dictionary),
             delta_version + 1,
         ));
 
         Ok(Self {
-            local_mapping,
+            local_dictionary,
             table,
             table_schema,
             writer,
@@ -188,17 +185,18 @@ impl DeltaObjectIdDictionary {
             put_mode,
         ));
 
-        let db_path = get_lmdb_path(&options, table.log_store().config().location());
-        let local_dictionary: Arc<dyn LocalObjectIdDictionary> =
-            if let Some(path) = db_path {
-                Arc::new(LmdbObjectIdDictionary::try_new(
-                    path,
-                    options.storage.delta.object_id_cache_size,
-                    claimer,
-                )?)
-            } else {
-                Arc::new(InMemoryObjectIdDictionary::new(claimer))
-            };
+        let db_path = get_redb_path(&options, table.log_store().config().location());
+        let builder = match db_path {
+            None => RedbObjectIdDictionaryBuilder::new_in_memory(),
+            Some(path) => RedbObjectIdDictionaryBuilder::new_on_disk(path),
+        };
+
+        let local_dictionary: Arc<dyn LocalObjectIdDictionary> = Arc::new(
+            builder
+                .with_cache_size(options.storage.delta.object_id_cache_size)
+                .with_claimer(Some(claimer))
+                .finish()?,
+        );
 
         let table = Arc::new(RwLock::new(table));
         let delta_version = table.read().await.version().unwrap_or(0) as u64;
@@ -208,7 +206,7 @@ impl DeltaObjectIdDictionary {
         ));
 
         let mapping = Self {
-            local_mapping: local_dictionary,
+            local_dictionary,
             table,
             table_schema,
             writer,
@@ -223,7 +221,7 @@ impl DeltaObjectIdDictionary {
 
     /// Returns a reference to the underlying dictionary.
     pub fn dictionary(&self) -> Arc<dyn LocalObjectIdDictionary> {
-        Arc::clone(&self.local_mapping)
+        Arc::clone(&self.local_dictionary)
     }
 
     /// Returns the shared writer for parallel encoding.
@@ -251,7 +249,7 @@ impl DeltaObjectIdDictionary {
         table.load().await?;
 
         let local_version = self
-            .local_mapping
+            .local_dictionary
             .snapshot()
             .await?
             .get_synced_version()
@@ -318,7 +316,7 @@ impl DeltaObjectIdDictionary {
                 .map(|add| format!("{}/{}", base_url, add.path))
                 .collect();
 
-            let mut txn = self.local_mapping.transaction().await?;
+            let mut txn = self.local_dictionary.transaction().await?;
 
             if !file_paths.is_empty() {
                 info!(
@@ -440,12 +438,8 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         &self,
         term: &PlainTermScalar,
     ) -> Result<Option<ScalarValue>, ObjectIdDictionaryError> {
-        let snapshot = self
-            .local_mapping
-            .snapshot()
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
-        if let Some(id) = snapshot.get_id_by_term(term).await {
+        let snapshot = self.local_dictionary.snapshot().await?;
+        if let Some(id) = snapshot.get_id_by_term(term).await? {
             Ok(Some(ScalarValue::Int64(Some(id))))
         } else {
             Ok(None)
@@ -464,13 +458,11 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         })?;
 
         let term_col = self
-            .local_mapping
+            .local_dictionary
             .snapshot()
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
+            .await?
             .resolve_plain_terms(id_array)
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
+            .await?;
 
         let result =
             PlainTermArray::try_from(term_col).expect("Should be valid PlainTermArray");
@@ -490,13 +482,11 @@ impl ObjectIdDictionary for DeltaObjectIdDictionary {
         })?;
 
         let typed_value_col = self
-            .local_mapping
+            .local_dictionary
             .snapshot()
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?
+            .await?
             .resolve_plain_terms(id_array)
-            .await
-            .map_err(|e| ObjectIdDictionaryError::Storage(Box::new(e)))?;
+            .await?;
 
         let plain_terms = PLAIN_TERM_ENCODING
             .try_new_array(typed_value_col)

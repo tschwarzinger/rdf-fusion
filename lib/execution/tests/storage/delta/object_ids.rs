@@ -1,13 +1,16 @@
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
 use rdf_fusion_storage::local_object_ids::{
-    InMemoryObjectIdDictionary, LocalObjectIdDictionary, StaticObjectIdClaimer,
+    LocalObjectIdDictionary, RedbObjectIdDictionaryBuilder, StaticObjectIdClaimer,
 };
 use std::sync::Arc;
 
 #[tokio::test]
 async fn test_transaction_without_claim_abort_persists_claim() {
-    let dictionary = InMemoryObjectIdDictionary::new(Arc::new(StaticObjectIdClaimer));
+    let dictionary = RedbObjectIdDictionaryBuilder::new_in_memory()
+        .with_claimer(Some(Arc::new(StaticObjectIdClaimer)))
+        .finish()
+        .unwrap();
     let mut txn = dictionary.transaction().await.unwrap();
 
     let mut builder = PlainTermArrayElementBuilder::new();
@@ -33,7 +36,10 @@ async fn test_transaction_without_claim_abort_persists_claim() {
 
 #[tokio::test]
 async fn test_transaction_with_claim_does_not_decrease_claim() {
-    let dictionary = InMemoryObjectIdDictionary::new(Arc::new(StaticObjectIdClaimer));
+    let dictionary = RedbObjectIdDictionaryBuilder::new_in_memory()
+        .with_claimer(Some(Arc::new(StaticObjectIdClaimer)))
+        .finish()
+        .unwrap();
 
     let mut txn = dictionary.transaction().await.unwrap();
     let mut builder = PlainTermArrayElementBuilder::new();
