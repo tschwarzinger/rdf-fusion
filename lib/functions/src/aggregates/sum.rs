@@ -17,7 +17,6 @@ use rdf_fusion_encoding::typed_family::{
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::sync::Arc;
 
 /// Creates a new [AggregateUDF] for the SPARQL `SUM` aggregate function.
@@ -49,10 +48,6 @@ impl SumSparqlUDAF {
 }
 
 impl AggregateUDFImpl for SumSparqlUDAF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }
@@ -332,15 +327,25 @@ impl GroupsAccumulator for SparqlSumGroupsAccumulator {
         &mut self,
         states: &[ArrayRef],
         group_indices: &[usize],
-        opt_filter: Option<&BooleanArray>,
         total_num_groups: usize,
     ) -> Result<(), DataFusionError> {
-        self.update_batch_impl::<false>(
-            states,
-            group_indices,
-            opt_filter,
-            total_num_groups,
-        )
+        self.update_batch_impl::<false>(states, group_indices, None, total_num_groups)
+    }
+
+    fn convert_to_state(
+        &self,
+        values: &[ArrayRef],
+        opt_filter: Option<&BooleanArray>,
+    ) -> Result<Vec<ArrayRef>, DataFusionError> {
+        let mut out = Vec::with_capacity(values.len());
+        for value in values {
+            let array = match opt_filter {
+                Some(filter) => datafusion::arrow::compute::filter(value, filter)?,
+                None => Arc::clone(value),
+            };
+            out.push(array);
+        }
+        Ok(out)
     }
 
     fn size(&self) -> usize {
@@ -492,8 +497,8 @@ mod tests {
 
         // Final Aggregation (Merge)
         let mut final_acc = SparqlSumGroupsAccumulator::new(Arc::clone(&encoding));
-        final_acc.merge_batch(&state1, &[0, 1], None, 2)?;
-        final_acc.merge_batch(&state2, &[0, 1], None, 2)?;
+        final_acc.merge_batch(&state1, &[0, 1], 2)?;
+        final_acc.merge_batch(&state2, &[0, 1], 2)?;
 
         let final_result = final_acc.evaluate(EmitTo::All)?;
 

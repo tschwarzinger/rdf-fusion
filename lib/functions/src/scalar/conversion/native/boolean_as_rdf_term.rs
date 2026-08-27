@@ -10,7 +10,6 @@ use rdf_fusion_encoding::typed_family::{
 };
 use rdf_fusion_encoding::{EncodingArray, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -42,10 +41,6 @@ impl NativeBooleanAsTerm {
 }
 
 impl ScalarUDFImpl for NativeBooleanAsTerm {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

@@ -76,7 +76,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target/criterion
-          key: benchmark-main-${{ steps.base-commit.outputs.base_sha }}
+          key: benchmark-main-${{ steps.base-commit.outputs.base_sha }}-${{ steps.parse.outputs.suites }}
 
       - name: Compute Main Baselines (On Cache Miss)
         if: steps.cache-main-benches.outputs.cache-hit != 'true'

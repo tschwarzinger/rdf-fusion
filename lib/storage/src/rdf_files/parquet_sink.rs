@@ -9,7 +9,6 @@ use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::buffered::BufWriter;
 use object_store::path::Path;
-use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -51,10 +50,6 @@ impl DisplayAs for RdfParquetDataSink {
 
 #[async_trait]
 impl DataSink for RdfParquetDataSink {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> &SchemaRef {
         &self.schema
     }

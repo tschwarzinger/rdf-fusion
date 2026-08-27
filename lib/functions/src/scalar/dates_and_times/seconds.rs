@@ -13,7 +13,6 @@ use rdf_fusion_encoding::{
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingName};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 /// Returns the seconds part of a date/time.
@@ -57,10 +56,6 @@ impl SecondsSparqlUDF {
 }
 
 impl ScalarUDFImpl for SecondsSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

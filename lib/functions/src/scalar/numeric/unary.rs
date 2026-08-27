@@ -12,7 +12,6 @@ use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 pub fn abs_udf(
@@ -123,10 +122,6 @@ impl NumericUnarySparqlUDF {
 }
 
 impl ScalarUDFImpl for NumericUnarySparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

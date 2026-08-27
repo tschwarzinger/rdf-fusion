@@ -317,8 +317,11 @@ impl TypedFamilyArgs {
             .collect::<Vec<_>>();
 
         // Group rows by family combination
-        let mut family_combinations: HashMap<Vec<i8>, Vec<u32>, ahash::RandomState> =
-            HashMap::with_hasher(ahash::RandomState::new());
+        let mut family_combinations: HashMap<
+            Vec<i8>,
+            Vec<u32>,
+            foldhash::fast::RandomState,
+        > = HashMap::with_hasher(foldhash::fast::RandomState::default());
 
         for i in 0..self.number_rows {
             let combination: Vec<i8> = type_ids.iter().map(|u| u[i]).collect();

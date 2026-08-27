@@ -10,8 +10,8 @@ RDF Fusion Term Encodings
 """
 
 [dependencies]
-ahash.workspace = true
 async-trait.workspace = true
+foldhash.workspace = true
 rdf-fusion-common.workspace = true
 datafusion.workspace = true
 thiserror.workspace = true

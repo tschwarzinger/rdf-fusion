@@ -6,7 +6,7 @@ HashJoinExec: mode=CollectLeft, join_type=LeftAnti, on=[(product@0, __inner__pro
   ProjectionExec: expr=[product@0 as product]
     SortExec: TopK(fetch=1000), expr=[AS_SORTABLE_BYTES(offerCount@1) DESC], preserve_partitioning=[false]
       ProjectionExec: expr=[product@0 as product, <uuid>@1 as offerCount]
-        AggregateExec: mode=Single, gby=[product@0 as product], aggr=[<uuid>]
+        AggregateExec: mode=Single, gby=[product@0 as product], aggr=[COUNT(offer) as <uuid>]
           HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(product@0, product@1)], projection=[product@0, offer@1]
             ProjectionExec: expr=[subject@0 as product]
               FilterExec: graph@0 IS NULL AND predicate@2 = {term_type:0,value:http://www.w3.org/1999/02/22-rdf-syntax-ns#type,data_type:,language_tag:} AND object@3 = {term_type:0,value:http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType1,data_type:,language_tag:}, projection=[subject@1]

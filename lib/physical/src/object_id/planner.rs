@@ -1,7 +1,8 @@
 use crate::object_id::exec::DecodeObjectIdsExec;
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::common::{DataFusionError, plan_err};
-use datafusion::execution::SessionState;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{LogicalPlan, ScalarUDF, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
@@ -29,7 +30,8 @@ impl ExtensionPlanner for DecodeObjectIdsPlanner {
         node: &dyn UserDefinedLogicalNode,
         _logical_inputs: &[&LogicalPlan],
         physical_inputs: &[Arc<dyn ExecutionPlan>],
-        _session_state: &SessionState,
+        _session: &dyn Session,
+        _planning_ctx: &PhysicalPlanningContext,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DataFusionError> {
         let Some(decode_node) = node.as_any().downcast_ref::<DecodeObjectIdsNode>()
         else {

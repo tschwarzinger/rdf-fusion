@@ -17,6 +17,7 @@ use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::physical_plan::FileGroup;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::Expr;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::utils::conjunction;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::PhysicalSortExpr;
@@ -24,10 +25,8 @@ use datafusion::physical_expr::create_physical_expr;
 use datafusion::physical_expr::expressions::Column as PhysColumn;
 use datafusion::physical_expr::{LexOrdering, LexRequirement};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
-use datafusion::physical_optimizer::enforce_distribution::EnforceDistribution;
-use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
+use datafusion::physical_optimizer::ensure_requirements::EnsureRequirements;
 use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
-use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::empty::EmptyExec;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::joins::{HashJoinExec, PartitionMode, SortMergeJoinExec};
@@ -35,6 +34,7 @@ use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
 use datafusion::physical_plan::union::UnionExec;
+use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::QuadStorageEncoding;
@@ -169,7 +169,9 @@ impl DeltaQuadsStorageScanPlanBuilder {
                     return self.build_without_quad_table(changeset).await?;
                 };
 
-                if base_scan.partition_statistics(None)?.num_rows == Precision::Exact(0) {
+                let base_scan_stats = StatisticsContext::new()
+                    .compute(base_scan.as_ref(), &StatisticsArgs::new())?;
+                if base_scan_stats.num_rows == Precision::Exact(0) {
                     return self.build_without_quad_table(changeset).await?;
                 }
 
@@ -215,8 +217,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
 
         let config = self.session_state.config_options();
         let rules = [
-            Arc::new(EnforceDistribution::new()) as Arc<dyn PhysicalOptimizerRule>,
-            Arc::new(EnforceSorting::new()) as Arc<dyn PhysicalOptimizerRule>,
+            Arc::new(EnsureRequirements::new()) as Arc<dyn PhysicalOptimizerRule>,
             Arc::new(SanityCheckPlan::new()) as Arc<dyn PhysicalOptimizerRule>,
         ];
         let mut rewritten_plan = initial_plan.scan;
@@ -530,6 +531,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
                 &filter_expr,
                 &df_schema,
                 self.session_state.execution_props(),
+                &PhysicalPlanningContext::default(),
             )?;
             current_plan = Arc::new(FilterExec::try_new(phys_filter, current_plan)?);
         }

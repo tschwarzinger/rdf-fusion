@@ -20,7 +20,6 @@ use rdf_fusion_encoding::{
 use rdf_fusion_extensions::functions::BuiltinName;
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
@@ -143,10 +142,6 @@ impl HashSparqlUdf {
 }
 
 impl ScalarUDFImpl for HashSparqlUdf {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

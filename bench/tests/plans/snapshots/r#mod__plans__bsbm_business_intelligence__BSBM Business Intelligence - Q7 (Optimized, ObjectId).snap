@@ -6,12 +6,11 @@ LeftAnti Join: product = __correlated_sq_1.__inner__product
   Projection: product
     Sort: AS_SORTABLE_BYTES(offerCount) DESC NULLS FIRST, fetch=1000
       DecodeObjectIds: columns=[product]
-        Projection: product, offerCount
-          Projection: product, <uuid>, <uuid> AS offerCount
-            Aggregate: groupBy=[[product AS product]], aggr=[[COUNT(offer) AS <uuid>]]
-              BasicGraphPattern: columns_to_decode=[offer], 
-                QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType1>]
-                QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+        Projection: product, <uuid> AS offerCount
+          Aggregate: groupBy=[[product AS product]], aggr=[[COUNT(offer) AS <uuid>]]
+            BasicGraphPattern: columns_to_decode=[offer], 
+              QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType1>]
+              QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
   SubqueryAlias: __correlated_sq_1
     Projection: product AS __inner__product
       BasicGraphPattern: columns_to_decode=[country, product], filters=[country = Struct({term_type:0,value:http://downlode.org/rdf/iso-3166/countries#US,data_type:,language_tag:})]

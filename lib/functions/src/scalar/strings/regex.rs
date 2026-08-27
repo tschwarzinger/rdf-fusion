@@ -18,7 +18,6 @@ use rdf_fusion_encoding::{
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use regex::{Regex, RegexBuilder};
-use std::any::Any;
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
 
@@ -64,10 +63,6 @@ impl RegexSparqlUDF {
 }
 
 impl ScalarUDFImpl for RegexSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

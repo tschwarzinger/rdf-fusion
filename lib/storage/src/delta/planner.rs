@@ -3,9 +3,11 @@ use crate::delta::objectids::EncodeAsObjectIdDeltaExec;
 use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
 use crate::delta::snapshot::DeltaQuadsStorageSnapshot;
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::common::plan_err;
 use datafusion::error::DataFusionError;
 use datafusion::execution::SessionState;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
@@ -105,8 +107,13 @@ impl ExtensionPlanner for DeltaQuadsStoragePlanner {
         node: &dyn UserDefinedLogicalNode,
         _logical_inputs: &[&LogicalPlan],
         physical_inputs: &[Arc<dyn ExecutionPlan>],
-        session_state: &SessionState,
+        session: &dyn Session,
+        _planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
+        let session_state = session
+            .as_any()
+            .downcast_ref::<SessionState>()
+            .expect("session must be a SessionState");
         if let Some(planned) =
             self.try_plan_quad_pattern_scan(session_state, node).await?
         {

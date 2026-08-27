@@ -80,7 +80,7 @@ impl LazyInsertionOnlyChangeset {
         let file_groups: Vec<FileGroup> =
             file_groups.into_iter().map(FileGroup::new).collect();
 
-        let table_schema = TableSchema::new(Arc::clone(&self.table_schema), vec![]);
+        let table_schema = TableSchema::builder(Arc::clone(&self.table_schema)).build();
 
         let file_factory =
             DefaultParquetFileReaderFactory::new(Arc::clone(&self.object_store));

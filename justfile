@@ -35,8 +35,10 @@ test:
     cargo test --workspace --exclude rdf-fusion-examples --exclude rdf-fusion-wasm
 
 # Run the tests related to RDF Fusion's Wasm bindings and the playground
+#
+# The tests run in release mode as we have had out-of-memory issues before.
 test-web:
-    wasm-pack test --firefox --headless ./lib/wasm
+    RUST_TEST_THREADS=1 wasm-pack test --firefox --headless --release ./lib/wasm
 
 # Runs all examples to see whether they fail
 test-examples:

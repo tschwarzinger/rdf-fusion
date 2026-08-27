@@ -13,33 +13,28 @@ Projection: country, product, ENC_PT(nrOfReviews) AS nrOfReviews, ENC_PT(avgPric
                 Inner Join:  Filter: IS_COMPATIBLE(lhs.country, rhs.country)
                   SubqueryAlias: lhs
                     DecodeObjectIds: columns=[country]
-                      Projection: country, maxReviews
-                        Projection: country, <uuid>, <uuid> AS maxReviews
-                          Aggregate: groupBy=[[country AS country]], aggr=[[MAX(nrOfReviews) AS <uuid>]]
-                            Projection: country, product, nrOfReviews
-                              Projection: country, product, <uuid>, <uuid> AS nrOfReviews
-                                Aggregate: groupBy=[[country AS country, product AS product]], aggr=[[COUNT(review) AS <uuid>]]
-                                  BasicGraphPattern: columns_to_decode=[review], 
-                                    QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
-                                    QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
-                                    QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
-                                    QuadPattern: triple_pattern=[?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]
+                      Projection: country, <uuid> AS maxReviews
+                        Aggregate: groupBy=[[country AS country]], aggr=[[MAX(nrOfReviews) AS <uuid>]]
+                          Projection: country, <uuid> AS nrOfReviews
+                            Aggregate: groupBy=[[country AS country, product AS product]], aggr=[[COUNT(review) AS <uuid>]]
+                              BasicGraphPattern: projection=[product, review, country], columns_to_decode=[review], 
+                                QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
+                                QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
+                                QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
+                                QuadPattern: triple_pattern=[?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]
                   SubqueryAlias: rhs
-                    Projection: country, product, avgPrice
-                      Projection: country, product, <uuid>, <uuid> AS avgPrice
-                        Projection: Struct({term_type:,value:,data_type:,language_tag:}) AS country, product, <uuid>
-                          Aggregate: groupBy=[[product AS product]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
-                            BasicGraphPattern: columns_to_decode=[price], 
-                              QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
-                              QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
-                              QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
+                    Projection: Struct({term_type:,value:,data_type:,language_tag:}) AS country, product, <uuid> AS avgPrice
+                      Aggregate: groupBy=[[product AS product]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS <uuid>]]
+                        BasicGraphPattern: projection=[product, price], columns_to_decode=[price], 
+                          QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
+                          QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?product]
+                          QuadPattern: triple_pattern=[?offer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
             SubqueryAlias: rhs
               DecodeObjectIds: columns=[country]
-                Projection: country, product, nrOfReviews
-                  Projection: country, product, <uuid>, <uuid> AS nrOfReviews
-                    Aggregate: groupBy=[[country AS country, product AS product]], aggr=[[COUNT(review) AS <uuid>]]
-                      BasicGraphPattern: columns_to_decode=[review], 
-                        QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
-                        QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
-                        QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
-                        QuadPattern: triple_pattern=[?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]
+                Projection: country, product, <uuid> AS nrOfReviews
+                  Aggregate: groupBy=[[country AS country, product AS product]], aggr=[[COUNT(review) AS <uuid>]]
+                    BasicGraphPattern: projection=[product, review, country], columns_to_decode=[review], 
+                      QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType111>]
+                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
+                      QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
+                      QuadPattern: triple_pattern=[?reviewer <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/country> ?country]

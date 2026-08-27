@@ -1,11 +1,12 @@
+use crate::block_cache::BlockCache;
 use bytes::Bytes;
 use datafusion::datasource::listing::PartitionedFile;
-use datafusion::datasource::physical_plan::parquet::ParquetFileReaderFactory;
+use datafusion::datasource::physical_plan::parquet::{
+    DefaultParquetFileReaderFactory, ParquetFileReaderFactory,
+};
 use datafusion::error::{DataFusionError, Result as DFResult};
-use datafusion::parquet::arrow::ParquetRecordBatchStreamBuilder;
 use datafusion::parquet::arrow::arrow_reader::ArrowReaderOptions;
 use datafusion::parquet::arrow::async_reader::AsyncFileReader;
-use datafusion::parquet::arrow::async_reader::ParquetObjectReader;
 use datafusion::parquet::errors::ParquetError;
 use datafusion::parquet::file::metadata::PageIndexPolicy;
 use datafusion::parquet::file::metadata::ParquetMetaData;
@@ -144,16 +145,19 @@ pub async fn load_parquet_metadata_and_bloom_filters(
     path: object_store::path::Path,
     object_meta: ObjectMeta,
 ) -> DFResult<(Arc<ParquetMetaData>, PreloadedBloomFiltersList)> {
-    let reader = ParquetObjectReader::new(Arc::clone(&object_store), path.clone())
-        .with_file_size(object_meta.size);
+    let mut reader = DefaultParquetFileReaderFactory::new(Arc::clone(&object_store))
+        .create_reader(
+            0,
+            PartitionedFile::new(path.clone(), object_meta.size),
+            None,
+            &ExecutionPlanMetricsSet::default(),
+        )?;
     let options =
         ArrowReaderOptions::new().with_page_index_policy(PageIndexPolicy::Optional);
-    let builder =
-        ParquetRecordBatchStreamBuilder::new_with_options(reader, options).await?;
+    let metadata = reader.get_metadata(Some(&options)).await?;
 
-    let parquet_meta = Arc::clone(builder.metadata());
     let mut bloom_filter_ranges = Vec::new();
-    for rg in parquet_meta.row_groups() {
+    for rg in metadata.row_groups() {
         for col in rg.columns() {
             if let Some(offset) = col.bloom_filter_offset() {
                 if let Some(length) = col.bloom_filter_length() {
@@ -178,10 +182,8 @@ pub async fn load_parquet_metadata_and_bloom_filters(
         .zip(bloom_filter_bytes)
         .collect();
 
-    Ok((parquet_meta, filters))
+    Ok((metadata, filters))
 }
-
-use crate::block_cache::BlockCache;
 
 /// A custom [`AsyncFileReader`] that serves ParquetMetaData from memory, but delegates actual byte
 /// reading to the underlying storage reader, with optional block caching.

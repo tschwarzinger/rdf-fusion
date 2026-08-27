@@ -25,7 +25,7 @@ use datafusion::datasource::physical_plan::parquet::DefaultParquetFileReaderFact
 use datafusion::datasource::physical_plan::{
     FileGroup, FileScanConfigBuilder, ParquetSource,
 };
-use datafusion::datasource::table_schema::TableSchema;
+use datafusion::datasource::table_schema::TableSchemaBuilder;
 use datafusion::execution::SessionState;
 use datafusion::optimizer::OptimizerConfig;
 use datafusion::physical_expr::LexOrdering;
@@ -465,7 +465,9 @@ impl DeltaQuadsStorageLog {
                 DataType::Int64,
                 false,
             ))];
-            let table_schema = TableSchema::new(Arc::new(file_schema), partition_cols);
+            let table_schema = TableSchemaBuilder::new(Arc::new(file_schema))
+                .with_table_partition_cols(partition_cols)
+                .build();
 
             let file_factory = DefaultParquetFileReaderFactory::new(object_store);
             let source = Arc::new(

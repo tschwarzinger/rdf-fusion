@@ -8,12 +8,13 @@ use datafusion::arrow::compute::BatchCoalescer;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::datatypes::{DataType, Schema, SchemaRef};
 use datafusion::arrow::row::{RowConverter, SortField};
+use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::common::{DataFusionError, exec_err};
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
 use datafusion::physical_expr::expressions::col;
 use datafusion::physical_expr::{
     Distribution, EquivalenceProperties, LexRequirement, OrderingRequirements,
-    PhysicalSortRequirement,
+    PhysicalExpr, PhysicalSortRequirement,
 };
 use datafusion::physical_plan::execution_plan::{
     Boundedness, EmissionType, Partitioning,
@@ -26,7 +27,6 @@ use deltalake::arrow::array::Int8Array;
 use futures::{Stream, StreamExt, ready};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::pin::Pin;
@@ -116,10 +116,6 @@ impl ExecutionPlan for ComputeLogChangesetExec {
         "ComputeLogChangesetExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         Arc::clone(self.plan_properties.eq_properties.schema())
     }
@@ -150,6 +146,13 @@ impl ExecutionPlan for ComputeLogChangesetExec {
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
         vec![&self.inner]
+    }
+
+    fn apply_expressions(
+        &self,
+        _f: &mut dyn FnMut(&Arc<dyn PhysicalExpr>) -> DFResult<TreeNodeRecursion>,
+    ) -> DFResult<TreeNodeRecursion> {
+        Ok(TreeNodeRecursion::Continue)
     }
 
     fn with_new_children(

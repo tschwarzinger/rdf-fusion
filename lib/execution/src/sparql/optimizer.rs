@@ -7,9 +7,8 @@ use datafusion::optimizer::{Optimizer, OptimizerRule};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::aggregate_statistics::AggregateStatistics;
 use datafusion::physical_optimizer::combine_partial_final_agg::CombinePartialFinalAggregate;
-use datafusion::physical_optimizer::enforce_distribution::EnforceDistribution;
-use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
 use datafusion::physical_optimizer::ensure_coop::EnsureCooperative;
+use datafusion::physical_optimizer::ensure_requirements::EnsureRequirements;
 use datafusion::physical_optimizer::filter_pushdown::FilterPushdown;
 use datafusion::physical_optimizer::limit_pushdown::LimitPushdown;
 use datafusion::physical_optimizer::limit_pushdown_past_window::LimitPushPastWindows;
@@ -115,9 +114,8 @@ pub fn create_pyhsical_optimizer_rules(
         Arc::new(AggregateStatistics::new()),
         Arc::new(LimitedDistinctAggregation::new()),
         Arc::new(FilterPushdown::new()),
-        Arc::new(EnforceDistribution::new()),
+        Arc::new(EnsureRequirements::new()),
         Arc::new(CombinePartialFinalAggregate::new()),
-        Arc::new(EnforceSorting::new()),
         Arc::new(OptimizeAggregateOrder::new()),
         Arc::new(ProjectionPushdown::new()),
         Arc::new(OutputRequirements::new_remove_mode()),

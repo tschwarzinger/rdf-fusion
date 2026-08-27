@@ -1,7 +1,9 @@
 use crate::rdf_files::RdfParserExec;
 use crate::rdf_files::logical_node::ParseRdfFileNode;
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::execution::context::SessionState;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
@@ -18,12 +20,17 @@ impl ExtensionPlanner for RdfFilePlanner {
         node: &dyn UserDefinedLogicalNode,
         _logical_inputs: &[&LogicalPlan],
         _physical_inputs: &[Arc<dyn ExecutionPlan>],
-        session_state: &SessionState,
+        session: &dyn Session,
+        _planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
         let Some(node) = node.as_any().downcast_ref::<ParseRdfFileNode>() else {
             return Ok(None);
         };
 
+        let session_state = session
+            .as_any()
+            .downcast_ref::<SessionState>()
+            .expect("session must be a SessionState");
         let reader = node.source.stream(session_state).await?;
         let parser = node.options.create_parser(reader);
 

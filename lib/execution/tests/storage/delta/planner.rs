@@ -97,15 +97,10 @@ async fn test_planner_with_additions() {
     assert_plan_snapshot!(
         ctx.get_plan_string().await,
         @"
-        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-          SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
-            SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
-              UnionExec
-                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 5, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 5 AND 5 <= subject_max@2, required_guarantees=[subject in (5)]
-                SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                  FilterExec: graph@0 IS NULL AND subject@1 = 5
-                    DataSourceExec: partitions=1, partition_sizes=[1]
-        "
+    ProjectionExec: expr=[predicate@0 as p, object@1 as o]
+      FilterExec: graph@0 IS NULL AND subject@1 = 5, projection=[predicate@2, object@3]
+        DataSourceExec: partitions=1, partition_sizes=[1]
+    "
     );
 }
 
@@ -133,14 +128,7 @@ async fn test_planner_with_deletions_inserts_anti_join() {
     )])
     .await;
 
-    assert_plan_snapshot!(ctx.get_plan_string().await, @"
-        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-          SortMergeJoinExec: join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
-            SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-              FilterExec: graph@0 IS NULL AND subject@1 = 1
-                DataSourceExec: partitions=1, partition_sizes=[1]
-            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 1, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 1 AND 1 <= subject_max@2, required_guarantees=[subject in (1)]
-        ");
+    assert_plan_snapshot!(ctx.get_plan_string().await, @"EmptyExec");
 }
 
 #[tokio::test]
@@ -175,19 +163,10 @@ async fn test_planner_with_additions_and_deletions() {
     .await;
 
     assert_plan_snapshot!(ctx.get_plan_string().await, @"
-        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-          SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
-            SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
-              UnionExec
-                SortMergeJoinExec: join_type=RightAnti, on=[(graph@0, graph@0), (subject@1, subject@1), (predicate@2, predicate@2), (object@3, object@3)], NullsEqual: true
-                  SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                    FilterExec: graph@0 IS NULL AND subject@1 = 1
-                      DataSourceExec: partitions=1, partition_sizes=[1]
-                  ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 1, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 1 AND 1 <= subject_max@2, required_guarantees=[subject in (1)]
-                SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                  FilterExec: graph@0 IS NULL AND subject@1 = 1
-                    DataSourceExec: partitions=1, partition_sizes=[1]
-        ");
+    ProjectionExec: expr=[predicate@0 as p, object@1 as o]
+      FilterExec: graph@0 IS NULL AND subject@1 = 1, projection=[predicate@2, object@3]
+        DataSourceExec: partitions=1, partition_sizes=[1]
+    ");
 }
 
 #[tokio::test]
@@ -215,15 +194,10 @@ async fn test_planner_with_additions_multiple_partitions() {
     .await;
 
     assert_plan_snapshot!(ctx.get_plan_string().await, @"
-        ProjectionExec: expr=[predicate@2 as p, object@3 as o]
-          SortedDistinctExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
-            SortPreservingMergeExec: [graph@0 ASC, predicate@2 ASC, object@3 ASC]
-              UnionExec
-                ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/<file>.parquet]]}, projection=[graph, subject, predicate, object], output_ordering=[graph@0 ASC, subject@1 ASC, predicate@2 ASC, object@3 ASC], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = 5, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= 5 AND 5 <= subject_max@2, required_guarantees=[subject in (5)]
-                SortExec: expr=[graph@0 ASC, predicate@2 ASC, object@3 ASC], preserve_partitioning=[false]
-                  FilterExec: graph@0 IS NULL AND subject@1 = 5
-                    DataSourceExec: partitions=1, partition_sizes=[1]
-        ");
+    ProjectionExec: expr=[predicate@0 as p, object@1 as o]
+      FilterExec: graph@0 IS NULL AND subject@1 = 5, projection=[predicate@2, object@3]
+        DataSourceExec: partitions=1, partition_sizes=[1]
+    ");
 }
 
 // ------------------------------------------------------------------------

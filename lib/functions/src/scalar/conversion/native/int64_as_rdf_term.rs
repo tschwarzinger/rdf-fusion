@@ -8,7 +8,6 @@ use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::typed_family::{NumericFamilyArray, TypedFamilyEncoding};
 use rdf_fusion_encoding::{EncodingArray, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -39,10 +38,6 @@ impl NativeInt64AsTerm {
 }
 
 impl ScalarUDFImpl for NativeInt64AsTerm {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

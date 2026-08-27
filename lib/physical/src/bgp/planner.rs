@@ -1,11 +1,12 @@
 use crate::object_id::exec::{DecodeObjectIdsExec, ObjectIdDecodingExecProjection};
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::Schema;
+use datafusion::catalog::Session;
 use datafusion::common::stats::Precision;
 use datafusion::common::{
     Column, DFSchema, JoinSide, JoinType, NullEquality, Result as DFResult,
 };
-use datafusion::execution::context::SessionState;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::utils::{expr_to_columns, split_conjunction};
 use datafusion::logical_expr::{Expr, LogicalPlan, ScalarUDF, UserDefinedLogicalNode};
 use datafusion::physical_expr::expressions::Column as PhysicalColumn;
@@ -17,7 +18,9 @@ use datafusion::physical_plan::joins::{
 };
 use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
 use datafusion::physical_plan::projection::ProjectionExec;
-use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanProperties};
+use datafusion::physical_plan::{
+    ExecutionPlan, ExecutionPlanProperties, StatisticsArgs, StatisticsContext,
+};
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use rdf_fusion_encoding::object_id::is_object_id_data_type;
 use rdf_fusion_logical::bgp::BgpNode;
@@ -36,7 +39,8 @@ impl ExtensionPlanner for BgpPlanner {
         node: &dyn UserDefinedLogicalNode,
         _logical_inputs: &[&LogicalPlan],
         physical_inputs: &[Arc<dyn ExecutionPlan>],
-        session_state: &SessionState,
+        session: &dyn Session,
+        planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
         let Some(bgp) = node.as_any().downcast_ref::<BgpNode>() else {
             return Ok(None);
@@ -93,7 +97,8 @@ impl ExtensionPlanner for BgpPlanner {
             &flat_filters,
             &bgp.columns_to_decode,
             &needed_columns,
-            session_state,
+            session,
+            planning_ctx,
         )?;
 
         let (mut patterns, mut pending_filters) = match prepared {
@@ -125,7 +130,8 @@ impl ExtensionPlanner for BgpPlanner {
                 &needed_after_join,
                 &bgp.columns_to_decode,
                 &mut pending_filters,
-                session_state,
+                session,
+                planning_ctx,
             )?;
 
             // Apply cross-column filters post-join
@@ -134,7 +140,8 @@ impl ExtensionPlanner for BgpPlanner {
                 exec,
                 &mut pending_filters,
                 &bgp.columns_to_decode,
-                session_state,
+                session,
+                planning_ctx,
             )?;
         }
 
@@ -157,7 +164,8 @@ impl ExtensionPlanner for BgpPlanner {
             exec,
             &mut pending_filters,
             &[],
-            session_state,
+            session,
+            planning_ctx,
         )?;
 
         // 7. Apply any final filters
@@ -166,8 +174,12 @@ impl ExtensionPlanner for BgpPlanner {
                 exec.schema().fields().clone(),
                 HashMap::new(),
             )?;
-            let phys_expr =
-                planner.create_physical_expr(&filter, &df_schema, session_state)?;
+            let phys_expr = planner.create_physical_expr(
+                &filter,
+                &df_schema,
+                session,
+                planning_ctx,
+            )?;
             exec = Arc::new(FilterExec::try_new(phys_expr, exec)?);
         }
 
@@ -198,6 +210,7 @@ impl BgpPlanner {
         Self { decoding_udf }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn prepare_and_sort_patterns(
         &self,
         planner: &dyn PhysicalPlanner,
@@ -205,14 +218,16 @@ impl BgpPlanner {
         filters: &[Expr],
         columns_to_decode: &[Column],
         needed_columns: &HashSet<String>,
-        session_state: &SessionState,
+        session: &dyn Session,
+        planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<PreparedSortPatterns> {
         let mut patterns = Vec::new();
         let mut pending_filters = filters.to_vec();
 
         // Check if any input is guaranteed to have no rows, and return early if so.
         for exec in physical_inputs {
-            let stats = exec.partition_statistics(None)?;
+            let stats = StatisticsContext::new()
+                .compute(exec.as_ref(), &StatisticsArgs::new())?;
             if let Precision::Exact(0) = stats.num_rows {
                 return Ok(None);
             }
@@ -226,7 +241,8 @@ impl BgpPlanner {
                 current_exec,
                 &mut pending_filters,
                 columns_to_decode,
-                session_state,
+                session,
+                planning_ctx,
             )?;
 
             let mut projection = Vec::new();
@@ -247,10 +263,12 @@ impl BgpPlanner {
                 current_exec,
                 &mut pending_filters,
                 columns_to_decode,
-                session_state,
+                session,
+                planning_ctx,
             )?;
 
-            let stats = exec.partition_statistics(None)?;
+            let stats = StatisticsContext::new()
+                .compute(exec.as_ref(), &StatisticsArgs::new())?;
             let rows = stats.num_rows.get_value().cloned().unwrap_or(usize::MAX);
             patterns.push((current_exec, rows));
         }
@@ -268,7 +286,8 @@ impl BgpPlanner {
         mut exec: Arc<dyn ExecutionPlan>,
         pending_filters: &mut Vec<Expr>,
         columns_to_decode: &[Column],
-        session_state: &SessionState,
+        session: &dyn Session,
+        planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         let schema = exec.schema();
         let mut ready_filters = Vec::new();
@@ -300,8 +319,12 @@ impl BgpPlanner {
                 exec.schema().fields().clone(),
                 HashMap::new(),
             )?;
-            let phys_expr =
-                planner.create_physical_expr(&filter, &df_schema, session_state)?;
+            let phys_expr = planner.create_physical_expr(
+                &filter,
+                &df_schema,
+                session,
+                planning_ctx,
+            )?;
             exec = Arc::new(FilterExec::try_new(phys_expr, exec)?);
         }
 
@@ -335,7 +358,8 @@ impl BgpPlanner {
         needed_after_join: &HashSet<String>,
         columns_to_decode: &[Column],
         pending_filters: &mut Vec<Expr>,
-        session_state: &SessionState,
+        session: &dyn Session,
+        planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         let left_schema = left.schema();
         let right_schema = right.schema();
@@ -400,7 +424,8 @@ impl BgpPlanner {
                 needed_after_join,
                 columns_to_decode,
                 pending_filters,
-                session_state,
+                session,
+                planning_ctx,
             )
         }
     }
@@ -415,7 +440,8 @@ impl BgpPlanner {
         needed_after_join: &HashSet<String>,
         columns_to_decode: &[Column],
         pending_filters: &mut Vec<Expr>,
-        session_state: &SessionState,
+        session: &dyn Session,
+        planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         let mut eligible_filters = Vec::new();
         let mut decode_left = Vec::new();
@@ -540,7 +566,8 @@ impl BgpPlanner {
             let phys_expr = planner.create_physical_expr(
                 &combined_filter,
                 &df_schema,
-                session_state,
+                session,
+                planning_ctx,
             )?;
 
             // Assign column quad_tables dynamically to map left/right sources
@@ -745,11 +772,12 @@ mod tests {
                 &[],
                 &[],
                 &ctx.state(),
+                &PhysicalPlanningContext::default(),
             )
             .await?
             .unwrap();
 
-        assert!(plan.as_any().is::<PlaceholderRowExec>());
+        assert!(plan.is::<PlaceholderRowExec>());
         assert_eq!(plan.schema().fields().len(), 0);
 
         Ok(())
@@ -783,11 +811,12 @@ mod tests {
                 &[&lp],
                 &[empty_exec as Arc<dyn ExecutionPlan>],
                 &ctx.state(),
+                &PhysicalPlanningContext::default(),
             )
             .await?
             .unwrap();
 
-        assert!(plan.as_any().is::<EmptyExec>());
+        assert!(plan.is::<EmptyExec>());
 
         Ok(())
     }
@@ -801,7 +830,7 @@ mod tests {
         async fn create_physical_plan(
             &self,
             logical_plan: &LogicalPlan,
-            _session_state: &SessionState,
+            _session: &dyn Session,
         ) -> DFResult<Arc<dyn ExecutionPlan>> {
             Ok(Arc::clone(
                 self.plans
@@ -814,7 +843,8 @@ mod tests {
             &self,
             _expr: &Expr,
             _input_dfschema: &DFSchema,
-            _session_state: &SessionState,
+            _session: &dyn Session,
+            _planning_ctx: &PhysicalPlanningContext,
         ) -> DFResult<Arc<dyn PhysicalExpr>> {
             unimplemented!()
         }

@@ -1,6 +1,6 @@
 ---
 source: bench/tests/query_results/bsbm.rs
-expression: "run_select_query(&store, include_str!(\"./queries/explore-q10.sparql\")).await"
+expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_result_query(&store, &query_str).await } else\n{ run_select_query(&store, &query_str).await }"
 ---
 {
   "head": {
@@ -17,9 +17,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/explore-q10.sparq
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor7/Offer12927"
         },
         "price": {
-          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD",
           "type": "literal",
-          "value": "3271.15"
+          "value": "3271.15",
+          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD"
         }
       },
       {
@@ -28,9 +28,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/explore-q10.sparq
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor7/Offer12345"
         },
         "price": {
-          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD",
           "type": "literal",
-          "value": "3432.61"
+          "value": "3432.61",
+          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD"
         }
       },
       {
@@ -39,9 +39,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/explore-q10.sparq
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor2/Offer4263"
         },
         "price": {
-          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD",
           "type": "literal",
-          "value": "4515.96"
+          "value": "4515.96",
+          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD"
         }
       }
     ]

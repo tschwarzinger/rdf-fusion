@@ -60,12 +60,16 @@ heed = "0.22"
 oneshot = "0.2"
 
 # DataFusion and Related Dependencies (we try to keep them in-sync with DataFusion)
-ahash = "0.8"
-arrow-string = "58.1"
-datafusion = "53.1"
-deltalake = { version = "0.32", features = ["datafusion", "datafusion-ext"] }
+foldhash = "0.2"
+arrow-string = "59.2"
+datafusion = "55.0"
+datafusion-session = "55.0"
+deltalake = { git = "https://github.com/delta-io/delta-rs", rev = "cee6f9ea9d1deab2f70d23221abb5386b60f3a9a", features = [
+  "datafusion",
+  "datafusion-ext",
+] }
 reqwest = { version = "0.12", features = ["stream"] }
-tokio = { version = "1.51", features = ["rt", "sync", "macros"] }
+tokio = { version = "1.52", features = ["rt", "sync", "macros"] }
 
 # Logging / Tracing
 

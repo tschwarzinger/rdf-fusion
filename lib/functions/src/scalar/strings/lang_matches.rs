@@ -14,7 +14,6 @@ use rdf_fusion_encoding::{
     detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 /// Returns true if the language tag matches the language range.
@@ -60,10 +59,6 @@ impl LangMatchesSparqlUDF {
 }
 
 impl ScalarUDFImpl for LangMatchesSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

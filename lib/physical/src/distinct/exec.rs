@@ -1,19 +1,19 @@
 use datafusion::arrow::compute::interleave;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::arrow::row::{RowConverter, SortField};
+use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::error::Result;
 use datafusion::execution::TaskContext;
 use datafusion::physical_expr::{
-    Distribution, LexRequirement, OrderingRequirements, Partitioning,
+    Distribution, LexRequirement, OrderingRequirements, Partitioning, PhysicalExpr,
 };
 use datafusion::physical_plan::metrics::{ExecutionPlanMetricsSet, MetricsSet};
 use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties, RecordBatchStream,
-    SendableRecordBatchStream,
+    SendableRecordBatchStream, apply_expression_roots,
 };
 use futures::{Stream, StreamExt};
 use itertools::Itertools;
-use std::any::Any;
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -63,10 +63,6 @@ impl ExecutionPlan for SortedDistinctExec {
         "SortedDistinctExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn properties(&self) -> &Arc<PlanProperties> {
         &self.properties
     }
@@ -87,6 +83,13 @@ impl ExecutionPlan for SortedDistinctExec {
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
         vec![&self.input]
+    }
+
+    fn apply_expressions(
+        &self,
+        f: &mut dyn FnMut(&Arc<dyn PhysicalExpr>) -> Result<TreeNodeRecursion>,
+    ) -> Result<TreeNodeRecursion> {
+        apply_expression_roots(self.sort_exprs.iter().map(|se| &se.expr), f)
     }
 
     fn with_new_children(

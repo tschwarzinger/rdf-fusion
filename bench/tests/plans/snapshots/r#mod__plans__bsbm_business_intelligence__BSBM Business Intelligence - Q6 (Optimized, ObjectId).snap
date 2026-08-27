@@ -4,18 +4,18 @@ expression: "&explanation.optimized_logical_plan.to_string()"
 ---
 Projection: reviewer AS reviewer, ENC_PT(reviewerAvgScore) AS reviewerAvgScore
   DecodeObjectIds: columns=[reviewer]
-    Projection: reviewer, reviewerAvgScore
-      Projection: reviewer, <uuid>, <uuid>, <uuid> AS reviewerAvgScore
-        Filter: EBV(GT(<uuid>, MUL(<uuid>, Union 5:2:Some(1500000000000000000),36,18)))
-          Aggregate: groupBy=[[reviewer AS reviewer]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>, MIN(avgScore) AS <uuid>]]
+    Projection: reviewer, <uuid> AS reviewerAvgScore
+      Filter: EBV(GT(<uuid>, MUL(<uuid>, Union 5:2:1.500000000000000000)))
+        Aggregate: groupBy=[[reviewer AS reviewer]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>, MIN(avgScore) AS <uuid>]]
+          Projection: avgScore, reviewer, score
             DecodeObjectIds: columns=[score]
               Projection: lhs.avgScore AS avgScore, lhs.product AS product, lhs.review AS review, lhs.reviewer AS reviewer, rhs.score AS score
                 Inner Join: lhs.review = rhs.review
                   SubqueryAlias: lhs
                     Cross Join:
-                      Projection: avgScore
-                        Projection: <uuid>, <uuid> AS avgScore
-                          Aggregate: groupBy=[[]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>]]
+                      Projection: <uuid> AS avgScore
+                        Aggregate: groupBy=[[]], aggr=[[AVG(xsd:float(ENC_TF(score))) AS <uuid>]]
+                          Projection: score
                             DecodeObjectIds: columns=[score]
                               Projection: lhs.product AS product, lhs.review AS review, rhs.score AS score
                                 Inner Join: lhs.review = rhs.review
@@ -25,35 +25,17 @@ Projection: reviewer AS reviewer, ENC_PT(reviewerAvgScore) AS reviewerAvgScore
                                       QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
                                   SubqueryAlias: rhs
                                     Union
-                                      Projection: review, score
-                                        Projection: review, score
-                                          Projection: review, score
-                                            QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score]
-                                      Projection: review, score
-                                        Projection: review, score
-                                          Projection: review, score
-                                            QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score]
-                                      Projection: review, score
-                                        Projection: review, score
-                                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score]
-                                      Projection: review, score
-                                        QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score]
+                                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score]
+                                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score]
+                                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score]
+                                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score]
                       BasicGraphPattern: 
                         QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/producer> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer6/Producer6>]
                         QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/reviewFor> ?product]
                         QuadPattern: triple_pattern=[?review <http://purl.org/stuff/rev#reviewer> ?reviewer]
                   SubqueryAlias: rhs
                     Union
-                      Projection: review, score
-                        Projection: review, score
-                          Projection: review, score
-                            QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score]
-                      Projection: review, score
-                        Projection: review, score
-                          Projection: review, score
-                            QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score]
-                      Projection: review, score
-                        Projection: review, score
-                          QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score]
-                      Projection: review, score
-                        QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score]
+                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating1> ?score]
+                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating2> ?score]
+                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating3> ?score]
+                      QuadPattern: triple_pattern=[?review <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/rating4> ?score]

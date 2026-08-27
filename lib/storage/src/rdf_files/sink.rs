@@ -21,7 +21,6 @@ use rdf_fusion_encoding::plain_term::decoders::{
 };
 use rdf_fusion_encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermEncoding};
 use rdf_fusion_encoding::{QuadStorageEncoding, TermDecoder, TermEncoding};
-use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tokio::io::AsyncWrite;
@@ -86,10 +85,6 @@ impl DisplayAs for RdfFileDataSink {
 
 #[async_trait]
 impl DataSink for RdfFileDataSink {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> &SchemaRef {
         &self.schema
     }

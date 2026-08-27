@@ -1,6 +1,6 @@
 ---
 source: bench/tests/query_results/bsbm.rs
-expression: "run_select_query(&store, include_str!(\"./queries/explore-q4.sparql\")).await"
+expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_result_query(&store, &query_str).await } else\n{ run_select_query(&store, &query_str).await }"
 ---
 {
   "head": {
@@ -13,13 +13,13 @@ expression: "run_select_query(&store, include_str!(\"./queries/explore-q4.sparql
   "results": {
     "bindings": [
       {
-        "label": {
-          "type": "literal",
-          "value": "repopulates"
-        },
         "product": {
           "type": "uri",
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer7/Product318"
+        },
+        "label": {
+          "type": "literal",
+          "value": "repopulates"
         },
         "propertyTextual": {
           "type": "literal",

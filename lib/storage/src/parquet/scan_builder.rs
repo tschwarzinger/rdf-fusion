@@ -13,14 +13,15 @@ use datafusion::datasource::physical_plan::{
     FileGroup, FileScanConfigBuilder, FileSource, ParquetFileMetrics, ParquetSource,
 };
 use datafusion::datasource::source::DataSourceExec;
-use datafusion::datasource::table_schema::TableSchema;
+use datafusion::datasource::table_schema::TableSchemaBuilder;
 use datafusion::execution::SessionState;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{Expr, utils::conjunction};
 use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::create_physical_expr;
 use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
-use datafusion::physical_optimizer::pruning::PruningPredicate;
+use datafusion::physical_optimizer::pruning::PruningPredicateBuilder;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::projection::ProjectionExprs;
@@ -201,6 +202,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                     &filter,
                     &df_schema,
                     session_state.execution_props(),
+                    &PhysicalPlanningContext::default(),
                 )?;
                 plan = Arc::new(FilterExec::try_new(phys_filter, plan)?);
             }
@@ -230,7 +232,8 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         base_schema: &DFSchemaRef,
     ) -> DFResult<Arc<dyn FileSource>> {
         let pushdown_filters = !matches!(self.encoding, QuadStorageEncoding::PlainTerm);
-        let table_schema = TableSchema::new(Arc::clone(base_schema.inner()), vec![]);
+        let table_schema =
+            TableSchemaBuilder::new(Arc::clone(base_schema.inner())).build();
 
         let store = if let Some(store) = self.object_store.clone() {
             store
@@ -337,7 +340,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                             combined_logical_filter.clone(),
                         )?;
 
-                    pf.extensions = Some(Arc::new(access_plan));
+                    pf = pf.with_extension(access_plan);
                     some_pruned = true;
 
                     match stats.num_rows {
@@ -390,6 +393,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                     &logical_expr,
                     schema,
                     session_state.execution_props(),
+                    &PhysicalPlanningContext::default(),
                 )?;
                 Ok((phys_expr, name))
             })
@@ -461,11 +465,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                 &logical_expr,
                 base_schema.as_ref(),
                 session_state.execution_props(),
-            )?;
-
-            let predicate = PruningPredicate::try_new(
-                Arc::clone(&phys_expr),
-                Arc::clone(base_schema.inner()),
+                &PhysicalPlanningContext::default(),
             )?;
 
             let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan);
@@ -473,13 +473,18 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             let metrics =
                 ParquetFileMetrics::new(0, object_meta.location.as_ref(), &metrics_set);
 
-            rg_filter.prune_by_statistics(
-                base_schema.inner().as_ref(),
-                parquet_meta.file_metadata().schema_descr(),
-                parquet_meta.row_groups(),
-                &predicate,
-                &metrics,
-            );
+            let predicate = PruningPredicateBuilder::new()
+                .with_file_schema(Arc::clone(base_schema.inner()))
+                .build(Arc::clone(&phys_expr));
+            if let Some(predicate) = predicate {
+                rg_filter.prune_by_statistics(
+                    base_schema.inner().as_ref(),
+                    parquet_meta.file_metadata().schema_descr(),
+                    parquet_meta.row_groups(),
+                    &predicate,
+                    &metrics,
+                );
+            }
 
             let access_plan = rg_filter.build();
 

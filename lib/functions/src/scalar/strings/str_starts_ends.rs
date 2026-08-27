@@ -15,7 +15,6 @@ use rdf_fusion_encoding::{
     detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -90,10 +89,6 @@ impl StringAffixSparqlUDF {
 }
 
 impl ScalarUDFImpl for StringAffixSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

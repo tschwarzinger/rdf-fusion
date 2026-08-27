@@ -13,7 +13,6 @@ use rdf_fusion_encoding::{
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingName};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 /// Returns the minutes part of a date/time.
@@ -137,10 +136,6 @@ impl DateTimeIntegerPartSparqlUDF {
 }
 
 impl ScalarUDFImpl for DateTimeIntegerPartSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

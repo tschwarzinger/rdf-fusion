@@ -1,6 +1,6 @@
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::common::DataFusionError;
-use datafusion::execution::SessionState;
 use datafusion::execution::context::QueryPlanner;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::physical_plan::ExecutionPlan;
@@ -59,7 +59,7 @@ impl QueryPlanner for RdfFusionPlanner {
     async fn create_physical_plan(
         &self,
         logical_plan: &LogicalPlan,
-        session_state: &SessionState,
+        session_state: &dyn Session,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         let snapshot = self
             .snapshot

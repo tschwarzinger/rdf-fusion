@@ -17,7 +17,6 @@ use rdf_fusion::functions::scalar::args::ScalarSparqlFunctionArgs;
 use rdf_fusion::functions::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 /// This example shows how to register a custom SPARQL function that can be used by RDF Fusion.
@@ -106,10 +105,6 @@ impl Debug for ContainsSpiderUDF {
 }
 
 impl ScalarUDFImpl for ContainsSpiderUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

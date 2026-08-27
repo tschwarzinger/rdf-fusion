@@ -1,6 +1,6 @@
 ---
 source: bench/tests/query_results/bsbm.rs
-expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).await"
+expression: "run_select_query(&store, &query_str).await"
 ---
 {
   "head": {
@@ -17,9 +17,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer106"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "9.333333"
+          "value": "9.333333",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -28,9 +28,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer128"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "9"
+          "value": "9",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -39,9 +39,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer151"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "9.333333"
+          "value": "9.333333",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -50,9 +50,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer155"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "8.666667"
+          "value": "8.666667",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -61,9 +61,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer199"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "8.666667"
+          "value": "8.666667",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -72,9 +72,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer252"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "10"
+          "value": "10",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -83,9 +83,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer280"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "8.5"
+          "value": "8.5",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -94,9 +94,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer291"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "9"
+          "value": "9",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -105,9 +105,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer371"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "9"
+          "value": "9",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -116,9 +116,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer439"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "8.666667"
+          "value": "8.666667",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -127,9 +127,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer64"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "9.5"
+          "value": "9.5",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       },
       {
@@ -138,9 +138,9 @@ expression: "run_select_query(&store, include_str!(\"./queries/bi-q6.sparql\")).
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer85"
         },
         "reviewerAvgScore": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "10"
+          "value": "10",
+          "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       }
     ]

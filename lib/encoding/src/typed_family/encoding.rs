@@ -48,7 +48,7 @@ pub struct TypedFamilyEncoding {
     /// The registered families
     families: Vec<TypedFamilyRef>,
     /// Cache mapping datatype string to the family's quad_table in `self.families`.
-    cache: HashMap<String, i8, ahash::RandomState>,
+    cache: HashMap<String, i8, foldhash::fast::RandomState>,
 }
 
 impl TypedFamilyEncoding {
@@ -73,7 +73,7 @@ impl TypedFamilyEncoding {
 
     /// Creates a new [`TypedFamilyEncoding`] with the given families.
     fn new_with_families(families: Vec<TypedFamilyRef>) -> Self {
-        let mut cache = HashMap::with_hasher(ahash::RandomState::new());
+        let mut cache = HashMap::with_hasher(foldhash::fast::RandomState::default());
 
         for (i, family) in families.iter().enumerate() {
             if let TypeClaim::Literal(data_types) = family.claim() {

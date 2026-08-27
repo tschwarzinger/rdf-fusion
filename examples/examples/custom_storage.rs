@@ -1,18 +1,22 @@
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
+use datafusion::catalog::Session;
 use datafusion::common::{HashSet, exec_datafusion_err};
 use datafusion::datasource::TableProvider;
 use datafusion::datasource::{DefaultTableSource, MemTable};
 use datafusion::execution::SessionState;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode};
-use datafusion::optimizer::OptimizerRule;
+use datafusion::optimizer::{OptimizerContext, OptimizerRule};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion::common::{GraphName, NamedNode, Quad, StorageError, TermPattern};
+use rdf_fusion::common::{
+    DFResult, GraphName, NamedNode, Quad, StorageError, TermPattern,
+};
 use rdf_fusion::encoding::object_id::ObjectIdDictionary;
 use rdf_fusion::encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
@@ -143,8 +147,9 @@ impl ExtensionPlanner for VecQuadStoragePlanner {
         node: &dyn UserDefinedLogicalNode,
         _logical_inputs: &[&LogicalPlan],
         _physical_inputs: &[Arc<dyn ExecutionPlan>],
-        session_state: &SessionState,
-    ) -> datafusion::common::Result<Option<Arc<dyn ExecutionPlan>>> {
+        session: &dyn Session,
+        _planning_ctx: &PhysicalPlanningContext,
+    ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
         // Only plan quad pattern nodes.
         let Some(node) = node.as_any().downcast_ref::<QuadPatternNode>() else {
             return Ok(None);
@@ -177,12 +182,17 @@ impl ExtensionPlanner for VecQuadStoragePlanner {
 
         // 2.2 Lower pattern (Implementing the pattern is not trivial, therefore, we use existing
         // machinery).
+        let optimizer_context = OptimizerContext::new_with_config_options(Arc::new(
+            session.config_options().clone(),
+        ));
         let pattern_rewriting_rule = PatternLoweringRule::new(self.0.clone());
-        let pattern = pattern_rewriting_rule.rewrite(pattern, session_state)?.data;
+        let pattern = pattern_rewriting_rule
+            .rewrite(pattern, &optimizer_context)?
+            .data;
 
         // 3. Plan new logical plan
         planner
-            .create_physical_plan(&pattern, session_state)
+            .create_physical_plan(&pattern, session)
             .await
             .map(Some)
     }

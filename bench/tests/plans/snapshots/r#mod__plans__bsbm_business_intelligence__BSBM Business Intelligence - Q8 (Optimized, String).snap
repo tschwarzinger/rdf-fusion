@@ -10,7 +10,7 @@ Projection: ENC_PT(vendor) AS vendor, ENC_PT(cheapExpensiveRatio) AS cheapExpens
           Projection: vendor, <uuid> AS belowAvg
             Aggregate: groupBy=[[vendor AS vendor]], aggr=[[COUNT(offer) AS <uuid>]]
               Projection: lhs.offer AS offer, lhs.vendor AS vendor
-                Inner Join: lhs.product = rhs.product Filter: EBV(LT(xsd:float(xsd:string(ENC_TF(ENC_PT(lhs.price)))), rhs.avgPrice))
+                LeftSemi Join: lhs.product = rhs.product Filter: EBV(LT(xsd:float(xsd:string(ENC_TF(ENC_PT(lhs.price)))), rhs.avgPrice))
                   SubqueryAlias: lhs
                     BasicGraphPattern: 
                       QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4>]

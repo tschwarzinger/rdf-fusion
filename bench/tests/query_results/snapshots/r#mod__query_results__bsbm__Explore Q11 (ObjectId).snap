@@ -1,6 +1,6 @@
 ---
 source: bench/tests/query_results/bsbm.rs
-expression: "run_select_query(&store, include_str!(\"./queries/explore-q11.sparql\")).await"
+expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_result_query(&store, &query_str).await } else\n{ run_select_query(&store, &query_str).await }"
 ---
 {
   "head": {
@@ -13,108 +13,108 @@ expression: "run_select_query(&store, include_str!(\"./queries/explore-q11.sparq
   "results": {
     "bindings": [
       {
-        "hasValue": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#date",
-          "type": "literal",
-          "value": "2008-05-25"
-        },
         "property": {
           "type": "uri",
           "value": "http://purl.org/dc/elements/1.1/date"
+        },
+        "hasValue": {
+          "type": "literal",
+          "value": "2008-05-25",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date"
         }
       },
       {
-        "hasValue": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Vendor1"
-        },
         "property": {
           "type": "uri",
           "value": "http://purl.org/dc/elements/1.1/publisher"
-        }
-      },
-      {
-        "hasValue": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Offer"
         },
-        "property": {
-          "type": "uri",
-          "value": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-        }
-      },
-      {
-        "hasValue": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
-          "type": "literal",
-          "value": "4"
-        },
-        "property": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/deliveryDays"
-        }
-      },
-      {
-        "hasValue": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250/"
-        },
-        "property": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/offerWebpage"
-        }
-      },
-      {
-        "hasValue": {
-          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD",
-          "type": "literal",
-          "value": "7956.65"
-        },
-        "property": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price"
-        }
-      },
-      {
-        "hasValue": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer10/Product463"
-        },
-        "property": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product"
-        }
-      },
-      {
-        "hasValue": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-          "type": "literal",
-          "value": "2008-03-17T00:00:00"
-        },
-        "property": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validFrom"
-        }
-      },
-      {
-        "hasValue": {
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-          "type": "literal",
-          "value": "2008-07-18T00:00:00"
-        },
-        "property": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo"
-        }
-      },
-      {
         "hasValue": {
           "type": "uri",
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Vendor1"
+        }
+      },
+      {
+        "property": {
+          "type": "uri",
+          "value": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
         },
+        "hasValue": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Offer"
+        }
+      },
+      {
+        "property": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/deliveryDays"
+        },
+        "hasValue": {
+          "type": "literal",
+          "value": "4",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+        }
+      },
+      {
+        "property": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/offerWebpage"
+        },
+        "hasValue": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250/"
+        }
+      },
+      {
+        "property": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price"
+        },
+        "hasValue": {
+          "type": "literal",
+          "value": "7956.65",
+          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD"
+        }
+      },
+      {
+        "property": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product"
+        },
+        "hasValue": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer10/Product463"
+        }
+      },
+      {
+        "property": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validFrom"
+        },
+        "hasValue": {
+          "type": "literal",
+          "value": "2008-03-17T00:00:00",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+        }
+      },
+      {
+        "property": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo"
+        },
+        "hasValue": {
+          "type": "literal",
+          "value": "2008-07-18T00:00:00",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+        }
+      },
+      {
         "property": {
           "type": "uri",
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor"
+        },
+        "hasValue": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Vendor1"
         }
       }
     ]

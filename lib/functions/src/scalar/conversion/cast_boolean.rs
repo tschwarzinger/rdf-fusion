@@ -15,7 +15,6 @@ use rdf_fusion_encoding::{
     detect_encoding_from_types,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 /// Implementation of the SPARQL `xsd:boolean()` cast function.
@@ -61,10 +60,6 @@ impl CastBooleanSparqlUDF {
 }
 
 impl ScalarUDFImpl for CastBooleanSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

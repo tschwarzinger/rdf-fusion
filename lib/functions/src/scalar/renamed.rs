@@ -8,7 +8,6 @@ use datafusion::logical_expr::{
     ScalarUDFImpl, Signature,
 };
 use rdf_fusion_common::DFResult;
-use std::any::Any;
 use std::hash::{Hash, Hasher};
 
 /// Renames an existing [`ScalarUDFImpl`] with a new name. This can be useful if you want to
@@ -49,10 +48,6 @@ impl<TUDFImpl: ScalarUDFImpl + 'static> RenamedScalarUdfImpl<TUDFImpl> {
 }
 
 impl<TUDFImpl: ScalarUDFImpl + 'static> ScalarUDFImpl for RenamedScalarUdfImpl<TUDFImpl> {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

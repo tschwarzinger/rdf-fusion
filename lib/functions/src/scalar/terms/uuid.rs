@@ -9,7 +9,6 @@ use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::typed_family::{IriFamily, TypedFamilyEncodingRef};
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -57,10 +56,6 @@ impl UuidSparqlUDF {
 }
 
 impl ScalarUDFImpl for UuidSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

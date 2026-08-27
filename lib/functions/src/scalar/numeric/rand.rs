@@ -10,7 +10,6 @@ use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::typed_family::NumericFamilyArray;
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::fmt::{Debug, Formatter};
 
 /// Implementation of the SPARQL `RAND` function.
@@ -50,10 +49,6 @@ impl RandSparqlUDF {
 }
 
 impl ScalarUDFImpl for RandSparqlUDF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

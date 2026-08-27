@@ -11,7 +11,7 @@ use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
+use std::any::TypeId;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -52,10 +52,6 @@ impl WithPlainTermEncoding {
 }
 
 impl ScalarUDFImpl for WithPlainTermEncoding {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }
@@ -118,6 +114,6 @@ impl ScalarUDFImpl for WithPlainTermEncoding {
 
 impl Hash for WithPlainTermEncoding {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.as_any().type_id().hash(state);
+        TypeId::of::<Self>().hash(state);
     }
 }

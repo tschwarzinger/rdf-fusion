@@ -15,10 +15,10 @@ use datafusion::datasource::physical_plan::FileGroup;
 use datafusion::execution::{SessionState, TaskContext};
 use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr::expressions::Column;
-use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::aggregates::{
     AggregateExec, AggregateMode, PhysicalGroupBy,
 };
+use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
 use datafusion::physical_planner::ExtensionPlanner;
 use futures::StreamExt;
 use object_store::ObjectMeta;
@@ -181,7 +181,8 @@ async fn count_rows(
     plan: Arc<dyn ExecutionPlan>,
     task_ctx: Arc<TaskContext>,
 ) -> DFResult<usize> {
-    let stats = plan.partition_statistics(None)?;
+    let stats =
+        StatisticsContext::new().compute(plan.as_ref(), &StatisticsArgs::new())?;
     if let Precision::Exact(exact_count) = stats.num_rows {
         return Ok(exact_count);
     }

@@ -1,8 +1,9 @@
 use crate::paths::kleene_plus::KleenePlusClosureExec;
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::common::plan_err;
 use datafusion::error::Result as DFResult;
-use datafusion::execution::context::SessionState;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
@@ -27,7 +28,8 @@ impl ExtensionPlanner for KleenePlusPathPlanner {
         node: &dyn UserDefinedLogicalNode,
         logical_inputs: &[&LogicalPlan],
         physical_inputs: &[Arc<dyn ExecutionPlan>],
-        _session_state: &SessionState,
+        _session: &dyn Session,
+        _planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
         let Some(node) = node.as_any().downcast_ref::<KleenePlusClosureNode>() else {
             return Ok(None);

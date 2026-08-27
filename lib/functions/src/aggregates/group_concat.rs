@@ -17,7 +17,6 @@ use rdf_fusion_encoding::typed_family::{
 };
 use rdf_fusion_encoding::{EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::sync::Arc;
 
 pub fn group_concat_typed_family(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
@@ -53,10 +52,6 @@ impl SparqlGroupConcat {
 }
 
 impl AggregateUDFImpl for SparqlGroupConcat {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }
@@ -140,10 +135,6 @@ impl SparqlGroupConcatWithSeparator {
 }
 
 impl AggregateUDFImpl for SparqlGroupConcatWithSeparator {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

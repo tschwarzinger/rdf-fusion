@@ -14,7 +14,6 @@ use rdf_fusion_encoding::typed_family::{
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::sync::Arc;
 
 /// Creates a new [AggregateUDF] for the SPARQL `COUNT` aggregate function.
@@ -46,10 +45,6 @@ impl SparqlCount {
 }
 
 impl AggregateUDFImpl for SparqlCount {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }
@@ -204,11 +199,18 @@ impl GroupsAccumulator for SparqlCountGroupsAccumulator {
         &mut self,
         values: &[ArrayRef],
         group_indices: &[usize],
-        opt_filter: Option<&BooleanArray>,
         total_num_groups: usize,
     ) -> DFResult<()> {
         self.inner
-            .merge_batch(values, group_indices, opt_filter, total_num_groups)
+            .merge_batch(values, group_indices, total_num_groups)
+    }
+
+    fn convert_to_state(
+        &self,
+        values: &[ArrayRef],
+        opt_filter: Option<&BooleanArray>,
+    ) -> DFResult<Vec<ArrayRef>> {
+        self.inner.convert_to_state(values, opt_filter)
     }
 
     fn size(&self) -> usize {

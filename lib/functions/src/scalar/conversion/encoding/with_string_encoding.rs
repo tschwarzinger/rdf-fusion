@@ -13,7 +13,6 @@ use rdf_fusion_encoding::{
     TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::hash::Hash;
 use std::sync::Arc;
 
@@ -51,10 +50,6 @@ impl WithStringEncoding {
 }
 
 impl ScalarUDFImpl for WithStringEncoding {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }

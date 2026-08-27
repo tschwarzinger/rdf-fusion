@@ -1,6 +1,8 @@
 use crate::parquet::snapshot::ParquetQuadStorageSnapshot;
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::execution::SessionState;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
@@ -26,12 +28,17 @@ impl ExtensionPlanner for ParquetQuadStoragePlanner {
         node: &dyn UserDefinedLogicalNode,
         _logical_inputs: &[&LogicalPlan],
         _physical_inputs: &[Arc<dyn ExecutionPlan>],
-        session_state: &SessionState,
+        session: &dyn Session,
+        _planning_ctx: &PhysicalPlanningContext,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
         let Some(node) = node.as_any().downcast_ref::<QuadPatternNode>() else {
             return Ok(None);
         };
 
+        let session_state = session
+            .as_any()
+            .downcast_ref::<SessionState>()
+            .expect("session must be a SessionState");
         Ok(Some(
             self.snapshot
                 .plan_quad_pattern(

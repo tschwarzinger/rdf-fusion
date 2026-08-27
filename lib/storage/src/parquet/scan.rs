@@ -1,10 +1,11 @@
 use datafusion::arrow::datatypes::SchemaRef;
+use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::common::{Statistics, plan_err};
 use datafusion::config::ConfigOptions;
 use datafusion::datasource::source::DataSourceExec;
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
 use datafusion::physical_expr::{
-    Distribution, OrderingRequirements, PhysicalSortExpr, ScalarFunctionExpr,
+    OrderingRequirements, PhysicalSortExpr, ScalarFunctionExpr,
 };
 use datafusion::physical_plan::execution_plan::{CardinalityEffect, InvariantLevel};
 use datafusion::physical_plan::filter_pushdown::{
@@ -14,8 +15,9 @@ use datafusion::physical_plan::filter_pushdown::{
 use datafusion::physical_plan::metrics::MetricsSet;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::{
-    DisplayAs, DisplayFormatType, ExecutionPlan, PhysicalExpr, PlanProperties,
-    SortOrderPushdownResult,
+    ChildStats, DisplayAs, DisplayFormatType, ExecutionPlan,
+    InputDistributionRequirements, PhysicalExpr, PlanProperties, SortOrderPushdownResult,
+    StatisticsArgs, StatisticsContext,
 };
 use rdf_fusion_common::DFResult;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
@@ -51,7 +53,7 @@ impl ParquetQuadScanExec {
     }
 
     fn wrap_inner(&self, inner: Arc<dyn ExecutionPlan>) -> Option<Arc<Self>> {
-        let downcast = inner.as_any().downcast_ref::<DataSourceExec>()?;
+        let downcast = inner.downcast_ref::<DataSourceExec>()?;
         Some(Arc::new(Self {
             quad_pattern: self.quad_pattern.clone(),
             inner: Arc::new(downcast.clone()),
@@ -71,10 +73,6 @@ impl ExecutionPlan for ParquetQuadScanExec {
         "ParquetQuadScanExec"
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn schema(&self) -> SchemaRef {
         self.inner.schema()
     }
@@ -87,8 +85,8 @@ impl ExecutionPlan for ParquetQuadScanExec {
         self.inner.check_invariants(check)
     }
 
-    fn required_input_distribution(&self) -> Vec<Distribution> {
-        self.inner.required_input_distribution()
+    fn input_distribution_requirements(&self) -> InputDistributionRequirements {
+        self.inner.input_distribution_requirements()
     }
 
     fn required_input_ordering(&self) -> Vec<Option<OrderingRequirements>> {
@@ -105,6 +103,13 @@ impl ExecutionPlan for ParquetQuadScanExec {
 
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {
         vec![]
+    }
+
+    fn apply_expressions(
+        &self,
+        f: &mut dyn FnMut(&Arc<dyn PhysicalExpr>) -> DFResult<TreeNodeRecursion>,
+    ) -> DFResult<TreeNodeRecursion> {
+        self.inner.apply_expressions(f)
     }
 
     fn with_new_children(
@@ -147,8 +152,24 @@ impl ExecutionPlan for ParquetQuadScanExec {
         self.inner.metrics()
     }
 
-    fn partition_statistics(&self, partition: Option<usize>) -> DFResult<Statistics> {
-        self.inner.partition_statistics(partition)
+    fn partition_statistics(
+        &self,
+        partition: Option<usize>,
+    ) -> DFResult<Arc<Statistics>> {
+        StatisticsContext::new()
+            .compute(self, &StatisticsArgs::new().with_partition(partition))
+    }
+
+    fn statistics_from_inputs(
+        &self,
+        input_stats: &[Arc<Statistics>],
+        args: &StatisticsArgs,
+    ) -> DFResult<Arc<Statistics>> {
+        self.inner.statistics_from_inputs(input_stats, args)
+    }
+
+    fn child_stats_requests(&self, partition: Option<usize>) -> Vec<ChildStats> {
+        self.inner.child_stats_requests(partition)
     }
 
     fn supports_limit_pushdown(&self) -> bool {
@@ -308,7 +329,7 @@ impl DisplayAs for ParquetQuadScanExec {
 
 /// Helper function to check if a physical expression contains a Scalar UDF.
 fn contains_udf(expr: &Arc<dyn PhysicalExpr>) -> bool {
-    if expr.as_any().is::<ScalarFunctionExpr>() {
+    if expr.is::<ScalarFunctionExpr>() {
         return true;
     }
     for child in expr.children() {

@@ -110,7 +110,7 @@ impl RdfFusionParquetWriterProperties {
             let is_clustered = clustered_columns.contains(&col_path);
 
             self.builder = if !is_clustered {
-                self.builder.set_column_bloom_filter_ndv(
+                self.builder.set_column_bloom_filter_max_ndv(
                     col_path.clone(),
                     BLOOM_FILTER_NDV as u64,
                 )

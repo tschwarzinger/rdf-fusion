@@ -10,7 +10,7 @@ use datafusion::execution::SessionState;
 use datafusion::physical_expr::expressions::Column;
 use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
-use datafusion::physical_optimizer::enforce_sorting::EnforceSorting;
+use datafusion::physical_optimizer::ensure_requirements::EnsureRequirements;
 use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
@@ -136,7 +136,7 @@ impl DeltaStorageQuadTableUpdater {
         };
 
         let rules = [
-            Arc::new(EnforceSorting::new()) as Arc<dyn PhysicalOptimizerRule>,
+            Arc::new(EnsureRequirements::new()) as Arc<dyn PhysicalOptimizerRule>,
             Arc::new(SanityCheckPlan::new()) as Arc<dyn PhysicalOptimizerRule>,
         ];
         let config = self.state.config_options();

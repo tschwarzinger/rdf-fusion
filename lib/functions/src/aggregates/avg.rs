@@ -15,7 +15,6 @@ use rdf_fusion_encoding::typed_family::{
 };
 use rdf_fusion_encoding::{EncodingArray, EncodingDatum, EncodingScalar, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
-use std::any::Any;
 use std::sync::Arc;
 
 /// Creates a new [AggregateUDF] for the SPARQL `AVG` aggregate function.
@@ -55,10 +54,6 @@ impl SparqlAvgUDAF {
 }
 
 impl AggregateUDFImpl for SparqlAvgUDAF {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn name(&self) -> &str {
         &self.name
     }
@@ -284,25 +279,26 @@ impl GroupsAccumulator for SparqlAvgGroupsAccumulator {
         &mut self,
         states: &[ArrayRef],
         group_indices: &[usize],
-        opt_filter: Option<&BooleanArray>,
         total_num_groups: usize,
     ) -> Result<(), DataFusionError> {
         let sum_states = &states[0..1];
         let count_states = &states[1..];
 
-        self.sum_acc.merge_batch(
-            sum_states,
-            group_indices,
-            opt_filter,
-            total_num_groups,
-        )?;
-        self.count_acc.merge_batch(
-            count_states,
-            group_indices,
-            opt_filter,
-            total_num_groups,
-        )?;
+        self.sum_acc
+            .merge_batch(sum_states, group_indices, total_num_groups)?;
+        self.count_acc
+            .merge_batch(count_states, group_indices, total_num_groups)?;
         Ok(())
+    }
+
+    fn convert_to_state(
+        &self,
+        values: &[ArrayRef],
+        opt_filter: Option<&BooleanArray>,
+    ) -> Result<Vec<ArrayRef>, DataFusionError> {
+        let mut state = self.sum_acc.convert_to_state(values, opt_filter)?;
+        state.append(&mut self.count_acc.convert_to_state(values, opt_filter)?);
+        Ok(state)
     }
 
     fn size(&self) -> usize {
