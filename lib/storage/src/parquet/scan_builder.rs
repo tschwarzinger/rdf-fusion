@@ -1,13 +1,15 @@
 use crate::parquet::reader::PreLoadedMetadataReaderFactory;
 use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use crate::parquet::scan::ParquetQuadScanExec;
+use datafusion::common::ScalarValue;
 use datafusion::common::plan_datafusion_err;
 use datafusion::common::stats::Precision;
-use datafusion::common::{DFSchema, DFSchemaRef, Statistics};
+use datafusion::common::{Column, DFSchema, DFSchemaRef, ExprSchema, Statistics};
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::parquet::{
     DefaultParquetFileReaderFactory, PagePruningAccessPlanFilter, ParquetAccessPlan,
     ParquetFileReaderFactory, RowGroupAccess, RowGroupAccessPlanFilter,
+    can_expr_be_pushed_down_with_schemas,
 };
 use datafusion::datasource::physical_plan::{
     FileGroup, FileScanConfigBuilder, FileSource, ParquetFileMetrics, ParquetSource,
@@ -15,8 +17,11 @@ use datafusion::datasource::physical_plan::{
 use datafusion::datasource::source::DataSourceExec;
 use datafusion::datasource::table_schema::TableSchemaBuilder;
 use datafusion::execution::SessionState;
+use datafusion::functions::core::expr_fn::get_field;
+use datafusion::logical_expr::expr::{BinaryExpr, InList};
 use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
-use datafusion::logical_expr::{Expr, utils::conjunction};
+use datafusion::logical_expr::utils::conjunction;
+use datafusion::logical_expr::{Expr, Operator, lit};
 use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::create_physical_expr;
@@ -24,11 +29,15 @@ use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
 use datafusion::physical_optimizer::pruning::PruningPredicateBuilder;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::filter::FilterExec;
-use datafusion::physical_plan::projection::ProjectionExprs;
-use datafusion::physical_plan::projection::{ProjectionExec, ProjectionExpr};
+use datafusion::physical_plan::projection::{
+    ProjectionExec, ProjectionExpr, ProjectionExprs,
+};
 use object_store::ObjectMeta;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::QuadStorageEncoding;
+use rdf_fusion_encoding::plain_term::{
+    PlainTermEncoding, PlainTermScalar, PlainTermType,
+};
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::sync::Arc;
 
@@ -146,17 +155,50 @@ impl<'a> ParquetQuadScanBuilder<'a> {
     pub async fn build(self) -> DFResult<Arc<dyn ExecutionPlan>> {
         let base_schema = self.encoding.quad_schema();
 
+        // The original, logical filter over the quad table.
         let combined_logical_filter = if let Some(pattern) = &self.pattern {
             conjunction(pattern.compute_filters(&self.encoding).await?)
         } else {
             None
         };
 
-        let file_source =
-            self.build_file_source(combined_logical_filter.clone(), &base_schema)?;
+        // The predicate pushed into the parquet source. For PlainTerm, equalities and graph IN
+        // lists are rewritten into leaf-field comparisons so the source can use them for pruning
+        // and row filtering.
+        let pushed_filter = match (&self.encoding, combined_logical_filter.clone()) {
+            (QuadStorageEncoding::PlainTerm, Some(filter)) => {
+                Some(rewrite_plain_term_predicates(filter, base_schema.as_ref())?)
+            }
+            (_, other) => other,
+        };
+
+        // Determine whether every part of the pushed predicate can be evaluated by the parquet
+        // decoder. If not, the source silently drops those conjuncts, so we re-apply the full
+        // filter (and projection) in a FilterExec/ProjectionExec above the scan instead.
+        let full_filter_is_pushable = match &pushed_filter {
+            Some(filter) => {
+                let physical = create_physical_expr(
+                    filter,
+                    base_schema.as_ref(),
+                    self.session_state.execution_props(),
+                    &PhysicalPlanningContext::default(),
+                )?;
+                can_expr_be_pushed_down_with_schemas(
+                    &physical,
+                    base_schema.inner().as_ref(),
+                )
+            }
+            None => true,
+        };
+
+        let file_source = self.build_file_source(
+            pushed_filter.clone(),
+            &base_schema,
+            full_filter_is_pushable,
+        )?;
 
         let (file_groups, statistics) =
-            self.apply_eager_pruning(combined_logical_filter.clone())?;
+            self.apply_eager_pruning(pushed_filter.clone())?;
 
         let mut file_scan_config =
             FileScanConfigBuilder::new(self.object_store_url.clone(), file_source)
@@ -173,56 +215,58 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         let pattern = self.pattern.clone().unwrap_or_else(QuadPattern::all_quads);
         let scan = Arc::new(ParquetQuadScanExec::try_new(pattern.clone(), data_source)?);
 
-        return if matches!(self.encoding, QuadStorageEncoding::PlainTerm) {
-            wrap_in_filter_and_projection(
+        if full_filter_is_pushable {
+            Ok(scan)
+        } else {
+            // Re-apply the full filter (and projection) above the scan, since the parquet source
+            // can only evaluate a subset of the predicates.
+            Self::wrap_in_filter_and_projection(
                 self.session_state,
                 self.pattern.as_ref(),
                 &self.pushdown_projection,
                 combined_logical_filter,
                 scan,
             )
-        } else {
-            Ok(scan)
-        };
+        }
+    }
 
-        /// Wraps the given plan in a filter and projection (if applicable). This is used to
-        /// implement the pattern matching on scans that do not support pushing down the filters
-        /// and projections.
-        fn wrap_in_filter_and_projection(
-            session_state: &SessionState,
-            pattern: Option<&QuadPattern>,
-            pushdown_projection: &PushdownProjection,
-            combined_logical_filter: Option<Expr>,
-            mut plan: Arc<dyn ExecutionPlan>,
-        ) -> DFResult<Arc<dyn ExecutionPlan>> {
-            if let Some(filter) = combined_logical_filter {
+    /// Wraps the given plan in a filter and projection (if applicable). This is used to implement
+    /// the parts of pattern matching that are not pushed down into the parquet scan and for
+    /// projections that are not pushed into the scan.
+    fn wrap_in_filter_and_projection(
+        session_state: &SessionState,
+        pattern: Option<&QuadPattern>,
+        pushdown_projection: &PushdownProjection,
+        combined_logical_filter: Option<Expr>,
+        mut plan: Arc<dyn ExecutionPlan>,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        if let Some(filter) = combined_logical_filter {
+            let schema = plan.schema();
+            let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
+            let phys_filter = create_physical_expr(
+                &filter,
+                &df_schema,
+                session_state.execution_props(),
+                &PhysicalPlanningContext::default(),
+            )?;
+            plan = Arc::new(FilterExec::try_new(phys_filter, plan)?);
+        }
+
+        if let PushdownProjection::Yes(quad_tables) = pushdown_projection {
+            if let Some(pattern) = pattern {
                 let schema = plan.schema();
                 let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
-                let phys_filter = create_physical_expr(
-                    &filter,
+                let exprs = ParquetQuadScanBuilder::compute_projection_exprs(
+                    session_state,
+                    pattern,
                     &df_schema,
-                    session_state.execution_props(),
-                    &PhysicalPlanningContext::default(),
+                    quad_tables.as_deref(),
                 )?;
-                plan = Arc::new(FilterExec::try_new(phys_filter, plan)?);
+                plan = Arc::new(ProjectionExec::try_new(exprs, plan)?);
             }
-
-            if let PushdownProjection::Yes(quad_tables) = pushdown_projection {
-                if let Some(pattern) = pattern {
-                    let schema = plan.schema();
-                    let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
-                    let exprs = ParquetQuadScanBuilder::compute_projection_exprs(
-                        session_state,
-                        pattern,
-                        &df_schema,
-                        quad_tables.as_deref(),
-                    )?;
-                    plan = Arc::new(ProjectionExec::try_new(exprs, plan)?);
-                }
-            }
-
-            Ok(plan)
         }
+
+        Ok(plan)
     }
 
     /// Builds the [`FileSource`] that is used to implement the scan.
@@ -230,8 +274,8 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         &self,
         combined_logical_filter: Option<Expr>,
         base_schema: &DFSchemaRef,
+        full_filter_is_pushable: bool,
     ) -> DFResult<Arc<dyn FileSource>> {
-        let pushdown_filters = !matches!(self.encoding, QuadStorageEncoding::PlainTerm);
         let table_schema =
             TableSchemaBuilder::new(Arc::clone(base_schema.inner())).build();
 
@@ -260,7 +304,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         };
 
         let mut parquet_source = ParquetSource::new(table_schema)
-            .with_pushdown_filters(pushdown_filters)
+            .with_pushdown_filters(true)
             .with_parquet_file_reader_factory(reader_factory);
 
         if let Some(filter) = combined_logical_filter {
@@ -273,7 +317,9 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         match &self.pushdown_projection {
             PushdownProjection::No => Ok(Arc::new(parquet_source)),
             PushdownProjection::Yes(quad_tables) => {
-                if matches!(self.encoding, QuadStorageEncoding::PlainTerm) {
+                if !full_filter_is_pushable {
+                    // The scan is wrapped in a filter/projection above, so the projection is not
+                    // pushed into the parquet source.
                     Ok(Arc::new(parquet_source))
                 } else if let Some(pattern) = &self.pattern {
                     ParquetQuadScanBuilder::pushdown_projection_into_index_scan(
@@ -544,5 +590,313 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         };
 
         Ok((access_plan, physical_filter_expr, statistics))
+    }
+}
+
+/// Recursively rewrites PlainTerm equality predicates into comparisons on the struct's leaf fields.
+///
+/// DataFusion's parquet scan cannot evaluate an `Eq` between a PlainTerm struct column and a
+/// PlainTerm struct literal as a row-level filter. Translating
+/// `subject = {term_type:0, value:"..", data_type:null, language_tag:null}` into
+/// `subject["term_type"] = 0 AND subject["value"] = ".." AND subject["data_type"] IS NULL AND
+/// subject["language_tag"] IS NULL` produces predicates that DataFusion can evaluate and prune on.
+fn rewrite_plain_term_predicates(expr: Expr, schema: &DFSchema) -> DFResult<Expr> {
+    match expr {
+        Expr::BinaryExpr(BinaryExpr { left, op, right }) => {
+            let left = rewrite_plain_term_predicates(*left, schema)?;
+            let right = rewrite_plain_term_predicates(*right, schema)?;
+
+            if op == Operator::Eq {
+                if let Some(predicate) = rewrite_plain_term_eq(&left, &right)? {
+                    return Ok(predicate);
+                }
+                if let Some(predicate) = rewrite_plain_term_eq(&right, &left)? {
+                    return Ok(predicate);
+                }
+                if let Some(predicate) = rewrite_plain_term_col_eq(&left, &right, schema)
+                {
+                    return Ok(predicate);
+                }
+            }
+
+            Ok(Expr::BinaryExpr(BinaryExpr {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            }))
+        }
+        Expr::InList(InList {
+            expr,
+            list,
+            negated,
+        }) => {
+            let expr = rewrite_plain_term_predicates(*expr, schema)?;
+            let list = list
+                .into_iter()
+                .map(|e| rewrite_plain_term_predicates(e, schema))
+                .collect::<DFResult<Vec<_>>>()?;
+            rewrite_plain_term_in_list(expr, list, negated)
+        }
+        other => Ok(other),
+    }
+}
+
+/// Returns whether the given column is typed as a [PlainTermEncoding].
+fn is_plain_term_column(column: &Column, schema: &DFSchema) -> bool {
+    schema
+        .field_from_column(column)
+        .is_ok_and(|field| field.data_type() == &PlainTermEncoding::data_type())
+}
+
+/// Rewrites an equality between two PlainTerm columns (e.g. a graph bound to an object/variable) into
+/// leaf-field comparisons that DataFusion can evaluate. Comparable to a "null-safe" equality.
+fn rewrite_plain_term_col_eq(
+    left: &Expr,
+    right: &Expr,
+    schema: &DFSchema,
+) -> Option<Expr> {
+    let Expr::Column(left_col) = left else {
+        return None;
+    };
+    let Expr::Column(right_col) = right else {
+        return None;
+    };
+    if left_col == right_col {
+        return None;
+    }
+    if !is_plain_term_column(left_col, schema) || !is_plain_term_column(right_col, schema)
+    {
+        return None;
+    }
+
+    let mut conjuncts = Vec::new();
+    for field_name in ["term_type", "value", "data_type", "language_tag"] {
+        let left = get_field(Expr::Column(left_col.clone()), field_name);
+        let right = get_field(Expr::Column(right_col.clone()), field_name);
+        // Null-safe: equal values, or both are NULL (for the nullable data_type/language_tag
+        // fields). Using it for all fields is also correct for the non-nullable ones.
+        conjuncts.push(
+            left.clone()
+                .eq(right.clone())
+                .or(left.is_null().and(right.is_null())),
+        );
+    }
+    conjunction(conjuncts)
+}
+
+/// Rewrites a PlainTerm `IN` predicate into a filter on the leaf `value` field.
+///
+/// `IN` predicates are only generated for graph names, which are always IRIs. So
+/// `graph IN ({term_type:0, value:"g1", ..}, ..)` is rewritten to
+/// `graph["term_type"] = 0 AND graph["value"] IN ("g1", ..)` which DataFusion can evaluate. Any
+/// PlainTerm `IN` list that cannot be rewritten this way is rejected loudly instead of silently
+/// producing false results.
+fn rewrite_plain_term_in_list(
+    expr: Expr,
+    list: Vec<Expr>,
+    negated: bool,
+) -> DFResult<Expr> {
+    // Only PlainTerm typed literals are affected.
+    if !list.iter().any(is_plain_term_literal) {
+        return Ok(Expr::InList(InList {
+            expr: Box::new(expr),
+            list,
+            negated,
+        }));
+    }
+
+    let column = match expr {
+        Expr::Column(column) => column,
+        other => {
+            return Err(plan_datafusion_err!(
+                "Cannot rewrite PlainTerm IN-list against a non-column expression: {other:?}"
+            ));
+        }
+    };
+    if negated {
+        return Err(plan_datafusion_err!(
+            "Cannot rewrite a negated PlainTerm IN-list predicate, which would silently produce false results."
+        ));
+    }
+
+    let mut values = Vec::with_capacity(list.len());
+    for item in list {
+        let scalar = plain_term_scalar(&item).ok_or_else(|| {
+            plan_datafusion_err!(
+                "PlainTerm IN-list contains a non-PlainTerm element: {item:?}"
+            )
+        })?;
+        let parts = scalar.as_parts().ok_or_else(|| {
+            plan_datafusion_err!("PlainTerm IN-list contains a null term: {scalar:?}")
+        })?;
+        // Graph names are always IRIs (term_type 0 = NamedNode).
+        if parts.term_type != i8::from(PlainTermType::NamedNode) {
+            return Err(plan_datafusion_err!(
+                "Cannot rewrite a non-IRI entry in a PlainTerm graph IN-list: {item:?}"
+            ));
+        }
+        values.push(lit(ScalarValue::Utf8(Some(parts.value.to_string()))));
+    }
+
+    let field = |name: &str| get_field(Expr::Column(column.clone()), name);
+    Ok(field("term_type")
+        .eq(lit(ScalarValue::Int8(Some(
+            PlainTermType::NamedNode.into(),
+        ))))
+        .and(field("value").in_list(values, false)))
+}
+
+fn is_plain_term_literal(expr: &Expr) -> bool {
+    matches!(
+        expr,
+        Expr::Literal(scalar, _) if PlainTermScalar::try_new(scalar.clone()).is_ok()
+    )
+}
+
+fn plain_term_scalar(expr: &Expr) -> Option<PlainTermScalar> {
+    if let Expr::Literal(scalar, _) = expr {
+        PlainTermScalar::try_new(scalar.clone()).ok()
+    } else {
+        None
+    }
+}
+
+/// Rewrites `other = <plain term literal>` into a conjunction of leaf-field comparisons.
+///
+/// Returns:
+/// - `Ok(None)` if `literal` is not a PlainTerm-typed struct literal (nothing to rewrite),
+/// - `Ok(Some(expr))` with the rewritten predicate,
+/// - `Err` if `literal` is a PlainTerm literal that cannot be safely rewritten. Leaving such a
+///   predicate untouched would silently produce false results (DataFusion cannot apply an equality
+///   on a PlainTerm struct column), so we fail loudly instead.
+fn rewrite_plain_term_eq(other: &Expr, literal: &Expr) -> DFResult<Option<Expr>> {
+    let Expr::Literal(scalar, _) = literal else {
+        return Ok(None);
+    };
+
+    let Ok(scalar) = PlainTermScalar::try_new(scalar.clone()) else {
+        // Not a PlainTerm literal, nothing to do.
+        return Ok(None);
+    };
+
+    // This is a PlainTerm literal comparison, so the other side must be a column we can rewrite.
+    let Expr::Column(column) = other else {
+        return Err(plan_datafusion_err!(
+            "Cannot rewrite PlainTerm predicate comparison against a non-column expression: {other:?}"
+        ));
+    };
+
+    let parts = scalar.as_parts().ok_or_else(|| {
+        plan_datafusion_err!(
+            "Cannot rewrite PlainTerm predicate comparison against a null term: {scalar:?}"
+        )
+    })?;
+
+    let field = |name: &str| get_field(Expr::Column(column.clone()), name);
+
+    let mut conjuncts = vec![
+        field("term_type").eq(lit(ScalarValue::Int8(Some(parts.term_type)))),
+        field("value").eq(lit(ScalarValue::Utf8(Some(parts.value.to_string())))),
+    ];
+    match parts.data_type {
+        Some(datatype) => conjuncts.push(
+            field("data_type").eq(lit(ScalarValue::Utf8(Some(datatype.to_string())))),
+        ),
+        None => conjuncts.push(field("data_type").is_null()),
+    }
+    match parts.language_tag {
+        Some(language_tag) => conjuncts.push(
+            field("language_tag")
+                .eq(lit(ScalarValue::Utf8(Some(language_tag.to_string())))),
+        ),
+        None => conjuncts.push(field("language_tag").is_null()),
+    }
+
+    Ok(conjunction(conjuncts))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datafusion::arrow::array::StringArray;
+    use datafusion::common::ScalarValue;
+    use datafusion::logical_expr::{col, lit};
+    use rdf_fusion_common::NamedNodeRef;
+    use rdf_fusion_encoding::EncodingScalar;
+    use rdf_fusion_encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermScalar};
+
+    fn named_node_term(iri: &str) -> Expr {
+        Expr::Literal(
+            PlainTermScalar::from(NamedNodeRef::new_unchecked(iri)).into_scalar_value(),
+            None,
+        )
+    }
+
+    fn test_schema() -> DFSchemaRef {
+        QuadStorageEncoding::PlainTerm.quad_schema()
+    }
+
+    fn rewrite(expr: Expr) -> DFResult<Expr> {
+        rewrite_plain_term_predicates(expr, test_schema().as_ref())
+    }
+
+    #[test]
+    fn rewrites_plain_term_equality_to_field_comparisons() {
+        let predicate: Expr = col("subject").eq(named_node_term("http://p1"));
+        let rewritten = rewrite(predicate).unwrap();
+        insta::assert_snapshot!(
+            rewritten.to_string(),
+            @r#"get_field(subject, Utf8("term_type")) = Int8(0) AND get_field(subject, Utf8("value")) = Utf8("http://p1") AND get_field(subject, Utf8("data_type")) IS NULL AND get_field(subject, Utf8("language_tag")) IS NULL"#
+        );
+    }
+
+    #[test]
+    fn rewrites_plain_term_column_equality() {
+        let predicate: Expr = col("graph").eq(col("object"));
+        let rewritten = rewrite(predicate).unwrap();
+        insta::assert_snapshot!(
+            rewritten.to_string(),
+            @r#"(get_field(graph, Utf8("term_type")) = get_field(object, Utf8("term_type")) OR get_field(graph, Utf8("term_type")) IS NULL AND get_field(object, Utf8("term_type")) IS NULL) AND (get_field(graph, Utf8("value")) = get_field(object, Utf8("value")) OR get_field(graph, Utf8("value")) IS NULL AND get_field(object, Utf8("value")) IS NULL) AND (get_field(graph, Utf8("data_type")) = get_field(object, Utf8("data_type")) OR get_field(graph, Utf8("data_type")) IS NULL AND get_field(object, Utf8("data_type")) IS NULL) AND (get_field(graph, Utf8("language_tag")) = get_field(object, Utf8("language_tag")) OR get_field(graph, Utf8("language_tag")) IS NULL AND get_field(object, Utf8("language_tag")) IS NULL)"#
+        );
+    }
+    #[test]
+    fn leaves_non_plain_term_literals_unchanged() {
+        let predicate: Expr = col("subject").eq(lit("http://p1"));
+        let rewritten = rewrite(predicate.clone()).unwrap();
+        assert_eq!(rewritten.to_string(), predicate.to_string());
+    }
+
+    #[test]
+    fn rewrites_plain_term_in_list_to_value_field() {
+        let predicate: Expr = col("graph").in_list(
+            vec![named_node_term("http://g1"), named_node_term("http://g2")],
+            false,
+        );
+        let rewritten = rewrite(predicate).unwrap();
+        insta::assert_snapshot!(
+            rewritten.to_string(),
+            @r#"get_field(graph, Utf8("term_type")) = Int8(0) AND get_field(graph, Utf8("value")) IN ([Utf8("http://g1"), Utf8("http://g2")])"#
+        );
+    }
+
+    #[test]
+    fn errors_on_null_plain_term_literal() {
+        let struct_array =
+            PLAIN_TERM_ENCODING.create_named_nodes_array(StringArray::new_null(1));
+        let null_scalar = ScalarValue::try_from_array(&struct_array, 0).unwrap();
+        let predicate: Expr = col("subject").eq(Expr::Literal(null_scalar, None));
+        assert!(
+            rewrite(predicate).is_err(),
+            "Expected an error for a null PlainTerm literal"
+        );
+    }
+
+    #[test]
+    fn errors_when_plain_term_literal_is_compared_to_non_column() {
+        let predicate: Expr = named_node_term("http://p1").eq(lit("not-a-column"));
+        assert!(
+            rewrite(predicate).is_err(),
+            "Expected an error when the other side is not a column"
+        );
     }
 }
