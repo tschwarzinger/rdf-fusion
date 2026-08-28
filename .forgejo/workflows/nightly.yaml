@@ -46,10 +46,16 @@ jobs:
         if: steps.check_changes.outputs.skip != 'true'
         run: wasm-pack build --target web --release lib/wasm
 
+      - name: Install AWS CLI
+        if: steps.check_changes.outputs.skip != 'true'
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
+
       - name: Upload to S3 (Hetzner)
         if: steps.check_changes.outputs.skip != 'true'
         env:
-          # Note: Adjust AWS_ACCESS_KEY_ID if you have a separate Access Key!
           AWS_ACCESS_KEY_ID: ${{ secrets.RDF_FUSION_PUBLIC_S3_ACCESS_TOKEN }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.RDF_FUSION_PUBLIC_S3_SECRET_ACCESS_TOKEN }}
           AWS_DEFAULT_REGION: hel1
