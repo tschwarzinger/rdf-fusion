@@ -5,10 +5,12 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    types: [ opened, synchronize, reopened, labeled, unlabeled ]
 
 jobs:
   lint:
     runs-on: tuw-runner
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'wasm')
 
     steps:
       - name: Checkout Code
@@ -25,6 +27,7 @@ jobs:
 
   test:
     runs-on: tuw-runner
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'wasm')
 
     steps:
       - name: Checkout Code

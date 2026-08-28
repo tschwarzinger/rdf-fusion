@@ -33,7 +33,7 @@ jobs:
         run: just bench prepare-benches-tests
 
       - name: Tests
-        run: just test
+        run: just test ci
 
       - name: Test Examples
         run: just test-examples
@@ -61,7 +61,7 @@ jobs:
           tools: 'just taplo-cli'
 
       - name: Lints
-        run: just lint
+        run: just lint ci
 
   docs:
     runs-on: tuw-runner

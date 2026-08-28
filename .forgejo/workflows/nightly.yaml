@@ -63,5 +63,5 @@ jobs:
           BUCKET_NAME="rdf-fusion-public"
           ENDPOINT_URL="https://hel1.your-objectstorage.com"
           
-          aws s3 cp lib/wasm/pkg/rdf_fusion_wasm.js s3://$BUCKET_NAME/latest/rdf_fusion_wasm.js --endpoint-url $ENDPOINT_URL
-          aws s3 cp lib/wasm/pkg/rdf_fusion_wasm_bg.wasm s3://$BUCKET_NAME/latest/rdf_fusion_wasm_bg.wasm --endpoint-url $ENDPOINT_URL
+          aws s3 cp lib/wasm/pkg/rdf_fusion_wasm.js s3://$BUCKET_NAME/wasm/latest/rdf_fusion_wasm.js --endpoint-url $ENDPOINT_URL
+          aws s3 cp lib/wasm/pkg/rdf_fusion_wasm_bg.wasm s3://$BUCKET_NAME/wasm/latest/rdf_fusion_wasm_bg.wasm --endpoint-url $ENDPOINT_URL

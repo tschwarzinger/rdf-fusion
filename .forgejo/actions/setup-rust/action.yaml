@@ -45,6 +45,8 @@ runs:
 
     - name: Rust Cache
       uses: https://github.com/Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: "true"
 
     - name: Install Tools via cargo-binstall
       if: inputs.tools != ''

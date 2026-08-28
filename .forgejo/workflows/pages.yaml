@@ -5,10 +5,33 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    types: [ opened, synchronize, reopened, labeled, unlabeled ]
 
 jobs:
+  needs-pages-label:
+    runs-on: tuw-runner
+    outputs:
+      run-web: ${{ steps.check.outputs.run_web }}
+
+    steps:
+      - name: Check for pages label
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "run_web=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LABELS='${{ toJSON(github.event.pull_request.labels.*.name) }}'
+          if echo "$LABELS" | grep -qE '"pages([^"]*)"'; then
+            echo "run_web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_web=false" >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
     runs-on: tuw-runner
+    needs: needs-pages-label
+    if: needs.needs-pages-label.outputs.run_web == 'true'
 
     steps:
       - name: Checkout Code

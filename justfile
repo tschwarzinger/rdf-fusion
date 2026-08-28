@@ -11,13 +11,13 @@ fmt:
     npx --yes prettier@3 --write "**/*.{css,html}"
 
 # Run all Rust lints (e.g., formatting, clippy)
-lint: lint-rust
+lint profile="dev": (lint-rust profile)
 
 # Run all Rust lints (e.g., formatting, clippy)
-lint-rust:
+lint-rust profile="dev":
     cargo fmt --all -- --check
     taplo fmt **.toml --check
-    cargo clippy --workspace --all-targets -- -D warnings -D clippy::all
+    cargo clippy --workspace --all-targets --profile {{ profile }} -- -D warnings -D clippy::all
 
 # Lint the Wasm bindings (requires a Rust toolchain + wasm32 target).
 # Only used by the wasm CI workflow.
@@ -31,8 +31,8 @@ lint-web:
     npm run lint --prefix misc/pages
 
 # Run all regular tests
-test:
-    cargo test --workspace --exclude rdf-fusion-examples --exclude rdf-fusion-wasm
+test profile="test":
+    cargo test --workspace --exclude rdf-fusion-examples --exclude rdf-fusion-wasm --profile {{ profile }}
 
 # Run the tests related to RDF Fusion's Wasm bindings and the playground
 #
