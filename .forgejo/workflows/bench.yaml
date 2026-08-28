@@ -6,6 +6,7 @@ on:
 
 jobs:
   benchmark:
+    name: benchmark
     runs-on: tuw-runner
     if: >
       github.event.issue.pull_request &&
@@ -13,9 +14,8 @@ jobs:
       contains(fromJson('["tschwarzinger"]'), github.actor)
 
     steps:
-      # --- 1. SETUP & PARSING ---
-      - name: Parse Comment for Suites
-        id: parse
+      - id: parse
+        name: Parse Comment for Suites
         env:
           COMMENT: ${{ github.event.comment.body }}
         run: |
@@ -26,11 +26,14 @@ jobs:
           if [ -z "$SUITES" ]; then
             SUITES="bsbm-bi,bsbm-explore"
           fi
-
+          
+          # Create a clean version of suites for cache key by replacing ',' with '_'
+          SUITES_CLEAN=$(echo "$SUITES" | tr ',' '_')
+          
           echo "Target suites: $SUITES"
           echo "suites=$SUITES" >> "$GITHUB_OUTPUT"
+          echo "suites_clean=$SUITES_CLEAN" >> "$GITHUB_OUTPUT"
 
-      # Acknowledge the command quickly with a reaction (Optional but nice UX)
       - name: React to comment
         env:
           TOKEN: ${{ secrets.BENCHMARKING_BOT_TOKEN }}
@@ -40,7 +43,6 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"content": "rocket"}'
 
-      # --- 2. CHECKOUT & GIT METADATA ---
       - name: Install git-lfs
         run: |
           apt-get update
@@ -50,36 +52,34 @@ jobs:
       - name: Checkout PR Code
         uses: actions/checkout@v4
         with:
-          # In issue_comment, we must explicitly check out the PR ref
+          fetch-depth: "0"
+          lfs: "true"
           ref: refs/pull/${{ github.event.issue.number }}/head
-          lfs: true
-          fetch-depth: 0
 
       - name: Setup Rust Environment
         uses: ./.forgejo/actions/setup-rust
         with:
-          system-deps: 'true'
-          extra-system-packages: 'default-jre-headless jq'
-          tools: 'just taplo-cli critcmp'
+          extra-system-packages: default-jre-headless jq
+          system-deps: "true"
+          tools: just taplo-cli critcmp
 
-      - name: Determine Target Base Commit
-        id: base-commit
+      - id: base-commit
+        name: Determine Target Base Commit
         run: |
           # Find the common ancestor between the PR branch and origin/main
           git fetch origin main
           BASE_SHA=$(git merge-base HEAD origin/main)
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
 
-      # --- 3. BENCHMARKING (Main vs PR) ---
-      - name: Cache Main Baselines
-        id: cache-main-benches
+      - id: cache-main-benches
+        name: Cache Main Baselines
         uses: actions/cache@v4
         with:
+          key: benchmark-main-${{ steps.base-commit.outputs.base_sha }}-${{ steps.parse.outputs.suites_clean }}
           path: target/criterion
-          key: benchmark-main-${{ steps.base-commit.outputs.base_sha }}-${{ replace(steps.parse.outputs.suites, ',', '_') }}
 
-      - name: Compute Main Baselines (On Cache Miss)
-        if: steps.cache-main-benches.outputs.cache-hit != 'true'
+      - if: steps.cache-main-benches.outputs.cache-hit != 'true'
+        name: Compute Main Baselines (On Cache Miss)
         env:
           TARGET_SUITES: ${{ steps.parse.outputs.suites }}
         run: |
@@ -105,17 +105,15 @@ jobs:
         run: |
           ./misc/ci/run-benches.sh candidate "$TARGET_SUITES"
 
-      - name: Compare Benchmarks
-        id: compare
+      - id: compare
+        name: Compare Benchmarks
         env:
           TARGET_SUITES: ${{ steps.parse.outputs.suites }}
         run: |
-          # Run compare and use `tee` to print to console AND save to a file
           ./misc/ci/run-benches.sh compare "$TARGET_SUITES" | tee critcmp_output.txt
 
-      # --- 4. POST RESULTS BACK TO PR ---
-      - name: Post Results Comment
-        if: always()
+      - if: always()
+        name: Post Results Comment
         env:
           TOKEN: ${{ secrets.BENCHMARKING_BOT_TOKEN }}
           TARGET_SUITES: ${{ steps.parse.outputs.suites }}
@@ -123,9 +121,9 @@ jobs:
           # 1. Construct the Markdown body for the comment
           cat << 'EOF' > comment_body.md
           ### 📊 Benchmark Results Complete
-
+          
           **Target Suites:** `TARGET_SUITES`
-
+          
           <details><summary>Click to expand <code>critcmp</code> output</summary>
           
           ```text
@@ -144,10 +142,10 @@ jobs:
           # Close the markdown blocks
           echo '```' >> comment_body.md
           echo '</details>' >> comment_body.md
-
+          
           # 2. Use jq to safely escape the multiline markdown into a JSON string
           jq -n --arg body "$(cat comment_body.md)" '{body: $body}' > payload.json
-
+          
           # 3. Post the comment via Forgejo/Codeberg API
           curl -s -X POST "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
             -H "Authorization: token $TOKEN" \
