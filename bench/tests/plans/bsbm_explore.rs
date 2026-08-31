@@ -1,5 +1,4 @@
 use crate::plans::run_plan_assertions;
-use anyhow::Context;
 use datafusion::physical_plan::displayable;
 use insta::assert_snapshot;
 use rdf_fusion::encoding::QuadStorageEncodingName;
@@ -9,7 +8,7 @@ use rdf_fusion_bench::benchmarks::bsbm::{
 };
 use rdf_fusion_bench::benchmarks::{Benchmark, BenchmarkName};
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
-use rdf_fusion_bench::operation::SparqlRawOperation;
+use rdf_fusion_bench::operation::SparqlOperation;
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -138,12 +137,11 @@ fn get_query_to_execute(
     benchmark: BsbmBenchmark<ExploreUseCase>,
     benchmark_context: &BenchmarkContext,
     query_name: BsbmExploreQueryName,
-) -> SparqlRawOperation<BsbmExploreQueryName> {
+) -> SparqlOperation {
     benchmark
-        .list_raw_operations(benchmark_context)
-        .context("Could not list raw operations for BSBM Explore benchmark. Have you prepared a bsbm-1000 dataset?")
+        .list_operations(benchmark_context)
         .unwrap()
         .into_iter()
-        .find(|q| q.query_name() == query_name)
+        .find(|q| q.name() == query_name.to_string())
         .unwrap()
 }

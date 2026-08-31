@@ -1,49 +1,37 @@
 use crate::runs::BenchmarkRun;
 use futures::StreamExt;
 use rdf_fusion::execution::results::QueryResults;
-use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions, RdfFusionQuery};
+use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
 use rdf_fusion::store::Store;
 
+/// A SPARQL operation (a named query) that gets executed during a benchmark run.
 #[derive(Clone)]
-pub enum SparqlRawOperation<QueryName> {
-    Query(QueryName, String),
+pub struct SparqlOperation {
+    name: String,
+    text: String,
 }
 
-impl<QueryName: Clone> SparqlRawOperation<QueryName> {
-    pub fn query_name(&self) -> QueryName {
-        match self {
-            SparqlRawOperation::Query(name, _) => name.clone(),
+impl SparqlOperation {
+    /// Creates a new [`SparqlOperation`] from a query name and its SPARQL text.
+    pub fn new(name: impl Into<String>, text: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            text: text.into(),
         }
     }
 
+    /// Returns the name of the operation.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the SPARQL query text.
     pub fn text(&self) -> &str {
-        match self {
-            SparqlRawOperation::Query(_, text) => text.as_ref(),
-        }
+        &self.text
     }
 
-    pub fn parse(&self) -> anyhow::Result<SparqlUDFeration<QueryName>> {
-        match self {
-            SparqlRawOperation::Query(query_name, query) => {
-                let query = query.parse()?;
-                Ok(SparqlUDFeration::Query(query_name.clone(), query))
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
-pub enum SparqlUDFeration<QueryName> {
-    Query(QueryName, RdfFusionQuery),
-}
-
-impl<QueryName> SparqlUDFeration<QueryName> {
-    pub fn query(&self) -> &RdfFusionQuery {
-        match self {
-            SparqlUDFeration::Query(_, query) => query,
-        }
-    }
-
+    /// Executes the operation against the given store and returns the measured run along with the
+    /// query explanation and the number of results.
     pub async fn run(
         &self,
         store: &Store,
@@ -52,38 +40,24 @@ impl<QueryName> SparqlUDFeration<QueryName> {
 
         let mut num_results = 0;
         let options = QueryOptions::default();
-        let explanation = match &self {
-            SparqlUDFeration::Query(_, q) => {
-                let (result, explanation) =
-                    store.explain_query_opt(q.clone(), options.clone()).await?;
-                match result {
-                    QueryResults::Boolean(_) => (),
-                    QueryResults::Solutions(s) => {
-                        let mut stream = s.into_record_batch_stream()?;
-                        while let Some(s) = stream.next().await {
-                            num_results += s?.num_rows();
-                        }
-                    }
-                    QueryResults::Graph(mut g) => {
-                        while let Some(t) = g.next().await {
-                            t?;
-                            num_results += 1;
-                        }
-                    }
+        let (result, explanation) = store.explain_query_opt(self.text(), options).await?;
+        match result {
+            QueryResults::Boolean(_) => (),
+            QueryResults::Solutions(s) => {
+                let mut stream = s.into_record_batch_stream()?;
+                while let Some(s) = stream.next().await {
+                    num_results += s?.num_rows();
                 }
-                explanation
             }
-        };
+            QueryResults::Graph(mut g) => {
+                while let Some(t) = g.next().await {
+                    t?;
+                    num_results += 1;
+                }
+            }
+        }
 
         let duration = start.elapsed();
         Ok((BenchmarkRun { duration }, explanation, num_results))
-    }
-}
-
-impl<QueryName: Clone> SparqlUDFeration<QueryName> {
-    pub fn query_name(&self) -> QueryName {
-        match self {
-            SparqlUDFeration::Query(name, _) => name.clone(),
-        }
     }
 }

@@ -5,8 +5,9 @@ use crate::w3c::{StoreConfig, StoreFactory};
 use anyhow::{Context, bail, ensure};
 use datafusion::physical_plan::displayable;
 use futures::StreamExt;
+use rdf_fusion::common::sparql::{Query, QueryDataset, SparqlParser};
 use rdf_fusion::common::{GraphName, NamedOrBlankNode};
-use rdf_fusion::execution::sparql::{QueryOptions, RdfFusionQuery};
+use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -42,12 +43,24 @@ impl Test for W3CSparqlEvaluationTest {
 impl W3CSparqlEvaluationTest {
     async fn execute(&self) -> anyhow::Result<()> {
         let query_file = self.test_data.query.as_deref().context("No action found")?;
-        let options = QueryOptions::default();
-        let query = RdfFusionQuery::parse(
-            &self.runtime.read_file_to_string(query_file).await?,
-            Some(query_file),
-        )
-        .context("Failure to parse query")?;
+        let options = QueryOptions {
+            base_iri: query_file.parse().ok(),
+            ..QueryOptions::default()
+        };
+        let query_str = self.runtime.read_file_to_string(query_file).await?;
+        let parser = SparqlParser::new()
+            .with_base_iri(query_file)
+            .expect("Invalid base IRI for SPARQL parser.");
+        let query = parser
+            .parse_query(&query_str)
+            .context("Failure to parse query")?;
+        let query_dataset = match &query {
+            Query::Select { dataset, .. }
+            | Query::Construct { dataset, .. }
+            | Query::Describe { dataset, .. }
+            | Query::Ask { dataset, .. } => dataset,
+        };
+        let dataset = QueryDataset::from_algebra(query_dataset);
 
         let mut default_graphs = Vec::new();
         let mut seen_graphs = HashSet::new();
@@ -76,8 +89,8 @@ impl W3CSparqlEvaluationTest {
         }
 
         // FROM and FROM NAMED support.
-        if !query.dataset().is_default_dataset() {
-            for graph_name in query.dataset().default_graph_graphs().unwrap_or(&[]) {
+        if !dataset.is_default_dataset() {
+            for graph_name in dataset.default_graph_graphs().unwrap_or(&[]) {
                 let GraphName::NamedNode(graph_node) = graph_name else {
                     bail!("Invalid FROM in query {query}");
                 };
@@ -93,7 +106,7 @@ impl W3CSparqlEvaluationTest {
                     seen_graphs.insert((graph_name.clone(), url));
                 }
             }
-            for graph_name in query.dataset().available_named_graphs().unwrap_or(&[]) {
+            for graph_name in dataset.available_named_graphs().unwrap_or(&[]) {
                 let NamedOrBlankNode::NamedNode(graph_node) = graph_name else {
                     bail!("Invalid FROM NAMED in query {query}");
                 };
@@ -130,18 +143,15 @@ impl W3CSparqlEvaluationTest {
             .context("Error constructing expected graph")?;
 
         let (actual_results, explanation) = store
-            .explain_query_opt(query.clone(), options)
+            .explain_query_opt(&query_str, options)
             .await
             .context("Failure to execute query")?;
 
         ensure!(
             are_query_results_isomorphic(&expected_results, actual_results).await,
             "Not isomorphic results.\n{}\nParsed query:\n{}\nData:\n{:?}\n\nOptimized Logical Plan:\n{}\n\nExecution Plan:\n{}\n",
-            results_diff(expected_results, store.query(query.clone()).await?).await,
-            RdfFusionQuery::parse(
-                &self.runtime.read_file_to_string(query_file).await?,
-                Some(query_file)
-            )?,
+            results_diff(expected_results, store.query(&query_str).await?).await,
+            query,
             {
                 let mut data = Vec::new();
                 let mut stream = store.stream().await?;

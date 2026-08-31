@@ -3,7 +3,6 @@ use crate::error::RdfFusionServerError;
 use axum::RequestPartsExt;
 use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
-use rdf_fusion::execution::sparql::QueryOptions;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -45,13 +44,6 @@ pub struct SparqlQueryParams {
     pub default_graph_uris: Vec<String>,
     pub named_graph_uris: Vec<String>,
     pub default_graph_as_union: bool,
-}
-
-impl SparqlQueryParams {
-    #[allow(clippy::unused_self, reason = "Self does not yet contain options.")]
-    pub fn to_query_options(&self) -> QueryOptions {
-        QueryOptions::default()
-    }
 }
 
 impl FromRequestParts<AppState> for SparqlQueryParams {

@@ -1,12 +1,12 @@
 use crate::BenchQuadStorageTypeArg;
-use crate::benchmarks::bsbm::operation::list_raw_operations;
+use crate::benchmarks::bsbm::operation::list_operations;
 use crate::benchmarks::bsbm::report::{BsbmReport, ExploreReportBuilder, QueryDetails};
 
 use crate::benchmarks::bsbm::use_case::BsbmUseCase;
 use crate::benchmarks::bsbm::{BusinessIntelligenceUseCase, ExploreUseCase, NumProducts};
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::BenchmarkContext;
-use crate::operation::{SparqlRawOperation, SparqlUDFeration};
+use crate::operation::SparqlOperation;
 use crate::report::BenchmarkReport;
 use crate::requirement::BenchRequirement;
 use crate::utils::print_store_stats;
@@ -88,40 +88,21 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
     /// method returns a list of these queries that should be executed during this run.
     pub fn list_operations(
         &self,
-        ctx: &BenchmarkContext,
-    ) -> anyhow::Result<Vec<SparqlUDFeration<TUseCase::QueryName>>> {
+        _ctx: &BenchmarkContext,
+    ) -> anyhow::Result<Vec<SparqlOperation>> {
         println!("Loading queries ...");
 
+        let queries_path = self.paths.queries.clone();
+        let operations = list_operations(queries_path)?;
+
         let result = match self.max_query_count {
-            None => self
-                .list_raw_operations(ctx)?
-                .map(|q| q.parse().unwrap())
-                .collect(),
-            Some(max_query_count) => self
-                .list_raw_operations(ctx)?
-                .map(|q| q.parse().unwrap())
-                .take(usize::try_from(max_query_count)?)
-                .collect(),
+            None => operations.collect(),
+            Some(max_query_count) => {
+                operations.take(usize::try_from(max_query_count)?).collect()
+            }
         };
 
         println!("Queries loaded.");
-        Ok(result)
-    }
-
-    /// The BSBM generator produces a list of queries that are tailored to the generated data. This
-    /// method returns a list of these queries that should be executed during this run.
-    pub fn list_raw_operations(
-        &self,
-        _ctx: &BenchmarkContext,
-    ) -> anyhow::Result<impl Iterator<Item = SparqlRawOperation<TUseCase::QueryName>>>
-    {
-        let queries_path = self.paths.queries.clone();
-        let result =
-            list_raw_operations::<TUseCase::QueryName>(queries_path)?.map(|q| match q {
-                SparqlRawOperation::Query(name, text) => {
-                    SparqlRawOperation::Query(name, text.replace(" #", ""))
-                }
-            });
         Ok(result)
     }
 }
@@ -171,9 +152,7 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
     ) -> anyhow::Result<Box<dyn BenchmarkReport>> {
         let operations = self.list_operations(bench_context)?;
         let memory_store = self.prepare_store(bench_context, true).await?;
-        let report =
-            execute_benchmark::<TUseCase>(bench_context, operations, &memory_store)
-                .await?;
+        let report = execute_benchmark(bench_context, operations, &memory_store).await?;
 
         Ok(Box::new(report))
     }
@@ -246,14 +225,11 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
     }
 }
 
-async fn execute_benchmark<TUseCase: BsbmUseCase>(
+async fn execute_benchmark(
     context: &BenchmarkContext<'_>,
-    operations: Vec<SparqlUDFeration<TUseCase::QueryName>>,
+    operations: Vec<SparqlOperation>,
     memory_store: &Store,
-) -> anyhow::Result<BsbmReport<TUseCase>>
-where
-    TUseCase::QueryName: 'static,
-{
+) -> anyhow::Result<BsbmReport> {
     println!("Evaluating queries ...");
 
     let mut recorder = crate::utils::cache::CacheMetricsRecorder::new(context)?;
@@ -267,41 +243,24 @@ where
             let store = memory_store.clone();
             SpawnedTask::spawn(async move {
                 let (run, explanation, num_results) = operation.run(&store).await?;
-                Ok::<
-                    (
-                        usize,
-                        TUseCase::QueryName,
-                        String,
-                        crate::runs::BenchmarkRun,
-                        rdf_fusion::execution::sparql::QueryExplanation,
-                        usize,
-                    ),
-                    anyhow::Error,
-                >((
-                    idx,
-                    operation.query_name(),
-                    operation.query().to_string(),
-                    run,
-                    explanation,
-                    num_results,
-                ))
+                Ok::<_, anyhow::Error>((idx, operation, run, explanation, num_results))
             })
         })
         .buffer_unordered(max_parallel_tasks);
 
     while let Some(result) = stream.next().await {
         let result = result.context("Failed to join query task")??;
-        let (idx, query_name, query_text, run, explanation, num_results) = result;
+        let (idx, operation, run, explanation, num_results) = result;
 
         if idx % 25 == 0 {
             println!("Progress: {idx}/{len}");
         }
 
-        report.add_run(query_name, run.clone());
+        report.add_run(operation.name().to_string(), run.clone());
         if context.parent().options().verbose_results {
             let details = QueryDetails {
-                query: query_text,
-                query_type: query_name.to_string(),
+                query: operation.text().to_string(),
+                query_type: operation.name().to_string(),
                 total_time: run.duration,
                 explanation,
                 num_results,
@@ -309,7 +268,7 @@ where
             report.add_explanation(details);
         }
 
-        recorder.record_run(context, &query_name.to_string())?;
+        recorder.record_run(context, operation.name())?;
     }
 
     let report = report.build();

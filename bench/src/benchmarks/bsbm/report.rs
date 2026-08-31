@@ -1,4 +1,3 @@
-use crate::benchmarks::bsbm::use_case::BsbmUseCase;
 use crate::report::BenchmarkReport;
 use crate::runs::{BenchmarkRun, BenchmarkRuns};
 use anyhow::Context;
@@ -7,7 +6,7 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::display::DisplayableExecutionPlan;
 use prettytable::{Table, row};
 use rdf_fusion::execution::sparql::QueryExplanation;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -27,15 +26,15 @@ pub struct QueryDetails {
 }
 
 /// Stores the final report of executing a BSBM explore benchmark.
-pub struct BsbmReport<TUseCase: BsbmUseCase> {
+pub struct BsbmReport {
     /// Stores all runs of the benchmark grouped by the query name.
     /// A single query name can have multiple instances (with random variables) in BSBM.
-    runs: HashMap<TUseCase::QueryName, BenchmarkRuns>,
+    runs: BTreeMap<String, BenchmarkRuns>,
     /// Query details for each run.
     details: Vec<QueryDetails>,
 }
 
-impl<TUseCase: BsbmUseCase> BsbmReport<TUseCase> {
+impl BsbmReport {
     /// Writes a tabular summary of the query execution time.
     fn write_summary<W: Write + ?Sized>(&self, writer: &mut W) -> anyhow::Result<()> {
         // Create the table
@@ -46,10 +45,10 @@ impl<TUseCase: BsbmUseCase> BsbmReport<TUseCase> {
             "Average Duration",
             "Average Results"
         ]);
-        for query in TUseCase::list_queries() {
+        for query in self.runs.keys() {
             let summary = self
                 .runs
-                .get(&query)
+                .get(query)
                 .map(BenchmarkRuns::summarize)
                 .transpose()?;
 
@@ -63,17 +62,12 @@ impl<TUseCase: BsbmUseCase> BsbmReport<TUseCase> {
             let details = self
                 .details
                 .iter()
-                .filter(|d| d.query_type == query.to_string())
+                .filter(|d| d.query_type == *query)
                 .collect::<Vec<_>>();
             let total_results = details.iter().map(|d| d.num_results).sum::<usize>();
             let average_results = total_results as f64 / details.len() as f64;
 
-            table.add_row(row![
-                query.to_string(),
-                samples,
-                average_duration,
-                average_results
-            ]);
+            table.add_row(row![query, samples, average_duration, average_results]);
         }
         table.print(writer)?;
 
@@ -201,7 +195,7 @@ Planning Compute: {:?}
     }
 }
 
-impl<TUseCase: BsbmUseCase> BenchmarkReport for BsbmReport<TUseCase> {
+impl BenchmarkReport for BsbmReport {
     fn write_results(&self, output_dir: &Path) -> anyhow::Result<()> {
         let summary_txt = output_dir.join("summary.txt");
         let mut summary_file = fs::File::create(summary_txt)?;
@@ -227,24 +221,24 @@ impl<TUseCase: BsbmUseCase> BenchmarkReport for BsbmReport<TUseCase> {
 /// Builder for the [`BsbmReport`].
 ///
 /// This should only be accessible to the benchmark code.
-pub(super) struct ExploreReportBuilder<TUseCase: BsbmUseCase> {
+pub(super) struct ExploreReportBuilder {
     /// The inner report that is being built.
-    report: BsbmReport<TUseCase>,
+    report: BsbmReport,
 }
 
-impl<TUseCase: BsbmUseCase> ExploreReportBuilder<TUseCase> {
+impl ExploreReportBuilder {
     /// Creates a new builder.
     pub(super) fn new() -> Self {
         Self {
             report: BsbmReport {
-                runs: HashMap::new(),
+                runs: BTreeMap::new(),
                 details: Vec::new(),
             },
         }
     }
 
     /// Adds a run to a particular query.
-    pub fn add_run(&mut self, name: TUseCase::QueryName, run: BenchmarkRun) {
+    pub fn add_run(&mut self, name: String, run: BenchmarkRun) {
         let runs = self.report.runs.entry(name).or_default();
         runs.add_run(run);
     }
@@ -257,7 +251,7 @@ impl<TUseCase: BsbmUseCase> ExploreReportBuilder<TUseCase> {
     }
 
     /// Finalizes the report.
-    pub fn build(self) -> BsbmReport<TUseCase> {
+    pub fn build(self) -> BsbmReport {
         self.report
     }
 }

@@ -1,8 +1,8 @@
-use crate::sparql::QueryDataset;
 use crate::sparql::rewriting::expression_rewriter::ExpressionRewriter;
 use datafusion::common::{Column, DFSchema, not_impl_err, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, SortExpr};
 use rdf_fusion_common::Iri;
+use rdf_fusion_common::sparql::QueryDataset;
 use rdf_fusion_common::sparql::algebra::{
     AggregateExpression, AggregateFunction, Expression, GraphPattern, OrderExpression,
 };

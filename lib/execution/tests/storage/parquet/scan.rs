@@ -4,14 +4,16 @@ use datafusion::physical_plan::displayable;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use insta::assert_snapshot;
 use object_store::memory::InMemory;
+use rdf_fusion_common::sparql::SparqlParser;
 use rdf_fusion_common::{NamedNode, Quad};
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_encoding::string::StringQuadsBuilder;
 use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_execution::sparql::QueryOptions;
-use rdf_fusion_execution::sparql::RdfFusionQuery;
+use rdf_fusion_execution::sparql::{RdfFusionQuery, plan_query};
 use rdf_fusion_extensions::storage::QuadStorage;
+use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion_storage::block_cache::BlockCache;
 use rdf_fusion_storage::parquet::ParquetQuadStorage;
 use std::sync::Arc;
@@ -30,7 +32,10 @@ async fn test_parquet_scan_filter_pushdown_with_equality_with_named_node() {
     )
     .await;
 
-    let query_pushed: RdfFusionQuery = "SELECT ?s WHERE { ?s <http://example.org/p1> ?o . FILTER(?o = <http://example.org/o1>) }".try_into().unwrap();
+    let query_pushed = plan_query_from_str(
+        &context,
+        "SELECT ?s WHERE { ?s <http://example.org/p1> ?o . FILTER(?o = <http://example.org/o1>) }",
+    );
     let (_, explanation_pushed) = context
         .execute_query(&query_pushed, QueryOptions::default())
         .await
@@ -56,7 +61,10 @@ async fn test_parquet_scan_filter_pushdown_with_function_prevented() {
     )
     .await;
 
-    let query_not_pushed: RdfFusionQuery = "SELECT ?s WHERE { ?s <http://example.org/p1> ?o . FILTER(LCASE(STR(?o)) = \"http://example.org/o1\") }".try_into().unwrap();
+    let query_not_pushed = plan_query_from_str(
+        &context,
+        "SELECT ?s WHERE { ?s <http://example.org/p1> ?o . FILTER(LCASE(STR(?o)) = \"http://example.org/o1\") }",
+    );
     let (_, explanation_not_pushed) = context
         .execute_query(&query_not_pushed, QueryOptions::default())
         .await
@@ -91,9 +99,10 @@ async fn test_parquet_bloom_filter_cache_hits() {
     .await;
     let cache = storage.bloom_filter_cache().clone();
 
-    let query: RdfFusionQuery = "SELECT ?s WHERE { ?s ?p <http://example.org/o2> . }"
-        .try_into()
-        .unwrap();
+    let query = plan_query_from_str(
+        &rdf_context,
+        "SELECT ?s WHERE { ?s ?p <http://example.org/o2> . }",
+    );
     let (results, _) = rdf_context
         .execute_query(&query, QueryOptions::default())
         .await
@@ -136,9 +145,10 @@ async fn test_parquet_scan_with_caching() {
 
     assert!(storage.cache().is_some());
 
-    let query: RdfFusionQuery = "SELECT ?s ?o WHERE { ?s <http://example.org/p1> ?o . }"
-        .try_into()
-        .unwrap();
+    let query = plan_query_from_str(
+        &rdf_context,
+        "SELECT ?s ?o WHERE { ?s <http://example.org/p1> ?o . }",
+    );
     let (results, _) = rdf_context
         .execute_query(&query, QueryOptions::default())
         .await
@@ -226,4 +236,10 @@ async fn prepare_test_store_with_cache(
             .unwrap();
 
     (rdf_context, storage)
+}
+
+fn plan_query_from_str(context: &RdfFusionContext, query: &str) -> RdfFusionQuery {
+    let parsed = SparqlParser::new().parse_query(query).unwrap();
+    let builder_context = RdfFusionLogicalPlanBuilderContext::new(context.create_view());
+    plan_query(builder_context, parsed, None, &Default::default()).unwrap()
 }

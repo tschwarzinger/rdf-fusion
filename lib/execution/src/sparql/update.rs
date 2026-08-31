@@ -1,31 +1,23 @@
 use crate::RdfFusionContext;
-use crate::sparql::QueryOptions;
+use crate::results::QueryResults;
 use crate::sparql::error::QueryEvaluationError;
-use crate::sparql::{
-    RdfFusionQuery, RdfFusionUpdate, UpdateOptions, evaluate_query_with_snapshot,
-};
+use crate::sparql::{QueryOptions, UpdateOptions, evaluate_query_with_snapshot};
 
 use datafusion::dataframe::DataFrame;
 use futures::{StreamExt, TryStreamExt};
-use itertools::izip;
 use oxrdfio::RdfParser;
+use sparesults::QuerySolution as OxQuerySolution;
 
-use rdf_fusion_common::RdfFormat;
-use rdf_fusion_common::sparql::algebra::GraphTarget;
-use rdf_fusion_common::sparql::term::{
-    GraphNamePattern, GroundQuadPattern, GroundTermPattern, QuadPattern,
+use rdf_fusion_common::sparql::term::{GraphNamePattern, GroundQuadPattern, QuadPattern};
+use rdf_fusion_common::sparql::{
+    GraphTarget, QueryVariant, RdfFusionQuery, RdfFusionUpdate, UpdateOperation,
 };
-use rdf_fusion_common::sparql::{GraphUpdateOperation, Query};
 use rdf_fusion_common::{
-    BlankNode, GraphName, NamedNodePattern, NamedOrBlankNode, Quad, Term, TermPattern,
+    BlankNode, GraphName, NamedNodePattern, Quad, Term, TermPattern,
 };
 
 use rdf_fusion_encoding::quads_to_plain_term_dataframe;
-use rdf_fusion_extensions::storage::{
-    QuadStorageTransaction, graph_target_to_plain_term_dataframe,
-};
-use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
-use sparesults::QuerySolution;
+use rdf_fusion_extensions::storage::graph_target_to_plain_term_dataframe;
 use std::collections::HashMap;
 use std::io;
 use tokio_util::io::StreamReader;
@@ -33,107 +25,38 @@ use tokio_util::io::StreamReader;
 /// Implements the SPARQL `UPDATE` query.
 pub async fn evaluate_update(
     ctx: &RdfFusionContext,
-    builder_context: RdfFusionLogicalPlanBuilderContext,
     update: &RdfFusionUpdate,
     _options: UpdateOptions,
 ) -> Result<(), QueryEvaluationError> {
     let state = ctx.session_context().state();
     let transaction = ctx.storage().begin_transaction(&state).await?;
 
-    for (operation, dataset) in izip!(&update.inner.operations, &update.using_datasets) {
+    for operation in update.operations() {
         match operation {
-            GraphUpdateOperation::InsertData { data } => {
-                let data: Vec<Quad> = data
-                    .iter()
-                    .map(|q| Quad {
-                        subject: q.subject.clone(),
-                        predicate: q.predicate.clone(),
-                        object: q.object.clone(),
-                        graph_name: convert_graph_name(q.graph_name.clone()),
-                    })
-                    .collect();
-                let df = quads_to_plain_term_dataframe(ctx.session_context(), &data);
+            UpdateOperation::InsertData { quads } => {
+                let df = ctx.session_context().read_batch(quads.clone())?;
                 transaction.insert(df).await?;
             }
-            GraphUpdateOperation::DeleteData { data } => {
-                let data: Vec<Quad> = data
-                    .iter()
-                    .map(|q| Quad {
-                        subject: NamedOrBlankNode::NamedNode(q.subject.clone()),
-                        predicate: q.predicate.clone(),
-                        object: convert_ground_term(q.object.clone()),
-                        graph_name: convert_graph_name(q.graph_name.clone()),
-                    })
-                    .collect();
-                let df = quads_to_plain_term_dataframe(ctx.session_context(), &data);
+            UpdateOperation::DeleteData { quads } => {
+                let df = ctx.session_context().read_batch(quads.clone())?;
                 transaction.remove(df).await?;
             }
-            GraphUpdateOperation::Clear { silent, graph } => {
-                let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
-                    .await?;
-                let res = transaction.clear_graph(df).await;
-                if let Err(e) = res {
-                    if !silent {
-                        return Err(QueryEvaluationError::Storage(e));
-                    }
-                }
-            }
-            GraphUpdateOperation::Drop { silent, graph } => {
-                let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
-                    .await?;
-                let res = transaction.drop_graph(df).await;
-                if let Err(e) = res {
-                    if !silent {
-                        return Err(QueryEvaluationError::Storage(e));
-                    }
-                }
-            }
-            GraphUpdateOperation::Create { silent, graph } => {
-                let df = create_graph_target_dataframe(
-                    ctx,
-                    transaction.as_ref(),
-                    &GraphTarget::NamedNode(graph.clone()),
-                )
-                .await?;
-                let res = transaction
-                    .create_named_graph(df)
-                    .await
-                    .map_err(QueryEvaluationError::Storage)?;
-                if let Some(false) = res {
-                    if !silent {
-                        return Err(QueryEvaluationError::GraphAlreadyExists(
-                            graph.clone(),
-                        ));
-                    }
-                }
-            }
-            GraphUpdateOperation::DeleteInsert {
+            UpdateOperation::DeleteInsert {
                 delete,
                 insert,
                 pattern,
-                using,
             } => {
-                let dataset = dataset.clone().unwrap_or_default();
-
-                let query = RdfFusionQuery {
-                    inner: Query::Select {
-                        dataset: using.clone(),
-                        pattern: *pattern.clone(),
-                        base_iri: None,
-                    },
-                    dataset,
-                };
+                let query = RdfFusionQuery::new(pattern.clone(), QueryVariant::Select);
                 let snapshot = transaction.snapshot().await?;
                 let (results, _) = evaluate_query_with_snapshot(
                     ctx,
-                    builder_context.clone(),
                     &query,
                     QueryOptions::default(),
                     snapshot,
                 )
                 .await?;
 
-                if let crate::results::QueryResults::Solutions(mut solutions) = results {
+                if let QueryResults::Solutions(mut solutions) = results {
                     let mut delete_substituter = QuadPatternSubstituter::new(
                         delete
                             .iter()
@@ -169,7 +92,7 @@ pub async fn evaluate_update(
                     }
                 }
             }
-            GraphUpdateOperation::Load {
+            UpdateOperation::Load {
                 source,
                 destination,
                 silent,
@@ -182,11 +105,15 @@ pub async fn evaluate_update(
                         .headers()
                         .get(reqwest::header::CONTENT_TYPE)
                         .and_then(|ct| ct.to_str().ok())
-                        .and_then(|ct: &str| RdfFormat::from_media_type(ct))
-                        .or_else(|| {
-                            RdfFormat::from_extension(source.as_str().rsplit_once('.')?.1)
+                        .and_then(|ct: &str| {
+                            rdf_fusion_common::RdfFormat::from_media_type(ct)
                         })
-                        .unwrap_or(RdfFormat::Turtle);
+                        .or_else(|| {
+                            rdf_fusion_common::RdfFormat::from_extension(
+                                source.as_str().rsplit_once('.')?.1,
+                            )
+                        })
+                        .unwrap_or(rdf_fusion_common::RdfFormat::Turtle);
 
                     let stream = response.bytes_stream().map_err(io::Error::other);
                     let reader = StreamReader::new(stream);
@@ -200,7 +127,7 @@ pub async fn evaluate_update(
                         .for_tokio_async_reader(reader);
 
                     let mut quads = Vec::new();
-                    let destination = convert_graph_name(destination.clone());
+                    let destination = destination.clone();
 
                     while let Some(quad) = parser.next().await {
                         let mut quad =
@@ -237,6 +164,45 @@ pub async fn evaluate_update(
                     }
                 }
             }
+            UpdateOperation::Clear { silent, graph } => {
+                let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
+                    .await?;
+                let res = transaction.clear_graph(df).await;
+                if let Err(e) = res {
+                    if !silent {
+                        return Err(QueryEvaluationError::Storage(e));
+                    }
+                }
+            }
+            UpdateOperation::Drop { silent, graph } => {
+                let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
+                    .await?;
+                let res = transaction.drop_graph(df).await;
+                if let Err(e) = res {
+                    if !silent {
+                        return Err(QueryEvaluationError::Storage(e));
+                    }
+                }
+            }
+            UpdateOperation::Create { silent, graph } => {
+                let df = create_graph_target_dataframe(
+                    ctx,
+                    transaction.as_ref(),
+                    &GraphTarget::NamedNode(graph.clone()),
+                )
+                .await?;
+                let res = transaction
+                    .create_named_graph(df)
+                    .await
+                    .map_err(QueryEvaluationError::Storage)?;
+                if let Some(false) = res {
+                    if !silent {
+                        return Err(QueryEvaluationError::GraphAlreadyExists(
+                            graph.clone(),
+                        ));
+                    }
+                }
+            }
         }
     }
 
@@ -245,27 +211,9 @@ pub async fn evaluate_update(
     Ok(())
 }
 
-fn convert_graph_name(gn: rdf_fusion_common::sparql::term::GraphName) -> GraphName {
-    match gn {
-        rdf_fusion_common::sparql::term::GraphName::NamedNode(n) => {
-            GraphName::NamedNode(n)
-        }
-        rdf_fusion_common::sparql::term::GraphName::DefaultGraph => {
-            GraphName::DefaultGraph
-        }
-    }
-}
-
-fn convert_ground_term(term: rdf_fusion_common::sparql::term::GroundTerm) -> Term {
-    match term {
-        rdf_fusion_common::sparql::term::GroundTerm::NamedNode(n) => Term::NamedNode(n),
-        rdf_fusion_common::sparql::term::GroundTerm::Literal(l) => Term::Literal(l),
-    }
-}
-
 async fn create_graph_target_dataframe(
     ctx: &RdfFusionContext,
-    transaction: &dyn QuadStorageTransaction,
+    transaction: &dyn rdf_fusion_extensions::storage::QuadStorageTransaction,
     graph: &GraphTarget,
 ) -> Result<DataFrame, QueryEvaluationError> {
     let snapshot = transaction
@@ -296,7 +244,7 @@ impl QuadPatternSubstituter {
         }
     }
 
-    fn substitute(&mut self, solution: &QuerySolution) -> Vec<Quad> {
+    fn substitute(&mut self, solution: &OxQuerySolution) -> Vec<Quad> {
         let mut result = Vec::with_capacity(self.templates.len());
         for template in &self.templates {
             if let Some(quad) =
@@ -319,28 +267,42 @@ fn ground_quad_pattern_to_quad_pattern(pattern: &GroundQuadPattern) -> QuadPatte
     }
 }
 
-fn ground_term_pattern_to_term_pattern(pattern: &GroundTermPattern) -> TermPattern {
+fn ground_term_pattern_to_term_pattern(
+    pattern: &rdf_fusion_common::sparql::term::GroundTermPattern,
+) -> TermPattern {
     match pattern {
-        GroundTermPattern::NamedNode(n) => TermPattern::NamedNode(n.clone()),
-        GroundTermPattern::Literal(l) => TermPattern::Literal(l.clone()),
-        GroundTermPattern::Variable(v) => TermPattern::Variable(v.clone()),
+        rdf_fusion_common::sparql::term::GroundTermPattern::NamedNode(n) => {
+            TermPattern::NamedNode(n.clone())
+        }
+        rdf_fusion_common::sparql::term::GroundTermPattern::Literal(l) => {
+            TermPattern::Literal(l.clone())
+        }
+        rdf_fusion_common::sparql::term::GroundTermPattern::Variable(v) => {
+            TermPattern::Variable(v.clone())
+        }
     }
 }
 
 fn instantiate_quad_pattern(
     pattern: &QuadPattern,
-    solution: &QuerySolution,
+    solution: &OxQuerySolution,
     bnodes: &mut HashMap<BlankNode, BlankNode>,
 ) -> Option<Quad> {
     let subject = match &pattern.subject {
-        TermPattern::NamedNode(n) => NamedOrBlankNode::NamedNode(n.clone()),
+        TermPattern::NamedNode(n) => {
+            rdf_fusion_common::NamedOrBlankNode::NamedNode(n.clone())
+        }
         TermPattern::BlankNode(b) => {
             let bnode = bnodes.entry(b.clone()).or_default();
-            NamedOrBlankNode::BlankNode(bnode.clone())
+            rdf_fusion_common::NamedOrBlankNode::BlankNode(bnode.clone())
         }
         TermPattern::Variable(v) => match solution.get(v)? {
-            Term::NamedNode(n) => NamedOrBlankNode::NamedNode(n.clone()),
-            Term::BlankNode(b) => NamedOrBlankNode::BlankNode(b.clone()),
+            Term::NamedNode(n) => {
+                rdf_fusion_common::NamedOrBlankNode::NamedNode(n.clone())
+            }
+            Term::BlankNode(b) => {
+                rdf_fusion_common::NamedOrBlankNode::BlankNode(b.clone())
+            }
             Term::Literal(_) => return None,
         },
         TermPattern::Literal(_) => return None,

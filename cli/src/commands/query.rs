@@ -1,9 +1,8 @@
-use anyhow::Context;
 use datafusion::common::instant::Instant;
 use datafusion::physical_plan::display::DisplayableExecutionPlan;
 use datafusion::physical_plan::displayable;
 use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::execution::sparql::{QueryOptions, RdfFusionQuery};
+use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion::store::Store;
 
 /// Executes a SPARQL query against the given store and prints the result to stdout.
@@ -13,12 +12,9 @@ pub async fn query(
     explain: bool,
     analyze: bool,
 ) -> anyhow::Result<()> {
-    let parsed_query = RdfFusionQuery::parse(&query_str, None)
-        .context("Failed to parse SPARQL query")?;
-
     if explain {
         let (results, explanation) = store
-            .explain_query_opt(parsed_query, QueryOptions::default())
+            .explain_query_opt(&query_str, QueryOptions::default())
             .await?;
 
         println!(
@@ -59,7 +55,7 @@ pub async fn query(
             );
         }
     } else {
-        let results = store.query(parsed_query).await?;
+        let results = store.query(&query_str).await?;
         results
             .write(std::io::stdout(), QueryResultsFormat::Tsv)
             .await?;

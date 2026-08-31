@@ -8,14 +8,15 @@ use std::path::PathBuf;
 pub struct ExploreUseCase;
 
 impl BsbmUseCase for ExploreUseCase {
-    type QueryName = BsbmExploreQueryName;
-
     fn name() -> BsbmUseCaseName {
         BsbmUseCaseName::Explore
     }
 
-    fn list_queries() -> Vec<Self::QueryName> {
+    fn list_queries() -> Vec<String> {
         BsbmExploreQueryName::list_queries()
+            .into_iter()
+            .map(|q| q.to_string())
+            .collect()
     }
 
     fn queries_file_path() -> PathBuf {
@@ -75,7 +76,7 @@ impl TryFrom<u8> for BsbmExploreQueryName {
             10 => Ok(BsbmExploreQueryName::Q10),
             11 => Ok(BsbmExploreQueryName::Q11),
             12 => Ok(BsbmExploreQueryName::Q12),
-            _ => Err(anyhow::anyhow!("Invalid BSBM explore query name: {value}",)),
+            _ => Err(anyhow::anyhow!("Invalid BSBM explore query name: {value}")),
         }
     }
 }

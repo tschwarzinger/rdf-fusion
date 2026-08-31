@@ -178,11 +178,8 @@ pub fn detect_encoding_from_types(
     Ok(Some(encoding_name))
 }
 
-/// Creates a [`DataFrame`] from the given quads using the plain term encoding.
-pub fn quads_to_plain_term_dataframe(
-    session: &SessionContext,
-    quads: &[Quad],
-) -> DataFrame {
+/// Creates a [`RecordBatch`] from the given quads using the plain term encoding.
+pub fn quads_to_plain_term_record_batch(quads: &[Quad]) -> RecordBatch {
     let schema = QuadStorageEncoding::PlainTerm.quad_schema();
 
     let mut builder = PlainTermQuadsBuilder::with_capacity(quads.len());
@@ -198,8 +195,16 @@ pub fn quads_to_plain_term_dataframe(
         pt_quads.objects.into_array_ref(),
     ];
 
-    let batch = RecordBatch::try_new(Arc::clone(schema.inner()), arrays)
-        .expect("Failed to create RecordBatch");
+    RecordBatch::try_new(Arc::clone(schema.inner()), arrays)
+        .expect("Failed to create RecordBatch")
+}
+
+/// Creates a [`DataFrame`] from the given quads using the plain term encoding.
+pub fn quads_to_plain_term_dataframe(
+    session: &SessionContext,
+    quads: &[Quad],
+) -> DataFrame {
+    let batch = quads_to_plain_term_record_batch(quads);
     session
         .read_batch(batch)
         .expect("Failed to read batch into DataFrame")

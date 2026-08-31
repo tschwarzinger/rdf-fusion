@@ -108,26 +108,22 @@ fn get_queries(
     benchmark: &BsbmBenchmark<BusinessIntelligenceUseCase>,
     benchmark_context: &BenchmarkContext,
 ) -> Vec<(String, String)> {
+    let operations = benchmark.list_operations(benchmark_context).unwrap();
     let mut queries = BsbmBusinessIntelligenceQueryName::list_queries()
         .into_iter()
         .map(|query_name| {
-            let op = benchmark
-                .list_raw_operations(benchmark_context)
-                .unwrap()
-                .find(|q| q.query_name() == query_name)
+            let op = operations
+                .iter()
+                .find(|op| op.name() == query_name.to_string())
                 .unwrap();
             (query_name.to_string(), op.text().to_string())
         })
         .collect::<Vec<_>>();
 
     // Query 64 is work-intensive
-    let op64 = benchmark
-        .list_raw_operations(benchmark_context)
-        .unwrap()
-        .nth(64)
-        .unwrap();
-
-    queries.push(("Query 64".to_string(), op64.text().to_string()));
+    if let Some(op64) = operations.get(64) {
+        queries.push(("Query 64".to_string(), op64.text().to_string()));
+    }
 
     queries
 }

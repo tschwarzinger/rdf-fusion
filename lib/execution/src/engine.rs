@@ -219,13 +219,7 @@ impl RdfFusionContext {
         query: &RdfFusionQuery,
         options: QueryOptions,
     ) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
-        Box::pin(evaluate_query(
-            self,
-            self.plan_builder_context(),
-            query,
-            options,
-        ))
-        .await
+        Box::pin(evaluate_query(self, query, options)).await
     }
 
     /// Evaluates a SPARQL [`RdfFusionUpdate`] over the instance.
@@ -234,13 +228,7 @@ impl RdfFusionContext {
         query: &RdfFusionUpdate,
         options: UpdateOptions,
     ) -> Result<(), QueryEvaluationError> {
-        Box::pin(evaluate_update(
-            self,
-            self.plan_builder_context(),
-            query,
-            options,
-        ))
-        .await
+        Box::pin(evaluate_update(self, query, options)).await
     }
 }
 

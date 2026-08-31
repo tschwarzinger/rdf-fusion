@@ -46,20 +46,11 @@ impl Display for BsbmUseCaseName {
 
 /// Implements the use-case-specific logic for BSBM benchmarks.
 pub trait BsbmUseCase: Send + Sync {
-    /// The type for
-    type QueryName: Copy
-        + TryFrom<u8, Error = anyhow::Error>
-        + Hash
-        + Eq
-        + Display
-        + Send
-        + Sync;
-
     /// Returns the name of the use case.
     fn name() -> BsbmUseCaseName;
 
     /// Lists all queries in the use case.
-    fn list_queries() -> Vec<Self::QueryName>;
+    fn list_queries() -> Vec<String>;
 
     /// The file path to the queries.
     fn queries_file_path() -> PathBuf;

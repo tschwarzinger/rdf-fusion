@@ -1,7 +1,7 @@
 use crate::test::{Test, TestOutcome};
 use crate::w3c::files::W3CTestRuntime;
 use anyhow::{Context, ensure};
-use rdf_fusion::execution::sparql::{RdfFusionQuery, RdfFusionUpdate};
+use rdf_fusion::common::sparql::SparqlParser;
 
 pub struct W3CSparqlSyntaxTest {
     pub id: String,
@@ -25,25 +25,34 @@ impl Test for W3CSparqlSyntaxTest {
     async fn run(&self) -> anyhow::Result<TestOutcome> {
         let content = self.runtime.read_file_to_string(&self.action_file).await?;
 
+        let parser = SparqlParser::new()
+            .with_base_iri(&self.action_file)
+            .expect("Invalid base IRI for SPARQL parser.");
         let result = if self.is_positive {
             if self.is_update {
-                let update = RdfFusionUpdate::parse(&content, Some(&self.action_file))
+                let update = parser
+                    .clone()
+                    .parse_update(&content)
                     .context("Not able to parse positive update syntax test")?;
-                RdfFusionUpdate::parse(&update.to_string(), None)
+                parser
+                    .parse_update(&update.to_string())
                     .map(|_| ())
                     .with_context(|| format!("Failure to deserialize \"{update}\""))
             } else {
-                let query = RdfFusionQuery::parse(&content, Some(&self.action_file))
+                let query = parser
+                    .clone()
+                    .parse_query(&content)
                     .context("Not able to parse positive syntax test")?;
-                RdfFusionQuery::parse(&query.to_string(), None)
+                parser
+                    .parse_query(&query.to_string())
                     .map(|_| ())
                     .with_context(|| format!("Failure to deserialize \"{query}\""))
             }
         } else {
             let res = if self.is_update {
-                RdfFusionUpdate::parse(&content, Some(&self.action_file)).map(|_| ())
+                parser.parse_update(&content).map(|_| ())
             } else {
-                RdfFusionQuery::parse(&content, Some(&self.action_file)).map(|_| ())
+                parser.parse_query(&content).map(|_| ())
             };
             ensure!(
                 res.is_err(),

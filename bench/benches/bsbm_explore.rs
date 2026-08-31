@@ -109,9 +109,10 @@ fn get_queries(
         .into_iter()
         .map(|query_name| {
             let op = benchmark
-                .list_raw_operations(benchmark_context)
+                .list_operations(benchmark_context)
                 .unwrap()
-                .find(|q| q.query_name() == query_name)
+                .into_iter()
+                .find(|op| op.name() == query_name.to_string())
                 .unwrap();
             (query_name.to_string(), op.text().to_string())
         })

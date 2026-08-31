@@ -5,8 +5,8 @@ use crate::w3c::{StoreConfig, StoreFactory};
 use anyhow::{Context, ensure};
 use futures::StreamExt;
 use rdf_fusion::common::dataset::CanonicalizationAlgorithm;
+use rdf_fusion::common::sparql::SparqlParser;
 use rdf_fusion::common::{Dataset, GraphName};
-use rdf_fusion::execution::sparql::RdfFusionUpdate;
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 
 pub struct W3CSparqlUpdateEvaluationTest {
@@ -105,18 +105,24 @@ impl W3CSparqlUpdateEvaluationTest {
             .update
             .as_deref()
             .context("No action found")?;
-        let update = RdfFusionUpdate::parse(
-            &self.runtime.read_file_to_string(update_file).await?,
-            Some(update_file),
-        )
-        .context("Failure to parse update")?;
+        let content = self.runtime.read_file_to_string(update_file).await?;
+
+        let parser = SparqlParser::new()
+            .with_base_iri(update_file)
+            .expect("Invalid base IRI for SPARQL parser.");
+
+        let update = parser
+            .clone()
+            .parse_update(&content)
+            .context("Failure to parse update")?;
 
         // We check parsing roundtrip
-        RdfFusionUpdate::parse(&update.to_string(), None)
+        parser
+            .parse_update(&update.to_string())
             .with_context(|| format!("Failure to deserialize \"{update}\""))?;
 
         store
-            .update(update)
+            .update(&content)
             .await
             .context("Failure to execute update")?;
         let mut store_dataset = Dataset::new();
@@ -137,11 +143,7 @@ impl W3CSparqlUpdateEvaluationTest {
             store_dataset == result_store_dataset,
             "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
             dataset_diff(&result_store_dataset, &store_dataset),
-            RdfFusionUpdate::parse(
-                &self.runtime.read_file_to_string(update_file).await?,
-                Some(update_file)
-            )
-            .unwrap(),
+            update,
         );
         Ok(())
     }

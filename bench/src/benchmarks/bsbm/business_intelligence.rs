@@ -8,14 +8,15 @@ use std::path::PathBuf;
 pub struct BusinessIntelligenceUseCase;
 
 impl BsbmUseCase for BusinessIntelligenceUseCase {
-    type QueryName = BsbmBusinessIntelligenceQueryName;
-
     fn name() -> BsbmUseCaseName {
         BsbmUseCaseName::BusinessIntelligence
     }
 
-    fn list_queries() -> Vec<Self::QueryName> {
+    fn list_queries() -> Vec<String> {
         BsbmBusinessIntelligenceQueryName::list_queries()
+            .into_iter()
+            .map(|q| q.to_string())
+            .collect()
     }
 
     fn queries_file_path() -> PathBuf {

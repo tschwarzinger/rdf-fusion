@@ -56,6 +56,7 @@ use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::arrow::record_batch::RecordBatch;
+use rdf_fusion_common::sparql::SparqlParser;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
     QuadStorageEncoding, TermEncoding, quads_to_plain_term_dataframe,
@@ -64,11 +65,12 @@ use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
 use rdf_fusion_execution::sparql::error::QueryEvaluationError;
 use rdf_fusion_execution::sparql::{
-    QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate, UpdateOptions,
+    QueryExplanation, QueryOptions, UpdateOptions, plan_query, plan_update,
 };
 use rdf_fusion_extensions::storage::{
     QuadStorageGraphTarget, graph_target_to_plain_term_dataframe,
 };
+use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
@@ -212,13 +214,7 @@ impl Store {
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    pub async fn query(
-        &self,
-        query: impl TryInto<
-            RdfFusionQuery,
-            Error = impl Into<QueryEvaluationError> + std::fmt::Debug,
-        >,
-    ) -> Result<QueryResults, QueryEvaluationError> {
+    pub async fn query(&self, query: &str) -> Result<QueryResults, QueryEvaluationError> {
         self.query_opt(query, QueryOptions::default()).await
     }
 
@@ -249,10 +245,7 @@ impl Store {
     /// ```
     pub async fn query_opt(
         &self,
-        query: impl TryInto<
-            RdfFusionQuery,
-            Error = impl Into<QueryEvaluationError> + std::fmt::Debug,
-        >,
+        query: &str,
         options: QueryOptions,
     ) -> Result<QueryResults, QueryEvaluationError> {
         self.explain_query_opt(query, options).await.map(|(r, _)| r)
@@ -288,17 +281,27 @@ impl Store {
     /// ```
     pub async fn explain_query_opt(
         &self,
-        query: impl TryInto<
-            RdfFusionQuery,
-            Error = impl Into<QueryEvaluationError> + std::fmt::Debug,
-        >,
+        query: &str,
         options: QueryOptions,
     ) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
-        let query = query.try_into();
-        match query {
-            Ok(query) => self.context.execute_query(&query, options).await,
-            Err(err) => Err(err.into()),
+        let builder_context =
+            RdfFusionLogicalPlanBuilderContext::new(self.context.create_view());
+
+        let mut parser = SparqlParser::new();
+        if let Some(base_iri) = options.base_iri.as_ref() {
+            parser = parser
+                .with_base_iri(base_iri.as_str())
+                .expect("Base iri is a valid IRI.");
         }
+        let query = parser.parse_query(query)?;
+
+        let query = plan_query(
+            builder_context,
+            query,
+            options.output_encoding_name,
+            &options.dataset,
+        )?;
+        self.context.execute_query(&query, options).await
     }
 
     /// Retrieves quads with a filter on each quad component
@@ -455,57 +458,51 @@ impl Store {
     ///
     /// Usage example:
     /// ```
-    /// // use rdf-fusion::model::*;
-    /// // use rdf-fusion::store::Store;
+    /// use rdf_fusion::store::Store;
+    /// use rdf_fusion::common::*;
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// // TODO #7: Implement Update
-    /// // let store = Store::new_in_memory().await;
-    /// // insertion
-    /// // store
-    /// //    .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }").await?;
+    /// let store = Store::new_in_memory().await;
+    /// store
+    ///    .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }").await?;
     ///
     /// // we inspect the store contents
-    /// // let ex = NamedNodeRef::new("http://example.com")?;
-    /// // assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph)).await?);
+    /// let ex = NamedNodeRef::new("http://example.com")?;
+    /// assert!(store.contains(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph)).await?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
-    pub async fn update(
-        &self,
-        update: impl TryInto<RdfFusionUpdate, Error = impl Into<QueryEvaluationError>>,
-    ) -> Result<(), QueryEvaluationError> {
-        self.update_opt(update, UpdateOptions).await
+    pub async fn update(&self, update: &str) -> Result<(), QueryEvaluationError> {
+        self.update_opt(update, UpdateOptions::default()).await
     }
 
     /// Executes a [SPARQL 1.1 update](https://www.w3.org/TR/sparql11-update/) with some options.
     ///
     /// ```
-    /// // use rdf-fusion::store::Store;
-    /// // use rdf-fusion::sparql::QueryOptions;
+    /// use rdf_fusion::store::Store;
+    /// use rdf_fusion_execution::sparql::UpdateOptions;
     ///
-    /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
+    /// let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// // TODO #7: Implement Update
-    /// // let store = Store::new_in_memory().await;
-    /// // store.update_opt(
-    /// //    "INSERT { ?s <http://example.com/n-triples-representation> ?n } WHERE { ?s ?p ?o BIND(<http://www.w3.org/ns/formats/N-Triples>(?s) AS ?nt) }",
-    /// //    QueryOptions::default()
-    /// //).await?;
+    /// let store = Store::new_in_memory().await;
+    /// store.update_opt(
+    ///   "INSERT { ?s <http://example.com/name2> ?n } WHERE { ?s <http://example.com/name1> ?n }",
+    ///   UpdateOptions::default()
+    /// ).await?;
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
     /// # }).unwrap();
     /// ```
     pub async fn update_opt(
         &self,
-        update: impl TryInto<RdfFusionUpdate, Error = impl Into<QueryEvaluationError>>,
-        options: impl Into<UpdateOptions>,
+        update: &str,
+        options: UpdateOptions,
     ) -> Result<(), QueryEvaluationError> {
-        let query = update.try_into();
-        match query {
-            Ok(query) => self.context.execute_update(&query, options.into()).await,
-            Err(err) => Err(err.into()),
-        }
+        let builder_context =
+            RdfFusionLogicalPlanBuilderContext::new(self.context.create_view());
+        let update = SparqlParser::new().parse_update(update)?;
+        let update = plan_update(builder_context, update, None, &options.dataset)?;
+        self.context.execute_update(&update, options).await
     }
 
     /// Loads a RDF file under into the store.
