@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: animal
+  Filter: EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))
+    Subquery:
+      Filter: outer_ref(animal) = __inner__animal
+        Projection: animal AS __inner__animal
+          QuadPattern: triple_pattern=[?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Insect>]
+    QuadPattern: triple_pattern=[?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Animal>]

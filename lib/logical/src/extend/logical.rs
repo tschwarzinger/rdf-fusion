@@ -93,7 +93,11 @@ impl UserDefinedLogicalNodeCore for ExtendNode {
     }
 
     fn fmt_for_explain(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Extend: {} {}", self.variable, self.expression)
+        write!(
+            f,
+            "Extend: variable={}, expression={}",
+            self.variable, self.expression
+        )
     }
 
     fn with_exprs_and_inputs(

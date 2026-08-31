@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, p AS p, o AS o, ENC_PT(z) AS z
+  Projection: s, p, o, z
+    Filter: EBV(EQ(z, ENC_TF(Struct({term_type:2,value:3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
+      Extend: variable=?z, expression=ADD(ENC_TF(o), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+        QuadPattern: triple_pattern=[?s ?p ?o]

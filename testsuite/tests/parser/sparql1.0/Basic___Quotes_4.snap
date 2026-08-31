@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x
+  QuadPattern: triple_pattern=[?x ?p "x\ny"^^<http://example.org/ns#someType>]

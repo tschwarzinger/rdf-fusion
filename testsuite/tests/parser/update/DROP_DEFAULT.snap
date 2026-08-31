@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DROP(graph=DEFAULT, silent=false)

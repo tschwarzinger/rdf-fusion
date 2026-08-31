@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  QuadPattern: triple_pattern=[<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> <http://example.org/p> "1"^^<http://www.w3.org/2001/XMLSchema#integer>]

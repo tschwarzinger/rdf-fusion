@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: name, mbox
+  Sort: AS_SORTABLE_BYTES(ENC_TF(mbox)) ASC NULLS FIRST
+    SparqlJoin: Left 
+      QuadPattern: triple_pattern=[?x <http://xmlns.com/foaf/0.1/name> ?name]
+      QuadPattern: triple_pattern=[?x <http://xmlns.com/foaf/0.1/mbox> ?mbox]

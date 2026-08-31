@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  SparqlJoin: Left 
+    EmptyRelation: rows=1
+    EmptyRelation: rows=1

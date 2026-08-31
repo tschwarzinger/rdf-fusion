@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Distinct:
+  Projection: o, s
+    Union
+      Projection: s, o
+        QuadPattern: triple_pattern=[?s <http://example/p> ?o]
+      Projection: s, o
+        QuadPattern: triple_pattern=[?s <http://example/q> ?o]

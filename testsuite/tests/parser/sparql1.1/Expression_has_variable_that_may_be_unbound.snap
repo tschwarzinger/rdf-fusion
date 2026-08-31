@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x, dt
+  Extend: variable=?dt, expression=DATATYPE(l)
+    SparqlJoin: Left 
+      QuadPattern: triple_pattern=[?x <http://www.example.org/schema#p> ?y]
+      QuadPattern: triple_pattern=[?x <http://www.example.org/schema#q> ?l]

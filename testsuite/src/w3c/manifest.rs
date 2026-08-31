@@ -8,6 +8,7 @@ use rdf_fusion::common::{
 use std::collections::VecDeque;
 use std::fmt;
 
+#[derive(Clone)]
 pub struct Test {
     pub id: NamedNode,
     pub kind: NamedNode,

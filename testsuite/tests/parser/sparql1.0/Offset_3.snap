@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Limit: skip=100, fetch=None
+  Projection: v
+    Sort: AS_SORTABLE_BYTES(ENC_TF(v)) ASC NULLS FIRST
+      QuadPattern: triple_pattern=[_:<guid> <http://example.org/ns#num> ?v]

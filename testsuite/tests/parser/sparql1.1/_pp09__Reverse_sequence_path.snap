@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[?x <http://www.example.org/schema#p1> _:<guid>]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.example.org/schema#p2> <http://www.example.org/instance#c>]

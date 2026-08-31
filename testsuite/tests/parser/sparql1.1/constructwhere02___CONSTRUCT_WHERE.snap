@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct { template: [TriplePattern { subject: NamedNode(NamedNode { iri: "http://example.org/s1" }), predicate: NamedNode(NamedNode { iri: "http://example.org/p" }), object: Variable(Variable { name: "o" }) }, TriplePattern { subject: Variable(Variable { name: "s2" }), predicate: NamedNode(NamedNode { iri: "http://example.org/p" }), object: Variable(Variable { name: "o" }) }] }
+Projection: o, s2
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[<http://example.org/s1> <http://example.org/p> ?o]
+    QuadPattern: triple_pattern=[?s2 <http://example.org/p> ?o]

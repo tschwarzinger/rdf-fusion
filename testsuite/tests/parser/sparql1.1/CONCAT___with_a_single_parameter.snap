@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(str) AS str
+  Projection: str
+    Extend: variable=?str, expression=CONCAT(ENC_TF(str1))
+      QuadPattern: triple_pattern=[<http://example.org/s6> <http://example.org/str> ?str1]

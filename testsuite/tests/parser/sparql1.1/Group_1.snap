@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s
+  Aggregate: groupBy=[[s AS s]], aggr=[[]]
+    QuadPattern: triple_pattern=[?s <http://example/p> ?v]

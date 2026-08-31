@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: g AS g, ENC_PT(avg) AS avg
+  Projection: g, avg
+    Extend: variable=?avg, expression=<guid>
+      Aggregate: groupBy=[[g AS g]], aggr=[[AVG(IF(isNUMERIC(ENC_TF(p)), ENC_TF(p), ENC_TF(COALESCE(ENC_PT(xsd:double(ENC_TF(p))), Struct({term_type:2,value:0,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))) AS <guid>]]
+        QuadPattern: triple_pattern=[?g <http://example.com/data/#p> ?p]

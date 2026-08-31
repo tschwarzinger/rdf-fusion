@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: error_string
+---
+error at 5:1: expected one of LATERAL, SERVICE, The SELECT overrides an existing variable using an expression, [_]

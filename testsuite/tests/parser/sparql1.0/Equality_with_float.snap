@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x
+  Filter: EBV(EQ(ENC_TF(vr), ENC_TF(vl)))
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[?x <http://example.org/things#pr> ?vr]
+      QuadPattern: triple_pattern=[?x <http://example.org/things#pl> ?vl]

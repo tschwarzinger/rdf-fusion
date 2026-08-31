@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: t
+  SparqlJoin: Inner 
+    PropertyPath: <http://www.example.org/a> (<http://www.example.org/p1> | <http://www.example.org/p2>) _:<guid>
+    PropertyPath: _:<guid> (<http://www.example.org/p3> | <http://www.example.org/p4>) ?t

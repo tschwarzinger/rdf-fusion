@@ -16,6 +16,8 @@ datafusion.workspace = true
 deltalake.workspace = true
 futures.workspace = true
 rdf-fusion.workspace = true
+rdf-fusion-common.workspace = true
+rdf-fusion-sparql-parser.workspace = true
 object_store.workspace = true
 oxttl.workspace = true
 oxrdfio.workspace = true
@@ -26,6 +28,9 @@ tokio.workspace = true
 tempfile.workspace = true
 tokio-util = { workspace = true, features = ["io"] }
 url.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
 
 [lints]
 workspace = true

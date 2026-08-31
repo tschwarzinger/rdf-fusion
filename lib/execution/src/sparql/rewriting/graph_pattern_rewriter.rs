@@ -1,6 +1,7 @@
 use crate::sparql::rewriting::expression_rewriter::ExpressionRewriter;
 use datafusion::common::{Column, DFSchema, not_impl_err, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, SortExpr};
+use rdf_fusion_common::DateTime;
 use rdf_fusion_common::Iri;
 use rdf_fusion_common::sparql::QueryDataset;
 use rdf_fusion_common::sparql::algebra::{
@@ -29,6 +30,8 @@ pub struct GraphPatternRewriter {
     base_iri: Option<Iri<String>>,
     /// The encoding that should be used for the output of the rewritten query.
     output_encoding_name: Option<EncodingName>,
+    /// The time used to evaluate `NOW()` during rewriting.
+    now: DateTime,
     /// The current state of the rewriting process.
     state: RefCell<RewritingState>,
 }
@@ -40,11 +43,13 @@ impl GraphPatternRewriter {
     /// * `builder_context` - The context necessary for building logical plans.
     /// * `dataset` - The dataset against which the query will be evaluated
     /// * `base_iri` - The base IRI used for resolving relative IRIs in the query
+    /// * `now` - The time used to evaluate `NOW()` in the query
     pub fn new(
         builder_context: RdfFusionLogicalPlanBuilderContext,
         dataset: QueryDataset,
         base_iri: Option<Iri<String>>,
         output_encoding_name: Option<EncodingName>,
+        now: DateTime,
     ) -> Self {
         let active_graph = compute_default_active_graph(&dataset);
         let state = RewritingState::default().with_active_graph(active_graph);
@@ -53,8 +58,14 @@ impl GraphPatternRewriter {
             dataset,
             base_iri,
             output_encoding_name,
+            now,
             state: RefCell::new(state),
         }
+    }
+
+    /// Returns the time used to evaluate `NOW()` during rewriting.
+    pub fn now(&self) -> DateTime {
+        self.now
     }
 
     /// Rewrites a SPARQL graph pattern into a DataFusion logical plan.

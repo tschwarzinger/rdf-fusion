@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: o, p, s
+  Filter: EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))) OR EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-query/x,data_type:,language_tag:}))))))
+    QuadPattern: triple_pattern=[?s ?p ?o]

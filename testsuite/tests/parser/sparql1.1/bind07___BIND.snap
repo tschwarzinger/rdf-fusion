@@ -1,0 +1,16 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, p AS p, o AS o, ENC_PT(z) AS z
+  Projection: s, p, o, z
+    SparqlJoin: Inner 
+      QuadPattern: triple_pattern=[?s ?p ?o]
+      Union
+        Projection: z
+          Extend: variable=?z, expression=ADD(ENC_TF(Struct({term_type:,value:,data_type:,language_tag:})), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+            EmptyRelation: rows=1
+        Projection: z
+          Extend: variable=?z, expression=ADD(ENC_TF(Struct({term_type:,value:,data_type:,language_tag:})), ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+            EmptyRelation: rows=1

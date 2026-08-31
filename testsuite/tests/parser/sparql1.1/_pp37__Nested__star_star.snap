@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: X
+  Sort: AS_SORTABLE_BYTES(ENC_TF(X)) ASC NULLS FIRST
+    PropertyPath: <http://example.org/A0> ((<http://example.org/P>)*)* ?X

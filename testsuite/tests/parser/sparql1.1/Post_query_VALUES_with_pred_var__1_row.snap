@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, p1, o1
+  SparqlJoin: Inner 
+    QuadPattern: triple_pattern=[?s ?p1 ?o1]
+    Values: (Struct({term_type:0,value:http://xmlns.com/foaf/0.1/knows,data_type:,language_tag:}))

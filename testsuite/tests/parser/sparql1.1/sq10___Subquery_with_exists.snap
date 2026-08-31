@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x
+  Filter: EBV(BOOLEAN_AS_TERM(EXISTS (<subquery>)))
+    Subquery:
+      Filter: outer_ref(x) = __inner__x AND outer_ref(y) = __inner__y
+        Projection: x AS __inner__x, y AS __inner__y
+          QuadPattern: triple_pattern=[?x <http://www.example.org/schema#q> ?y]
+    Projection: x, y
+      QuadPattern: triple_pattern=[?x <http://www.example.org/schema#p> ?y]

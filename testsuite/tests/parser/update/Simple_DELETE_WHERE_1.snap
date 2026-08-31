@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        <http://example.org/a> <http://xmlns.com/foaf/0.1/knows> ?b
+
+QuadPattern: triple_pattern=[<http://example.org/a> <http://xmlns.com/foaf/0.1/knows> ?b]

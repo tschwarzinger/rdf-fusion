@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        ?a <http://xmlns.com/foaf/0.1/knows> ?Var_B
+    INSERT:
+        ?a <http://xmlns.com/foaf/0.1/knows> ?a
+
+BasicGraphPattern: 
+  QuadPattern: triple_pattern=[?a <http://xmlns.com/foaf/0.1/name> "Alan"]
+  QuadPattern: triple_pattern=[?a <http://xmlns.com/foaf/0.1/knows> ?Var_B]

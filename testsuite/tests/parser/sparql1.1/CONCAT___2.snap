@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(str) AS str
+  Projection: str
+    Extend: variable=?str, expression=CONCAT(ENC_TF(str1), ENC_TF(str2))
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[?s1 <http://example.org/str> ?str1]
+        QuadPattern: triple_pattern=[?s2 <http://example.org/str> ?str2]

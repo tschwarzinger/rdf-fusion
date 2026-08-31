@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: homepage, schoolPage
+  Filter: EBV(REGEX(ENC_TF(homepage), ENC_TF(Struct({term_type:2,value:^http://example.org/,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[_:who <http://xmlns.com/foaf/0.1/homepage> ?homepage]
+      QuadPattern: triple_pattern=[_:who <http://xmlns.com/foaf/0.1/schoolHomepage> ?schoolPage]

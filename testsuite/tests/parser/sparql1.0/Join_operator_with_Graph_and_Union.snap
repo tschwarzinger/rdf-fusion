@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x, y, z
+  SparqlJoin: Inner 
+    QuadPattern: graph_variable=?g triple_pattern=[?x ?p "1"^^<http://www.w3.org/2001/XMLSchema#integer>], active_graph: Any Named Graph 
+    Union
+      Projection: x, y, NULL AS p, NULL AS z
+        QuadPattern: triple_pattern=[?x <http://example/p> ?y]
+      Projection: NULL AS x, NULL AS y, p, z
+        QuadPattern: triple_pattern=[?p <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?z]

@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: o, p, s
+  Filter: EBV(REGEX(ENC_TF(o), ENC_TF(Struct({term_type:2,value:foo,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:i,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))
+    QuadPattern: triple_pattern=[?s ?p ?o]

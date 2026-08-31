@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: error_string
+---
+error at 2:35: expected \u escape sequence should be followed by hexadecimal digits

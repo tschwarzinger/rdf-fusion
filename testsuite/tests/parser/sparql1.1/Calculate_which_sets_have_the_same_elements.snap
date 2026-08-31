@@ -1,0 +1,31 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Distinct:
+  Projection: s1, s2
+    Filter: EBV(LT(ENC_TF(STR(s1)), ENC_TF(STR(s2))))
+      Minus:
+        Minus:
+          BasicGraphPattern: 
+            QuadPattern: triple_pattern=[?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+            QuadPattern: triple_pattern=[?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+          Filter: EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))
+            Subquery:
+              Filter: outer_ref(s2) = __inner__s2 AND outer_ref(x) = __inner__x
+                Projection: s2 AS __inner__s2, x AS __inner__x
+                  QuadPattern: triple_pattern=[?s2 <http://example/member> ?x]
+            BasicGraphPattern: 
+              QuadPattern: triple_pattern=[?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+              QuadPattern: triple_pattern=[?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+              QuadPattern: triple_pattern=[?s1 <http://example/member> ?x]
+        Filter: EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))
+          Subquery:
+            Filter: outer_ref(s1) = __inner__s1 AND outer_ref(x) = __inner__x
+              Projection: s1 AS __inner__s1, x AS __inner__x
+                QuadPattern: triple_pattern=[?s1 <http://example/member> ?x]
+          BasicGraphPattern: 
+            QuadPattern: triple_pattern=[?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+            QuadPattern: triple_pattern=[?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+            QuadPattern: triple_pattern=[?s2 <http://example/member> ?x]

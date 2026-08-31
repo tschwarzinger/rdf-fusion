@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(C) AS C
+  Projection: C
+    Extend: variable=?C, expression=<guid>
+      Aggregate: groupBy=[[]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS <guid>]]
+        QuadPattern: triple_pattern=[?s <http://example/p> ?x]

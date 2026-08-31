@@ -9,8 +9,9 @@ use insta::Settings;
 mod bsbm_business_intelligence;
 mod bsbm_explore;
 
-fn run_plan_assertions(assertions: impl FnOnce()) {
+fn run_plan_assertions(snapshot_path: &str, assertions: impl FnOnce()) {
     let mut settings = Settings::default();
+    settings.set_snapshot_path(snapshot_path);
 
     // This is a bit hacky. Oxigraph does not print leading zeroes, and therefore we must replace
     // also shorter uuids. We assume that more than 12 leading zeroes are very unlikely for random

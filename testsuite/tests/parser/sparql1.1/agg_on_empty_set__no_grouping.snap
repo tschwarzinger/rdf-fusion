@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(max) AS max
+  Projection: max
+    Extend: variable=?max, expression=<guid>
+      Aggregate: groupBy=[[]], aggr=[[MAX(ENC_TF(value)) AS <guid>]]
+        QuadPattern: triple_pattern=[?x <http://example.com/p> ?value]

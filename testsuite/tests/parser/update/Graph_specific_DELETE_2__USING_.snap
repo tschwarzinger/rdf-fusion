@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        GRAPH <http://example.org/g2> { ?s ?p ?o }
+
+BasicGraphPattern: 
+  QuadPattern: triple_pattern=[?s <http://xmlns.com/foaf/0.1/name> "Chris"], active_graph: Union of [] 
+  QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of []

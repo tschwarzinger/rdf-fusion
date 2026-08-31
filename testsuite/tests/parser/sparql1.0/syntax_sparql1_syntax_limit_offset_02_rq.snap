@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Limit: skip=3, fetch=5
+  Projection: o, p, s
+    Sort: AS_SORTABLE_BYTES(ENC_TF(o)) ASC NULLS FIRST
+      QuadPattern: triple_pattern=[?s ?p ?o]

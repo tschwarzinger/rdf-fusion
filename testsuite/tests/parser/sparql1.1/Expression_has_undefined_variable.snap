@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x, l, dt
+  Extend: variable=?dt, expression=DATATYPE(Struct({term_type:,value:,data_type:,language_tag:}))
+    QuadPattern: triple_pattern=[?x <http://www.example.org/schema#p> ?l]

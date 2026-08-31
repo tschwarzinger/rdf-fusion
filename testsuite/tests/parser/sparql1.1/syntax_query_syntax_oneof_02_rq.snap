@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: o, p, s
+  Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(BOOLEAN_AS_TERM(Boolean(false)))))
+    QuadPattern: triple_pattern=[?s ?p ?o]

@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a AS a, v AS v, ENC_PT(double) AS double
+  Projection: a, v, double
+    Extend: variable=?double, expression=xsd:double(ENC_TF(v))
+      QuadPattern: triple_pattern=[?a <http://example.org/p> ?v]

@@ -45,7 +45,9 @@ use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use rdf_fusion_common::quads::COL_GRAPH;
-use rdf_fusion_common::{CorruptionError, RdfDumpFormat, RdfInputSource, StorageError};
+use rdf_fusion_common::{
+    CorruptionError, DateTime, RdfDumpFormat, RdfInputSource, StorageError,
+};
 use rdf_fusion_common::{
     GraphNameRef, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
     TermRef, Variable,
@@ -300,6 +302,7 @@ impl Store {
             query,
             options.output_encoding_name,
             &options.dataset,
+            DateTime::now(),
         )?;
         self.context.execute_query(&query, options).await
     }
@@ -501,7 +504,13 @@ impl Store {
         let builder_context =
             RdfFusionLogicalPlanBuilderContext::new(self.context.create_view());
         let update = SparqlParser::new().parse_update(update)?;
-        let update = plan_update(builder_context, update, None, &options.dataset)?;
+        let update = plan_update(
+            builder_context,
+            update,
+            None,
+            &options.dataset,
+            DateTime::now(),
+        )?;
         self.context.execute_update(&update, options).await
     }
 

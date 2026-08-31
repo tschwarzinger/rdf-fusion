@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, o1, o2
+  SparqlJoin: Inner 
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[?s ?p1 ?o1]
+      QuadPattern: triple_pattern=[?s ?p2 ?o2]
+    Values: (Struct({term_type:2,value:Alan,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}), Struct({term_type:2,value:alan@example.org,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))

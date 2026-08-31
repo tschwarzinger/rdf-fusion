@@ -1,0 +1,20 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: exam, date
+  Filter: EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))
+    Subquery:
+      Filter: outer_ref(exam) = __inner__exam
+        Projection: otherExam AS __inner__otherExam, exam AS __inner__exam
+          BasicGraphPattern: 
+            QuadPattern: triple_pattern=[?otherExam <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#PhysicalExamination>]
+            QuadPattern: triple_pattern=[?otherExam <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#follows> ?exam]
+            QuadPattern: triple_pattern=[?otherExam <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#precedes> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#operation1>]
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[?exam <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#PhysicalExamination>]
+      QuadPattern: triple_pattern=[?exam <http://purl.org/dc/elements/1.1/date> ?date]
+      QuadPattern: triple_pattern=[?exam <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#precedes> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#operation1>]
+      QuadPattern: triple_pattern=[?op <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#SurgicalProcedure>]
+      QuadPattern: triple_pattern=[?op <http://purl.org/dc/elements/1.1/date> ?opDT]

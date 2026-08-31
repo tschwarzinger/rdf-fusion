@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: sample
+  Filter: EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(sample), ENC_TF(Struct({term_type:2,value:1.0,data_type:http://www.w3.org/2001/XMLSchema#decimal,language_tag:})))) OR EBV(EQ(ENC_TF(sample), ENC_TF(Struct({term_type:2,value:2.2,data_type:http://www.w3.org/2001/XMLSchema#decimal,language_tag:})))))) OR EBV(EQ(ENC_TF(sample), ENC_TF(Struct({term_type:2,value:3.5,data_type:http://www.w3.org/2001/XMLSchema#decimal,language_tag:}))))))
+    Projection: sample
+      Extend: variable=?sample, expression=<guid>
+        Aggregate: groupBy=[[]], aggr=[[first_value(o) AS <guid>]]
+          QuadPattern: triple_pattern=[?s <http://www.example.org/dec> ?o]

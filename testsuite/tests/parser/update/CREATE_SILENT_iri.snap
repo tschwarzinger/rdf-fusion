@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+CREATE(graph=<http://example.org/g1>, silent=true)

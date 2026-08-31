@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Error: External error: An error returned from the query engine: Cannot rewrite SPARQL query
+caused by
+Schema error: No field named x.
+Valid fields are z.

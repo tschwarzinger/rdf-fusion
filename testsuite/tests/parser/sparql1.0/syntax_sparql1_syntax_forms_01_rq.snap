@@ -1,0 +1,16 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: b, pa, x, y
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:<guid>]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>]
+    QuadPattern: triple_pattern=[_:<guid> ?x ?y]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "57"^^<http://www.w3.org/2001/XMLSchema#integer>]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:<guid>]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:<guid>]
+    QuadPattern: triple_pattern=[_:<guid> ?pa ?b]
+    QuadPattern: triple_pattern=[_:<guid> <http://example.org/ns#p> _:<guid>]

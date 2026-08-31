@@ -1,0 +1,14 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: o, o1
+  SparqlJoin: Inner 
+    Projection: o, o1 AS o1
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[<http://www.example.orgs> <http://www.example.orgp> ?o]
+        QuadPattern: triple_pattern=[<http://www.example.orgs> <http://www.example.orgq> ?o1]
+    Projection: ENC_PT(o1) AS o1
+      Extend: variable=?o1, expression=ADD(ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})), ENC_TF(Struct({term_type:,value:,data_type:,language_tag:})))
+        EmptyRelation: rows=1

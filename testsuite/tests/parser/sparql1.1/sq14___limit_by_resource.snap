@@ -1,0 +1,16 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct { template: [TriplePattern { subject: Variable(Variable { name: "person" }), predicate: NamedNode(NamedNode { iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" }), object: NamedNode(NamedNode { iri: "http://xmlns.com/foaf/0.1/Person" }) }, TriplePattern { subject: Variable(Variable { name: "person" }), predicate: NamedNode(NamedNode { iri: "http://xmlns.com/foaf/0.1/name" }), object: Variable(Variable { name: "name" }) }, TriplePattern { subject: Variable(Variable { name: "person" }), predicate: NamedNode(NamedNode { iri: "http://xmlns.com/foaf/0.1/homepage" }), object: Variable(Variable { name: "homepage" }) }, TriplePattern { subject: Variable(Variable { name: "person" }), predicate: NamedNode(NamedNode { iri: "http://xmlns.com/foaf/0.1/mbox" }), object: Variable(Variable { name: "mbox" }) }] }
+Projection: homepage, mbox, name, person
+  SparqlJoin: Left 
+    SparqlJoin: Inner 
+      Limit: skip=0, fetch=3
+        Projection: person, name
+          Sort: AS_SORTABLE_BYTES(ENC_TF(name)) ASC NULLS FIRST
+            BasicGraphPattern: 
+              QuadPattern: triple_pattern=[?person <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person>]
+              QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/name> ?name]
+      QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/homepage> ?homepage]
+    QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/mbox> ?mbox]

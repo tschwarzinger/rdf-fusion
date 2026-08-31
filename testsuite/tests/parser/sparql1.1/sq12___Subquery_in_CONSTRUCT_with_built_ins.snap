@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct { template: [TriplePattern { subject: Variable(Variable { name: "P" }), predicate: NamedNode(NamedNode { iri: "http://xmlns.com/foaf/0.1/name" }), object: Variable(Variable { name: "FullName" }) }] }
+Projection: ENC_PT(FullName) AS FullName, P AS P
+  Projection: FullName, P
+    Projection: P, FullName
+      Extend: variable=?FullName, expression=CONCAT(ENC_TF(F), ENC_TF(Struct({term_type:2,value: ,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(L))
+        BasicGraphPattern: 
+          QuadPattern: triple_pattern=[?P <http://xmlns.com/foaf/0.1/firstName> ?F]
+          QuadPattern: triple_pattern=[?P <http://xmlns.com/foaf/0.1/lastName> ?L]

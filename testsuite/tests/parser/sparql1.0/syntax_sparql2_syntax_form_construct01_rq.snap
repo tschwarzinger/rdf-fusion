@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct { template: [TriplePattern { subject: Variable(Variable { name: "s" }), predicate: NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql2/p1" }), object: NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql2/o" }) }, TriplePattern { subject: Variable(Variable { name: "s" }), predicate: NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql2/p2" }), object: Variable(Variable { name: "o" }) }] }
+Projection: o, p, s
+  QuadPattern: triple_pattern=[?s ?p ?o]

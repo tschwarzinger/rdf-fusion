@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(error) AS error
+  Projection: error
+    Extend: variable=?error, expression=IF(DIV(ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})), ENC_TF(Struct({term_type:2,value:0,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))), ENC_TF(Struct({term_type:2,value:false,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:})), ENC_TF(Struct({term_type:2,value:true,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:})))
+      EmptyRelation: rows=1

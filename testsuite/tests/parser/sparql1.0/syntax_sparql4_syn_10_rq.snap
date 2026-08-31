@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: p, q, v
+  Union
+    Projection: a, p, v, q, NULL AS b, NULL AS c
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[_:a ?p ?v]
+        QuadPattern: triple_pattern=[_:a ?q _:a]
+    Projection: NULL AS a, NULL AS p, NULL AS v, q, b, c
+      QuadPattern: triple_pattern=[_:b ?q _:c]

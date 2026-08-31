@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x
+  Projection: p, x, y
+    QuadPattern: triple_pattern=[?x ?p ?y], active_graph: Any Named Graph

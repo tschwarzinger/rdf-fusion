@@ -1,0 +1,18 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a, b, c
+  Sort: AS_SORTABLE_BYTES(ENC_TF(a)) ASC NULLS FIRST
+    Minus:
+      SparqlJoin: Left 
+        SparqlJoin: Left 
+          QuadPattern: triple_pattern=[?a <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Min>]
+          QuadPattern: triple_pattern=[?a <http://example/p1> ?b]
+        QuadPattern: triple_pattern=[?a <http://example/p2> ?c]
+      SparqlJoin: Left 
+        SparqlJoin: Left 
+          QuadPattern: triple_pattern=[?d <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Sub>]
+          QuadPattern: triple_pattern=[?d <http://example/q1> ?b]
+        QuadPattern: triple_pattern=[?d <http://example/q2> ?c]

@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(avg) AS avg
+  Projection: avg
+    Extend: variable=?avg, expression=<guid>
+      Aggregate: groupBy=[[]], aggr=[[AVG(ENC_TF(o)) AS <guid>]]
+        QuadPattern: triple_pattern=[?s <http://www.example.org/dec> ?o]

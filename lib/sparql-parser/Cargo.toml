@@ -1,0 +1,25 @@
+[package]
+name = "rdf-fusion-sparql-parser"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = """
+RDF Fusion SPARQL Parser Framework
+"""
+
+[dependencies]
+datafusion.workspace = true
+rdf-fusion-common.workspace = true
+rdf-fusion-encoding.workspace = true
+rdf-fusion-execution.workspace = true
+rdf-fusion-extensions.workspace = true
+rdf-fusion-logical.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true

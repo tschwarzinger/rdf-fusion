@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: X, Y
+  Sort: AS_SORTABLE_BYTES(ENC_TF(X)) ASC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(Y)) ASC NULLS FIRST
+    PropertyPath: ?X (<http://xmlns.com/foaf/0.1/knows>)* ?Y

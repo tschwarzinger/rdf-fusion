@@ -1,0 +1,18 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: person, nick, page, img, name, firstN
+  Filter: EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(BOUND(page)) OR EBV(BOUND(img)))) OR EBV(BOUND(firstN))))
+    SparqlJoin: Left 
+      SparqlJoin: Left 
+        QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/nick> ?nick]
+        QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/isPrimaryTopicOf> ?page]
+      SparqlJoin: Inner 
+        QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/name> ?name]
+        Union
+          Projection: person, img, NULL AS firstN
+            QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/depiction> ?img]
+          Projection: person, NULL AS img, firstN
+            QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/firstName> ?firstN]

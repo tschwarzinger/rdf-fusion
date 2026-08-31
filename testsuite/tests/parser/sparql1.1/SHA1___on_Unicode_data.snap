@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(hash) AS hash
+  Projection: hash
+    Extend: variable=?hash, expression=SHA1(ENC_TF(l))
+      QuadPattern: triple_pattern=[<http://example.org/s8> <http://example.org/str> ?l]

@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: p, v
+  Filter: EBV(LANGMATCHES(ENC_TF(LANG(v)), ENC_TF(Struct({term_type:2,value:de-de,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))
+    QuadPattern: triple_pattern=[<http://example.org/#x> ?p ?v]

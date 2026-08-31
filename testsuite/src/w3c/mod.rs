@@ -6,7 +6,7 @@ mod syntax;
 mod update;
 pub mod utils;
 
-use crate::test::UnsupportedTest;
+use crate::test::{Test, UnsupportedTest};
 use crate::testsuite::{TestSuite, TestSuiteBuilder};
 use crate::w3c::evaluation::W3CSparqlEvaluationTest;
 use crate::w3c::files::{TEST_RUNTIME_ENV, W3CTestRuntime};
@@ -36,11 +36,20 @@ pub struct StoreConfig {
 pub type StoreFactory =
     Arc<dyn Fn(StoreConfig) -> BoxFuture<'static, Result<Store>> + Send + Sync>;
 
+/// Provides a hook for registering a factory function that creates the actual [`Test`] instances.
+/// This can be used to run different tests, given the queries of the manifest as input.
+pub type TestFactory = Arc<
+    dyn Fn(&manifest::Test, &StoreFactory) -> BoxFuture<'static, Result<Box<dyn Test>>>
+        + Send
+        + Sync,
+>;
+
 pub struct W3CSparqlTestSuiteBuilder {
     builder: TestSuiteBuilder,
     manifest_tests: Vec<manifest::Test>,
     optimize_after_load: bool,
     store_factory: Option<StoreFactory>,
+    test_factory: Option<TestFactory>,
 }
 
 impl W3CSparqlTestSuiteBuilder {
@@ -59,20 +68,37 @@ impl W3CSparqlTestSuiteBuilder {
             manifest_tests,
             optimize_after_load: false,
             store_factory: None,
+            test_factory: None,
         })
     }
 
+    /// Ignores the given test by its ID.
     pub fn ignore_test(mut self, id: impl Into<String>) -> Self {
         self.builder.ignore_test(id);
         self
     }
 
+    /// Ignores the given tests by their IDs.
     pub fn ignore_tests<I, S>(mut self, ids: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
         self.builder.ignore_tests(ids);
+        self
+    }
+
+    /// Ignores all tests that match the given predicate.
+    pub fn ignore_tests_predicate(
+        mut self,
+        predicate: impl Fn(&manifest::Test) -> bool,
+    ) -> Self {
+        let ids_to_ignore = self
+            .manifest_tests
+            .iter()
+            .filter(|t| predicate(t))
+            .map(|t| t.id.as_str().to_string());
+        self.builder.ignore_tests(ids_to_ignore);
         self
     }
 
@@ -88,6 +114,11 @@ impl W3CSparqlTestSuiteBuilder {
 
     pub fn with_store_factory(mut self, factory: StoreFactory) -> Self {
         self.store_factory = Some(factory);
+        self
+    }
+
+    pub fn with_test_factory(mut self, factory: TestFactory) -> Self {
+        self.test_factory = Some(factory);
         self
     }
 
@@ -161,6 +192,12 @@ impl W3CSparqlTestSuiteBuilder {
         });
 
         for test in self.manifest_tests {
+            if let Some(test_factory) = &self.test_factory {
+                let test = test_factory(&test, &store_factory).await?;
+                self.builder.add_test(test);
+                continue;
+            }
+
             let kind = test.kind.as_str();
 
             match kind {

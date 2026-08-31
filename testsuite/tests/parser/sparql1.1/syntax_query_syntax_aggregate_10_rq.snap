@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(y) AS y
+  Projection: y
+    Extend: variable=?y, expression=<guid>
+      Aggregate: groupBy=[[]], aggr=[[MAX(ENC_TF(Struct({term_type:,value:,data_type:,language_tag:}))) AS <guid>]]
+        EmptyRelation: rows=1

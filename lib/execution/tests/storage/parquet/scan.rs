@@ -241,5 +241,12 @@ async fn prepare_test_store_with_cache(
 fn plan_query_from_str(context: &RdfFusionContext, query: &str) -> RdfFusionQuery {
     let parsed = SparqlParser::new().parse_query(query).unwrap();
     let builder_context = RdfFusionLogicalPlanBuilderContext::new(context.create_view());
-    plan_query(builder_context, parsed, None, &Default::default()).unwrap()
+    plan_query(
+        builder_context,
+        parsed,
+        None,
+        &Default::default(),
+        rdf_fusion_common::DateTime::now(),
+    )
+    .unwrap()
 }

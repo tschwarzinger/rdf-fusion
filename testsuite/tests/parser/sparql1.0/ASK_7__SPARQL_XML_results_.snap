@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: x
+  QuadPattern: triple_pattern=[<http://example/x> <http://example/p> ?x]

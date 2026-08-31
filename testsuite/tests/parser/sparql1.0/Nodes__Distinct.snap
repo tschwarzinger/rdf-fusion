@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Distinct:
+  Projection: v
+    QuadPattern: triple_pattern=[?x ?p ?v]

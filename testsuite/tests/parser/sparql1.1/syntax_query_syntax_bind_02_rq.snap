@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(Z) AS Z
+  Projection: Z
+    Extend: variable=?Zby2, expression=DIV(Z, ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+      Extend: variable=?Z, expression=ADD(ENC_TF(o), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+        QuadPattern: triple_pattern=[?s ?p ?o]

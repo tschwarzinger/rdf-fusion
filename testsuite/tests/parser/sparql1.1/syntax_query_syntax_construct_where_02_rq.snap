@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct { template: [TriplePattern { subject: Variable(Variable { name: "s" }), predicate: Variable(Variable { name: "p" }), object: Literal(Literal(TypedLiteral { value: "1816", datatype: NamedNode { iri: "http://www.w3.org/2001/XMLSchema#integer" } })) }] }
+Projection: p, s
+  QuadPattern: triple_pattern=[?s ?p "1816"^^<http://www.w3.org/2001/XMLSchema#integer>], active_graph: Union of [NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-query/file" })]

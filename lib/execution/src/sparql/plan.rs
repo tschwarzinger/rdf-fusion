@@ -8,7 +8,7 @@ use itertools::izip;
 use rdf_fusion_common::sparql::algebra::GraphPattern;
 use rdf_fusion_common::sparql::term::GroundTerm;
 use rdf_fusion_common::sparql::{GraphUpdateOperation, Query, QueryVariant, Update};
-use rdf_fusion_common::{GraphName, Quad, Term, TriplePattern, Variable};
+use rdf_fusion_common::{DateTime, GraphName, Quad, Term, TriplePattern, Variable};
 use rdf_fusion_encoding::{EncodingName, quads_to_plain_term_record_batch};
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 
@@ -23,6 +23,7 @@ pub fn plan_query(
     query: Query,
     output_encoding_name: Option<EncodingName>,
     dataset_overrides: &DatasetOptions,
+    now: DateTime,
 ) -> Result<RdfFusionQuery, QueryEvaluationError> {
     match &query {
         Query::Select {
@@ -37,6 +38,7 @@ pub fn plan_query(
                 query_base_iri.clone(),
                 output_encoding_name,
                 pattern,
+                now,
             )?;
             Ok(RdfFusionQuery::new(plan, QueryVariant::Select))
         }
@@ -53,6 +55,7 @@ pub fn plan_query(
                 query_base_iri.clone(),
                 output_encoding_name,
                 pattern,
+                now,
             )?;
             Ok(RdfFusionQuery::new(
                 plan,
@@ -73,6 +76,7 @@ pub fn plan_query(
                 query_base_iri.clone(),
                 output_encoding_name,
                 pattern,
+                now,
             )?;
             Ok(RdfFusionQuery::new(plan, QueryVariant::Ask))
         }
@@ -90,6 +94,7 @@ pub fn plan_query(
                 query_base_iri.clone(),
                 output_encoding_name,
                 &pattern,
+                now,
             )?;
             Ok(RdfFusionQuery::new(
                 plan,
@@ -105,6 +110,7 @@ pub fn plan_update(
     update: Update,
     output_encoding_name: Option<EncodingName>,
     dataset_overrides: &DatasetOptions,
+    now: DateTime,
 ) -> Result<RdfFusionUpdate, QueryEvaluationError> {
     let mut operations = Vec::with_capacity(update.operations.len());
     for operation in &update.operations {
@@ -113,6 +119,7 @@ pub fn plan_update(
             operation,
             output_encoding_name,
             dataset_overrides,
+            now,
         )?);
     }
     Ok(RdfFusionUpdate::new(operations))
@@ -123,6 +130,7 @@ fn plan_update_operation(
     operation: &GraphUpdateOperation,
     output_encoding_name: Option<EncodingName>,
     dataset_overrides: &DatasetOptions,
+    now: DateTime,
 ) -> Result<UpdateOperation, QueryEvaluationError> {
     match operation {
         GraphUpdateOperation::InsertData { data } => {
@@ -168,6 +176,7 @@ fn plan_update_operation(
                 dataset,
                 None,
                 output_encoding_name,
+                now,
             )
             .rewrite(pattern)
             .map_err(|e| e.context("Cannot rewrite DELETE/INSERT pattern"))?;
@@ -207,7 +216,13 @@ pub fn plan_update_with_options(
     update: Update,
     _options: crate::sparql::UpdateOptions,
 ) -> Result<RdfFusionUpdate, QueryEvaluationError> {
-    plan_update(builder_context, update, None, &DatasetOptions::default())
+    plan_update(
+        builder_context,
+        update,
+        None,
+        &DatasetOptions::default(),
+        DateTime::now(),
+    )
 }
 
 fn query_dataset(query: &Query, dataset_overrides: &DatasetOptions) -> QueryDataset {
@@ -247,12 +262,14 @@ fn rewrite_pattern(
     base_iri: Option<rdf_fusion_common::Iri<String>>,
     output_encoding_name: Option<EncodingName>,
     pattern: &GraphPattern,
+    now: DateTime,
 ) -> Result<LogicalPlan, QueryEvaluationError> {
     GraphPatternRewriter::new(
         builder_context.clone(),
         dataset,
         base_iri,
         output_encoding_name,
+        now,
     )
     .rewrite(pattern)
     .map_err(|e| QueryEvaluationError::from(e.context("Cannot rewrite SPARQL query")))

@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct { template: [TriplePattern { subject: Variable(Variable { name: "s" }), predicate: NamedNode(NamedNode { iri: "http://xmlns.com/foaf/0.1/name" }), object: Variable(Variable { name: "o" }) }] }
+Projection: o, s
+  QuadPattern: triple_pattern=[?s <http://xmlns.com/foaf/0.1/name> ?o]

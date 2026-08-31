@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x, v1, y, v2
+  Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(BOUND(v3))))
+    SparqlJoin: Left EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(NOT EBV(EQ(ENC_TF(v1), ENC_TF(v3))))) OR EBV(EQ(ENC_TF(v1), ENC_TF(v3)))))
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[?x <http://example/p> ?v1]
+        QuadPattern: triple_pattern=[?y <http://example/p> ?v2]
+      QuadPattern: triple_pattern=[?y <http://example/p> ?v3]

@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  QuadPattern: triple_pattern=[<http://example.org/#x> <http://example.org/#p> "Long\n'' \"\"\"\nLiteral"]

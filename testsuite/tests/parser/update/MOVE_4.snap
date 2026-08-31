@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DROP(graph=GRAPH <http://example.org/g2>, silent=true)
+
+DELETE INSERT
+    INSERT:
+        GRAPH <http://example.org/g2> { ?s ?p ?o }
+
+QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of [NamedNode(NamedNode { iri: "http://example.org/g1" })] 
+
+DROP(graph=GRAPH <http://example.org/g1>, silent=false)

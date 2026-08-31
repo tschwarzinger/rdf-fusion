@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: error_string
+---
+error at 3:11: expected OPTIONAL

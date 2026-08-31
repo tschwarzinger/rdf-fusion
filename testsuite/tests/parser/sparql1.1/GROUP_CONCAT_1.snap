@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: ENC_PT(g) AS g
+  Projection: g
+    Filter: EBV(BOOLEAN_AS_TERM(EBV(EQ(g, ENC_TF(Struct({term_type:2,value:1 22,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))) OR EBV(EQ(g, ENC_TF(Struct({term_type:2,value:22 1,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))
+      Projection: g
+        Extend: variable=?g, expression=<guid>
+          Aggregate: groupBy=[[]], aggr=[[GROUP_CONCAT(ENC_TF(o), Union 3:{value: ,language:}) AS <guid>]]
+            QuadPattern: triple_pattern=[_:<guid> <http://www.example.org/p1> ?o]

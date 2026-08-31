@@ -13,38 +13,21 @@ use rdf_fusion_bench::operation::SparqlOperation;
 use std::path::PathBuf;
 
 #[tokio::test]
-pub async fn bsbm_business_intelligence_plain_term_optimized_logical_plan() {
-    for_all_explanations(QuadStorageEncodingName::PlainTerm, |name, explanation| {
-        assert_snapshot!(
-            format!("{name} (Optimized, {})", QuadStorageEncodingName::PlainTerm),
-            &explanation.optimized_logical_plan.to_string()
-        )
-    })
-    .await;
-}
-
-#[tokio::test]
-pub async fn bsbm_business_intelligence_plain_term_execution_plan() {
-    for_all_explanations(QuadStorageEncodingName::PlainTerm, |name, explanation| {
-        let string = displayable(explanation.execution_plan.as_ref())
-            .indent(false)
-            .to_string();
-        assert_snapshot!(
-            format!(
-                "{name} (Execution Plan, {})",
-                QuadStorageEncodingName::PlainTerm
-            ),
-            &string
-        )
-    })
-    .await;
-}
-
-#[tokio::test]
-pub async fn bsbm_business_intelligence_object_id_optimized_logical_plan() {
+pub async fn bsbm_business_intelligence_initial_logical_plan() {
     for_all_explanations(QuadStorageEncodingName::ObjectId, |name, explanation| {
         assert_snapshot!(
-            format!("{name} (Optimized, {})", QuadStorageEncodingName::ObjectId),
+            format!("{name} (Initial)"),
+            &explanation.initial_logical_plan.to_string()
+        )
+    })
+    .await;
+}
+
+#[tokio::test]
+pub async fn bsbm_business_intelligence_optimized_logical_plan() {
+    for_all_explanations(QuadStorageEncodingName::ObjectId, |name, explanation| {
+        assert_snapshot!(
+            format!("{name} (Optimized)"),
             &explanation.optimized_logical_plan.to_string()
         )
     })
@@ -52,46 +35,12 @@ pub async fn bsbm_business_intelligence_object_id_optimized_logical_plan() {
 }
 
 #[tokio::test]
-pub async fn bsbm_business_intelligence_object_id_execution_plan() {
+pub async fn bsbm_business_intelligence_execution_plan() {
     for_all_explanations(QuadStorageEncodingName::ObjectId, |name, explanation| {
         let string = displayable(explanation.execution_plan.as_ref())
             .indent(false)
             .to_string();
-        assert_snapshot!(
-            format!(
-                "{name} (Execution Plan, {})",
-                QuadStorageEncodingName::ObjectId
-            ),
-            &string
-        )
-    })
-    .await;
-}
-
-#[tokio::test]
-pub async fn bsbm_business_intelligence_string_optimized_logical_plan() {
-    for_all_explanations(QuadStorageEncodingName::String, |name, explanation| {
-        assert_snapshot!(
-            format!("{name} (Optimized, {})", QuadStorageEncodingName::String),
-            &explanation.optimized_logical_plan.to_string()
-        )
-    })
-    .await;
-}
-
-#[tokio::test]
-pub async fn bsbm_business_intelligence_string_execution_plan() {
-    for_all_explanations(QuadStorageEncodingName::String, |name, explanation| {
-        let string = displayable(explanation.execution_plan.as_ref())
-            .indent(false)
-            .to_string();
-        assert_snapshot!(
-            format!(
-                "{name} (Execution Plan, {})",
-                QuadStorageEncodingName::String
-            ),
-            &string
-        )
+        assert_snapshot!(format!("{name} (Execution Plan)",), &string)
     })
     .await;
 }
@@ -130,7 +79,7 @@ async fn for_all_explanations(
             .await
             .unwrap();
 
-        run_plan_assertions(|| assertion(benchmark_name, explanation));
+        run_plan_assertions("bsbm-bi", || assertion(benchmark_name, explanation));
     }
 }
 

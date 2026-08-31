@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(length) AS length
+  Projection: length
+    Extend: variable=?length, expression=STRLEN(STR(uuid))
+      Filter: EBV(BOOLEAN_AS_TERM(EBV(isIRI(uuid)) AND EBV(REGEX(STR(uuid), ENC_TF(Struct({term_type:2,value:^urn:uuid:[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:i,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))
+        Extend: variable=?uuid, expression=UUID()
+          EmptyRelation: rows=1

@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: error_string
+---
+The blank node _:b1 cannot be shared by multiple blocks

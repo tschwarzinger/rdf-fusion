@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct { template: [TriplePattern { subject: _:<guid>, predicate: NamedNode(NamedNode { iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#first" }), object: Variable(Variable { name: "o" }) }, TriplePattern { subject: _:<guid>, predicate: NamedNode(NamedNode { iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest" }), object: NamedNode(NamedNode { iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil" }) }, TriplePattern { subject: _:<guid>, predicate: NamedNode(NamedNode { iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#first" }), object: Variable(Variable { name: "s" }) }, TriplePattern { subject: _:<guid>, predicate: NamedNode(NamedNode { iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest" }), object: _:<guid> }, TriplePattern { subject: _:<guid>, predicate: NamedNode(NamedNode { iri: "http://example.org/prop" }), object: Variable(Variable { name: "p" }) }] }
+Projection: o, p, s
+  QuadPattern: triple_pattern=[?s ?p ?o]

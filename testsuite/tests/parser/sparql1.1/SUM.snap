@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(sum) AS sum
+  Projection: sum
+    Extend: variable=?sum, expression=<guid>
+      Aggregate: groupBy=[[]], aggr=[[SUM(ENC_TF(o)) AS <guid>]]
+        QuadPattern: triple_pattern=[?s <http://www.example.org/dec> ?o]

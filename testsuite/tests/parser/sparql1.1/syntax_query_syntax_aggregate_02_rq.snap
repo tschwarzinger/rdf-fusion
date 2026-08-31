@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Error: External error: An error returned from the query engine: Cannot rewrite SPARQL query
+caused by
+Error during planning: 'SUM' does not support zero arguments. No function matches the given name and argument types 'SUM()'. You might need to add explicit type casts.
+	Candidate functions:
+	SUM(Union(Dense, 0: ("rdf-fusion.null": Null), 1: ("rdf-fusion.blank-node": Utf8), 2: ("rdf-fusion.iri": Utf8), 3: ("rdf-fusion.strings": Struct("value": non-null Utf8, "language": Utf8)), 4: ("rdf-fusion.boolean": Boolean), 5: ("rdf-fusion.numeric": Union(Dense, 0: ("float": Float32), 1: ("double": Float64), 2: ("decimal": Decimal128(36, 18)), 3: ("int": Int32), 4: ("integer": Int64))), 6: ("rdf-fusion.date-time": Struct("date_time_type": non-null UInt8, "value": non-null Decimal128(36, 18), "offset": Int16)), 7: ("rdf-fusion.duration": Struct("months": Int64, "seconds": Decimal128(36, 18))), 8: ("rdf-fusion.unknown": Struct("value": non-null Utf8, "datatype": non-null Utf8))))

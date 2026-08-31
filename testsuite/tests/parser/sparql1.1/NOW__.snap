@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: n
+  Filter: EBV(EQ(ENC_TF(DATATYPE(n)), ENC_TF(Struct({term_type:0,value:http://www.w3.org/2001/XMLSchema#dateTime,data_type:,language_tag:}))))
+    Extend: variable=?n, expression=Struct({term_type:2,value:-5391559471918-10-04T19:51:08.312696284115894272-14:00,data_type:http://www.w3.org/2001/XMLSchema#dateTime,language_tag:})
+      EmptyRelation: rows=1

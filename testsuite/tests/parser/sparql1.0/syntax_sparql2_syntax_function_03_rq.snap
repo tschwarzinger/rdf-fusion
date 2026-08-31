@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  Filter: EBV(ENC_TF(<http://example.org/name>()))
+    EmptyRelation: rows=1

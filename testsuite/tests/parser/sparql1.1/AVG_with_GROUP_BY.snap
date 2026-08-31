@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, ENC_PT(avg) AS avg
+  Projection: s, avg
+    Extend: variable=?avg, expression=<guid>
+      Filter: EBV(LEQ(<guid>, ENC_TF(Struct({term_type:2,value:2.0,data_type:http://www.w3.org/2001/XMLSchema#decimal,language_tag:}))))
+        Aggregate: groupBy=[[s AS s]], aggr=[[AVG(ENC_TF(o)) AS <guid>]]
+          QuadPattern: triple_pattern=[?s ?p ?o]

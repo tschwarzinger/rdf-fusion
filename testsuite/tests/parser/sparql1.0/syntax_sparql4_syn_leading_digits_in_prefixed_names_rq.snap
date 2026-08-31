@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: desc
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[<http://placetime.com/interval/gregorian/1977-01-18T04:00:00Z/P1D> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.ai.sri.com/daml/ontologies/time/Time.daml#ProperInterval>]
+    QuadPattern: triple_pattern=[<http://placetime.com/interval/gregorian/1977-01-18T04:00:00Z/P1D> <http://purl.org/dc/elements/1.1/description> ?desc]

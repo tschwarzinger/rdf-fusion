@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  PropertyPath: <https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql2/a> (<https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql2/b>)+ "11"^^<http://www.w3.org/2001/XMLSchema#integer>

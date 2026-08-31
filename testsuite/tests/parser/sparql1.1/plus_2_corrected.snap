@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x AS x, y AS y, ENC_PT(sum) AS sum
+  Projection: x, y, sum
+    Extend: variable=?sum, expression=ADD(ENC_TF(STR(x)), ENC_TF(STR(y)))
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[?s <http://example/p> ?x]
+        QuadPattern: triple_pattern=[?s <http://example/q> ?y]

@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: val
+  Filter: EBV(REGEX(ENC_TF(val), ENC_TF(Struct({term_type:2,value:example\.com,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))
+    QuadPattern: triple_pattern=[<http://example.com/#foo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> ?val]

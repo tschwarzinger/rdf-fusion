@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        ?s ?p ?o
+
+BasicGraphPattern: 
+  QuadPattern: triple_pattern=[?s <http://xmlns.com/foaf/0.1/knows> <http://example.org/c>]
+  QuadPattern: triple_pattern=[?s ?p ?o]

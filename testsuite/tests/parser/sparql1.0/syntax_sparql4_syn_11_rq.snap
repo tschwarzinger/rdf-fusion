@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: p, q, v
+  Filter: EBV(ENC_TF(Struct({term_type:2,value:true,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:})))
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[_:a ?p ?v]
+      QuadPattern: triple_pattern=[_:<guid> ?q _:a]

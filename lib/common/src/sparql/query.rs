@@ -36,11 +36,26 @@ impl RdfFusionQuery {
 
 impl std::fmt::Display for RdfFusionQuery {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Variant: {:?}\nPlan:\n{}",
-            self.variant,
-            self.plan.display_indent()
-        )
+        let name = match &self.variant {
+            QueryVariant::Ask => "Ask",
+            QueryVariant::Select => "Select",
+            QueryVariant::Construct { .. } => "Construct",
+            QueryVariant::Describe { .. } => "Describe",
+        };
+        writeln!(f, "Variant: {name}")?;
+
+        let template = match &self.variant {
+            QueryVariant::Ask | QueryVariant::Select => None,
+            QueryVariant::Construct { template }
+            | QueryVariant::Describe { template } => Some(template),
+        };
+        if let Some(template) = template {
+            writeln!(f, "Template:")?;
+            for triple_pattern in template {
+                writeln!(f, "  {triple_pattern}")?;
+            }
+        }
+
+        write!(f, "Plan:\n{}", self.plan.display_indent())
     }
 }

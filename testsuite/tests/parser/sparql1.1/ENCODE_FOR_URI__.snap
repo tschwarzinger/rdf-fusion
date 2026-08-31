@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, str AS str, ENC_PT(encoded) AS encoded
+  Projection: s, str, encoded
+    Extend: variable=?encoded, expression=ENCODE_FOR_URI(ENC_TF(str))
+      QuadPattern: triple_pattern=[?s <http://example.org/str> ?str]

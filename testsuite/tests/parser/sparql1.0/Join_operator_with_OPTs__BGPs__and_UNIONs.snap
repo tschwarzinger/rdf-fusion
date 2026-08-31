@@ -1,0 +1,17 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a, y, d, z
+  SparqlJoin: Inner 
+    SparqlJoin: Inner 
+      SparqlJoin: Left 
+        QuadPattern: triple_pattern=[?a <http://example/p> ?c]
+        QuadPattern: triple_pattern=[?a <http://example/r> ?d]
+      QuadPattern: triple_pattern=[?a ?p "1"^^<http://www.w3.org/2001/XMLSchema#integer>]
+    Union
+      Projection: p, y, NULL AS a, NULL AS z
+        QuadPattern: triple_pattern=[?p <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?y]
+      Projection: p, NULL AS y, a, z
+        QuadPattern: triple_pattern=[?a ?z ?p]

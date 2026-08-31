@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a, b, c, x, y, z
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[?x ?y ?z]
+    QuadPattern: triple_pattern=[?a ?b ?c]

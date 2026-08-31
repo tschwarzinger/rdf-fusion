@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  Filter: EBV(ENC_TF(Struct({term_type:,value:,data_type:,language_tag:})))
+    QuadPattern: triple_pattern=[<http://example/ns#s> <http://example/ns#p> <http://example/ns#o>]

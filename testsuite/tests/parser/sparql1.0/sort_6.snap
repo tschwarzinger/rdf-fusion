@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: address
+  Sort: AS_SORTABLE_BYTES(ENC_TF(address)) ASC NULLS FIRST
+    QuadPattern: triple_pattern=[?x <http://example.org/things#address> ?address]

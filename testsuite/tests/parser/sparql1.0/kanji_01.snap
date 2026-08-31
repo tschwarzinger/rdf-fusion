@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: name, food
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[_:<guid> <http://xmlns.com/foaf/0.1/name> ?name]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/2001/sw/DataAccess/tests/data/i18n/kanji.ttl#食べる> ?food]

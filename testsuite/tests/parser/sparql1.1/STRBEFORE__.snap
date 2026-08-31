@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, ENC_PT(prefix) AS prefix
+  Projection: s, prefix
+    Extend: variable=?prefix, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:s,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+      QuadPattern: triple_pattern=[?s <http://example.org/str> ?str]

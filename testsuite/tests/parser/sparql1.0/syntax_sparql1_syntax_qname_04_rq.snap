@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[<http://example.org/ns#> <http://example.org/ns2#> <http://example.org/ns#a>]
+    QuadPattern: triple_pattern=[<http://example.org/ns#> <http://example.org/ns#> <http://example.org/ns#>]

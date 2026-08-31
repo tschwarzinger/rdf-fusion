@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: ENC_PT(u1) AS u1, ENC_PT(u2) AS u2
+  Projection: u1, u2
+    Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(EQ(u1, u2))))
+      Extend: variable=?u2, expression=UUID()
+        Extend: variable=?u1, expression=UUID()
+          EmptyRelation: rows=1

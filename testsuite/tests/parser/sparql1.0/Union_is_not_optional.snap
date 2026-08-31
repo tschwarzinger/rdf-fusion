@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: mbox, name
+  Union
+    Projection: x, mbox, NULL AS name
+      QuadPattern: triple_pattern=[?x <http://xmlns.com/foaf/0.1/mbox> ?mbox]
+    Projection: x, mbox, name
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[?x <http://xmlns.com/foaf/0.1/mbox> ?mbox]
+        QuadPattern: triple_pattern=[?x <http://xmlns.com/foaf/0.1/name> ?name]

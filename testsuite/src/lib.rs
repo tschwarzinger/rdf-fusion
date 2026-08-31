@@ -2,6 +2,7 @@
 
 pub mod dictionary;
 pub mod storage;
+pub mod store_factories;
 pub mod test;
 pub mod testsuite;
 mod vocab;

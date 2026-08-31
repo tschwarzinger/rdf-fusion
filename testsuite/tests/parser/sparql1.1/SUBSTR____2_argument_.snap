@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, str AS str, ENC_PT(substr) AS substr
+  Projection: s, str, substr
+    Extend: variable=?substr, expression=SUBSTR(ENC_TF(str), ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+      QuadPattern: triple_pattern=[?s <http://example.org/str> ?str]

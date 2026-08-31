@@ -1,0 +1,19 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&explanation.initial_logical_plan.to_string()"
+---
+Limit: skip=0, fetch=5
+  DistinctOn: on_expr=[[AS_SORTABLE_BYTES(ENC_TF(productLabel)), product]], select_expr=[[product, productLabel]], sort_expr=[[AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST, product ASC NULLS FIRST]]
+    Projection: product, productLabel
+      Sort: AS_SORTABLE_BYTES(ENC_TF(productLabel)) ASC NULLS FIRST
+        DecodeObjectIds: columns=[prodFeature, productLabel]
+          Filter: EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(NOT EBV(EQ(ENC_TF(Struct({term_type:0,value:http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890,data_type:,language_tag:})), ENC_TF(product))))) AND EBV(BOOLEAN_AS_TERM(EBV(LT(ENC_TF(simProperty1), ADD(ENC_TF(origProperty1), ENC_TF(Struct({term_type:2,value:120,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))) AND EBV(GT(ENC_TF(simProperty1), SUB(ENC_TF(origProperty1), ENC_TF(Struct({term_type:2,value:120,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))))))) AND EBV(BOOLEAN_AS_TERM(EBV(LT(ENC_TF(simProperty2), ADD(ENC_TF(origProperty2), ENC_TF(Struct({term_type:2,value:170,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))) AND EBV(GT(ENC_TF(simProperty2), SUB(ENC_TF(origProperty2), ENC_TF(Struct({term_type:2,value:170,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))))))))
+            DecodeObjectIds: columns=[origProperty1, origProperty2, product, simProperty1, simProperty2]
+              BasicGraphPattern: 
+                QuadPattern: triple_pattern=[?product <http://www.w3.org/2000/01/rdf-schema#label> ?productLabel]
+                QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature]
+                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?prodFeature]
+                QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?origProperty1]
+                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?simProperty1]
+                QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer19/Product890> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?origProperty2]
+                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric2> ?simProperty2]

@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: ENC_PT(g) AS g
+  Projection: g
+    Filter: EBV(BOOLEAN_AS_TERM(EBV(EQ(g, ENC_TF(Struct({term_type:2,value:1 2,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:en})))) OR EBV(EQ(g, ENC_TF(Struct({term_type:2,value:2 1,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:en}))))))
+      Projection: g
+        Extend: variable=?g, expression=<guid>
+          Aggregate: groupBy=[[]], aggr=[[GROUP_CONCAT(ENC_TF(o), Union 3:{value: ,language:}) AS <guid>]]
+            Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:en})), (Struct({term_type:2,value:2,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:en}))

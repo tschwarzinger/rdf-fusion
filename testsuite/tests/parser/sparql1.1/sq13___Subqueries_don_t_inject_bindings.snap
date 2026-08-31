@@ -1,0 +1,16 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+DistinctOn: on_expr=[[AS_SORTABLE_BYTES(ENC_TF(O1)), AS_SORTABLE_BYTES(ENC_TF(O2))]], select_expr=[[O1, O2]], sort_expr=[[AS_SORTABLE_BYTES(ENC_TF(O1)) ASC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(O2)) ASC NULLS FIRST]]
+  Projection: O1, O2
+    Sort: AS_SORTABLE_BYTES(ENC_TF(O1)) ASC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(O2)) ASC NULLS FIRST
+      SparqlJoin: Inner 
+        BasicGraphPattern: 
+          QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/2000/01/rdf-schema#label> ?L]
+          QuadPattern: triple_pattern=[?O1 <http://www.example.orghasItem> _:<guid>]
+        Projection: O2
+          BasicGraphPattern: 
+            QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/2000/01/rdf-schema#label> ?L]
+            QuadPattern: triple_pattern=[?O2 <http://www.example.orghasItem> _:<guid>]

@@ -1,0 +1,11 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&explanation.initial_logical_plan.to_string()"
+---
+DecodeObjectIds: columns=[hasValue, isValueOf, property]
+  Projection: property, hasValue, isValueOf
+    Union
+      Projection: property, hasValue, NULL AS isValueOf
+        QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250> ?property ?hasValue]
+      Projection: property, NULL AS hasValue, isValueOf
+        QuadPattern: triple_pattern=[?isValueOf ?property <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor1/Offer1250>]

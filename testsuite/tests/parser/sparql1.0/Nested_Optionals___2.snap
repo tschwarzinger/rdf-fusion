@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: v, w
+  SparqlJoin: Left 
+    SparqlJoin: Left 
+      QuadPattern: triple_pattern=[<http://example/x1> <http://example/p> ?v]
+      QuadPattern: triple_pattern=[<http://example/x3> <http://example/q> ?w]
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[<http://example/x3> <http://example/q> ?w]
+      QuadPattern: triple_pattern=[<http://example/x2> <http://example/p> ?v]

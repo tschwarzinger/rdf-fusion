@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: book, title, price
+  SparqlJoin: Inner 
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[?book <http://purl.org/dc/elements/1.1/title> ?title]
+      QuadPattern: triple_pattern=[?book <http://example.org/ns#price> ?price]
+    Values: (Struct({term_type:,value:,data_type:,language_tag:}), Struct({term_type:2,value:SPARQL Tutorial,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), (Struct({term_type:0,value:http://example.org/book/book2,data_type:,language_tag:}), Struct({term_type:,value:,data_type:,language_tag:}))

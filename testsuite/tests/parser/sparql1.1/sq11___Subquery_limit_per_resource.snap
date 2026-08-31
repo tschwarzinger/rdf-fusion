@@ -1,0 +1,16 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: L
+  Sort: AS_SORTABLE_BYTES(ENC_TF(L)) ASC NULLS FIRST
+    SparqlJoin: Inner 
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/2000/01/rdf-schema#label> ?L]
+        QuadPattern: triple_pattern=[?O <http://www.example.orghasItem> _:<guid>]
+      Limit: skip=0, fetch=2
+        DistinctOn: on_expr=[[AS_SORTABLE_BYTES(ENC_TF(O))]], select_expr=[[O]], sort_expr=[[AS_SORTABLE_BYTES(ENC_TF(O)) ASC NULLS FIRST]]
+          Projection: O
+            Sort: AS_SORTABLE_BYTES(ENC_TF(O)) ASC NULLS FIRST
+              QuadPattern: triple_pattern=[?O <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.example.orgOrder>]

@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x, y
+  QuadPattern: triple_pattern=[?x <http://xmlns.com/foaf/0.1/knows> ?y]

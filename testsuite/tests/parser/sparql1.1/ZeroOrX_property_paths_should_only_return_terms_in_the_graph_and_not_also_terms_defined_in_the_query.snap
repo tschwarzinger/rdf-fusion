@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: v
+  SparqlJoin: Inner 
+    Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))
+    PropertyPath: ?v (<http://example.com/p>)? ?v

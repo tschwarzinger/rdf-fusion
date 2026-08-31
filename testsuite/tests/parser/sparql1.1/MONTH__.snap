@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, ENC_PT(x) AS x
+  Projection: s, x
+    Extend: variable=?x, expression=MONTH(ENC_TF(date))
+      QuadPattern: triple_pattern=[?s <http://example.org/date> ?date]

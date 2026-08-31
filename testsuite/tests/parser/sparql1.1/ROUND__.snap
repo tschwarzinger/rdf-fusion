@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, num AS num, ENC_PT(round) AS round
+  Projection: s, num, round
+    Extend: variable=?round, expression=ROUND(ENC_TF(num))
+      QuadPattern: triple_pattern=[?s <http://example.org/num> ?num]

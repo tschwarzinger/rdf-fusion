@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: X, S
+  Extend: variable=?S, expression=<guid>
+    Aggregate: groupBy=[[X AS X]], aggr=[[first_value(v) AS <guid>]]
+      Extend: variable=?X, expression=COALESCE(w, Struct({term_type:2,value:1605-11-05,data_type:http://www.w3.org/2001/XMLSchema#date,language_tag:}))
+        SparqlJoin: Left 
+          QuadPattern: triple_pattern=[?s <http://example/p> ?v]
+          QuadPattern: triple_pattern=[?s <http://example/q> ?w]

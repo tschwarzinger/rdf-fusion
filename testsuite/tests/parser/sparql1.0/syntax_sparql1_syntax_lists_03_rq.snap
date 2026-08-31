@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: z
+  BasicGraphPattern: 
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> ?z]
+    QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>]

@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a, c
+  Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(BOUND(e))))
+    SparqlJoin: Left 
+      QuadPattern: triple_pattern=[?a <http://example.org/ns#b> ?c]
+      QuadPattern: triple_pattern=[?c <http://example.org/ns#d> ?e]

@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: t
+  Filter: EBV(EQ(ENC_TF(g), ENC_TF(Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql11/property-path/ng-01.ttl,data_type:,language_tag:}))))
+    PropertyPath: ?g ?s (<http://www.example.org/p1>)* ?t

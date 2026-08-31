@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: name
+  Sort: AS_SORTABLE_BYTES(ENC_TF(name)) ASC NULLS FIRST
+    QuadPattern: triple_pattern=[?x <http://xmlns.com/foaf/0.1/name> ?name]

@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        ?s ?p ?o
+
+QuadPattern: triple_pattern=[?s ?p ?o]

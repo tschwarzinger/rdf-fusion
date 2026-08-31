@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a, g, g2, x
+  SparqlJoin: Inner 
+    QuadPattern: triple_pattern=[<http://example.org/x> <http://example.org/p> <http://example.org/z>]
+    SparqlJoin: Inner 
+      QuadPattern: graph_variable=?g triple_pattern=[<http://example.org/x> <http://example.org/b> ?a], active_graph: Any Named Graph 
+      QuadPattern: graph_variable=?g2 triple_pattern=[<http://example.org/x> <http://example.org/p> ?x], active_graph: Any Named Graph

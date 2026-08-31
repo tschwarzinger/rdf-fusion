@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection:
+  QuadPattern: triple_pattern=[<https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql1/syntax-qname-05.rq> <https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql1/syntax-qname-05.rq> <https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql1/syntax-qname-05.rq>]

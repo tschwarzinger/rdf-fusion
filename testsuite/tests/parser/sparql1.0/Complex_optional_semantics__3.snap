@@ -1,0 +1,17 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: name, nick, plan, dept
+  SparqlJoin: Left 
+    SparqlJoin: Inner 
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[?person <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person>]
+        QuadPattern: triple_pattern=[?person <http://xmlns.com/foaf/0.1/name> ?name]
+      BasicGraphPattern: 
+        QuadPattern: graph_variable=?x triple_pattern=[_:<guid> <http://xmlns.com/foaf/0.1/name> ?name], active_graph: Any Named Graph 
+        QuadPattern: graph_variable=?x triple_pattern=[_:<guid> <http://xmlns.com/foaf/0.1/nick> ?nick], active_graph: Any Named Graph 
+    SparqlJoin: Left 
+      QuadPattern: triple_pattern=[?person <http://example.org/things#healthplan> ?plan]
+      QuadPattern: triple_pattern=[?person <http://example.org/things#department> ?dept]

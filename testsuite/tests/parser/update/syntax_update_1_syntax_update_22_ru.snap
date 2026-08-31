@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+CLEAR(graph=GRAPH <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/graph>, silent=true)

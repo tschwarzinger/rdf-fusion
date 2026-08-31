@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: X
+  SparqlJoin: Inner 
+    Projection: X
+      Extend: variable=?X, expression=Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})
+        EmptyRelation: rows=1
+    Projection: X
+      Extend: variable=?X, expression=Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})
+        EmptyRelation: rows=1

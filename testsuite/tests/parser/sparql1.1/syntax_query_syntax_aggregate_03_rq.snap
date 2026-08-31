@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(count) AS count
+  Projection: count
+    Extend: variable=?count, expression=<guid>
+      Aggregate: groupBy=[[]], aggr=[[COUNT(Struct({term_type:,value:,data_type:,language_tag:})) AS <guid>]]
+        EmptyRelation: rows=1

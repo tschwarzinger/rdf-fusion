@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+LOAD(source=<somescheme://www.example.com/THIS-GRAPH-DOES-NOT-EXIST/>, destination=<http://www.example.org/>, silent=true)

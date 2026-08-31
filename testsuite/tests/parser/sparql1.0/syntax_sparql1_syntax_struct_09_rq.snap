@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: x, y, z
+  SparqlJoin: Inner 
+    SparqlJoin: Left 
+      EmptyRelation: rows=1
+      QuadPattern: triple_pattern=[<http://example.org/ns#a> <http://example.org/ns#b> <http://example.org/ns#c>]
+    QuadPattern: triple_pattern=[?x ?y ?z]

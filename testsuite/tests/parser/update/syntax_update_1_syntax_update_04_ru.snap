@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+LOAD(source=<http://example.org/faraway>, destination=<https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/localCopy>, silent=false)

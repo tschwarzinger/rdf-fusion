@@ -1,0 +1,13 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s1 AS s1, s2 AS s2, ENC_PT(b1) AS b1, ENC_PT(b2) AS b2
+  Projection: s1, s2, b1, b2
+    Extend: variable=?b2, expression=BNODE(ENC_TF(s2))
+      Extend: variable=?b1, expression=BNODE(ENC_TF(s1))
+        Filter: EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(a), ENC_TF(Struct({term_type:0,value:http://example.org/s1,data_type:,language_tag:})))) OR EBV(EQ(ENC_TF(a), ENC_TF(Struct({term_type:0,value:http://example.org/s3,data_type:,language_tag:})))))) AND EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(b), ENC_TF(Struct({term_type:0,value:http://example.org/s1,data_type:,language_tag:})))) OR EBV(EQ(ENC_TF(b), ENC_TF(Struct({term_type:0,value:http://example.org/s3,data_type:,language_tag:}))))))))
+          BasicGraphPattern: 
+            QuadPattern: triple_pattern=[?a <http://example.org/str> ?s1]
+            QuadPattern: triple_pattern=[?b <http://example.org/str> ?s2]

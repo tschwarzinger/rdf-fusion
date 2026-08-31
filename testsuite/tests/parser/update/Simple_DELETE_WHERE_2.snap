@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        GRAPH <http://example.org/g1> { <http://example.org/a> <http://xmlns.com/foaf/0.1/knows> ?b }
+
+QuadPattern: triple_pattern=[<http://example.org/a> <http://xmlns.com/foaf/0.1/knows> ?b], active_graph: Union of [NamedNode(NamedNode { iri: "http://example.org/g1" })]

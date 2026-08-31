@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Describe { template: [TriplePattern { subject: Variable(Variable { name: "<guid>" }), predicate: NamedNode(NamedNode { iri: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" }), object: Variable(Variable { name: "<guid>__type" }) }] }
+SparqlJoin: Inner 
+  Projection: <guid>
+    Extend: variable=?<guid>, expression=Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql10/syntax-sparql2/u,data_type:,language_tag:})
+      EmptyRelation: rows=1
+  QuadPattern: triple_pattern=[?<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?<guid>__type]

@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(uri) AS uri, ENC_PT(iri) AS iri
+  Projection: uri, iri
+    Extend: variable=?iri, expression=IRI(ENC_TF(Struct({term_type:2,value:iri,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), Union 3:{value:http://example.org/,language:})
+      Extend: variable=?uri, expression=IRI(ENC_TF(Struct({term_type:2,value:uri,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), Union 3:{value:http://example.org/,language:})
+        EmptyRelation: rows=1

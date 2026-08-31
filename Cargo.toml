@@ -10,6 +10,7 @@ members = [
   "lib/execution",
   "lib/functions",
   "lib/logical",
+  "lib/sparql-parser",
   "lib/physical",
   "lib/storage",
   "lib/rdf-fusion",
@@ -121,6 +122,7 @@ rdf-fusion-functions = { version = "=0.2.1", path = "lib/functions" }
 rdf-fusion-logical = { version = "=0.2.1", path = "lib/logical" }
 rdf-fusion-physical = { version = "=0.2.1", path = "lib/physical" }
 rdf-fusion-storage = { version = "=0.2.1", path = "lib/storage" }
+rdf-fusion-sparql-parser = { version = "=0.2.1", path = "lib/sparql-parser" }
 rdf-fusion = { version = "=0.2.1", path = "lib/rdf-fusion" }
 rdf-fusion-web = { version = "=0.2.1", path = "lib/web" }
 

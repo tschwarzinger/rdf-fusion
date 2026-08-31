@@ -1,0 +1,14 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: cx AS cx, ENC_PT(div) AS div, def AS def, err AS err
+  Projection: cx, div, def, err
+    Extend: variable=?err, expression=COALESCE(Struct({term_type:,value:,data_type:,language_tag:}))
+      Extend: variable=?def, expression=COALESCE(Struct({term_type:,value:,data_type:,language_tag:}), ENC_PT(MINUS(ENC_TF(Struct({term_type:2,value:3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))))
+        Extend: variable=?div, expression=COALESCE(DIV(ENC_TF(o), ENC_TF(x)), MINUS(ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
+          Extend: variable=?cx, expression=COALESCE(x, ENC_PT(MINUS(ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))))
+            SparqlJoin: Left 
+              QuadPattern: triple_pattern=[?s <http://example.org/p> ?o]
+              QuadPattern: triple_pattern=[?s <http://example.org/q> ?x]

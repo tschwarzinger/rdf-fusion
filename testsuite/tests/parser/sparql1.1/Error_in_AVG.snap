@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: g AS g, ENC_PT(avg) AS avg, ENC_PT(c) AS c
+  Projection: g, avg, c
+    Extend: variable=?c, expression=DIV(ADD(<guid>, <guid>), ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+      Extend: variable=?avg, expression=<guid>
+        Aggregate: groupBy=[[g AS g]], aggr=[[AVG(ENC_TF(p)) AS <guid>, MIN(ENC_TF(p)) AS <guid>, MAX(ENC_TF(p)) AS <guid>]]
+          QuadPattern: triple_pattern=[?g <http://example.com/data/#p> ?p]

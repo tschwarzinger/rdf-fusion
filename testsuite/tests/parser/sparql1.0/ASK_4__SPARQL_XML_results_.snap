@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection:
+  QuadPattern: triple_pattern=[<http://example/x> <http://example/p> "99"^^<http://www.w3.org/2001/XMLSchema#integer>]

@@ -1,0 +1,33 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        ?a <http://xmlns.com/foaf/0.1/knows> ?Var_B
+
+SparqlJoin: Inner 
+  QuadPattern: triple_pattern=[?a <http://xmlns.com/foaf/0.1/name> "Alan"]
+  Distinct:
+    Projection: Var_B
+      Union
+        Projection: Var_B, Var_B1, Var_B2, Var_Bg
+          Union
+            Projection: Var_B, Var_B1, Var_B2, Var_Bg
+              Union
+                Projection: Var_B, Var_B1, Var_B2, NULL AS Var_Bg
+                  Union
+                    Projection: Var_B, Var_B1, Var_B2
+                      Union
+                        Projection: Var_B, Var_B1, Var_B2
+                          QuadPattern: triple_pattern=[?Var_B ?Var_B1 ?Var_B2]
+                        Projection: Var_B, Var_B1, Var_B2
+                          QuadPattern: triple_pattern=[?Var_B1 ?Var_B ?Var_B2]
+                    Projection: Var_B, Var_B1, Var_B2
+                      QuadPattern: triple_pattern=[?Var_B1 ?Var_B2 ?Var_B]
+                Projection: Var_B, Var_B1, Var_B2, Var_Bg
+                  QuadPattern: graph_variable=?Var_Bg triple_pattern=[?Var_B ?Var_B1 ?Var_B2], active_graph: Any Named Graph 
+            Projection: Var_B, Var_B1, Var_B2, Var_Bg
+              QuadPattern: graph_variable=?Var_Bg triple_pattern=[?Var_B1 ?Var_B ?Var_B2], active_graph: Any Named Graph 
+        Projection: Var_B, Var_B1, Var_B2, Var_Bg
+          QuadPattern: graph_variable=?Var_Bg triple_pattern=[?Var_B1 ?Var_B2 ?Var_B], active_graph: Any Named Graph

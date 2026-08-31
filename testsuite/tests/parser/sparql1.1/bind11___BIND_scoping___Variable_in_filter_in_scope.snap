@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, v, z
+  Filter: EBV(EQ(ENC_TF(v), ENC_TF(z)))
+    SparqlJoin: Inner 
+      Extend: variable=?z, expression=Struct({term_type:2,value:4,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})
+        EmptyRelation: rows=1
+      QuadPattern: triple_pattern=[?s <http://example.org/p> ?v]

@@ -1,0 +1,15 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, str AS str, ENC_PT(bb) AS bb, ENC_PT(bbc) AS bbc, ENC_PT(bbcy) AS bbcy, ENC_PT(b) AS b, ENC_PT(ben) AS ben, ENC_PT(bbx) AS bbx, ENC_PT(bxyzx) AS bxyzx
+  Projection: s, str, bb, bbc, bbcy, b, ben, bbx, bxyzx
+    Extend: variable=?bxyzx, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:xyz,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+      Extend: variable=?bbx, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:b,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+        Extend: variable=?ben, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:en})))
+          Extend: variable=?b, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+            Extend: variable=?bbcy, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:b,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:cy})))
+              Extend: variable=?bbc, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:bc,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+                Extend: variable=?bb, expression=STRBEFORE(ENC_TF(str), ENC_TF(Struct({term_type:2,value:b,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+                  QuadPattern: triple_pattern=[?s <http://example.org/str> ?str]

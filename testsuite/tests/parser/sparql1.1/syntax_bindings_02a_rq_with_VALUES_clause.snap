@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Error: External error: An error returned from the query engine: Cannot rewrite SPARQL query
+caused by
+Error during planning: Values list cannot be zero length

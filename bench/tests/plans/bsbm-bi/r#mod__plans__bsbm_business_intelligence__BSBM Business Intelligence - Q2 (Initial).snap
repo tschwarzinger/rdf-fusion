@@ -1,0 +1,20 @@
+---
+source: bench/tests/plans/bsbm_business_intelligence.rs
+expression: "&explanation.initial_logical_plan.to_string()"
+---
+Projection: otherProduct AS otherProduct, ENC_PT(sameFeatures) AS sameFeatures
+  Limit: skip=0, fetch=10
+    Projection: otherProduct, sameFeatures
+      Sort: AS_SORTABLE_BYTES(sameFeatures) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(otherProduct)) ASC NULLS FIRST
+        Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(EQ(ENC_TF(otherProduct), ENC_TF(Struct({term_type:0,value:http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636,data_type:,language_tag:}))))))
+          DecodeObjectIds: columns=[otherProduct]
+            SparqlJoin: Inner 
+              QuadPattern: triple_pattern=[?otherProduct <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/Product>]
+              Projection: otherProduct, sameFeatures
+                Extend: variable=?sameFeatures, expression=<uuid>
+                  Aggregate: groupBy=[[otherProduct AS otherProduct]], aggr=[[COUNT(otherFeature) AS <uuid>]]
+                    Filter: EBV(EQ(ENC_TF(feature), ENC_TF(otherFeature)))
+                      DecodeObjectIds: columns=[feature, otherFeature]
+                        BasicGraphPattern: 
+                          QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer13/Product636> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?feature]
+                          QuadPattern: triple_pattern=[?otherProduct <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> ?otherFeature]

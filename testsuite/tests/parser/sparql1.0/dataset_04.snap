@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: g, o, p, s
+  QuadPattern: graph_variable=?g triple_pattern=[?s ?p ?o], active_graph: Union of []

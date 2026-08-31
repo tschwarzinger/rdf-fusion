@@ -1,0 +1,14 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: O12 AS O12, ENC_PT(C) AS C
+  Projection: O12, C
+    Sort: AS_SORTABLE_BYTES(ENC_TF(O12)) ASC NULLS FIRST
+      Extend: variable=?C, expression=<guid>
+        Aggregate: groupBy=[[ENC_PT(O12) AS O12]], aggr=[[COUNT(O1) AS <guid>]]
+          Extend: variable=?O12, expression=ADD(ENC_TF(O1), ENC_TF(O2))
+            BasicGraphPattern: 
+              QuadPattern: triple_pattern=[?S <http://www.example.org/p> ?O1]
+              QuadPattern: triple_pattern=[?S <http://www.example.org/q> ?O2]

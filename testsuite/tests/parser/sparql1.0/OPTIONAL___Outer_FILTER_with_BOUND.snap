@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: title, price
+  Filter: EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(NOT EBV(BOUND(price)))) OR EBV(LT(ENC_TF(price), ENC_TF(Struct({term_type:2,value:15,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))))
+    SparqlJoin: Left 
+      QuadPattern: triple_pattern=[?book <http://purl.org/dc/elements/1.1/title> ?title]
+      QuadPattern: triple_pattern=[?book <http://example.org/ns#price> ?price]

@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s
+  Sort: AS_SORTABLE_BYTES(ADD(ENC_TF(o1), ENC_TF(o2))) ASC NULLS FIRST
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[?s <http://example.org/p> ?o1]
+      QuadPattern: triple_pattern=[?s <http://example.org/q> ?o2]

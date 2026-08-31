@@ -1,0 +1,34 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: subset, superset
+  Extend: variable=?superset, expression=s2
+    Extend: variable=?subset, expression=s1
+      Minus:
+        Minus:
+          BasicGraphPattern: 
+            QuadPattern: triple_pattern=[?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+            QuadPattern: triple_pattern=[?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+          Filter: EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(s1), ENC_TF(s2))) OR EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))))
+            Subquery:
+              Filter: outer_ref(s2) = __inner__s2 AND outer_ref(x) = __inner__x
+                Projection: s2 AS __inner__s2, x AS __inner__x
+                  QuadPattern: triple_pattern=[?s2 <http://example/member> ?x]
+            BasicGraphPattern: 
+              QuadPattern: triple_pattern=[?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+              QuadPattern: triple_pattern=[?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+              QuadPattern: triple_pattern=[?s1 <http://example/member> ?x]
+        Filter: EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>))) AND EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))))
+          Subquery:
+            Filter: outer_ref(s1) = __inner__s1
+              Projection: s1 AS __inner__s1, y AS __inner__y
+                QuadPattern: triple_pattern=[?s1 <http://example/member> ?y]
+          Subquery:
+            Filter: outer_ref(s2) = __inner__s2
+              Projection: s2 AS __inner__s2, y AS __inner__y
+                QuadPattern: triple_pattern=[?s2 <http://example/member> ?y]
+          BasicGraphPattern: 
+            QuadPattern: triple_pattern=[?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
+            QuadPattern: triple_pattern=[?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]

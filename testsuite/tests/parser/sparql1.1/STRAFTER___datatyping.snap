@@ -1,0 +1,15 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, str AS str, ENC_PT(ab) AS ab, ENC_PT(aab) AS aab, ENC_PT(abcy) AS abcy, ENC_PT(a) AS a, ENC_PT(aen) AS aen, ENC_PT(abx) AS abx, ENC_PT(axyzx) AS axyzx
+  Projection: s, str, ab, aab, abcy, a, aen, abx, axyzx
+    Extend: variable=?axyzx, expression=STRAFTER(ENC_TF(str), ENC_TF(Struct({term_type:2,value:xyz,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+      Extend: variable=?abx, expression=STRAFTER(ENC_TF(str), ENC_TF(Struct({term_type:2,value:b,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+        Extend: variable=?aen, expression=STRAFTER(ENC_TF(str), ENC_TF(Struct({term_type:2,value:,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:en})))
+          Extend: variable=?a, expression=STRAFTER(ENC_TF(str), ENC_TF(Struct({term_type:2,value:,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+            Extend: variable=?abcy, expression=STRAFTER(ENC_TF(str), ENC_TF(Struct({term_type:2,value:b,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:cy})))
+              Extend: variable=?aab, expression=STRAFTER(ENC_TF(str), ENC_TF(Struct({term_type:2,value:ab,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+                Extend: variable=?ab, expression=STRAFTER(ENC_TF(str), ENC_TF(Struct({term_type:2,value:b,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+                  QuadPattern: triple_pattern=[?s <http://example.org/str> ?str]

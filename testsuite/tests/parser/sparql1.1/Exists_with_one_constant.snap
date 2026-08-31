@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: o, p, s
+  Filter: EBV(BOOLEAN_AS_TERM(EXISTS (<subquery>)))
+    Subquery:
+      Filter: outer_ref(p) = __inner__p AND outer_ref(s) = __inner__s
+        Projection: s AS __inner__s, p AS __inner__p
+          QuadPattern: triple_pattern=[?s ?p <http://www.example.org/o>]
+    QuadPattern: triple_pattern=[?s ?p ?o]

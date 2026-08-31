@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: o, p, s, z
+  Extend: variable=?z, expression=Struct({term_type:,value:,data_type:,language_tag:})
+    QuadPattern: triple_pattern=[?s ?p ?o]

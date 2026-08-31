@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: animal
+  Minus:
+    QuadPattern: triple_pattern=[?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Animal>]
+    Filter: EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(type), ENC_TF(Struct({term_type:0,value:http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Reptile,data_type:,language_tag:})))) OR EBV(EQ(ENC_TF(type), ENC_TF(Struct({term_type:0,value:http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Insect,data_type:,language_tag:}))))))
+      QuadPattern: triple_pattern=[?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type]

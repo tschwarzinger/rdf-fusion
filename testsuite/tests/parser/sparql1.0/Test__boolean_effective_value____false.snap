@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a
+  Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(ENC_TF(v))))
+    QuadPattern: triple_pattern=[?a <http://example.org/ns#p> ?v]

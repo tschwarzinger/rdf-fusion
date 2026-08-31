@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: t
+  PropertyPath: <http://www.example.org/a> ((<http://www.example.org/p0> | (^(<http://www.example.org/p1>) / <http://www.example.org/p2>)) | <http://www.example.org/p3>) ?t

@@ -1,0 +1,17 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&explanation.initial_logical_plan.to_string()"
+---
+Limit: skip=0, fetch=10
+  DistinctOn: on_expr=[[AS_SORTABLE_BYTES(ENC_TF(label)), product]], select_expr=[[product, label]], sort_expr=[[AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST, product ASC NULLS FIRST]]
+    Projection: product, label
+      Sort: AS_SORTABLE_BYTES(ENC_TF(label)) ASC NULLS FIRST
+        DecodeObjectIds: columns=[label, product]
+          Filter: EBV(GT(ENC_TF(value1), ENC_TF(Struct({term_type:2,value:136,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
+            DecodeObjectIds: columns=[value1]
+              BasicGraphPattern: 
+                QuadPattern: triple_pattern=[?product <http://www.w3.org/2000/01/rdf-schema#label> ?label]
+                QuadPattern: triple_pattern=[?product <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType66>]
+                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature3>]
+                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productFeature> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1967>]
+                QuadPattern: triple_pattern=[?product <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/productPropertyNumeric1> ?value1]

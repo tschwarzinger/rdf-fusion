@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(b1) AS b1, ENC_PT(b2) AS b2
+  Projection: b1, b2
+    Extend: variable=?b2, expression=BNODE()
+      Extend: variable=?b1, expression=BNODE()
+        EmptyRelation: rows=1

@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(z) AS z
+  Projection: z
+    Extend: variable=?z, expression=ADD(ENC_TF(Struct({term_type:,value:,data_type:,language_tag:})), ENC_TF(Struct({term_type:,value:,data_type:,language_tag:})))
+      EmptyRelation: rows=1

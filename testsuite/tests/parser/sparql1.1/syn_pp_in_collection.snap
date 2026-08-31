@@ -1,0 +1,18 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: p, s
+  SparqlJoin: Inner 
+    SparqlJoin: Inner 
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:<guid>]
+        QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>]
+        QuadPattern: triple_pattern=["hello" <http://example.org/r> _:<guid>]
+        QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> _:<guid>]
+        QuadPattern: triple_pattern=[_:<guid> <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:<guid>]
+      PropertyPath: _:<guid> (<http://example.org/p>)* _:<guid>
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[_:<guid> <http://example.org/q> "123"^^<http://www.w3.org/2001/XMLSchema#integer>]
+      QuadPattern: triple_pattern=[?s ?p _:<guid>]

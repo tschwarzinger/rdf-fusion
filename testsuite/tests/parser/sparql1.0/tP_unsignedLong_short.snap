@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+Projection: l, r
+  Filter: EBV(EQ(DATATYPE(ADD(ENC_TF(l), ENC_TF(r))), ENC_TF(Struct({term_type:0,value:http://www.w3.org/2001/XMLSchema#integer,data_type:,language_tag:}))))
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[<http://www.w3.org/2001/sw/DataAccess/tests/data/TypePromotion/tP-0#unsignedLong1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> ?l]
+      QuadPattern: triple_pattern=[<http://www.w3.org/2001/sw/DataAccess/tests/data/TypePromotion/tP-0#short1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> ?r]

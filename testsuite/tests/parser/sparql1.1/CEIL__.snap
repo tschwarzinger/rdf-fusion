@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s AS s, num AS num, ENC_PT(ceil) AS ceil
+  Projection: s, num, ceil
+    Extend: variable=?ceil, expression=CEIL(ENC_TF(num))
+      QuadPattern: triple_pattern=[?s <http://example.org/num> ?num]

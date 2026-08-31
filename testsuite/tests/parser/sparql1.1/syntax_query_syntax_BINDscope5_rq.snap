@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: Y
+  Union
+    Projection: Y
+      QuadPattern: triple_pattern=[<http://www.example.orgs> <http://www.example.orgp> ?Y]
+    Projection: Y
+      Extend: variable=?Y, expression=Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})
+        EmptyRelation: rows=1

@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: o, p, s
+  Filter: EBV(xsd:integer(ENC_TF(o)))
+    QuadPattern: triple_pattern=[?s ?p ?o]

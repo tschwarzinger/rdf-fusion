@@ -1,0 +1,14 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DELETE INSERT
+    DELETE:
+        ?s <http://example.com/salary> ?o
+    INSERT:
+        ?s <http://example.com/salary> ?v
+
+Projection: s AS s, o AS o, ENC_PT(v) AS v
+  Filter: EBV(LT(ENC_TF(o), ENC_TF(Struct({term_type:2,value:1500,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
+    Extend: variable=?v, expression=ADD(ENC_TF(o), ENC_TF(Struct({term_type:2,value:100,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+      QuadPattern: triple_pattern=[?s <http://example.com/salary> ?o]

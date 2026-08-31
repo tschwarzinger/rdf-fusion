@@ -3,9 +3,9 @@ use datafusion::common::{internal_err, plan_err};
 use datafusion::logical_expr::{Expr, Operator, lit, or};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::Iri;
+use rdf_fusion_common::TermRef;
 use rdf_fusion_common::sparql::algebra::{Expression, Function, GraphPattern};
 use rdf_fusion_common::vocab::xsd;
-use rdf_fusion_common::{DateTime, TermRef};
 use rdf_fusion_common::{Literal, NamedNode};
 use rdf_fusion_extensions::functions::FunctionName;
 use rdf_fusion_logical::{RdfFusionExprBuilder, RdfFusionExprBuilderContext};
@@ -232,7 +232,7 @@ impl<'rewriter> ExpressionRewriter<'rewriter> {
             Function::Tz => self.unary_args(args)?.tz(),
             Function::Now => {
                 let literal = Literal::new_typed_literal(
-                    DateTime::now().to_string(),
+                    self.graph_rewriter.now().to_string(),
                     xsd::DATE_TIME,
                 );
                 self.expr_builder_root

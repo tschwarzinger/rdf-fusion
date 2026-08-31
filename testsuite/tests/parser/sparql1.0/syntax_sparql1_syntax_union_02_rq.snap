@@ -1,0 +1,15 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: a, b, c, o, p, r, s, t
+  Union
+    Projection: s, p, o, a, b, c, NULL AS r, NULL AS t
+      Union
+        Projection: s, p, o, NULL AS a, NULL AS b, NULL AS c
+          QuadPattern: triple_pattern=[?s ?p ?o]
+        Projection: NULL AS s, NULL AS p, NULL AS o, a, b, c
+          QuadPattern: triple_pattern=[?a ?b ?c]
+    Projection: s, NULL AS p, NULL AS o, NULL AS a, NULL AS b, NULL AS c, r, t
+      QuadPattern: triple_pattern=[?r ?s ?t]

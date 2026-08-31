@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, w
+  Aggregate: groupBy=[[s AS s, w AS w]], aggr=[[]]
+    SparqlJoin: Left 
+      QuadPattern: triple_pattern=[?s <http://example/p> ?v]
+      QuadPattern: triple_pattern=[?s <http://example/q> ?w]

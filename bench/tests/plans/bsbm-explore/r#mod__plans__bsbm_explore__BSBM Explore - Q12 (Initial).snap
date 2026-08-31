@@ -1,0 +1,16 @@
+---
+source: bench/tests/plans/bsbm_explore.rs
+expression: "&explanation.initial_logical_plan.to_string()"
+---
+DecodeObjectIds: columns=[deliveryDays, offerURL, price, productURI, productlabel, validTo, vendorURI, vendorhomepage, vendorname]
+  Projection: deliveryDays, offerURL, price, productURI, productlabel, validTo, vendorURI, vendorhomepage, vendorname
+    BasicGraphPattern: 
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/product> ?productURI]
+      QuadPattern: triple_pattern=[?productURI <http://www.w3.org/2000/01/rdf-schema#label> ?productlabel]
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/vendor> ?vendorURI]
+      QuadPattern: triple_pattern=[?vendorURI <http://www.w3.org/2000/01/rdf-schema#label> ?vendorname]
+      QuadPattern: triple_pattern=[?vendorURI <http://xmlns.com/foaf/0.1/homepage> ?vendorhomepage]
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/offerWebpage> ?offerURL]
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/price> ?price]
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/deliveryDays> ?deliveryDays]
+      QuadPattern: triple_pattern=[<http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor5/Offer9035> <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/validTo> ?validTo]

@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+DROP(graph=GRAPH <http://example.org/g1>, silent=true)
+
+DELETE INSERT
+    INSERT:
+        GRAPH <http://example.org/g1> { ?s ?p ?o }
+
+QuadPattern: triple_pattern=[?s ?p ?o]

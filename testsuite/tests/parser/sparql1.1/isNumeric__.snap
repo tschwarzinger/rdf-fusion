@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/store_tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, num
+  Filter: EBV(isNUMERIC(ENC_TF(num)))
+    QuadPattern: triple_pattern=[?s ?p ?num]
