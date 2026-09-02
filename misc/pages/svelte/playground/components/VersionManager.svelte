@@ -5,7 +5,7 @@
     import { storeLocalVersion, getAllLocalVersions } from '../db.js';
     import { setStatus, showError, jsStore, wasmModule, activeVersionMetadata, engineSettings, reloadStoreTrigger, expandedStatusSection, isEngineInitializing, localVersions } from '../store.js';
     import EngineSettings from './EngineSettings.svelte';
-    import { OFFICIAL_VERSIONS, ensureOfficialVersionDownloaded, activateVersion } from '../engine.js';
+    import { OFFICIAL_VERSIONS, ensureOfficialVersionDownloaded, redownloadOfficialVersion, activateVersion } from '../engine.js';
 
     const versions = OFFICIAL_VERSIONS;
 
@@ -202,6 +202,26 @@
         }
     }
 
+    // The active version may already be present locally, so the normal Apply/Download path
+    // (keyed on `needsDownload`) would skip the fetch and just close the pane. "Update Now"
+    // must force a fresh download that overwrites the cached copy, then re-initialize.
+    async function handleUpdateNow() {
+        isDownloading = true;
+        try {
+            await redownloadOfficialVersion(draftVersion);
+            await updateLocalVersionsModal();
+            latestUpdateAvailable = false;
+            $expandedStatusSection = null;
+            await handleVersionSelect();
+            setStatus('Engine updated to the latest build.', 'fa-circle-check', 'success');
+        } catch (e) {
+            console.error(e);
+            showError(e.message || String(e));
+        } finally {
+            isDownloading = false;
+        }
+    }
+
     async function updateLocalVersionsModal() {
         $localVersions = await getAllLocalVersions();
     }
@@ -290,7 +310,7 @@
             <div class="p-2 bg-light border rounded text-center">
                 <div class="small text-success fw-bold d-flex align-items-center justify-content-center gap-2">
                     <i class="fa-solid fa-arrows-rotate"></i> A newer build of this version was released!
-                    <button class="btn btn-sm btn-primary py-0 px-2" onclick={handleApplyOrDownload}>Update Now</button>
+                    <button class="btn btn-sm btn-primary py-0 px-2" onclick={handleUpdateNow} disabled={isDownloading}>Update Now</button>
                 </div>
             </div>
         {/if}

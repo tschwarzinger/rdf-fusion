@@ -1,10 +1,10 @@
-import { getLocalVersion, storeLocalVersion } from './db.js';
-import { createEngineProxy } from './engineProxy.js';
-import { jsStore, wasmModule, activeVersionMetadata, setStatus } from './store.js';
-import { OFFICIAL_VERSIONS } from './data_engine_versions.js';
+import {getLocalVersion, storeLocalVersion} from './db.js';
+import {createEngineProxy} from './engineProxy.js';
+import {activeVersionMetadata, jsStore, setStatus, wasmModule} from './store.js';
+import {OFFICIAL_VERSIONS} from './data_engine_versions.js';
 
 // engine.js is the single source of truth for activating engine versions.
-export { OFFICIAL_VERSIONS };
+export {OFFICIAL_VERSIONS};
 
 let activeProxy = null;
 let activeJsUrl = null;
@@ -36,8 +36,8 @@ export async function ensureOfficialVersionDownloaded(versionId) {
     }
 
     const [jsRes, wasmRes] = await Promise.all([
-        fetch(vInfo.jsUrl, { cache: 'no-cache' }),
-        fetch(vInfo.wasmUrl, { cache: 'no-cache' })
+        fetch(vInfo.jsUrl, {cache: 'no-cache'}),
+        fetch(vInfo.wasmUrl, {cache: 'no-cache'})
     ]);
     if (!jsRes.ok || !wasmRes.ok) {
         throw new Error("Failed to fetch binary resources.");
@@ -45,7 +45,34 @@ export async function ensureOfficialVersionDownloaded(versionId) {
 
     const jsBlob = await jsRes.blob();
     const wasmBlob = await wasmRes.blob();
-    const validJsBlob = new Blob([jsBlob], { type: 'application/javascript' });
+    const validJsBlob = new Blob([jsBlob], {type: 'application/javascript'});
+    const etag = wasmRes.headers.get('ETag') || wasmRes.headers.get('etag') || jsRes.headers.get('ETag') || jsRes.headers.get('etag') || null;
+
+    await storeLocalVersion(versionId, validJsBlob, wasmBlob, null, etag);
+    return getLocalVersion(versionId);
+}
+
+// Downloads a fresh copy of an official version, overwriting any locally cached copy. Unlike
+// `ensureOfficialVersionDownloaded`, it always fetches even when the version is already present
+// locally, which is what "Update Now" needs when a newer build of an already-downloaded version
+// has been released.
+export async function redownloadOfficialVersion(versionId) {
+    const vInfo = OFFICIAL_VERSIONS.find(v => v.id === versionId);
+    if (!vInfo) {
+        throw new Error(`Unknown official version: ${versionId}`);
+    }
+
+    const [jsRes, wasmRes] = await Promise.all([
+        fetch(vInfo.jsUrl, {cache: 'no-cache'}),
+        fetch(vInfo.wasmUrl, {cache: 'no-cache'})
+    ]);
+    if (!jsRes.ok || !wasmRes.ok) {
+        throw new Error("Failed to fetch binary resources.");
+    }
+
+    const jsBlob = await jsRes.blob();
+    const wasmBlob = await wasmRes.blob();
+    const validJsBlob = new Blob([jsBlob], {type: 'application/javascript'});
     const etag = wasmRes.headers.get('ETag') || wasmRes.headers.get('etag') || jsRes.headers.get('ETag') || jsRes.headers.get('etag') || null;
 
     await storeLocalVersion(versionId, validJsBlob, wasmBlob, null, etag);
@@ -90,9 +117,14 @@ export async function initializeWasm(localData) {
 export async function checkForRemoteUpdate(vInfo, localVer) {
     if (!vInfo || !localVer || vInfo.isCustom) return false;
     try {
-        const res = await fetch(vInfo.wasmUrl, { method: 'HEAD', cache: 'no-cache' });
-        const remoteEtag = res.headers.get('ETag') || res.headers.get('etag') || res.headers.get('Last-Modified');
-        return !!(remoteEtag && (!localVer.etag || remoteEtag !== localVer.etag));
+        const [wasmRes, jsRes] = await Promise.all([
+            fetch(vInfo.wasmUrl, {method: 'HEAD', cache: 'no-cache'}),
+            fetch(vInfo.jsUrl, {method: 'HEAD', cache: 'no-cache'})
+        ]);
+        const remoteTag = wasmRes.headers.get('ETag') || wasmRes.headers.get('etag')
+            || jsRes.headers.get('ETag') || jsRes.headers.get('etag')
+            || wasmRes.headers.get('Last-Modified') || jsRes.headers.get('Last-Modified') || null;
+        return !!(remoteTag && (!localVer.etag || remoteTag !== localVer.etag));
     } catch (e) {
         console.error("Failed to check for updates:", e);
         return false;
@@ -102,7 +134,7 @@ export async function checkForRemoteUpdate(vInfo, localVer) {
 // Activates an engine version: records it as selected, publishes its metadata,
 // (re-)initializes the Wasm module, and reports whether a newer build is available.
 // `localVersions` lets the caller resolve custom (uploaded) builds by id.
-export async function activateVersion(versionId, { localVersion = null, localVersions = [] } = {}) {
+export async function activateVersion(versionId, {localVersion = null, localVersions = []} = {}) {
     const vInfo = OFFICIAL_VERSIONS.find(v => v.id === versionId);
     localStorage.setItem('lastRdfFusionVersion', versionId);
 
@@ -139,5 +171,5 @@ export async function activateVersion(versionId, { localVersion = null, localVer
             hasUpdate = await checkForRemoteUpdate(vInfo, localVer);
         }
     }
-    return { metadata, hasUpdate };
+    return {metadata, hasUpdate};
 }
