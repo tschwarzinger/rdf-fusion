@@ -53,15 +53,15 @@ jobs:
           unzip awscliv2.zip
           ./aws/install
 
-      - name: Upload to S3 (Hetzner)
+      - name: Upload to S3
         if: steps.check_changes.outputs.skip != 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.RDF_FUSION_PUBLIC_S3_ACCESS_TOKEN }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.RDF_FUSION_PUBLIC_S3_SECRET_ACCESS_TOKEN }}
-          AWS_DEFAULT_REGION: hel1
+          AWS_DEFAULT_REGION: de
         run: |
           BUCKET_NAME="rdf-fusion-public"
-          ENDPOINT_URL="https://hel1.your-objectstorage.com"
+          ENDPOINT_URL="https://de-s3.storage.bunnycdn.com"
           
           aws s3 cp lib/wasm/pkg/rdf_fusion_wasm.js s3://$BUCKET_NAME/wasm/latest/rdf_fusion_wasm.js --endpoint-url $ENDPOINT_URL
           aws s3 cp lib/wasm/pkg/rdf_fusion_wasm_bg.wasm s3://$BUCKET_NAME/wasm/latest/rdf_fusion_wasm_bg.wasm --endpoint-url $ENDPOINT_URL

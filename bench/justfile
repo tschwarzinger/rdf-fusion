@@ -23,7 +23,7 @@ prepare-bsbm num_products:
 
     if [ "$num_products" = "1000" ]; then
         echo "Downloading pre-built dataset for 1000 products..."
-        curl -sSL "https://hel1.your-objectstorage.com/rdf-fusion-public/ci/bsbm-1000.zip" -o "$DATA_DIR/bsbm-1000.zip"
+        curl -sSL "https://rdf-fusion-public.b-cdn.net/ci/bsbm-1000.zip" -o "$DATA_DIR/bsbm-1000.zip"
         unzip -q -o "$DATA_DIR/bsbm-1000.zip" -d "$DATA_DIR"
         rm "$DATA_DIR/bsbm-1000.zip"
     else

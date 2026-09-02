@@ -13,7 +13,7 @@ export const DATASETS = [
                 name: "Parquet (GPOS)",
                 format: "Parquet",
                 description: "Pre-sorted Parquet file encoded with Graph-Predicate-Object-Subject (GPOS) sorting for high-efficiency SPARQL triple pattern queries.",
-                url: "https://rdf-fusion-public.hel1.your-objectstorage.com/datasets/bsbm-1000/bsbm-1000-gpos.rdf.parquet",
+                url: "https://rdf-fusion-public.b-cdn.net/datasets/bsbm-1000/bsbm-1000-gpos.rdf.parquet",
                 quadStorage: { type: "parquet", version: "0.1" }
             },
             {
@@ -21,7 +21,7 @@ export const DATASETS = [
                 name: "Parquet (GSPO)",
                 format: "Parquet",
                 description: "Pre-sorted Parquet file encoded with Graph-Subject-Predicate-Object (GSPO) sorting for high-efficiency SPARQL triple pattern queries.",
-                url: "https://rdf-fusion-public.hel1.your-objectstorage.com/datasets/bsbm-1000/bsbm-1000-gspo.rdf.parquet",
+                url: "https://rdf-fusion-public.b-cdn.net/datasets/bsbm-1000/bsbm-1000-gspo.rdf.parquet",
                 quadStorage: { type: "parquet", version: "0.1" }
             },
             {
@@ -29,7 +29,7 @@ export const DATASETS = [
                 name: "Parquet (GOSP)",
                 format: "Parquet",
                 description: "Pre-sorted Parquet file encoded with Graph-Object-Subject-Predicate (GOSP) sorting for high-efficiency SPARQL triple pattern queries.",
-                url: "https://rdf-fusion-public.hel1.your-objectstorage.com/datasets/bsbm-1000/bsbm-1000-gosp.rdf.parquet",
+                url: "https://rdf-fusion-public.b-cdn.net/datasets/bsbm-1000/bsbm-1000-gosp.rdf.parquet",
                 quadStorage: { type: "parquet", version: "0.1" }
             }
         ]
@@ -48,7 +48,7 @@ export const DATASETS = [
                 name: "Parquet (GPOS)",
                 format: "Parquet",
                 description: "Pre-sorted Parquet file encoded with Graph-Predicate-Object-Subject (GPOS) sorting for high-efficiency SPARQL triple pattern queries.",
-                url: "https://rdf-fusion-public.hel1.your-objectstorage.com/datasets/bsbm-10000/bsbm-10000-gpos.rdf.parquet",
+                url: "https://rdf-fusion-public.b-cdn.net/datasets/bsbm-10000/bsbm-10000-gpos.rdf.parquet",
                 quadStorage: { type: "parquet", version: "0.1" }
             },
             {
@@ -56,7 +56,7 @@ export const DATASETS = [
                 name: "Parquet (GSPO)",
                 format: "Parquet",
                 description: "Pre-sorted Parquet file encoded with Graph-Subject-Predicate-Object (GSPO) sorting for high-efficiency SPARQL triple pattern queries.",
-                url: "https://rdf-fusion-public.hel1.your-objectstorage.com/datasets/bsbm-10000/bsbm-10000-gspo.rdf.parquet",
+                url: "https://rdf-fusion-public.b-cdn.net/datasets/bsbm-10000/bsbm-10000-gspo.rdf.parquet",
                 quadStorage: { type: "parquet", version: "0.1" }
             },
             {
@@ -64,7 +64,7 @@ export const DATASETS = [
                 name: "Parquet (GOSP)",
                 format: "Parquet",
                 description: "Pre-sorted Parquet file encoded with Graph-Object-Subject-Predicate (GOSP) sorting for high-efficiency SPARQL triple pattern queries.",
-                url: "https://rdf-fusion-public.hel1.your-objectstorage.com/datasets/bsbm-10000/bsbm-10000-gosp.rdf.parquet",
+                url: "https://rdf-fusion-public.b-cdn.net/datasets/bsbm-10000/bsbm-10000-gosp.rdf.parquet",
                 quadStorage: { type: "parquet", version: "0.1" }
             }
         ]
