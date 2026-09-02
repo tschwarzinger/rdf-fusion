@@ -1,6 +1,8 @@
 use crate::context::JsRdfFusionContext;
 use crate::results::{JsDetailedQueryResult, JsQueryExplanation, transform_results};
 use datafusion::physical_plan::displayable;
+use js_sys::Date;
+use rdf_fusion::common::DateTime;
 use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion::store::Store;
 use rdf_fusion_encoding::EncodingName;
@@ -52,6 +54,7 @@ impl JsStore {
         crate::runtime::run(async move {
             let options = QueryOptions {
                 output_encoding_name: Some(EncodingName::String),
+                now: Some(current_date_time()),
                 ..Default::default()
             };
 
@@ -93,4 +96,14 @@ impl JsStore {
         })
         .await?
     }
+}
+
+/// Returns the current time as a [`DateTime`] derived from the browser's clock.
+///
+/// `wasm32-unknown-unknown` has no `std::time`, so `DateTime::now()` would panic. Instead we read
+/// the JavaScript clock (`Date.now()`, milliseconds since the Unix epoch) and convert it.
+fn current_date_time() -> DateTime {
+    let millis = Date::now() as i64;
+    DateTime::from_unix_millis(millis)
+        .expect("The current JS time represents a valid dateTime")
 }

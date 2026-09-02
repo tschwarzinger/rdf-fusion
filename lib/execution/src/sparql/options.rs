@@ -1,4 +1,4 @@
-use rdf_fusion_common::{Iri, NamedNode};
+use rdf_fusion_common::{DateTime, Iri, NamedNode};
 use rdf_fusion_encoding::EncodingName;
 
 /// Defines how many optimizations the query optimizer should apply.
@@ -43,6 +43,8 @@ pub struct QueryOptions {
     pub base_iri: Option<Iri<String>>,
     /// Overrides applied to the query dataset specification.
     pub dataset: DatasetOptions,
+    /// The time used to evaluate `NOW()`. When `None`, the system clock is queried.
+    pub now: Option<DateTime>,
 }
 
 /// Options for SPARQL update evaluation.
@@ -50,4 +52,6 @@ pub struct QueryOptions {
 pub struct UpdateOptions {
     /// Overrides applied to the datasets of the update operations.
     pub dataset: DatasetOptions,
+    /// The time used to evaluate `NOW()`. When `None`, the system clock is queried.
+    pub now: Option<DateTime>,
 }

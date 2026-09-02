@@ -302,7 +302,7 @@ impl Store {
             query,
             options.output_encoding_name,
             &options.dataset,
-            DateTime::now(),
+            options.now.unwrap_or_else(DateTime::now),
         )?;
         self.context.execute_query(&query, options).await
     }
@@ -509,7 +509,7 @@ impl Store {
             update,
             None,
             &options.dataset,
-            DateTime::now(),
+            options.now.unwrap_or_else(DateTime::now),
         )?;
         self.context.execute_update(&update, options).await
     }

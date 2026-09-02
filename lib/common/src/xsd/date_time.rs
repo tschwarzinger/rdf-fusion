@@ -62,6 +62,37 @@ impl DateTime {
         }
     }
 
+    /// Returns a [`DateTime`] representing the given instant as milliseconds since the Unix
+    /// epoch (UTC).
+    pub fn from_unix_millis(millis: i64) -> Result<Self, DateTimeOverflowError> {
+        let seconds = Decimal::from(millis)
+            .checked_div(Decimal::from(1000))
+            .map_err(|_| DateTimeOverflowError)?;
+        let duration = Duration::from(DayTimeDuration::new(seconds));
+        let model = date_time_plus_duration(
+            duration,
+            &DateTimeSevenPropertyModel {
+                year: Some(1970),
+                month: Some(1),
+                day: Some(1),
+                hour: Some(0),
+                minute: Some(0),
+                second: Some(Decimal::default()),
+                timezone_offset: Some(TimezoneOffset::UTC),
+            },
+        )
+        .map_err(|_| DateTimeOverflowError)?;
+        Self::from_seven_property_model(
+            model.year.unwrap_or(1),
+            model.month.unwrap_or(1),
+            model.day.unwrap_or(1),
+            model.hour.unwrap_or(0),
+            model.minute.unwrap_or(0),
+            model.second.unwrap_or_default(),
+            model.timezone_offset,
+        )
+    }
+
     pub fn timestamp(&self) -> Timestamp {
         self.timestamp
     }
