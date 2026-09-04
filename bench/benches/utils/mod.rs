@@ -59,22 +59,10 @@ pub fn benchmark_configs() -> Vec<BenchmarkConfig> {
             encoding: QuadStorageEncodingName::String,
         },
         BenchmarkConfig {
-            name: "DQ-PlainTerm".to_string(),
-            storage_type: BenchQuadStorageTypeArg::DeltaQuads,
-            storage_location: QuadStorageLocationArg::OnDisk,
-            encoding: QuadStorageEncodingName::PlainTerm,
-        },
-        BenchmarkConfig {
             name: "Parquet-String".to_string(),
             storage_type: BenchQuadStorageTypeArg::Parquet,
             storage_location: QuadStorageLocationArg::OnDisk,
             encoding: QuadStorageEncodingName::String,
-        },
-        BenchmarkConfig {
-            name: "Parquet-PlainTerm".to_string(),
-            storage_type: BenchQuadStorageTypeArg::Parquet,
-            storage_location: QuadStorageLocationArg::OnDisk,
-            encoding: QuadStorageEncodingName::PlainTerm,
         },
     ]
 }
