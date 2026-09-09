@@ -1,5 +1,11 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 8:1: expected one of BIND, [_]
+error: Variable ?o1 is already used in the group graph pattern
+  ┌─ :6:20
+  │
+5 │     :s :q ?o1 .
+  │           --- Variable ?o1 previously used here
+6 │     BIND((1+?o) AS ?o1)
+  │                    ^^^ Variable ?o1 used here

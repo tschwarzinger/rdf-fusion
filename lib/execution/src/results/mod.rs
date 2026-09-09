@@ -15,7 +15,7 @@ mod quads;
 mod query_solution;
 mod triples;
 
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 pub use graph_name::GraphNameStream;
 pub use quads::QuadStream;
 pub use query_solution::QuerySolutionStream;

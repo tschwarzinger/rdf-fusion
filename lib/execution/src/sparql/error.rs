@@ -1,7 +1,6 @@
 use datafusion::error::DataFusionError;
 use oxrdfio::RdfParseError;
 use rdf_fusion_common::StorageError;
-use rdf_fusion_common::sparql::SparqlSyntaxError;
 use rdf_fusion_common::{NamedNode, Term};
 use sparesults::QueryResultsParseError;
 use std::convert::Infallible;
@@ -49,7 +48,7 @@ impl From<Infallible> for SparqlEvaluationError {
 pub enum QueryEvaluationError {
     /// An error in SPARQL parsing.
     #[error(transparent)]
-    Parsing(#[from] SparqlSyntaxError),
+    Parsing(#[from] Box<dyn Error + Send + Sync>),
     /// An error from the storage.
     #[error(transparent)]
     Storage(#[from] StorageError),

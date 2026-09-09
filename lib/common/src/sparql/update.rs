@@ -1,9 +1,8 @@
-use crate::sparql::{GraphTarget, QuadPattern};
+use crate::sparql::{GraphTarget, GroundQuadPattern, QuadPattern};
 use crate::{GraphName, NamedNode};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::test_util::format_batches;
 use datafusion::logical_expr::LogicalPlan;
-use spargebra::term::GroundQuadPattern;
 use std::fmt::{Display, Formatter};
 
 /// Represents a parsed SPARQL Update script (a sequence of operations).

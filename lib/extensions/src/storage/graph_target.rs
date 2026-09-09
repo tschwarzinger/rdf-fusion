@@ -6,7 +6,7 @@ use datafusion::prelude::SessionContext;
 use futures::StreamExt;
 use rdf_fusion_common::StorageError;
 use rdf_fusion_common::quads::COL_GRAPH;
-use rdf_fusion_common::sparql::algebra::GraphTarget;
+use rdf_fusion_common::sparql::GraphTarget;
 use rdf_fusion_common::{BlankNode, NamedNode};
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;

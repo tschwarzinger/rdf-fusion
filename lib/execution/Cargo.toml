@@ -12,7 +12,6 @@ RDF Fusion Execution Engine
 [dependencies]
 async-trait.workspace = true
 datafusion.workspace = true
-itertools.workspace = true
 object_store.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-encoding.workspace = true
@@ -32,6 +31,7 @@ url.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+rdf-fusion-sparql-parser.workspace = true
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 deltalake.workspace = true

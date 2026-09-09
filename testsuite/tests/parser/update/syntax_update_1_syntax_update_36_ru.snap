@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 DELETE INSERT
@@ -7,6 +7,6 @@ DELETE INSERT
         GRAPH <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/G> { <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/s> <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/p> "123"^^<http://www.w3.org/2001/XMLSchema#integer> }
         GRAPH <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/G> { <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/s> <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/q> "4567.0"^^<http://www.w3.org/2001/XMLSchema#decimal> }
 
-SparqlJoin: Inner 
-  QuadPattern: triple_pattern=[<https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/s> <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/p> "123"^^<http://www.w3.org/2001/XMLSchema#integer>], active_graph: Union of [NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/G" })] 
-  QuadPattern: triple_pattern=[<https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/s> <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/q> "4567.0"^^<http://www.w3.org/2001/XMLSchema#decimal>], active_graph: Union of [NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/G" })]
+BasicGraphPattern: 
+  QuadPattern: triple_pattern=[<https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/s> <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/p> "123"^^<http://www.w3.org/2001/XMLSchema#integer>], active_graph: <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/G> 
+  QuadPattern: triple_pattern=[<https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/s> <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/q> "4567.0"^^<http://www.w3.org/2001/XMLSchema#decimal>], active_graph: <https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-update-1/G>

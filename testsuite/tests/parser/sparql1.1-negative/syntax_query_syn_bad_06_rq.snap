@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 1:23: expected ENCODE_FOR_URI
+error: expected ), found `,`
+  ┌─ :1:15
+  │
+1 │ SELECT (SUM(?x,?y) AS ?S) {}
+  │               ^ expected ), found `,`

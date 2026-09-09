@@ -183,14 +183,11 @@ impl RdfFusionLogicalPlanBuilderContext {
         let schema = DFSchema::from_unqualified_fields(fields, HashMap::new())?;
 
         if bindings.is_empty() {
-            let empty = DefaultPlainTermEncoder
-                .encode_term(ThinError::expected())?
-                .into_scalar_value();
-            let plan = LogicalPlanBuilder::values_with_schema(
-                vec![vec![lit(empty); variables.len()]],
-                &Arc::new(schema),
-            )?
-            .build()?;
+            let plan =
+                LogicalPlan::EmptyRelation(datafusion::logical_expr::EmptyRelation {
+                    produce_one_row: false,
+                    schema: Arc::new(schema),
+                });
             return Ok(RdfFusionLogicalPlanBuilder::new(
                 self.clone(),
                 Arc::new(plan),

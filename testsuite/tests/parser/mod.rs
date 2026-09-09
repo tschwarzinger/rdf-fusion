@@ -1,18 +1,11 @@
 use crate::sanitize_snapshot_name;
 use anyhow::{Context, Error};
-use datafusion::arrow::datatypes::DataType;
-use datafusion::logical_expr::{
-    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
-};
 use insta::{Settings, assert_snapshot};
 use rdf_fusion::common::Iri;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::encoding::plain_term::PLAIN_TERM_ENCODING;
-use rdf_fusion::encoding::{RdfFusionEncodings, TermEncoding};
-use rdf_fusion::extensions::functions::FunctionName;
-use rdf_fusion::functions::scalar::SparqlUDFTypeSignatureBuilder;
+use rdf_fusion::extensions::RdfFusionContextView;
 use rdf_fusion_common::DateTime;
-use rdf_fusion_sparql_parser::{ParserConfig, SparqlParser};
+use rdf_fusion_sparql_parser::{ParserOptions, parse_query, parse_update};
 use rdf_fusion_testsuite::store_factories::parquet_store_factory;
 use rdf_fusion_testsuite::test::{Test, TestOutcome};
 use rdf_fusion_testsuite::w3c::files::{TEST_RUNTIME_ENV, W3CTestRuntime};
@@ -154,27 +147,13 @@ async fn parser_test_factory(
     .await?;
 
     let context_view = store.context().create_view();
-    for iri in [
-        "http://example.org/ns#myFunc",
-        "http://example.org/ns#func",
-        "http://example.org/ns#func2",
-        "http://example.org/name",
-        "http://example/function",
-    ] {
-        let udf = ScalarUDF::new_from_impl(PlaceholderUdf::new(
-            iri,
-            context_view.encodings().clone(),
-        ));
-        context_view.functions().register_udf(udf);
-    }
-
-    let parser = SparqlParser::new(context_view);
+    rdf_fusion_testsuite::w3c::custom_functions::register_custom_functions(&context_view);
 
     Ok(Box::new(PlannerSnapshotTest {
         snapshot_path: snapshot_path.to_string(),
         test_data: test.clone(),
         expect_error,
-        parser,
+        context_view,
         runtime,
     }))
 }
@@ -183,7 +162,7 @@ pub struct PlannerSnapshotTest {
     snapshot_path: String,
     test_data: manifest::Test,
     expect_error: bool,
-    parser: SparqlParser,
+    context_view: RdfFusionContextView,
     runtime: W3CTestRuntime,
 }
 
@@ -251,51 +230,43 @@ impl PlannerSnapshotTest {
             } else {
                 sanitize_snapshot_name(self.id())
             };
-            let parser_config = ParserConfig::builder()
+            let parser_config = ParserOptions::builder()
                 .with_base_iri(Some(Iri::parse(query_file.to_string()).unwrap()))
                 .with_now(DateTime::MIN)
                 .build();
 
             if self.expect_error {
                 let error_string = if is_update {
-                    self.parser
-                        .parse_update(&query_str, &parser_config)
+                    parse_update(&self.context_view, &query_str, &parser_config)
                         .map(|_| ())
                         .expect_err(&format!(
                             "Expected an update error but succeeded for: {query_str}",
                         ))
-                        .to_string()
+                        .render(&query_str)
                 } else {
-                    self.parser
-                        .parse_query(&query_str, &parser_config)
+                    parse_query(&self.context_view, &query_str, &parser_config)
                         .map(|_| ())
                         .expect_err(&format!(
                             "Expected a query error but succeeded for: {query_str}",
                         ))
-                        .to_string()
+                        .render(&query_str)
                 };
                 assert_snapshot!(test_name, error_string);
             } else {
                 let snapshot = if is_update {
-                    let result = self
-                        .parser
-                        .parse_update(&query_str, &parser_config)
-                        .map_err(|err| err.to_string());
+                    let result =
+                        parse_update(&self.context_view, &query_str, &parser_config)
+                            .map_err(|err| err.to_string());
                     match result {
                         Ok(update) => update.display_list_operations().to_string(),
                         Err(err) => format!("Error: {err}\n"),
                     }
                 } else {
-                    let result = self
-                        .parser
-                        .parse_query(&query_str, &parser_config)
-                        .map_err(|err| err.to_string());
+                    let result =
+                        parse_query(&self.context_view, &query_str, &parser_config)
+                            .map_err(|err| err.to_string());
                     match result {
-                        Ok(query) => format!(
-                            "Variant: {:?}\n{}",
-                            query.variant(),
-                            query.logical_plan().display_indent()
-                        ),
+                        Ok(query) => query.to_string(),
                         Err(err) => format!("Error: {err}\n"),
                     }
                 };
@@ -304,50 +275,5 @@ impl PlannerSnapshotTest {
         });
 
         Ok(())
-    }
-}
-
-/// A placeholder udf for the functions used in the tests that are not available in RDF Fusion.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-struct PlaceholderUdf {
-    name: String,
-    signature: Signature,
-}
-
-impl PlaceholderUdf {
-    pub fn new(iri: &str, encodings: RdfFusionEncodings) -> Self {
-        let type_signature = SparqlUDFTypeSignatureBuilder::new()
-            .with_supported_encoding(encodings.typed_family().as_ref())
-            .with_variadic_arity()
-            .build();
-        Self {
-            name: FunctionName::Custom(rdf_fusion_common::NamedNode::new_unchecked(iri))
-                .to_string(),
-            signature: Signature::new(type_signature, Volatility::Immutable),
-        }
-    }
-}
-
-impl ScalarUDFImpl for PlaceholderUdf {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn signature(&self) -> &Signature {
-        &self.signature
-    }
-
-    fn return_type(
-        &self,
-        _arg_types: &[DataType],
-    ) -> rdf_fusion_common::DFResult<DataType> {
-        Ok(PLAIN_TERM_ENCODING.data_type().clone())
-    }
-
-    fn invoke_with_args(
-        &self,
-        _args: ScalarFunctionArgs,
-    ) -> rdf_fusion_common::DFResult<ColumnarValue> {
-        unimplemented!()
     }
 }

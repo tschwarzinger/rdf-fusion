@@ -33,8 +33,6 @@
 //! We then convert this algebra pattern into a DataFusion logical plan through a rewriting step.
 //! The resulting logical plan is executed by DataFusion.
 
-extern crate core;
-
 mod builder;
 mod engine;
 mod planner;

@@ -1,7 +1,7 @@
 use crate::RdfFusionContext;
 use crate::planner::RdfFusionPlanner;
 use crate::results::{QueryResults, QuerySolutionStream, QueryTripleStream};
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 use crate::sparql::optimizer::{create_optimizer_rules, create_pyhsical_optimizer_rules};
 use crate::sparql::{QueryExplanation, QueryOptions, QueryVariant, RdfFusionQuery};
 use datafusion::arrow::datatypes::Schema;

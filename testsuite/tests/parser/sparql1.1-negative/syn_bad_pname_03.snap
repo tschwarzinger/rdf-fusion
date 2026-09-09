@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 2:10: expected CONSTRUCT
+error: expected a PNAME_NS prefix, found `::`
+  ┌─ :2:8
+  │
+2 │ PREFIX :: <http://example/>
+  │        ^^ expected a PNAME_NS prefix, found `::`

@@ -5,9 +5,11 @@ use crate::w3c::{StoreConfig, StoreFactory};
 use anyhow::{Context, ensure};
 use futures::StreamExt;
 use rdf_fusion::common::dataset::CanonicalizationAlgorithm;
-use rdf_fusion::common::sparql::SparqlParser;
 use rdf_fusion::common::{Dataset, GraphName};
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
+use rdf_fusion_sparql_parser::ast::pretty_printable;
+use rdf_fusion_sparql_parser::parser::SparqlParser;
+use std::sync::Arc;
 
 pub struct W3CSparqlUpdateEvaluationTest {
     pub id: String,
@@ -107,19 +109,21 @@ impl W3CSparqlUpdateEvaluationTest {
             .context("No action found")?;
         let content = self.runtime.read_file_to_string(update_file).await?;
 
-        let parser = SparqlParser::new()
-            .with_base_iri(update_file)
-            .expect("Invalid base IRI for SPARQL parser.");
-
-        let update = parser
-            .clone()
-            .parse_update(&content)
+        let view = result_store.context().create_view();
+        let functions = view.functions();
+        let update = SparqlParser::new(&content, Arc::clone(functions))
+            .parse_update()
             .context("Failure to parse update")?;
 
         // We check parsing roundtrip
-        parser
-            .parse_update(&update.to_string())
-            .with_context(|| format!("Failure to deserialize \"{update}\""))?;
+        SparqlParser::new(
+            &pretty_printable(&update).to_string(),
+            Arc::clone(functions),
+        )
+        .parse_update()
+        .with_context(|| {
+            format!("Failure to deserialize \"{}\"", pretty_printable(&update))
+        })?;
 
         store
             .update(&content)
@@ -143,7 +147,7 @@ impl W3CSparqlUpdateEvaluationTest {
             store_dataset == result_store_dataset,
             "Not isomorphic result dataset.\nDiff:\n{}\nParsed update:\n{}\n",
             dataset_diff(&result_store_dataset, &store_dataset),
-            update,
+            pretty_printable(&update),
         );
         Ok(())
     }

@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use rdf_fusion_common::GraphName;
 use std::fmt::Display;
 
@@ -53,12 +54,17 @@ impl EnumeratedActiveGraph {
 }
 
 impl Display for ActiveGraph {
-    #[allow(clippy::use_debug)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ActiveGraph::DefaultGraph => write!(f, "Default Graph"),
             ActiveGraph::AllGraphs => write!(f, "All Graphs"),
-            ActiveGraph::Union(graphs) => write!(f, "Union of {graphs:?}"),
+            ActiveGraph::Union(graphs) => {
+                if graphs.len() == 1 {
+                    write!(f, "{}", graphs[0])
+                } else {
+                    write!(f, "Union of [{}]", graphs.iter().format(", "))
+                }
+            }
             ActiveGraph::AnyNamedGraph => write!(f, "Any Named Graph"),
         }
     }

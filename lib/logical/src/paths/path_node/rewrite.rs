@@ -9,7 +9,7 @@ use datafusion::logical_expr::{
     Expr, Extension, LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode, col,
 };
 use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
-use datafusion::prelude::{not, or};
+use datafusion::prelude::{and, not, or};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{
@@ -177,7 +177,7 @@ impl PropertyPathLoweringRule {
         ])
     }
 
-    /// Rewrites an alternative path to union over both (distinct).
+    /// Rewrites an alternative path to union over both.
     fn rewrite_alternative(
         &self,
         inf: &PropertyPathLoweringInformation,
@@ -186,7 +186,7 @@ impl PropertyPathLoweringRule {
     ) -> DFResult<LogicalPlanBuilder> {
         let lhs = self.rewrite_property_path_expression(inf, lhs)?;
         let rhs = self.rewrite_property_path_expression(inf, rhs)?;
-        join_path_alternatives(lhs, rhs)?.distinct()
+        join_path_alternatives(lhs, rhs)
     }
 
     /// Rewrites a sequence by joining the [COL_PATH_TARGET] of the lhs to the [COL_PATH_SOURCE] of the `rhs`.
@@ -198,7 +198,7 @@ impl PropertyPathLoweringRule {
     ) -> DFResult<LogicalPlanBuilder> {
         let lhs = self.rewrite_property_path_expression(inf, lhs)?;
         let rhs = self.rewrite_property_path_expression(inf, rhs)?;
-        self.join_path_sequence(inf, lhs, rhs)?.distinct()
+        self.join_path_sequence(inf, lhs, rhs)
     }
 
     /// Rewrites a zero or more to a CTE.
@@ -242,7 +242,7 @@ impl PropertyPathLoweringRule {
     ) -> DFResult<LogicalPlanBuilder> {
         let zero = self.zero_length_paths(inf)?;
         let one = self.rewrite_property_path_expression(inf, inner)?;
-        join_path_alternatives(zero, one)
+        join_path_alternatives(zero, one)?.distinct()
     }
 
     /// Returns a list of all subjects and objects in the graph where they both are the source and
@@ -358,7 +358,7 @@ fn create_path_sequence_join_filter(
 
     Ok(on_exprs
         .into_iter()
-        .reduce(or)
+        .reduce(and)
         .expect("At least one expression must be present"))
 }
 

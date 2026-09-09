@@ -38,8 +38,6 @@ use crate::scalar::terms::{
     is_numeric_udf, lang_udf, str_udf, strdt_udf, strlang_udf, struuid_udf, uuid_udf,
 };
 use datafusion::common::plan_datafusion_err;
-use datafusion::execution::FunctionRegistry;
-use datafusion::execution::registry::MemoryFunctionRegistry;
 use datafusion::functions::core::coalesce::CoalesceFunc;
 use datafusion::logical_expr::{
     AggregateUDF, ScalarUDF, ScalarUDFImpl, Signature, TypeSignature, Volatility,
@@ -51,6 +49,7 @@ use rdf_fusion_extensions::functions::{
 };
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;
+use std::iter::once;
 use std::sync::{Arc, RwLock};
 
 /// The default implementation of the `RdfFusionFunctionRegistry` trait.
@@ -64,7 +63,7 @@ use std::sync::{Arc, RwLock};
 pub struct DefaultRdfFusionFunctionRegistry {
     /// The registered encodings.
     encodings: RdfFusionEncodings,
-    /// A DataFusion [`MemoryFunctionRegistry`] that is used for actually storing the functions.
+    /// The actual storage for the registered functions.
     ///
     /// Note that this registry is currently *not* connected to the
     /// [`SessionContext`](::datafusion::prelude::SessionContext) of the DataFusion engine.
@@ -77,8 +76,10 @@ pub struct RegistryContent {
     ///
     /// Currently, this is not needed for aggregate functions as they only support typed values.
     udf_encodings: HashMap<String, Vec<EncodingName>>,
-    /// The actual function registry.
-    registry: MemoryFunctionRegistry,
+    /// The scalar function registry
+    udfs: HashMap<String, Arc<ScalarUDF>>,
+    /// The aggregate function registry
+    udafs: HashMap<String, Arc<AggregateUDF>>,
 }
 
 impl Debug for DefaultRdfFusionFunctionRegistry {
@@ -96,7 +97,8 @@ impl DefaultRdfFusionFunctionRegistry {
             encodings,
             inner: Arc::new(RwLock::new(RegistryContent {
                 udf_encodings: HashMap::default(),
-                registry: MemoryFunctionRegistry::default(),
+                udfs: HashMap::default(),
+                udafs: HashMap::default(),
             })),
         };
         register_functions(&mut registry)
@@ -123,49 +125,49 @@ impl RdfFusionFunctionRegistry for DefaultRdfFusionFunctionRegistry {
         self.inner
             .read()
             .unwrap()
-            .registry
-            .udf(&function_name.to_string())
+            .udfs
+            .get(&function_name.to_string())
+            .cloned()
+            .ok_or_else(|| plan_datafusion_err!("Function '{function_name}' not found"))
     }
 
     fn udaf(&self, function_name: &FunctionName) -> DFResult<Arc<AggregateUDF>> {
         self.inner
             .read()
             .unwrap()
-            .registry
-            .udaf(&function_name.to_string())
+            .udafs
+            .get(&function_name.to_string())
+            .cloned()
+            .ok_or_else(|| plan_datafusion_err!("Function '{function_name}' not found"))
     }
 
-    fn register_udf(&self, udf: ScalarUDF) {
+    fn register_udf(&self, udf: Arc<ScalarUDF>) {
         let supported_encodings =
             supported_encodings(&self.encodings, &udf.signature().type_signature);
 
         let mut lock = self.inner.write().unwrap();
 
-        lock.udf_encodings.insert(
-            udf.name().to_owned(),
-            supported_encodings.into_iter().collect(),
-        );
-        lock.registry
-            .register_udf(Arc::new(udf))
-            .expect("Cannot fail");
+        for name in once(udf.name().to_owned()).chain(udf.aliases().iter().cloned()) {
+            lock.udf_encodings.entry(name.clone()).or_default();
+            lock.udf_encodings
+                .get_mut(&name)
+                .unwrap()
+                .extend(supported_encodings.iter().copied());
+            lock.udfs.insert(name, Arc::clone(&udf));
+        }
     }
 
-    fn register_udaf(&self, udaf: AggregateUDF) {
-        self.inner
-            .write()
-            .unwrap()
-            .registry
-            .register_udaf(Arc::new(udaf))
-            .expect("Cannot fail");
+    fn register_udaf(&self, udaf: Arc<AggregateUDF>) {
+        let mut lock = self.inner.write().expect("Poisoned lock.");
+
+        lock.udafs.insert(udaf.name().to_owned(), Arc::clone(&udaf));
+        for alias in udaf.aliases() {
+            lock.udafs.insert(alias.to_owned(), Arc::clone(&udaf));
+        }
     }
 
     fn udfs(&self) -> Vec<Arc<ScalarUDF>> {
-        let lock = self.inner.read().unwrap();
-        lock.registry
-            .udfs()
-            .iter()
-            .map(|name| lock.registry.udf(name).expect("Function exists"))
-            .collect()
+        self.inner.read().unwrap().udfs.values().cloned().collect()
     }
 }
 
@@ -297,11 +299,11 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
     ];
 
     for udf in scalar_fns {
-        registry.register_udf(udf);
+        registry.register_udf(Arc::new(udf));
     }
 
     if let Some(decode) = decode_term(registry.encodings.clone()) {
-        registry.register_udf(decode);
+        registry.register_udf(Arc::new(decode));
     }
 
     // Native conversion functions
@@ -311,7 +313,7 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
     ];
 
     for udf in native_fns {
-        registry.register_udf(udf);
+        registry.register_udf(Arc::new(udf));
     }
 
     // Aggregate functions
@@ -325,7 +327,7 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
     ];
 
     for udaf_information in aggregate_fns {
-        registry.register_udaf(udaf_information);
+        registry.register_udaf(Arc::new(udaf_information));
     }
 
     Ok(())

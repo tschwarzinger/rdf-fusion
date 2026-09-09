@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 LOAD(source=<http://example.org/faraway>, destination=DEFAULT, silent=false)

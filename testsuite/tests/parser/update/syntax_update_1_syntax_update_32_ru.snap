@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 DELETE INSERT
@@ -8,4 +8,4 @@ DELETE INSERT
     INSERT:
         GRAPH <http://example/g> { ?s ?p <base:#o> }
 
-QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of [NamedNode(NamedNode { iri: "base:g1" }), NamedNode(NamedNode { iri: "base:g2" })]
+QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of [<base:g1>, <base:g2>, <http://example/g>]

@@ -1,5 +1,11 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 2:1: expected one of Duplicated variable name in SELECT, [_]
+error: Variable ?X is already assigned in the SELECT clause
+  ┌─ :1:24
+  │
+1 │ SELECT (1 AS ?X) (1 AS ?X) {}
+  │              --        ^^ Variable ?X assigned here
+  │              │          
+  │              Variable ?X previously assigned here

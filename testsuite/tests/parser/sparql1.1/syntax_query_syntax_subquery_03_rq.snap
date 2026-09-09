@@ -1,10 +1,8 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: o, p, s
-  SparqlJoin: Left 
-    EmptyRelation: rows=1
-    Projection: o, p, s
-      QuadPattern: triple_pattern=[?s ?p ?o]
+SparqlJoin: Left 
+  EmptyRelation: rows=1
+  QuadPattern: triple_pattern=[?s ?p ?o]

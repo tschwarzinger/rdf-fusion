@@ -1,14 +1,13 @@
 use crate::RdfFusionContext;
 use crate::results::QueryResults;
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 use crate::sparql::{QueryOptions, UpdateOptions, evaluate_query_with_snapshot};
-
 use datafusion::dataframe::DataFrame;
 use futures::{StreamExt, TryStreamExt};
 use oxrdfio::RdfParser;
 use sparesults::QuerySolution as OxQuerySolution;
 
-use rdf_fusion_common::sparql::term::{GraphNamePattern, GroundQuadPattern, QuadPattern};
+use rdf_fusion_common::sparql::{GraphNamePattern, GroundQuadPattern, QuadPattern};
 use rdf_fusion_common::sparql::{
     GraphTarget, QueryVariant, RdfFusionQuery, RdfFusionUpdate, UpdateOperation,
 };
@@ -268,16 +267,16 @@ fn ground_quad_pattern_to_quad_pattern(pattern: &GroundQuadPattern) -> QuadPatte
 }
 
 fn ground_term_pattern_to_term_pattern(
-    pattern: &rdf_fusion_common::sparql::term::GroundTermPattern,
+    pattern: &rdf_fusion_common::sparql::GroundTermPattern,
 ) -> TermPattern {
     match pattern {
-        rdf_fusion_common::sparql::term::GroundTermPattern::NamedNode(n) => {
+        rdf_fusion_common::sparql::GroundTermPattern::NamedNode(n) => {
             TermPattern::NamedNode(n.clone())
         }
-        rdf_fusion_common::sparql::term::GroundTermPattern::Literal(l) => {
+        rdf_fusion_common::sparql::GroundTermPattern::Literal(l) => {
             TermPattern::Literal(l.clone())
         }
-        rdf_fusion_common::sparql::term::GroundTermPattern::Variable(v) => {
+        rdf_fusion_common::sparql::GroundTermPattern::Variable(v) => {
             TermPattern::Variable(v.clone())
         }
     }

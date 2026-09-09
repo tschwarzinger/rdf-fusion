@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 2:12: expected DATA
+error: expected {, found `WHERE`
+  ┌─ :2:8
+  │
+2 │ INSERT WHERE { ?s ?p ?o }
+  │        ^^^^^ expected {, found `WHERE`

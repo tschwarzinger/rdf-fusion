@@ -1,7 +1,6 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: s, o
-  PropertyPath: ?s (!(<http://example.org/pd>) | ^(!(<http://example.org/pr>))) ?o
+PropertyPath: ?s (!(<http://example.org/pd>) | ^(!(<http://example.org/pr>))) ?o

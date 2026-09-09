@@ -10,7 +10,7 @@ use rdf_fusion::execution::results::{
     QueryResultsFormat, QueryResultsSerializer, QuerySolutionStream,
     WriterSolutionsSerializer,
 };
-use rdf_fusion::execution::sparql::error::QueryEvaluationError;
+use rdf_fusion::execution::sparql::QueryEvaluationError;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;

@@ -1,4 +1,4 @@
-use crate::RdfFusionContext;
+use crate::engine::RdfFusionContext;
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::prelude::SessionConfig;
 use rdf_fusion_common::DFResult;

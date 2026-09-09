@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
@@ -11,6 +11,4 @@ Projection: L
         QuadPattern: triple_pattern=[?O <http://www.example.orghasItem> _:<guid>]
       Limit: skip=0, fetch=2
         DistinctOn: on_expr=[[AS_SORTABLE_BYTES(ENC_TF(O))]], select_expr=[[O]], sort_expr=[[AS_SORTABLE_BYTES(ENC_TF(O)) ASC NULLS FIRST]]
-          Projection: O
-            Sort: AS_SORTABLE_BYTES(ENC_TF(O)) ASC NULLS FIRST
-              QuadPattern: triple_pattern=[?O <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.example.orgOrder>]
+          QuadPattern: triple_pattern=[?O <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.example.orgOrder>]

@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 5:1: expected one of The SELECT contains a variable that is unbound, [_]
+error: Variable ?P is projected but not grouped or aggregated
+  ┌─ :3:8
+  │
+3 │ SELECT ?P (COUNT(?O) AS ?C)
+  │        ^^ Variable ?P is projected but not grouped or aggregated

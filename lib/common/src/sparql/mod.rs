@@ -1,13 +1,11 @@
+mod algebra;
 mod dataset;
 mod query;
+mod term;
 mod update;
 
+pub use algebra::*;
 pub use dataset::*;
 pub use query::*;
-pub use spargebra::algebra::{GraphTarget, PropertyPathExpression};
-pub use spargebra::term::{
-    GraphNamePattern, GroundQuadPattern, GroundTerm, GroundTermPattern, NamedNodePattern,
-    QuadPattern, TermPattern, TriplePattern,
-};
-pub use spargebra::*;
+pub use term::*;
 pub use update::*;

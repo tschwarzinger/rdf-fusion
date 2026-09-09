@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 INSERT DATA
@@ -14,17 +14,15 @@ DELETE INSERT
     INSERT:
         GRAPH <http://example.org/g2> { ?S ?P ?O }
 
-QuadPattern: triple_pattern=[?S ?P ?O], active_graph: Union of [NamedNode(NamedNode { iri: "http://example.org/g1" })] 
+QuadPattern: triple_pattern=[?S ?P ?O], active_graph: <http://example.org/g1> 
 
 DELETE INSERT
     INSERT:
         GRAPH <http://example.org/g3> { <http://example.org/s> <http://example.org/p> ?count }
 
 Projection: ENC_PT(count) AS count
-  Projection: count
-    Extend: variable=?count, expression=<guid>
-      Aggregate: groupBy=[[]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS <guid>]]
-        QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of [NamedNode(NamedNode { iri: "http://example.org/g2" })] 
+  Aggregate: groupBy=[[]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS count]]
+    QuadPattern: triple_pattern=[?s ?p ?o], active_graph: <http://example.org/g2> 
 
 DROP(graph=GRAPH <http://example.org/g1>, silent=false)
 

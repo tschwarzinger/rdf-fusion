@@ -1,7 +1,7 @@
 use datafusion::common::DataFusionError;
 use rdf_fusion_common::StorageError;
 use rdf_fusion_common::{IriParseError, RdfFormat};
-use rdf_fusion_execution::sparql::error::QueryEvaluationError;
+use rdf_fusion_execution::sparql::QueryEvaluationError;
 use std::error::Error;
 use std::io;
 

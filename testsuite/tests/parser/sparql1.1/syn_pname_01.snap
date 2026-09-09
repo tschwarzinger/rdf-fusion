@@ -1,7 +1,6 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Ask
-Projection:
-  EmptyRelation: rows=1
+EmptyRelation: rows=1

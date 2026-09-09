@@ -1,7 +1,8 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
-Variant: Construct { template: [TriplePattern { subject: Variable(Variable { name: "s" }), predicate: Variable(Variable { name: "p" }), object: Variable(Variable { name: "o" }) }] }
-Projection: o, p, s
-  QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of [NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql11/construct/data.ttl" })]
+Variant: Construct
+Template:
+  ?s ?p ?o
+QuadPattern: triple_pattern=[?s ?p ?o], active_graph: <https://w3c.github.io/rdf-tests/sparql/sparql11/construct/data.ttl>

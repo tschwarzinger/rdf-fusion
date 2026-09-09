@@ -394,6 +394,7 @@
 //! - [rdf-fusion-web](https://docs.rs/rdf-fusion-web/): The web server for RDF Fusion.
 
 pub mod error;
+pub mod options;
 pub mod store;
 
 pub mod common {
@@ -430,4 +431,8 @@ pub mod pyhsical {
 
 pub mod storage {
     pub use rdf_fusion_storage::*;
+}
+
+pub mod sparql_parser {
+    pub use rdf_fusion_sparql_parser::*;
 }

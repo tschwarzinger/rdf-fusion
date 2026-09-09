@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 4:5: expected one of CREATE, DELETE, INSERT
+error: expected an update operation (LOAD, CLEAR, DROP, CREATE, ADD, MOVE, COPY, INSERT, DELETE, WITH), found `;`
+  ┌─ :3:2
+  │
+3 │ ;;
+  │  ^ expected an update operation (LOAD, CLEAR, DROP, CREATE, ADD, MOVE, COPY, INSERT, DELETE, WITH), found `;`

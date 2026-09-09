@@ -1,10 +1,8 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: s AS s, ENC_PT(max) AS max
-  Projection: s, max
-    Extend: variable=?max, expression=<guid>
-      Aggregate: groupBy=[[s AS s]], aggr=[[MAX(ENC_TF(o)) AS <guid>]]
-        QuadPattern: triple_pattern=[?s ?p ?o]
+Projection: s, ENC_PT(max) AS max
+  Aggregate: groupBy=[[s AS s]], aggr=[[MAX(ENC_TF(o)) AS max]]
+    QuadPattern: triple_pattern=[?s ?p ?o]

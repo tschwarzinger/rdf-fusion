@@ -1,3 +1,4 @@
+pub mod custom_functions;
 mod evaluation;
 pub mod files;
 pub mod manifest;
@@ -35,6 +36,25 @@ pub struct StoreConfig {
 
 pub type StoreFactory =
     Arc<dyn Fn(StoreConfig) -> BoxFuture<'static, Result<Store>> + Send + Sync>;
+
+/// Returns a default function registry for parsing queries/updates that rely only
+/// on the built-in SPARQL functions.
+pub(crate) fn default_registry()
+-> rdf_fusion::extensions::functions::RdfFusionFunctionRegistryRef {
+    use rdf_fusion::encoding::RdfFusionEncodings;
+    use rdf_fusion::encoding::plain_term::PLAIN_TERM_ENCODING;
+    use rdf_fusion::encoding::string::STRING_ENCODING;
+    use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
+    use rdf_fusion::functions::registry::DefaultRdfFusionFunctionRegistry;
+
+    let encodings = RdfFusionEncodings::new(
+        Arc::clone(&PLAIN_TERM_ENCODING),
+        Arc::new(TypedFamilyEncoding::default()),
+        None,
+        Arc::clone(&STRING_ENCODING),
+    );
+    Arc::new(DefaultRdfFusionFunctionRegistry::new(encodings))
+}
 
 /// Provides a hook for registering a factory function that creates the actual [`Test`] instances.
 /// This can be used to run different tests, given the queries of the manifest as input.
@@ -222,6 +242,7 @@ impl W3CSparqlTestSuiteBuilder {
                         action_file,
                         is_positive,
                         is_update,
+                        store_factory: Arc::clone(&store_factory),
                         runtime: W3CTestRuntime::new(TEST_RUNTIME_ENV.clone()),
                     };
                     self.builder.add_test(Box::new(w3c_test));

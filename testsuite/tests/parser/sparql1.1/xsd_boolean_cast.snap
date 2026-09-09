@@ -1,9 +1,8 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
 Projection: a AS a, v AS v, ENC_PT(boolean) AS boolean
-  Projection: a, v, boolean
-    Extend: variable=?boolean, expression=xsd:boolean(ENC_TF(v))
-      QuadPattern: triple_pattern=[?a <http://example.org/p> ?v]
+  Extend: variable=?boolean, expression=xsd:boolean(ENC_TF(v))
+    QuadPattern: triple_pattern=[?a <http://example.org/p> ?v]

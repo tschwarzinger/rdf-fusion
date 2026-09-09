@@ -8,6 +8,7 @@ use datafusion::common::exec_err;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
+use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_common::{DFResult, Decimal};
 use rdf_fusion_compute::numeric::cast_numeric;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, NumericFamilyArray};
@@ -30,6 +31,7 @@ pub fn cast_int_udf(
         encodings,
         BuiltinName::CastInt.to_string(),
         DataType::Int32,
+        vec![xsd::INT.as_str().to_string()],
     )))
 }
 
@@ -44,6 +46,7 @@ pub fn cast_integer_udf(
         encodings,
         BuiltinName::CastInteger.to_string(),
         DataType::Int64,
+        vec![xsd::INTEGER.as_str().to_string()],
     )))
 }
 
@@ -58,6 +61,7 @@ pub fn cast_float_udf(
         encodings,
         BuiltinName::CastFloat.to_string(),
         DataType::Float32,
+        vec![xsd::FLOAT.as_str().to_string()],
     )))
 }
 
@@ -72,6 +76,7 @@ pub fn cast_double_udf(
         encodings,
         BuiltinName::CastDouble.to_string(),
         DataType::Float64,
+        vec![xsd::DOUBLE.as_str().to_string()],
     )))
 }
 
@@ -86,6 +91,7 @@ pub fn cast_decimal_udf(
         encodings,
         BuiltinName::CastDecimal.to_string(),
         DataType::Decimal128(Decimal::PRECISION, Decimal::SCALE),
+        vec![xsd::DECIMAL.as_str().to_string()],
     )))
 }
 
@@ -93,6 +99,7 @@ pub fn cast_decimal_udf(
 pub struct CastNumericSparqlUdf {
     encodings: RdfFusionEncodings,
     name: String,
+    aliases: Vec<String>,
     target_type: DataType,
     signature: Signature,
 }
@@ -113,6 +120,7 @@ impl CastNumericSparqlUdf {
         encodings: RdfFusionEncodings,
         name: String,
         target_type: DataType,
+        aliases: Vec<String>,
     ) -> Self {
         let type_signature = SparqlUDFTypeSignatureBuilder::new()
             .with_supported_encoding(encodings.typed_family().as_ref())
@@ -121,6 +129,7 @@ impl CastNumericSparqlUdf {
         Self {
             encodings,
             name,
+            aliases,
             target_type,
             signature: Signature::new(type_signature, Volatility::Immutable),
         }
@@ -130,6 +139,10 @@ impl CastNumericSparqlUdf {
 impl ScalarUDFImpl for CastNumericSparqlUdf {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn aliases(&self) -> &[String] {
+        &self.aliases
     }
 
     fn signature(&self) -> &Signature {

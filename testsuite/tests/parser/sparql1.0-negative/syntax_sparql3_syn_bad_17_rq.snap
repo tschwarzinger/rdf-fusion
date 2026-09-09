@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 4:11: expected OPTIONAL
+error: expected a term or variable, found `;`
+  ┌─ :4:9
+  │
+4 │ { :s :p ; }
+  │         ^ expected a term or variable, found `;`

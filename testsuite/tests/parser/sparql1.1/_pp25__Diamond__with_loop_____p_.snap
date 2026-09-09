@@ -1,7 +1,6 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: z
-  PropertyPath: <http://example/a> (<http://example/p>)+ ?z
+PropertyPath: <http://example/a> (<http://example/p>)+ ?z

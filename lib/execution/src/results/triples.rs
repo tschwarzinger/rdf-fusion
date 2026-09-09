@@ -1,5 +1,5 @@
 use crate::results::QuerySolutionStream;
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 use futures::{Stream, StreamExt};
 use rdf_fusion_common::{BlankNode, Graph, Term, TermPattern, Triple, TriplePattern};
 use sparesults::QuerySolution;

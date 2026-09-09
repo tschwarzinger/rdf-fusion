@@ -1,6 +1,6 @@
 use crate::planner::RdfFusionPlanner;
 use crate::results::QueryResults;
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 use crate::sparql::{
     OptimizationLevel, QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate,
     UpdateOptions, create_optimizer_rules, create_pyhsical_optimizer_rules,
@@ -225,10 +225,10 @@ impl RdfFusionContext {
     /// Evaluates a SPARQL [`RdfFusionUpdate`] over the instance.
     pub async fn execute_update(
         &self,
-        query: &RdfFusionUpdate,
+        update: &RdfFusionUpdate,
         options: UpdateOptions,
     ) -> Result<(), QueryEvaluationError> {
-        Box::pin(evaluate_update(self, query, options)).await
+        Box::pin(evaluate_update(self, update, options)).await
     }
 }
 

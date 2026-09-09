@@ -16,27 +16,6 @@ impl QueryDataset {
         Self { default, named }
     }
 
-    /// Builds a [`QueryDataset`] from a SPARQL algebra dataset specification.
-    ///
-    /// If the given specification is `None` (i.e. the query does not specify `FROM`/`FROM NAMED`),
-    /// the default dataset is used (the store default graph plus all named graphs).
-    pub fn from_algebra(inner: &Option<crate::sparql::algebra::QueryDataset>) -> Self {
-        if let Some(inner) = inner {
-            Self {
-                default: Some(inner.default.iter().map(|g| g.clone().into()).collect()),
-                named: inner
-                    .named
-                    .as_ref()
-                    .map(|named| named.iter().map(|g| g.clone().into()).collect()),
-            }
-        } else {
-            Self {
-                default: Some(vec![GraphName::DefaultGraph]),
-                named: None,
-            }
-        }
-    }
-
     /// Checks if this dataset specification is the default one
     /// (i.e. the default graph is the store default graph and all the store named graphs are available)
     ///

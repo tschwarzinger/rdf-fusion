@@ -1,9 +1,8 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
 Projection: a AS a, v AS v, ENC_PT(integer) AS integer
-  Projection: a, v, integer
-    Extend: variable=?integer, expression=xsd:integer(ENC_TF(v))
-      QuadPattern: triple_pattern=[?a <http://example.org/p> ?v]
+  Extend: variable=?integer, expression=xsd:integer(ENC_TF(v))
+    QuadPattern: triple_pattern=[?a <http://example.org/p> ?v]

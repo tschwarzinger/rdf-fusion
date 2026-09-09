@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 1:16: expected DISTINCT
+error: expected a select variable or expression, found `COUNT`
+  ┌─ :1:8
+  │
+1 │ SELECT COUNT(*) {}
+  │        ^^^^^ expected a select variable or expression, found `COUNT`

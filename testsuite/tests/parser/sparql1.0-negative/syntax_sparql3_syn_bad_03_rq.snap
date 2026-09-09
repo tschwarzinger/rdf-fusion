@@ -1,5 +1,12 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 4:23: expected OPTIONAL
+error: invalid triple pattern termination
+  ┌─ :4:15
+  │
+4 │ { :s1 :p1 :o1 :s2 :p2 :o2 . }
+  │               ^^^
+  │               │
+  │               expected `.` (or `}`), found `:s2`
+  │               triple patterns must be separated by `.` or continued with `;`

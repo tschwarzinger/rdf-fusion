@@ -1,4 +1,4 @@
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 use datafusion::arrow::array::{ArrayRef, RecordBatch};
 use datafusion::common::exec_err;
 use datafusion::execution::SendableRecordBatchStream;

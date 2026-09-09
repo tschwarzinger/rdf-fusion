@@ -1,7 +1,6 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: page, title
-  QuadPattern: triple_pattern=[?page <http://ogp.me/ns#audio:title> ?title]
+QuadPattern: triple_pattern=[?page <http://ogp.me/ns#audio:title> ?title]

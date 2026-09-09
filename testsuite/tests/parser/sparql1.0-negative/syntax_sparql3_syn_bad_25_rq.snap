@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 2:1: expected one of "{", [_]
+error: expected WHERE, found `end of input`
+  ┌─ :2:1
+  │
+2 │ 
+  │ ^ expected WHERE, found `end of input`

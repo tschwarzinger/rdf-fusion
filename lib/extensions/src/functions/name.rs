@@ -15,7 +15,7 @@ impl Display for FunctionName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             FunctionName::Builtin(builtin) => builtin.fmt(f),
-            FunctionName::Custom(name) => name.fmt(f),
+            FunctionName::Custom(name) => write!(f, "{}", name.as_str()),
         }
     }
 }

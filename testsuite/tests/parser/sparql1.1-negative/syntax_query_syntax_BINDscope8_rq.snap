@@ -1,5 +1,12 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 11:1: expected [_]
+error: Variable ?Y is already used in the group graph pattern
+  ┌─ :9:15
+  │
+5 │        { :s :p ?Y }
+  │                -- Variable ?Y previously used here
+  ·
+9 │    BIND (1 AS ?Y) 
+  │               ^^ Variable ?Y used here

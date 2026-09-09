@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 1:20: expected one of HAVING, OFFSET, OPTIONAL, VALUES
+error: expected end of input, found `BINDINGS`
+  ┌─ :1:14
+  │
+1 │ SELECT * { } BINDINGS ?x ?y { (1 2) (3) }
+  │              ^^^^^^^^ expected end of input, found `BINDINGS`

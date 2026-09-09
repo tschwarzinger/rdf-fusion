@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 3:1: expected <unreported>
+error: expected an expression, found `_:x`
+  ┌─ :2:35
+  │
+2 │ SELECT * WHERE { <a><b>_:x FILTER(_:x < 3) }
+  │                                   ^^^ expected an expression, found `_:x`

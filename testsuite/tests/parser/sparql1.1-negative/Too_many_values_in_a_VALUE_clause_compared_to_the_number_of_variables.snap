@@ -1,5 +1,11 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 1:46: expected UNDEF
+error: VALUES clause has 2 variables but row has 3 values
+  ┌─ :1:35
+  │
+1 │ SELECT * WHERE { VALUES (?a ?b) { (1 2 3) } }
+  │                          -----    ^^^^^^^^^ row values defined here
+  │                          │         
+  │                          2 variables defined here

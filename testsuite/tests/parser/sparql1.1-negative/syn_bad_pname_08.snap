@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 4:11: expected OPTIONAL
+error: expected a predicate or property path, found `.`
+  ┌─ :4:10
+  │
+4 │   :a:b:c .
+  │          ^ expected a predicate or property path, found `.`

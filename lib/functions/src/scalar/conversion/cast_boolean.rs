@@ -7,6 +7,7 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
+use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_encoding::typed_family::{
     BooleanFamily, BooleanFamilyArray, DowncastTypedFamilyArray, TypedFamily,
 };
@@ -33,6 +34,7 @@ pub fn cast_boolean_udf(
 struct CastBooleanSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
+    aliases: Vec<String>,
     signature: Signature,
 }
 
@@ -54,6 +56,7 @@ impl CastBooleanSparqlUDF {
         Self {
             encodings,
             name: BuiltinName::CastBoolean.to_string(),
+            aliases: vec![xsd::BOOLEAN.as_str().to_string()],
             signature: Signature::new(type_signature, Volatility::Immutable),
         }
     }
@@ -62,6 +65,10 @@ impl CastBooleanSparqlUDF {
 impl ScalarUDFImpl for CastBooleanSparqlUDF {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn aliases(&self) -> &[String] {
+        &self.aliases
     }
 
     fn signature(&self) -> &Signature {

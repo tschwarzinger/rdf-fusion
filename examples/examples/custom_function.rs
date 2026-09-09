@@ -18,6 +18,7 @@ use rdf_fusion::functions::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use rdf_fusion::storage::rdf_files::RdfFileScanOptions;
 use rdf_fusion::store::Store;
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 /// This example shows how to register a custom SPARQL function that can be used by RDF Fusion.
 #[tokio::main]
@@ -35,9 +36,9 @@ pub async fn main() -> anyhow::Result<()> {
     let context = store.context();
     context
         .functions()
-        .register_udf(ScalarUDF::new_from_impl(ContainsSpiderUDF::new(
+        .register_udf(Arc::new(ScalarUDF::new_from_impl(ContainsSpiderUDF::new(
             context.encodings().clone(),
-        )));
+        ))));
 
     // Run SPARQL query.
     let query = "
@@ -185,7 +186,7 @@ mod tests {
         let udf = ContainsSpiderUDF::new(context.encodings().clone());
         context
             .functions()
-            .register_udf(ScalarUDF::new_from_impl(udf));
+            .register_udf(Arc::new(ScalarUDF::new_from_impl(udf)));
 
         let file_path = "./data/spiderman.ttl";
         let file = File::open(file_path)

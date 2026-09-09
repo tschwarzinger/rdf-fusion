@@ -1,6 +1,6 @@
 use crate::{ParserConfig, SparqlParseError};
 use rdf_fusion_common::sparql::{RdfFusionQuery, RdfFusionUpdate};
-use rdf_fusion_execution::sparql::error::QueryEvaluationError;
+use rdf_fusion_execution::sparql::QueryEvaluationError;
 use rdf_fusion_execution::sparql::{DatasetOptions, plan_query, plan_update};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;

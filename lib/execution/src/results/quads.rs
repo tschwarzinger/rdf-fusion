@@ -1,5 +1,5 @@
 use crate::results::QuerySolutionStream;
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 use futures::{Stream, StreamExt, ready};
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term, Variable};

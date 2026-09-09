@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 1:29: expected OPTIONAL
+error: invalid triple pattern termination
+  ┌─ :1:21
+  │
+1 │ SELECT * { ?s ?p ?o UNION ?s ?p ?o  }
+  │                     ^^^^^ expected `.` (or `}`), found `UNION`

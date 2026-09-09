@@ -1,9 +1,8 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
 Projection: ENC_PT(str) AS str
-  Projection: str
-    Extend: variable=?str, expression=CONCAT()
-      EmptyRelation: rows=1
+  Extend: variable=?str, expression=CONCAT()
+    EmptyRelation: rows=1

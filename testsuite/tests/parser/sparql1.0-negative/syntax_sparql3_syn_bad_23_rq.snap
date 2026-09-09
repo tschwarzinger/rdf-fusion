@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 5:1: expected one of BIND, [_]
+error: expected an object after `,`, found `}`
+  ┌─ :4:15
+  │
+4 │ { :s  :p :o , }
+  │               ^ expected an object after `,`, found `}`

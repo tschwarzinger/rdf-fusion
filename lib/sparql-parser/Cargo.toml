@@ -10,16 +10,20 @@ RDF Fusion SPARQL Parser Framework
 """
 
 [dependencies]
-datafusion.workspace = true
+codespan-reporting.workspace = true
+datafusion-common.workspace = true
+datafusion-expr.workspace = true
+itertools.workspace = true
+logos.workspace = true
 rdf-fusion-common.workspace = true
 rdf-fusion-encoding.workspace = true
-rdf-fusion-execution.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-logical.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+rdf-fusion-functions.workspace = true
 
 [lints]
 workspace = true

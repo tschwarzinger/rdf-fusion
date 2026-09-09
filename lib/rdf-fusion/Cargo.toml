@@ -25,6 +25,7 @@ rdf-fusion-common.workspace = true
 futures.workspace = true
 object_store.workspace = true
 rdf-fusion-execution.workspace = true
+rdf-fusion-sparql-parser.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-storage.workspace = true
 thiserror.workspace = true

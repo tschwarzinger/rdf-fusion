@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 2:26: expected GRAPH
+error: Blank nodes are not allowed in DELETE templates
+  ┌─ :2:18
+  │
+2 │ DELETE { <s> <p> [] } WHERE { ?x <p> <o> }
+  │                  ^^ Blank nodes are not allowed in DELETE templates

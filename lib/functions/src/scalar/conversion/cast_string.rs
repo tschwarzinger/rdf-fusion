@@ -8,6 +8,7 @@ use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
+use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_encoding::typed_family::{DowncastTypedFamilyArray, StringFamilyArray};
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
@@ -32,6 +33,7 @@ pub fn cast_string_udf(
 struct CastStringSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
+    aliases: Vec<String>,
     signature: Signature,
 }
 
@@ -53,6 +55,7 @@ impl CastStringSparqlUDF {
         Self {
             encodings,
             name: BuiltinName::CastString.to_string(),
+            aliases: vec![xsd::STRING.as_str().to_string()],
             signature: Signature::new(type_signature, Volatility::Immutable),
         }
     }
@@ -61,6 +64,10 @@ impl CastStringSparqlUDF {
 impl ScalarUDFImpl for CastStringSparqlUDF {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn aliases(&self) -> &[String] {
+        &self.aliases
     }
 
     fn signature(&self) -> &Signature {

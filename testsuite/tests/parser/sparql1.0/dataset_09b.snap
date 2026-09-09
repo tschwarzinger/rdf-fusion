@@ -1,9 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: g, o, p, q, s, v
-  SparqlJoin: Inner 
-    QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of [NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql10/dataset/data-g3-dup.ttl" })] 
-    QuadPattern: graph_variable=?g triple_pattern=[?s ?q ?v], active_graph: Union of [NamedNode(NamedNode { iri: "https://w3c.github.io/rdf-tests/sparql/sparql10/dataset/data-g3.ttl" })]
+SparqlJoin: Inner 
+  QuadPattern: triple_pattern=[?s ?p ?o], active_graph: <https://w3c.github.io/rdf-tests/sparql/sparql10/dataset/data-g3-dup.ttl> 
+  Filter: g = Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql10/dataset/data-g3.ttl,data_type:,language_tag:})
+    QuadPattern: graph_variable=?g triple_pattern=[?s ?q ?v], active_graph: <https://w3c.github.io/rdf-tests/sparql/sparql10/dataset/data-g3.ttl>

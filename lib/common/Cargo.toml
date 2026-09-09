@@ -12,7 +12,6 @@ RDF Fusion Common
 [dependencies]
 datafusion.workspace = true
 object_store.workspace = true
-spargebra.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

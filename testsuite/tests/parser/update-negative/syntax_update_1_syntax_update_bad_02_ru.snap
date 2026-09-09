@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 2:14: expected SILENT
+error: expected GRAPH, found `DEAFULT`
+  ┌─ :2:8
+  │
+2 │ CREATE DEAFULT
+  │        ^^^^^^^ expected GRAPH, found `DEAFULT`

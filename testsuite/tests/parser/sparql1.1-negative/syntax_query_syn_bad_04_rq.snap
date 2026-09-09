@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 1:18: expected NOT
+error: expected AS, found `)`
+  ┌─ :1:15
+  │
+1 │ SELECT (?x +?y) {}
+  │               ^ expected AS, found `)`

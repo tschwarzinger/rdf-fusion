@@ -1,8 +1,7 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Ask
-Projection:
-  Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(BOOLEAN_AS_TERM(Boolean(false)))))
-    EmptyRelation: rows=1
+Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(BOOLEAN_AS_TERM(Boolean(false)))))
+  EmptyRelation: rows=1

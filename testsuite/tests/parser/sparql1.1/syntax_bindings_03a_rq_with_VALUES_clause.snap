@@ -1,7 +1,8 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection:
+SparqlJoin: Inner 
+  EmptyRelation: rows=1
   Values: ()

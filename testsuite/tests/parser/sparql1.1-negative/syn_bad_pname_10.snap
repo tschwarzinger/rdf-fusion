@@ -1,5 +1,12 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 6:1: expected one of LATERAL, SERVICE, [_]
+error: invalid triple pattern termination
+  ┌─ :4:11
+  │
+4 │   ?x:a :b :c .
+  │           ^^
+  │           │
+  │           expected `.` (or `}`), found `:c`
+  │           triple patterns must be separated by `.` or continued with `;`

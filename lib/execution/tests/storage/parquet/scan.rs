@@ -4,16 +4,15 @@ use datafusion::physical_plan::displayable;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use insta::assert_snapshot;
 use object_store::memory::InMemory;
-use rdf_fusion_common::sparql::SparqlParser;
 use rdf_fusion_common::{NamedNode, Quad};
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_encoding::string::StringQuadsBuilder;
 use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_execution::sparql::QueryOptions;
-use rdf_fusion_execution::sparql::{RdfFusionQuery, plan_query};
+use rdf_fusion_execution::sparql::RdfFusionQuery;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
+use rdf_fusion_sparql_parser::ParserOptions;
 use rdf_fusion_storage::block_cache::BlockCache;
 use rdf_fusion_storage::parquet::ParquetQuadStorage;
 use std::sync::Arc;
@@ -239,14 +238,10 @@ async fn prepare_test_store_with_cache(
 }
 
 fn plan_query_from_str(context: &RdfFusionContext, query: &str) -> RdfFusionQuery {
-    let parsed = SparqlParser::new().parse_query(query).unwrap();
-    let builder_context = RdfFusionLogicalPlanBuilderContext::new(context.create_view());
-    plan_query(
-        builder_context,
-        parsed,
-        None,
-        &Default::default(),
-        rdf_fusion_common::DateTime::now(),
+    rdf_fusion_sparql_parser::parse_query(
+        &context.create_view(),
+        query,
+        &ParserOptions::default(),
     )
     .unwrap()
 }

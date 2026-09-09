@@ -1,7 +1,6 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: p
-  QuadPattern: triple_pattern=[<http://example.org/ns#x> ?p "-18"^^<http://www.w3.org/2001/XMLSchema#integer>]
+QuadPattern: triple_pattern=[<http://example.org/ns#x> ?p "-18"^^<http://www.w3.org/2001/XMLSchema#integer>]

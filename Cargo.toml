@@ -65,7 +65,8 @@ oneshot = "0.2"
 foldhash = "0.2"
 arrow-string = "59.2"
 datafusion = "55.0"
-datafusion-session = "55.0"
+datafusion-common = "55.0"
+datafusion-expr = "55.0"
 deltalake = { git = "https://github.com/delta-io/delta-rs", rev = "cee6f9ea9d1deab2f70d23221abb5386b60f3a9a", features = [
   "datafusion",
   "datafusion-ext",
@@ -104,13 +105,18 @@ text-diff = "0.4"
 tempfile = "3.27"
 tokio-test = "0.4"
 
+# Parsing
+
+codespan-reporting = "0.13"
+logos = "0.16"
+
 # Upstream Oxigraph dependencies
+
 oxttl = "0.2"
 oxiri = "0.2"
 oxrdf = "0.3"
 oxrdfio = { version = "0.2", features = ["async-tokio"] }
 sparesults = { version = "0.3", features = ["async-tokio"] }
-spargebra = "0.4"
 
 # Internal dependencies
 rdf-fusion-compute = { version = "=0.2.1", path = "lib/compute" }

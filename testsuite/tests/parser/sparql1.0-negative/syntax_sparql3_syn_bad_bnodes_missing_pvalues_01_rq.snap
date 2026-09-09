@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 3:26: expected OPTIONAL
+error: expected a predicate or property path, found `,`
+  ┌─ :3:19
+  │
+3 │ SELECT * WHERE { [,] :p [;] . }
+  │                   ^ expected a predicate or property path, found `,`

@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
@@ -20,7 +20,7 @@ Projection: subset, superset
               QuadPattern: triple_pattern=[?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
               QuadPattern: triple_pattern=[?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set>]
               QuadPattern: triple_pattern=[?s1 <http://example/member> ?x]
-        Filter: EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>))) AND EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))))
+        Filter: EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>))) AND EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))
           Subquery:
             Filter: outer_ref(s1) = __inner__s1
               Projection: s1 AS __inner__s1, y AS __inner__y

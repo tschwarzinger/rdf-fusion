@@ -35,7 +35,10 @@ mod dump;
 pub use dump::{DumpEncoding, RdfDumpOptions, TripleFallbackStrategy};
 
 use crate::error::{LoaderError, SerializerError};
+use crate::options::{query_options_to_parser, update_options_to_parser};
 use crate::store::dump::dump_store;
+use datafusion::arrow::datatypes::{Field, Schema};
+use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::dataframe::DataFrame;
 use datafusion::logical_expr::{Extension, LogicalPlan, col, lit};
 use datafusion::optimizer::OptimizerConfig;
@@ -45,9 +48,7 @@ use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use futures::StreamExt;
 use rdf_fusion_common::quads::COL_GRAPH;
-use rdf_fusion_common::{
-    CorruptionError, DateTime, RdfDumpFormat, RdfInputSource, StorageError,
-};
+use rdf_fusion_common::{CorruptionError, RdfDumpFormat, RdfInputSource, StorageError};
 use rdf_fusion_common::{
     GraphNameRef, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Quad, QuadRef,
     TermRef, Variable,
@@ -55,24 +56,18 @@ use rdf_fusion_common::{
 use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::EncodingScalar;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-
-use datafusion::arrow::datatypes::{Field, Schema};
-use datafusion::arrow::record_batch::RecordBatch;
-use rdf_fusion_common::sparql::SparqlParser;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
     QuadStorageEncoding, TermEncoding, quads_to_plain_term_dataframe,
 };
 use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStream};
-use rdf_fusion_execution::sparql::error::QueryEvaluationError;
-use rdf_fusion_execution::sparql::{
-    QueryExplanation, QueryOptions, UpdateOptions, plan_query, plan_update,
-};
+use rdf_fusion_execution::sparql::QueryEvaluationError;
+use rdf_fusion_execution::sparql::{QueryExplanation, QueryOptions, UpdateOptions};
 use rdf_fusion_extensions::storage::{
     QuadStorageGraphTarget, graph_target_to_plain_term_dataframe,
 };
-use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
+use rdf_fusion_sparql_parser::{parse_query, parse_update};
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::{Arc, LazyLock};
 use tokio::io::AsyncRead;
@@ -286,24 +281,10 @@ impl Store {
         query: &str,
         options: QueryOptions,
     ) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
-        let builder_context =
-            RdfFusionLogicalPlanBuilderContext::new(self.context.create_view());
+        let parser_config = query_options_to_parser(&options).build();
+        let query = parse_query(&self.context.create_view(), query, &parser_config)
+            .map_err(|err| QueryEvaluationError::Parsing(Box::new(err)))?;
 
-        let mut parser = SparqlParser::new();
-        if let Some(base_iri) = options.base_iri.as_ref() {
-            parser = parser
-                .with_base_iri(base_iri.as_str())
-                .expect("Base iri is a valid IRI.");
-        }
-        let query = parser.parse_query(query)?;
-
-        let query = plan_query(
-            builder_context,
-            query,
-            options.output_encoding_name,
-            &options.dataset,
-            options.now.unwrap_or_else(DateTime::now),
-        )?;
         self.context.execute_query(&query, options).await
     }
 
@@ -501,16 +482,9 @@ impl Store {
         update: &str,
         options: UpdateOptions,
     ) -> Result<(), QueryEvaluationError> {
-        let builder_context =
-            RdfFusionLogicalPlanBuilderContext::new(self.context.create_view());
-        let update = SparqlParser::new().parse_update(update)?;
-        let update = plan_update(
-            builder_context,
-            update,
-            None,
-            &options.dataset,
-            options.now.unwrap_or_else(DateTime::now),
-        )?;
+        let parser_config = update_options_to_parser(&options).build();
+        let update = parse_update(&self.context.create_view(), update, &parser_config)
+            .map_err(|err| QueryEvaluationError::Parsing(Box::new(err)))?;
         self.context.execute_update(&update, options).await
     }
 
@@ -1026,7 +1000,8 @@ impl Store {
 mod tests {
     use super::*;
     use rdf_fusion_common::{
-        BlankNode, GraphName, Literal, NamedNode, NamedOrBlankNode, Term,
+        BlankNode, DateTime, GraphName, Literal, NamedNode, NamedOrBlankNode, Term,
+        TypedValueRef,
     };
     use std::collections::HashSet;
 
@@ -1063,6 +1038,30 @@ mod tests {
 
         let collected_quads = store.stream().await?.try_collect_to_vec().await?;
         assert_eq!(collected_quads, vec![quad.into_owned()]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_query_respects_now() -> Result<(), QueryEvaluationError> {
+        let store = Store::new_in_memory().await;
+        let now = DateTime::from_unix_millis(0).expect("valid datetime");
+        let options = QueryOptions {
+            now: Some(now),
+            ..QueryOptions::default()
+        };
+
+        let mut solutions = match store
+            .query_opt("SELECT (NOW() AS ?now) WHERE {}", options)
+            .await?
+        {
+            QueryResults::Solutions(solutions) => solutions,
+            _ => unreachable!("SELECT query must return solutions"),
+        };
+
+        let results = solutions.next().await.unwrap().unwrap();
+        let expected = Term::from(TypedValueRef::DateTimeLiteral(now));
+        assert_eq!(results.get("now"), Some(&expected));
 
         Ok(())
     }

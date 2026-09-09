@@ -1,7 +1,7 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
-Error: External error: An error returned from the query engine: Cannot rewrite SPARQL query
-caused by
-Schema error: No field named g.
+Variant: Select
+Extend: variable=?g, expression=Struct({term_type:,value:,data_type:,language_tag:})
+  EmptyRelation: rows=1

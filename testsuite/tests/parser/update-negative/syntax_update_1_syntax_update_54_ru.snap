@@ -1,5 +1,12 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-The blank node _:b1 cannot be shared by multiple blocks
+error: Blank node b1 reused across operations
+  ┌─ :5:15
+  │
+3 │ INSERT DATA { _:b1 :p :o }
+  │               ---- Blank node b1 previously used here
+4 │ ;
+5 │ INSERT DATA { _:b1 :p :o } 
+  │               ^^^^ Blank node b1 used here

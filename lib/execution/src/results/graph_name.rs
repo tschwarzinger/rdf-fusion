@@ -1,5 +1,5 @@
 use crate::results::QuerySolutionStream;
-use crate::sparql::error::QueryEvaluationError;
+use crate::sparql::QueryEvaluationError;
 use datafusion::common::exec_err;
 use datafusion::execution::SendableRecordBatchStream;
 use futures::{Stream, StreamExt};

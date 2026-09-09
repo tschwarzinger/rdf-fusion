@@ -229,7 +229,6 @@ async fn partition_changeset_operations(
         BatchCoalescer::new(Arc::clone(&quad_schema), batch_size);
     let mut added_quads_coal = BatchCoalescer::new(Arc::clone(&quad_schema), batch_size);
 
-    // --- Execute Streaming Processing ---
     let mut operations = operations.into_inner();
     while let Some(batch) = operations.next().await {
         let batch = batch?;

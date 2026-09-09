@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 5:1: expected one of GRAPH, MINUS, [_]
+error: expected }, found `;`
+  ┌─ :4:14
+  │
+4 │ { :s :p :o . ;  }
+  │              ^ expected }, found `;`

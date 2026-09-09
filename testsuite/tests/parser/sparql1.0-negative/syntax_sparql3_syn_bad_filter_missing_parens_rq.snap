@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 3:1: expected one of BNODE, BOUND, COUNT, FLOOR, HOURS, LCASE, MONTH, REGEX, ROUND, STRDT, UCASE, [_], isIRI, isURI
+error: expected a bracketted expression, built-in call, or function call, found `}`
+  ┌─ :2:31
+  │
+2 │ SELECT * { ?s ?p ?o FILTER ?x }
+  │                               ^ expected a bracketted expression, built-in call, or function call, found `}`

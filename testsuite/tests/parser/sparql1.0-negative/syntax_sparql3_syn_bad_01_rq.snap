@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 4:1: expected one of "{", CONSTRUCT, [_]
+error: expected {, found `end of input`
+  ┌─ :4:1
+  │
+4 │ 
+  │ ^ expected {, found `end of input`

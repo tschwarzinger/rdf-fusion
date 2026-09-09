@@ -1368,6 +1368,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
+name = "codespan-reporting"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
+dependencies = [
+ "serde",
+ "termcolor",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3852,6 +3863,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
+name = "logos"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb2c55a318a87600ea870ff8c2012148b44bf18b74fad48d0f835c38c7d07c5f"
+dependencies = [
+ "logos-derive",
+]
+
+[[package]]
+name = "logos-codegen"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58b3ffaa284e1350d017a57d04ada118c4583cf260c8fb01e0fe28a2e9cf8970"
+dependencies = [
+ "fnv",
+ "proc-macro2",
+ "quote",
+ "regex-automata",
+ "regex-syntax",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "logos-derive"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52d3a9855747c17eaf4383823f135220716ab49bea5fbea7dd42cc9a92f8aa31"
+dependencies = [
+ "logos-codegen",
+]
+
+[[package]]
 name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4363,33 +4406,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "peg"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0aad070be5b63aa72103f2fcdd70a83adbd5e90112ce5b574171ff1c65501773"
-dependencies = [
- "peg-macros",
- "peg-runtime",
-]
-
-[[package]]
-name = "peg-macros"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd8ef6825cae95355031ae26a99b616a2a21f22ba2de0197c43dfb05acbe7ee"
-dependencies = [
- "peg-runtime",
- "proc-macro2",
- "quote",
-]
-
-[[package]]
-name = "peg-runtime"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7011d97b484a5ebdc4b1fdb3b12d5e4bbbea56e9d22b688f2e79e04b65a7d8a6"
-
-[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4849,6 +4865,7 @@ dependencies = [
  "rdf-fusion-functions",
  "rdf-fusion-logical",
  "rdf-fusion-physical",
+ "rdf-fusion-sparql-parser",
  "rdf-fusion-storage",
  "tempfile",
  "thiserror 2.0.20",
@@ -4922,7 +4939,6 @@ dependencies = [
  "oxiri",
  "oxrdf",
  "oxrdfio",
- "spargebra",
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
@@ -4977,7 +4993,6 @@ dependencies = [
  "deltalake",
  "futures",
  "insta",
- "itertools 0.15.0",
  "object_store",
  "oxrdfio",
  "rdf-fusion-common",
@@ -4986,6 +5001,7 @@ dependencies = [
  "rdf-fusion-functions",
  "rdf-fusion-logical",
  "rdf-fusion-physical",
+ "rdf-fusion-sparql-parser",
  "rdf-fusion-storage",
  "reqwest 0.12.28",
  "sparesults",
@@ -5068,12 +5084,16 @@ dependencies = [
 name = "rdf-fusion-sparql-parser"
 version = "0.2.1"
 dependencies = [
- "datafusion",
+ "codespan-reporting",
+ "datafusion-common",
+ "datafusion-expr",
  "insta",
+ "itertools 0.15.0",
+ "logos",
  "rdf-fusion-common",
  "rdf-fusion-encoding",
- "rdf-fusion-execution",
  "rdf-fusion-extensions",
+ "rdf-fusion-functions",
  "rdf-fusion-logical",
  "thiserror 2.0.20",
 ]
@@ -5833,20 +5853,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spargebra"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46715eb957d1fe960cbbc0b713da8f78e2cb19df315b48fb09c9467a1c84f656"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "oxrdf",
- "peg",
- "rand 0.9.5",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "sqlparser"
 version = "0.61.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6034,6 +6040,15 @@ dependencies = [
  "dirs-next",
  "rustversion",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "termcolor"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
+dependencies = [
+ "winapi-util",
 ]
 
 [[package]]

@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 5:11: expected OPTIONAL
+error: expected a variable or an IRI, found `[`
+  ┌─ :5:9
+  │
+5 │   GRAPH [] { } 
+  │         ^ expected a variable or an IRI, found `[`

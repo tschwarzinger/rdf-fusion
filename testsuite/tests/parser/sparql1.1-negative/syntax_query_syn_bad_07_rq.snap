@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 1:23: expected OPTIONAL
+error: expected }, found `SELECT`
+  ┌─ :1:15
+  │
+1 │ SELECT * { {} SELECT * { ?s ?p ?o } }
+  │               ^^^^^^ expected }, found `SELECT`

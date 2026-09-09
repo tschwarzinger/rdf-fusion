@@ -40,6 +40,9 @@ pub use xsd::*;
 
 // Re-export some oxrdf types.
 pub use crate::rdf::RdfDumpFormat;
+pub use crate::sparql::{
+    GroundTerm, NamedNodePattern, PropertyPathExpression, TermPattern, TriplePattern,
+};
 pub use oxiri::Iri;
 pub use oxrdf::{
     BlankNode, BlankNodeRef, Dataset, Graph, GraphName, GraphNameRef, IriParseError,
@@ -48,8 +51,6 @@ pub use oxrdf::{
     VariableNameParseError, VariableRef, dataset,
 };
 pub use oxrdfio::RdfFormat;
-pub use spargebra::algebra::PropertyPathExpression;
-pub use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern};
 
 use datafusion::arrow::error::ArrowError;
 

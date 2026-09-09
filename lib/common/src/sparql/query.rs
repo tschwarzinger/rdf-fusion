@@ -56,6 +56,6 @@ impl std::fmt::Display for RdfFusionQuery {
             }
         }
 
-        write!(f, "Plan:\n{}", self.plan.display_indent())
+        write!(f, "{}", self.plan.display_indent())
     }
 }

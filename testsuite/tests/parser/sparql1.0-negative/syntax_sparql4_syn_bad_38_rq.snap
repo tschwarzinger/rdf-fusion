@@ -1,5 +1,11 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 5:33: expected <unreported>
+error: Blank node label _:a is used across different basic graph patterns
+  ┌─ :5:25
+  │
+5 │   _:a ?p ?v . OPTIONAL {_:a ?q 1 }
+  │   ---                   ^^^ Blank node label _:a used here
+  │   │                      
+  │   Blank node label _:a previously used here

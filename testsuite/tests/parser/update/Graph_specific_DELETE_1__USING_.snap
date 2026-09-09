@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 DELETE INSERT
@@ -7,5 +7,5 @@ DELETE INSERT
         GRAPH <http://example.org/g1> { ?s ?p ?o }
 
 BasicGraphPattern: 
-  QuadPattern: triple_pattern=[?s <http://xmlns.com/foaf/0.1/knows> <http://example.org/b>], active_graph: Union of [NamedNode(NamedNode { iri: "http://example.org/g1" })] 
-  QuadPattern: triple_pattern=[?s ?p ?o], active_graph: Union of [NamedNode(NamedNode { iri: "http://example.org/g1" })]
+  QuadPattern: triple_pattern=[?s <http://xmlns.com/foaf/0.1/knows> <http://example.org/b>], active_graph: <http://example.org/g1> 
+  QuadPattern: triple_pattern=[?s ?p ?o], active_graph: <http://example.org/g1>

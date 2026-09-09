@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 3:1: expected [_]
+error: Blank nodes are not allowed in DELETE DATA
+  ┌─ :2:15
+  │
+2 │ DELETE DATA { _:a <p> <o> }
+  │               ^^^ Blank nodes are not allowed in DELETE DATA

@@ -1,3 +1,4 @@
+use rdf_fusion_common::sparql::QueryDataset;
 use rdf_fusion_common::{DateTime, Iri, NamedNode};
 use rdf_fusion_encoding::EncodingName;
 
@@ -30,6 +31,21 @@ pub struct DatasetOptions {
     pub default_graphs: Option<Vec<NamedNode>>,
     /// The named graphs that are available to the query.
     pub named_graphs: Option<Vec<NamedNode>>,
+}
+
+impl DatasetOptions {
+    /// Creates a new [`QueryDataset`] based on these options.
+    pub fn as_query_dataset(&self) -> QueryDataset {
+        // TODO: default_graph_as_union
+        QueryDataset::new(
+            self.default_graphs
+                .as_ref()
+                .map(|gs| gs.iter().map(|g| g.clone().into()).collect()),
+            self.named_graphs
+                .as_ref()
+                .map(|gs| gs.iter().map(|g| g.clone().into()).collect()),
+        )
+    }
 }
 
 /// Options for SPARQL query evaluation.

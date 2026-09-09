@@ -1,5 +1,12 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 9:15: expected <unreported>
+error: Blank node label _:who is used across different basic graph patterns
+  ┌─ :9:7
+  │
+7 │ ASK { _:who foaf:homepage ?homepage 
+  │       ----- Blank node label _:who previously used here
+8 │       OPTIONAL { ?someone foaf:made ?homepage } 
+9 │       _:who foaf:schoolHomepage ?schoolPage }
+  │       ^^^^^ Blank node label _:who used here

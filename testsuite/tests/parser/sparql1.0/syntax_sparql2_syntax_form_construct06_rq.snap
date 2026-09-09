@@ -1,7 +1,7 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
-Variant: Construct { template: [] }
-Projection:
-  EmptyRelation: rows=1
+Variant: Construct
+Template:
+EmptyRelation: rows=1

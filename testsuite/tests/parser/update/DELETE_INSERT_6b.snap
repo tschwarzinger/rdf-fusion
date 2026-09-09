@@ -1,5 +1,5 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 DELETE INSERT
@@ -8,6 +8,6 @@ DELETE INSERT
     INSERT:
         ?a <http://xmlns.com/foaf/0.1/knows> ?a
 
-BasicGraphPattern: 
+SparqlJoin: Inner 
   QuadPattern: triple_pattern=[?a <http://xmlns.com/foaf/0.1/name> "Alan"]
   QuadPattern: triple_pattern=[?a <http://xmlns.com/foaf/0.1/knows> ?Var_B]

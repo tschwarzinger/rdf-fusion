@@ -1,5 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: error_string
 ---
-error at 2:21: expected "{"
+error: expected {, found `FILTER`
+  ┌─ :2:21
+  │
+2 │ SELECT * { OPTIONAL FILTER (?x) }
+  │                     ^^^^^^ expected {, found `FILTER`

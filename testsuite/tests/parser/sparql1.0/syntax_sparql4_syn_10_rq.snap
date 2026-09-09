@@ -1,9 +1,9 @@
 ---
-source: testsuite/tests/store_tests/parser/mod.rs
+source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Projection: p, q, v
+Projection: p, v, q
   Union
     Projection: a, p, v, q, NULL AS b, NULL AS c
       BasicGraphPattern: 
