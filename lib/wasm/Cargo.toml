@@ -58,7 +58,7 @@ getrandom_0_2 = { package = "getrandom", version = "0.2", features = ["js"] }
 wasm-bindgen-test = "0.3"
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-O3", "--all-features"]
+wasm-opt = ["-Oz", "--all-features"]
 
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = ["--all-features"]
