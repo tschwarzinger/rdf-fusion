@@ -1,4 +1,4 @@
-use crate::active_graph::ActiveGraph;
+use crate::ActiveGraph;
 use crate::bgp::BgpNode;
 use crate::paths::PropertyPathNode;
 use crate::quad_pattern::QuadPatternNode;

@@ -4,7 +4,7 @@ use datafusion::arrow::datatypes::Schema;
 use datafusion::catalog::Session;
 use datafusion::common::stats::Precision;
 use datafusion::common::{
-    Column, DFSchema, JoinSide, JoinType, NullEquality, Result as DFResult,
+    Column, DFSchema, JoinSide, JoinType, NullEquality, Result as DFResult, Statistics,
 };
 use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::utils::{expr_to_columns, split_conjunction};
@@ -269,15 +269,22 @@ impl BgpPlanner {
 
             let stats = StatisticsContext::new()
                 .compute(exec.as_ref(), &StatisticsArgs::new())?;
-            let rows = stats.num_rows.get_value().cloned().unwrap_or(usize::MAX);
-            patterns.push((current_exec, rows));
+            let bytes = self.pattern_scan_bytes(&stats)?;
+            patterns.push((current_exec, bytes));
         }
 
-        patterns.sort_by_key(|(_, rows)| *rows);
+        patterns.sort_by_key(|(_, bytes)| *bytes);
         Ok(Some((
             patterns.into_iter().map(|(exec, _)| exec).collect(),
             pending_filters,
         )))
+    }
+
+    fn pattern_scan_bytes(&self, stats: &Statistics) -> DFResult<usize> {
+        if let Some(bytes) = stats.total_byte_size.get_value() {
+            return Ok(*bytes);
+        }
+        Ok(usize::MAX)
     }
 
     fn apply_ready_filters(

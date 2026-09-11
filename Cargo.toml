@@ -67,6 +67,8 @@ arrow-string = "59.2"
 datafusion = "55.0"
 datafusion-common = "55.0"
 datafusion-expr = "55.0"
+datafusion-datasource = "55.0"
+datafusion-session = "55.0"
 deltalake = { git = "https://github.com/delta-io/delta-rs", rev = "cee6f9ea9d1deab2f70d23221abb5386b60f3a9a", features = [
   "datafusion",
   "datafusion-ext",

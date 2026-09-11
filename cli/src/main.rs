@@ -12,8 +12,8 @@ use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
-use object_store::ClientOptions;
 use object_store::aws::AmazonS3Builder;
+use object_store::http::HttpBuilder;
 use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::{RdfFusionContext, RdfFusionContextBuilder};
@@ -26,7 +26,6 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::runtime::Handle;
 use tracing::warn;
 use tracing_subscriber::layer::SubscriberExt;
@@ -143,19 +142,13 @@ pub async fn main() -> anyhow::Result<()> {
 
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
-    let mut session_config = SessionConfig::from_env()?;
     let runtime_env = build_runtime_env(args)?;
-
-    let rdf_fusion_options = RdfFusionOptions::from_env()?;
-    session_config
-        .options_mut()
-        .extensions
-        .insert(rdf_fusion_options.clone());
 
     let encoding = QuadStorageEncodingName::from_str(&args.storage.encoding)?;
     let location = Url::parse(&resolve_location(&args.storage.location)?)
         .context("Invalid object store URL")?;
 
+    let (session_config, rdf_fusion_options) = create_engine_config(&location)?;
     let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
         cli::QuadStorageType::DeltaQuads => {
             create_delta_storage(
@@ -192,6 +185,26 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
     Ok(Store::new(context))
 }
 
+/// Creates the engine configuration from the environment.
+fn create_engine_config(
+    location: &Url,
+) -> anyhow::Result<(SessionConfig, RdfFusionOptions)> {
+    let mut session_config = SessionConfig::from_env()?;
+    let mut rdf_fusion_options = RdfFusionOptions::from_env()?;
+    let is_default_small_scan_buffering_threshold =
+        env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD").is_err();
+    if !matches!(location.scheme(), "file" | "memory")
+        && is_default_small_scan_buffering_threshold
+    {
+        rdf_fusion_options.execution.small_scan_buffering_threshold = 1024 * 1024;
+    }
+    session_config
+        .options_mut()
+        .extensions
+        .insert(rdf_fusion_options.clone());
+    Ok((session_config, rdf_fusion_options))
+}
+
 /// Helper to create a `DeltaQuadsStorage` instance.
 async fn create_delta_storage(
     location: &Url,
@@ -221,7 +234,6 @@ async fn create_delta_storage(
         DeltaQuadsStorageBuilder::new()
             .with_log_store(log_store)
             .with_load_mode(LoadMode::Load(Box::new(loading_state)))
-            .with_options(Some(rdf_fusion_options.clone()))
             .with_encoding(encoding)
             .with_log_max_age(rdf_fusion_options.storage.delta.log_max_age)
             .build()
@@ -323,15 +335,26 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     }
 
     for location in &locations {
-        if location.starts_with("s3a://") {
-            register_s3_store(&registry, location)?;
-        } else if location.starts_with("file://") {
-            // Store is already registered by `create_store` or it's a local file
-        } else {
-            warn!(
-                "Unknown location type: {}. Check usage information for supported storage locations",
-                location
-            )
+        let url = Url::parse(location)
+            .context("Failed to parse the S3 URL from the location argument")?;
+        let schema = url.scheme();
+
+        match schema {
+            "file" => {}
+            "http" | "https" => {
+                let base_url = Url::parse(&url[..url::Position::AfterPort])?;
+                let store = HttpBuilder::new().with_url(base_url.as_str()).build()?;
+                registry.register_store(&base_url, Arc::new(store));
+            }
+            "s3a" => {
+                register_s3_store(&registry, &url)?;
+            }
+            _ => {
+                warn!(
+                    "Unknown location type: {}. Check usage information for supported storage locations",
+                    location
+                )
+            }
         }
     }
 
@@ -351,11 +374,9 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
 
 fn register_s3_store(
     registry: &Arc<dyn ObjectStoreRegistry>,
-    location: &str,
+    url: &Url,
 ) -> anyhow::Result<()> {
-    let s3_url = Url::parse(location)
-        .context("Failed to parse the S3 URL from the location argument")?;
-    let s3_domain = s3_url
+    let s3_domain = url
         .domain()
         .context("The S3 URL does not contain a domain")?;
 
@@ -365,11 +386,6 @@ fn register_s3_store(
         (s3_domain, None)
     };
 
-    let client_options = ClientOptions::new()
-        .with_timeout(Duration::from_secs(15 * 60))
-        .with_connect_timeout(Duration::from_secs(60))
-        .with_pool_idle_timeout(Duration::from_secs(90));
-
     if env::var("AWS_ACCESS_KEY_ID").ok().is_none() {
         warn!("AWS_ACCESS_KEY_ID not set, using default credentials")
     }
@@ -377,9 +393,7 @@ fn register_s3_store(
         warn!("AWS_SECRET_ACCESS_KEY not set, using default credentials")
     }
 
-    let mut s3_builder = AmazonS3Builder::from_env()
-        .with_bucket_name(s3_bucket)
-        .with_client_options(client_options);
+    let mut s3_builder = AmazonS3Builder::from_env().with_bucket_name(s3_bucket);
 
     if s3_bucket.ends_with("--x-s3") || s3_bucket.ends_with("--xa-s3") {
         s3_builder = s3_builder.with_s3_express(true);
@@ -390,7 +404,7 @@ fn register_s3_store(
     }
 
     if let Ok(s3) = s3_builder.build() {
-        registry.register_store(&s3_url, Arc::new(s3));
+        registry.register_store(url, Arc::new(s3));
     } else {
         warn!(
             "Building the S3-compatible object store failed.

@@ -14,7 +14,6 @@ use anyhow::Context;
 use async_trait::async_trait;
 use datafusion::common::runtime::SpawnedTask;
 use futures::StreamExt;
-use rdf_fusion::common::config::RdfFusionSessionConfigExt;
 use rdf_fusion::common::{RdfFormat, RdfSortOrder};
 use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
 use rdf_fusion::store::Store;
@@ -131,15 +130,11 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
                 self.prepare_delta_store(ctx, print_info).await
             }
             BenchQuadStorageTypeArg::Parquet => {
-                let rdf_fusion_options = ctx
-                    .parent()
-                    .options()
-                    .data_fusion_config
-                    .rdf_fusion_options_or_from_env()?;
+                let rdf_fusion_options = ctx.rdf_fusion_options();
                 self.prepare_parquet_store(
                     ctx,
                     print_info,
-                    rdf_fusion_options.storage.parquet.sort_order,
+                    rdf_fusion_options.storage.parquet.sort_order.clone(),
                 )
                 .await
             }

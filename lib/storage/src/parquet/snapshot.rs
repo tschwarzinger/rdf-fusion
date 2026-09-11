@@ -1,5 +1,4 @@
 use crate::block_cache::BlockCache;
-use crate::parquet::planner::ParquetQuadStoragePlanner;
 use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use crate::parquet::scan_builder::{
     ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
@@ -19,13 +18,11 @@ use datafusion::physical_plan::aggregates::{
     AggregateExec, AggregateMode, PhysicalGroupBy,
 };
 use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
-use datafusion::physical_planner::ExtensionPlanner;
 use futures::StreamExt;
 use object_store::ObjectMeta;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_common::{StorageError, url_to_object_store_url};
 use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::fmt::{Debug, Formatter};
@@ -112,13 +109,15 @@ impl Debug for ParquetQuadStorageSnapshot {
 
 #[async_trait]
 impl QuadStorageSnapshot for ParquetQuadStorageSnapshot {
-    async fn planners(
+    async fn scan_quad_pattern(
         &self,
-        _context: &RdfFusionContextView,
-    ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
-        vec![Arc::new(ParquetQuadStoragePlanner::new(Arc::new(
-            self.clone(),
-        )))]
+        pattern: &QuadPattern,
+        projection: Option<Vec<usize>>,
+        session_state: &SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        self.plan_quad_pattern(pattern, projection, session_state)
+            .await
+            .map_err(|e| StorageError::Other(Box::new(e)))
     }
 
     async fn named_graphs(

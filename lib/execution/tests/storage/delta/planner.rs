@@ -1,13 +1,22 @@
 use super::*;
-use datafusion::logical_expr::{Extension, LogicalPlan};
+use async_trait::async_trait;
+use datafusion::catalog::Session;
+use datafusion::common::plan_err;
+use datafusion::execution::SessionStateBuilder;
+use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
+use datafusion::logical_expr::{Extension, LogicalPlan, UserDefinedLogicalNode};
+use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::displayable;
+use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use datafusion::prelude::{SessionConfig, SessionContext};
-use rdf_fusion_common::{NamedNode, Quad, TermPattern, TriplePattern};
+use rdf_fusion_common::{NamedNode, Quad, StorageError, TermPattern, TriplePattern};
 use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
-use rdf_fusion_extensions::storage::QuadStorage;
+use rdf_fusion_execution::RdfFusionPlanner;
+use rdf_fusion_extensions::storage::{QuadStorage, QuadStorageSnapshot};
 use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_logical::quad_pattern::QuadPatternNode;
 use rdf_fusion_storage::quad_tables::QuadTableName;
+use std::sync::Arc;
 
 /// Automatically applies standard filters for Parquet file names before snapshotting.
 macro_rules! assert_plan_snapshot {
@@ -15,8 +24,7 @@ macro_rules! assert_plan_snapshot {
             let plan_str = $plan_str;
 
             insta::with_settings!({filters => vec![
-                (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
-                (r"part-[0-9a-f-]+\.parquet", "<file>.parquet"),
+                (r"part-.*\.parquet", "part-<file>.parquet"),
             ]}, {
                 insta::assert_snapshot!(plan_str, @$snapshot);
             });
@@ -200,6 +208,70 @@ async fn test_planner_with_additions_multiple_partitions() {
     ");
 }
 
+#[tokio::test]
+async fn test_generic_planner_installed_by_default_and_buffers_small_scans() {
+    let ctx = PlannerTestContext::new(
+        QuadStorageEncodingName::String,
+        vec![QuadTableName::GSPO],
+        1,
+    )
+    .await
+    .with_existing_quads(&[test_quad(
+        "https://my.com/s",
+        "https://my.com/p",
+        "https://my.com/o",
+        "https://my.com/g",
+    )])
+    .await;
+
+    let plan = ctx.get_plan_string().await;
+    assert_plan_snapshot!(
+        plan,
+        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/part-<file>.parquet]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.com/s>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.com/s> AND <https://my.com/s> <= subject_max@2, required_guarantees=[subject in (<https://my.com/s>)]"
+    );
+
+    // With an eager buffering threshold the small matching scan gets buffered.
+    ctx.session
+        .state()
+        .config_mut()
+        .clone()
+        .set_str("rdf_fusion.execution.small_scan_buffering_threshold", "10K");
+    let plan = ctx.get_plan_string().await;
+    assert_plan_snapshot!(
+        plan,
+        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/part-<file>.parquet]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.com/s>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.com/s> AND <https://my.com/s> <= subject_max@2, required_guarantees=[subject in (<https://my.com/s>)]"
+    );
+}
+
+/// Ensures that the storage planner takes precedence over the generic planner (which should panic).
+#[tokio::test]
+async fn test_storage_planner_takes_precedence_over_generic() {
+    let ctx = PlannerTestContext::new(QuadStorageEncodingName::String, vec![], 1).await;
+    let rdf_ctx =
+        RdfFusionContextBuilder::new(Arc::clone(&ctx.storage) as Arc<dyn QuadStorage>)
+            .build()
+            .unwrap();
+
+    let session_state = SessionStateBuilder::from(rdf_ctx.session_context().state())
+        .with_query_planner(Arc::new(RdfFusionPlanner::new_with_snapshot(
+            rdf_ctx.create_view(),
+            Arc::new(TestSnapshot),
+        )))
+        .build();
+
+    let logical_plan = LogicalPlan::Extension(Extension {
+        node: Arc::new(ctx.node.clone()),
+    });
+    let plan = session_state
+        .create_physical_plan(&logical_plan)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        plan.to_string(),
+        "Error during planning: TestPlanner was executed!"
+    );
+}
+
 // ------------------------------------------------------------------------
 // Test Context Fixture
 // ------------------------------------------------------------------------
@@ -317,4 +389,60 @@ fn test_quad(s: &str, p: &str, o: &str, g: &str) -> Quad {
         NamedNode::new_unchecked(o),
         NamedNode::new_unchecked(g),
     )
+}
+
+struct TestSnapshot;
+
+#[async_trait]
+impl QuadStorageSnapshot for TestSnapshot {
+    async fn planners(
+        &self,
+        _context: &rdf_fusion_extensions::RdfFusionContextView,
+    ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
+        vec![Arc::new(TestPlanner)]
+    }
+
+    async fn scan_quad_pattern(
+        &self,
+        _pattern: &rdf_fusion_common::QuadPattern,
+        _projection: Option<Vec<usize>>,
+        _session_state: &datafusion::execution::SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        unreachable!("storage planner must handle the quad pattern")
+    }
+
+    async fn named_graphs(
+        &self,
+        _state: &datafusion::execution::SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        unimplemented!()
+    }
+
+    async fn len(
+        &self,
+        _state: &datafusion::execution::SessionState,
+    ) -> Result<usize, StorageError> {
+        unimplemented!()
+    }
+}
+
+struct TestPlanner;
+
+#[async_trait]
+impl ExtensionPlanner for TestPlanner {
+    async fn plan_extension(
+        &self,
+        _planner: &dyn PhysicalPlanner,
+        node: &dyn UserDefinedLogicalNode,
+        _logical_inputs: &[&LogicalPlan],
+        _physical_inputs: &[Arc<dyn ExecutionPlan>],
+        _session: &dyn Session,
+        _planning_ctx: &PhysicalPlanningContext,
+    ) -> datafusion::common::Result<Option<Arc<dyn ExecutionPlan>>> {
+        let Some(_) = node.as_any().downcast_ref::<QuadPatternNode>() else {
+            return Ok(None);
+        };
+
+        plan_err!("TestPlanner was executed!")
+    }
 }

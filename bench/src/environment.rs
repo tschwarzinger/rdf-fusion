@@ -1,16 +1,17 @@
 use crate::benchmarks::BenchmarkName;
 use crate::requirement::BenchRequirement;
 use crate::{BenchQuadStorageTypeArg, BenchmarkingConfig, QuadStorageLocationArg};
+use datafusion::execution::SessionStateBuilder;
 use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
-use rdf_fusion::common::config::RdfFusionOptions;
+use rdf_fusion::common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
 use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
+use rdf_fusion::storage::delta::{DeltaQuadsStorageBuilder, LoadMode};
 use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::storage::parquet::RdfParquetLoader;
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
@@ -73,11 +74,21 @@ impl RdfFusionBenchContextBuilder {
         self
     }
 
+    /// Allows configuring the engine.
+    pub fn with_configure_engine(
+        mut self,
+        engine_config: impl FnOnce(SessionConfig) -> SessionConfig,
+    ) -> Self {
+        let config = engine_config(self.config.data_fusion_config);
+        self.config.data_fusion_config = config;
+        self
+    }
+
     pub fn build(mut self) -> RdfFusionBenchContext {
         if self
             .config
             .data_fusion_config
-            .get_extension::<RdfFusionOptions>()
+            .rdf_fusion_options()
             .is_none()
         {
             self.config
@@ -241,7 +252,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
     }
 
     /// Returns the RDF Fusion configuration.
-    pub fn rdf_fusion_config(&self) -> &RdfFusionOptions {
+    pub fn rdf_fusion_options(&self) -> &RdfFusionOptions {
         self.context
             .config
             .data_fusion_config
@@ -333,7 +344,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
 
     pub async fn create_store(&self) -> Store {
         let runtime_env = self.create_runtime_env().await;
-        let rdf_fusion_config = self.rdf_fusion_config();
+        let rdf_fusion_config = self.rdf_fusion_options();
 
         let (base_url, object_store_url) = match self.context.config.storage_location {
             QuadStorageLocationArg::InMemory => (
@@ -348,6 +359,11 @@ impl<'ctx> BenchmarkContext<'ctx> {
                 (full_iri, "file://".to_string())
             }
         };
+
+        let session_state = SessionStateBuilder::new()
+            .with_runtime_env(Arc::clone(&runtime_env))
+            .with_config(self.context.config.data_fusion_config.clone())
+            .build();
 
         let storage_backend: Arc<dyn rdf_fusion::extensions::storage::QuadStorage> =
             match self.context.config.storage_type {
@@ -370,6 +386,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
                     Arc::new(
                         DeltaQuadsStorageBuilder::new()
                             .with_log_store(log_store)
+                            .with_load_mode(LoadMode::Load(Box::new(session_state)))
                             .with_encoding(self.context.config.storage_encoding)
                             .with_log_max_age(rdf_fusion_config.storage.delta.log_max_age)
                             .build()

@@ -1,10 +1,11 @@
+mod estimated_vs_actual;
 mod file_size;
 mod scanned_bytes;
 
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::store::{RdfDumpOptions, Store};
-use rdf_fusion_bench::benchmarks::Benchmark;
 use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
+use rdf_fusion_bench::benchmarks::{Benchmark, BenchmarkName};
 use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
@@ -28,8 +29,12 @@ async fn setup_test_store() -> Store {
         QuadStorageEncodingName::String,
         1,
     )
+    .with_configure_engine(|config| {
+        config.set_bool("rdf_fusion.storage.parquet.data_cache_enabled", false)
+    })
     .build();
-    let name = rdf_fusion_bench::benchmarks::BenchmarkName::BsbmExplore {
+
+    let name = BenchmarkName::BsbmExplore {
         num_products: NumProducts::N1_000,
         max_query_count: None,
     };

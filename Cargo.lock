@@ -4935,6 +4935,7 @@ name = "rdf-fusion-common"
 version = "0.2.1"
 dependencies = [
  "datafusion",
+ "itertools 0.15.0",
  "object_store",
  "oxiri",
  "oxrdf",
@@ -4965,7 +4966,6 @@ dependencies = [
  "criterion",
  "datafusion",
  "foldhash 0.2.0",
- "futures",
  "insta",
  "rdf-fusion-common",
  "thiserror 2.0.20",
@@ -5076,6 +5076,7 @@ dependencies = [
  "rand 0.10.2",
  "rdf-fusion-common",
  "rdf-fusion-encoding",
+ "rdf-fusion-extensions",
  "rdf-fusion-logical",
  "tokio",
 ]
@@ -5106,6 +5107,7 @@ dependencies = [
  "bytes",
  "criterion",
  "datafusion",
+ "datafusion-datasource",
  "deltalake",
  "futures",
  "insta",
@@ -5120,7 +5122,6 @@ dependencies = [
  "rdf-fusion-logical",
  "rdf-fusion-physical",
  "redb",
- "redb-derive",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
@@ -5234,17 +5235,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de6c3b63e007e90ce536ec2ae4690826136a20ec8dbbbb400daef1bb999d2e36"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "redb-derive"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37e3e4a65184277f3fbc05f879a1729b2928845ff7b188739e14457b8e50ae89"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]

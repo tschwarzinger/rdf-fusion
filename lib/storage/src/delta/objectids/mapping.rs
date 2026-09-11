@@ -174,7 +174,7 @@ impl DeltaObjectIdDictionary {
 
         info!("Loaded global object id mapping table state.");
 
-        let options = session.config().rdf_fusion_options_or_from_env()?;
+        let options = session.config().rdf_fusion_options_or_default();
         let put_mode = match options.storage.delta.assume_single_node {
             true => ObjectIdClaimerPutMode::AlwaysOverwrite,
             false => ObjectIdClaimerPutMode::EnsureVersion,

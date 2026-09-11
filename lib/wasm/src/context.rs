@@ -14,7 +14,7 @@ use object_store::ObjectStoreExt;
 use object_store::http::HttpBuilder;
 use object_store::memory::InMemory;
 use rdf_fusion::common::config::RdfFusionOptions;
-use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder, StorageError};
+use rdf_fusion::common::{GraphName, QuadPattern, RdfInput, RdfSortOrder, StorageError};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::encoding::object_id::ObjectIdDictionary;
 use rdf_fusion::execution::{RdfFusionContext, RdfFusionContextBuilder};
@@ -254,6 +254,17 @@ impl QuadStorageSnapshot for DummyQuadStorageSnapshot {
         ))
     }
 
+    async fn scan_quad_pattern(
+        &self,
+        _pattern: &QuadPattern,
+        _projection: Option<Vec<usize>>,
+        _session_state: &SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        Err(StorageError::Other(
+            "DummyQuadStorage cannot match quad patterns".into(),
+        ))
+    }
+
     async fn len(&self, _state: &SessionState) -> Result<usize, StorageError> {
         Ok(0)
     }
@@ -351,14 +362,12 @@ async fn create_parquet_context(
             .with_option_extension(RdfFusionOptions::default())
             .with_target_partitions(1)
             .with_batch_size(8192);
-        session_config
-            .options_mut()
-            .execution
-            .parquet
-            .pushdown_filters = true;
 
         for (k, v) in &settings.custom_config {
-            let _ = session_config.options_mut().set(k, v);
+            session_config
+                .options_mut()
+                .set(k, v)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
         }
 
         let rdf_fusion_options = session_config

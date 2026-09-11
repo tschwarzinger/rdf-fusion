@@ -15,7 +15,6 @@
 
 extern crate core;
 
-mod active_graph;
 pub mod bgp;
 pub mod encoding;
 pub mod expr;
@@ -30,13 +29,13 @@ pub mod paths;
 pub mod patterns; // TODO: Remove this once we have a better way for property paths
 pub mod quad_pattern;
 
-pub use active_graph::{ActiveGraph, EnumeratedActiveGraph};
 use datafusion::common::{DFSchema, plan_err};
 pub use expr_builder::RdfFusionExprBuilder;
 pub use expr_builder_context::RdfFusionExprBuilderContext;
 pub use logical_plan_builder::RdfFusionLogicalPlanBuilder;
 pub use logical_plan_builder_context::RdfFusionLogicalPlanBuilderContext;
 use rdf_fusion_common::DFResult;
+pub use rdf_fusion_common::{ActiveGraph, EnumeratedActiveGraph};
 
 /// Checks if two schemas are logically equivalent in terms of names and types.
 pub(crate) fn check_same_schema(

@@ -41,3 +41,4 @@ pub mod sparql;
 
 pub use builder::RdfFusionContextBuilder;
 pub use engine::RdfFusionContext;
+pub use planner::RdfFusionPlanner;

@@ -528,17 +528,16 @@
         };
 
         if ($engineSettings.rdfFusion) {
+            const smallScanThresholdKb = $engineSettings.rdfFusion.smallScanBufferingThresholdKb || 0;
+            dfConfigObj["rdf_fusion.execution.small_scan_buffering_threshold"] = String(smallScanThresholdKb) + "K";
+
             const isCacheEnabled = $engineSettings.rdfFusion.enableDataCache ? "true" : "false";
-            const blockSizeBytes = String(($engineSettings.rdfFusion.dataCacheBlockSizeKb || 2048) * 1024);
+            const blockSizeBytes = String($engineSettings.rdfFusion.dataCacheBlockSizeKb || 2048) + "K";
             const numBlocks = String($engineSettings.rdfFusion.dataCacheNumBlocks || 1024);
 
             dfConfigObj["rdf_fusion.storage.parquet.data_cache_enabled"] = isCacheEnabled;
             dfConfigObj["rdf_fusion.storage.parquet.data_cache_block_size"] = blockSizeBytes;
             dfConfigObj["rdf_fusion.storage.parquet.data_cache_num_blocks"] = numBlocks;
-
-            dfConfigObj["rdf_fusion.storage.delta.data_cache_enabled"] = isCacheEnabled;
-            dfConfigObj["rdf_fusion.storage.delta.data_cache_block_size"] = blockSizeBytes;
-            dfConfigObj["rdf_fusion.storage.delta.data_cache_num_blocks"] = numBlocks;
         }
 
         if ($engineSettings.customConfig) {

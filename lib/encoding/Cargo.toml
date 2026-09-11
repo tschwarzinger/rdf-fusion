@@ -15,7 +15,6 @@ foldhash.workspace = true
 rdf-fusion-common.workspace = true
 datafusion.workspace = true
 thiserror.workspace = true
-futures.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

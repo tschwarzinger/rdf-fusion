@@ -68,9 +68,9 @@ async fn test_bgp_planner_late_decoding() {
         ");
     assert_plan_snapshot!(physical, @"
     DecodeObjectIdsExec: projections=[decode(s) as s]
-      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(o1@1, o1@0)], projection=[s@0]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o1], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GPOS/<file>.parquet]]}, projection=[subject@1 as s, object@3 as o1], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?o1 <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GPOS/<file>.parquet]]}, projection=[subject@1 as o1], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3 AND DynamicFilter [ empty ], dynamic_rg_pruning=eligible, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
+      HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(o1@0, o1@1)], projection=[s@1]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?o1 <http://example.org/p2> ?o2], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GPOS/<file>.parquet]]}, projection=[subject@1 as o1], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 3, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 3 AND 3 <= predicate_max@2, required_guarantees=[predicate in (3)]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o1], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GPOS/<file>.parquet]]}, projection=[subject@1 as s, object@3 as o1], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = 1 AND DynamicFilter [ empty ], dynamic_rg_pruning=eligible, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= 1 AND 1 <= predicate_max@2, required_guarantees=[predicate in (1)]
     ");
 }
 

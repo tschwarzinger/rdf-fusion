@@ -135,7 +135,7 @@ impl ExecutionPlan for EncodeAsObjectIdDeltaExec {
         context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         let input_stream = self.input.execute(partition, Arc::clone(&context))?;
-        let options = context.session_config().rdf_fusion_options_or_from_env()?;
+        let options = context.session_config().rdf_fusion_options_or_default();
         let max_buffered_rows = self
             .max_buffered_rows
             .or(options.storage.delta.max_buffered_rows)

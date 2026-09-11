@@ -9,7 +9,6 @@ use deltalake::logstore::{StorageConfig, logstore_with};
 use object_store::ObjectStore;
 use object_store::memory::InMemory;
 use rdf_fusion_common::NamedNodeRef;
-use rdf_fusion_common::config::RdfFusionOptions;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::QuadStorageEncodingName;
@@ -42,13 +41,9 @@ async fn test_reload_storage_object_id() {
     {
         let ctx = create_test_session_context(&log_store);
 
-        let storage = DeltaQuadsStorage::try_load(
-            &ctx.state(),
-            &RdfFusionOptions::default(),
-            Arc::clone(&log_store),
-        )
-        .await
-        .unwrap();
+        let storage = DeltaQuadsStorage::try_load(&ctx.state(), Arc::clone(&log_store))
+            .await
+            .unwrap();
 
         let mapping = storage
             .delta_object_id_mapping()
@@ -89,13 +84,9 @@ async fn test_reload_storage_plain_term() {
 
     // 2. Reload and verify
     {
-        let storage = DeltaQuadsStorage::try_load(
-            &session,
-            &RdfFusionOptions::default(),
-            Arc::clone(&log_store),
-        )
-        .await
-        .unwrap();
+        let storage = DeltaQuadsStorage::try_load(&session, Arc::clone(&log_store))
+            .await
+            .unwrap();
 
         assert_eq!(storage.log().version().await, 1);
     }
@@ -130,13 +121,9 @@ async fn test_reload_storage_with_quad_table_and_optimize() {
     // 2. Reload, add more data, and optimize again
     {
         let storage = Arc::new(
-            DeltaQuadsStorage::try_load(
-                &session,
-                &RdfFusionOptions::default(),
-                Arc::clone(&log_store),
-            )
-            .await
-            .unwrap(),
+            DeltaQuadsStorage::try_load(&session, Arc::clone(&log_store))
+                .await
+                .unwrap(),
         );
 
         populate_storage(Arc::clone(&storage), "http://example.org/s2").await;
@@ -179,13 +166,9 @@ async fn test_load_storage_object_id() {
     {
         let ctx = create_test_session_context(&log_store);
 
-        let storage = DeltaQuadsStorage::try_load(
-            &ctx.state(),
-            &RdfFusionOptions::default(),
-            Arc::clone(&log_store),
-        )
-        .await
-        .unwrap();
+        let storage = DeltaQuadsStorage::try_load(&ctx.state(), Arc::clone(&log_store))
+            .await
+            .unwrap();
 
         assert!(storage.delta_object_id_mapping().is_some());
         assert_eq!(storage.log().version().await, 1);
@@ -233,13 +216,9 @@ async fn test_concurrent_dictionary_inserts() {
             .unwrap();
             let ctx = create_test_session_context(&log_store);
             let storage = Arc::new(
-                DeltaQuadsStorage::try_load(
-                    &ctx.state(),
-                    &RdfFusionOptions::default(),
-                    Arc::clone(&log_store),
-                )
-                .await
-                .unwrap(),
+                DeltaQuadsStorage::try_load(&ctx.state(), Arc::clone(&log_store))
+                    .await
+                    .unwrap(),
             );
 
             for batch_idx in 0..5 {
@@ -268,13 +247,9 @@ async fn test_concurrent_dictionary_inserts() {
     )
     .unwrap();
     let ctx = create_test_session_context(&log_store);
-    let storage = DeltaQuadsStorage::try_load(
-        &ctx.state(),
-        &RdfFusionOptions::default(),
-        log_store,
-    )
-    .await
-    .unwrap();
+    let storage = DeltaQuadsStorage::try_load(&ctx.state(), log_store)
+        .await
+        .unwrap();
 
     let mapping = storage.delta_object_id_mapping().unwrap();
     mapping.flush().await.unwrap();

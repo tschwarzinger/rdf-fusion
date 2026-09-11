@@ -12,12 +12,14 @@
 //!
 //! Large portions of the available types are re-exported from [Oxigraph](https://github.com/oxigraph/oxigraph).
 
+mod active_graph;
 mod blank_node_mode;
 pub mod config;
 mod error;
 mod input;
 mod measure_poll;
 mod quad_component;
+mod quad_pattern;
 pub mod quads;
 mod rdf;
 mod sort_order;
@@ -27,11 +29,13 @@ mod url;
 pub mod vocab;
 mod xsd;
 
+pub use active_graph::{ActiveGraph, EnumeratedActiveGraph};
 pub use blank_node_mode::BlankNodeMatchingMode;
 pub use error::*;
 pub use input::*;
 pub use measure_poll::MeasurePoll;
 pub use quad_component::*;
+pub use quad_pattern::QuadPattern;
 pub use rdf::*;
 pub use sort_order::*;
 pub use typed_value::*;

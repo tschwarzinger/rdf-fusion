@@ -4,6 +4,7 @@ use datafusion::physical_plan::displayable;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use insta::assert_snapshot;
 use object_store::memory::InMemory;
+use rdf_fusion_common::config::RdfFusionOptions;
 use rdf_fusion_common::{NamedNode, Quad};
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_encoding::string::StringQuadsBuilder;
@@ -167,12 +168,52 @@ async fn test_parquet_scan_with_caching() {
     }
 }
 
+#[tokio::test]
+async fn test_parquet_scan_small_scan_buffering() {
+    let (rdf_context, _storage) = prepare_test_store_with_options(
+        &[
+            (
+                "http://example.org/s1",
+                "http://example.org/p1",
+                "http://example.org/o1",
+            ),
+            (
+                "http://example.org/s2",
+                "http://example.org/p2",
+                "http://example.org/o2",
+            ),
+        ],
+        false,
+        "buffered_test.parquet",
+        None,
+        1024 * 1024,
+    )
+    .await;
+
+    let query = plan_query_from_str(&rdf_context, "SELECT ?s ?o WHERE { ?s ?p ?o . }");
+    let (_, explanation) = rdf_context
+        .execute_query(&query, QueryOptions::default())
+        .await
+        .unwrap();
+
+    let plan = displayable(explanation.execution_plan.as_ref())
+        .indent(false)
+        .to_string();
+    assert_snapshot!(
+        plan,
+        @"
+    BufferExec: capacity=1048576
+      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[buffered_test.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=graph@0 IS NULL, pruning_predicate=graph_null_count@0 > 0, required_guarantees=[]
+    "
+    );
+}
+
 async fn prepare_test_store(
     quads: &[(&str, &str, &str)],
     enable_bloom: bool,
     filename: &str,
 ) -> (RdfFusionContext, Arc<ParquetQuadStorage>) {
-    prepare_test_store_with_cache(quads, enable_bloom, filename, None).await
+    prepare_test_store_with_options(quads, enable_bloom, filename, None, 0).await
 }
 
 async fn prepare_test_store_with_cache(
@@ -180,6 +221,16 @@ async fn prepare_test_store_with_cache(
     enable_bloom: bool,
     filename: &str,
     cache: Option<Arc<BlockCache>>,
+) -> (RdfFusionContext, Arc<ParquetQuadStorage>) {
+    prepare_test_store_with_options(quads, enable_bloom, filename, cache, 0).await
+}
+
+async fn prepare_test_store_with_options(
+    quads: &[(&str, &str, &str)],
+    enable_bloom: bool,
+    filename: &str,
+    cache: Option<Arc<BlockCache>>,
+    small_scan_buffering_threshold: usize,
 ) -> (RdfFusionContext, Arc<ParquetQuadStorage>) {
     let session_config = SessionConfig::default();
     let context = SessionContext::new_with_config(session_config);
@@ -227,9 +278,27 @@ async fn prepare_test_store_with_cache(
 
     let storage = Arc::new(storage_builder.build().await.unwrap());
 
+    let mut rdf_session_config = SessionConfig::new()
+        .with_batch_size(8192)
+        .with_target_partitions(1);
+    rdf_session_config
+        .options_mut()
+        .execution
+        .parquet
+        .pushdown_filters = true;
+    if small_scan_buffering_threshold > 0 {
+        let mut rdf_options = RdfFusionOptions::default();
+        rdf_options.execution.small_scan_buffering_threshold =
+            small_scan_buffering_threshold;
+        rdf_session_config
+            .options_mut()
+            .extensions
+            .insert(rdf_options);
+    }
+
     let rdf_context =
         RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
-            .with_single_partition_session_config()
+            .with_session_config(Some(rdf_session_config))
             .with_runtime_env(Some(Arc::clone(&context.runtime_env())))
             .build()
             .unwrap();

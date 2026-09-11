@@ -52,9 +52,10 @@ const defaultEngineSettings = {
         targetPartitions: 1
     },
     rdfFusion: {
-        enableDataCache: true,
+        enableDataCache: false,
         dataCacheBlockSizeKb: 2048,
-        dataCacheNumBlocks: 1024
+        dataCacheNumBlocks: 1024,
+        smallScanBufferingThresholdKb: 1024
     },
     customConfig: [] // Array of { key: "", value: "" }
 };

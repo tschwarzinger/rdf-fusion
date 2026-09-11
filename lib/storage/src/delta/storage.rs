@@ -16,7 +16,9 @@ use deltalake::logstore::{LogStoreRef, logstore_with};
 use futures::StreamExt;
 use object_store::path::Path;
 use rdf_fusion_common::StorageError;
-use rdf_fusion_common::config::{DeltaStorageOptions, RdfFusionOptions};
+use rdf_fusion_common::config::{
+    DeltaStorageOptions, RdfFusionOptions, RdfFusionSessionConfigExt,
+};
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::object_id::{ObjectIdDictionary, ObjectIdEncoding};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
@@ -180,19 +182,18 @@ impl DeltaQuadsStorage {
     /// Tries to load an existing [`DeltaQuadsStorage`] based on the given `base_location`.
     pub async fn try_load(
         state: &SessionState,
-        options: &RdfFusionOptions,
         base_log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadsStorageError> {
-        Self::try_load_with_cache(state, options, base_log_store, None).await
+        Self::try_load_with_cache(state, base_log_store, None).await
     }
 
     /// Tries to load an existing [`DeltaQuadsStorage`] based on the given `base_location` with an optional [`BlockCache`].
     pub async fn try_load_with_cache(
         state: &SessionState,
-        options: &RdfFusionOptions,
         base_log_store: LogStoreRef,
         cache: Option<Arc<BlockCache>>,
     ) -> Result<Self, DeltaQuadsStorageError> {
+        let options = state.config().rdf_fusion_options_or_default();
         let log_storage_config = base_log_store.config().options().clone();
         let base_url = base_log_store.config().location().clone();
 

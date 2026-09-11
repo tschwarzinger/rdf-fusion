@@ -20,6 +20,7 @@
     let memoryLimitExceedsWasm = $derived(settings.memoryLimit > WASM_MEMORY_LIMIT_MB);
     let cacheCapacityMb = $derived(((settings.rdfFusion?.dataCacheBlockSizeKb || 0) * (settings.rdfFusion?.dataCacheNumBlocks || 0)) / 1024);
     let cacheExceedsWasm = $derived(settings.rdfFusion?.enableDataCache && cacheCapacityMb > WASM_MEMORY_LIMIT_MB);
+    let smallScanThresholdMiB = $derived((settings.rdfFusion?.smallScanBufferingThresholdKb || 0) / 1024);
 </script>
 
 <style>
@@ -106,6 +107,22 @@
             <i class="fa-solid fa-chevron-down text-muted small"></i>
         </div>
         <div class="collapse" id="settingsRdfFusionCollapse">
+
+            <div class="p-3 border-top bg-white">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold" for="rf-small-scan-threshold">
+                            Small Scan Buffering Threshold
+                            <span class="text-muted fw-normal d-block" style="font-size: 0.75rem;">rdf_fusion.execution.small_scan_buffering_threshold</span>
+                        </label>
+                        <div class="input-group input-group-sm">
+                            <input id="rf-small-scan-threshold" type="number" class="form-control" bind:value={settings.rdfFusion.smallScanBufferingThresholdKb} min="0">
+                            <span class="input-group-text">KB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="p-3 border-top bg-white">
                 <div class="card border bg-light-subtle rounded-3">
                     <div class="card-body p-3">
@@ -124,7 +141,7 @@
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold" for="rf-block-size">Block Size</label>
                                     <div class="input-group input-group-sm">
-                                        <input id="rf-block-size" type="number" class="form-control" bind:value={settings.rdfFusion.dataCacheBlockSizeKb} min="4" step="64" disabled={!settings.rdfFusion.enableDataCache}>
+                                        <input id="rf-block-size" type="number" class="form-control" bind:value={settings.rdfFusion.dataCacheBlockSizeKb} min="4" disabled={!settings.rdfFusion.enableDataCache}>
                                         <span class="input-group-text">KB</span>
                                     </div>
                                     <div class="text-muted mt-1" style="font-size: 0.72rem;">rdf_fusion.storage.parquet.data_cache_block_size</div>

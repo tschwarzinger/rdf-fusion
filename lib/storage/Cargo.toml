@@ -19,6 +19,7 @@ oxrdfio.workspace = true
 rdf-fusion-extensions.workspace = true
 rdf-fusion-common.workspace = true
 datafusion.workspace = true
+datafusion-datasource.workspace = true
 rdf-fusion-encoding.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-physical.workspace = true
@@ -29,7 +30,6 @@ tokio.workspace = true
 tracing.workspace = true
 url.workspace = true
 redb.workspace = true
-redb-derive.workspace = true
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 deltalake.workspace = true

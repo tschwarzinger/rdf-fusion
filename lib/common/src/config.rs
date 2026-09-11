@@ -1,7 +1,7 @@
 use crate::{DFResult, RdfSortOrder};
 use datafusion::common::config::{ConfigEntry, ConfigExtension, ExtensionOptions};
 use datafusion::error::DataFusionError;
-use datafusion::prelude::SessionConfig;
+use datafusion::prelude::{SessionConfig, SessionContext};
 use std::any::Any;
 use std::time::Duration;
 
@@ -10,12 +10,23 @@ use std::time::Duration;
 pub struct RdfFusionOptions {
     /// Storage configuration.
     pub storage: StorageOptions,
+    /// Execution configuration.
+    pub execution: ExecutionOptions,
     /// Local configuration.
     pub local: LocalOptions,
 }
 
 impl ConfigExtension for RdfFusionOptions {
     const PREFIX: &'static str = "rdf_fusion";
+}
+
+/// Execution configuration for RDF Fusion.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ExecutionOptions {
+    /// The size in bytes below which a scan is eagerly buffered during planning. This allows small
+    /// scans to be evaluated in parallel instead of sequentially waiting on dynamic filters. A
+    /// value of `0` disables this optimization.
+    pub small_scan_buffering_threshold: usize,
 }
 
 /// Local configuration for RDF Fusion.
@@ -54,7 +65,7 @@ impl Default for ParquetStorageOptions {
         Self {
             sort_order: None,
             data_cache_enabled: false,
-            data_cache_block_size: 2 * 1024 * 1024, // 2 MiB
+            data_cache_block_size: 2 * 1024 * 1024,
             data_cache_num_blocks: 1024,
         }
     }
@@ -118,6 +129,33 @@ impl ExtensionOptions for RdfFusionOptions {
 
     fn set(&mut self, key: &str, value: &str) -> DFResult<()> {
         match key {
+            "execution.small_scan_buffering_threshold" => {
+                self.execution.small_scan_buffering_threshold =
+                    SessionContext::parse_capacity_limit(key, value)?;
+            }
+            "local.work_dir" => {
+                self.local.work_dir = Some(value.to_string());
+            }
+            "storage.delta.assume_single_node" => {
+                let value: bool = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.delta.assume_single_node: {e}"
+                    ))
+                })?;
+                self.storage.delta.assume_single_node = value;
+            }
+            "storage.delta.data_cache_block_size" => {
+                let size = SessionContext::parse_capacity_limit(key, value)?;
+                self.storage.delta.data_cache_block_size = size;
+            }
+            "storage.delta.data_cache_num_blocks" => {
+                let size: usize = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.delta.data_cache_num_blocks: {e}"
+                    ))
+                })?;
+                self.storage.delta.data_cache_num_blocks = size;
+            }
             "storage.delta.log_max_age" => {
                 if value.to_lowercase() == "inf" || value.to_lowercase() == "none" {
                     self.storage.delta.log_max_age = None;
@@ -131,65 +169,33 @@ impl ExtensionOptions for RdfFusionOptions {
                     self.storage.delta.log_max_age = Some(Duration::from_millis(ms));
                 }
             }
-            "storage.delta.object_id_claim_size" => {
-                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
-                    key, value,
-                )? as i64;
-                self.storage.delta.object_id_claim_size = size;
+            "storage.delta.max_buffered_ids" => {
+                if value.to_lowercase() == "none" || value.is_empty() {
+                    self.storage.delta.max_buffered_ids = None;
+                } else {
+                    let ids = SessionContext::parse_capacity_limit(key, value)?;
+                    self.storage.delta.max_buffered_ids = Some(ids);
+                }
             }
             "storage.delta.max_buffered_rows" => {
                 if value.to_lowercase() == "none" || value.is_empty() {
                     self.storage.delta.max_buffered_rows = None;
                 } else {
-                    let rows = datafusion::prelude::SessionContext::parse_capacity_limit(
-                        key, value,
-                    )?;
+                    let rows = SessionContext::parse_capacity_limit(key, value)?;
                     self.storage.delta.max_buffered_rows = Some(rows);
                 }
             }
-            "storage.delta.max_buffered_ids" => {
-                if value.to_lowercase() == "none" || value.is_empty() {
-                    self.storage.delta.max_buffered_ids = None;
-                } else {
-                    let ids = datafusion::prelude::SessionContext::parse_capacity_limit(
-                        key, value,
-                    )?;
-                    self.storage.delta.max_buffered_ids = Some(ids);
-                }
-            }
             "storage.delta.object_id_cache_size" => {
-                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
-                    key, value,
-                )?;
+                let size = SessionContext::parse_capacity_limit(key, value)?;
                 self.storage.delta.object_id_cache_size = Some(size);
             }
-            "storage.delta.assume_single_node" => {
-                let value: bool = value.parse().map_err(|e| {
-                    DataFusionError::Configuration(format!(
-                        "Invalid value for storage.delta.assume_single_node: {e}"
-                    ))
-                })?;
-                self.storage.delta.assume_single_node = value;
+            "storage.delta.object_id_claim_size" => {
+                let size = SessionContext::parse_capacity_limit(key, value)? as i64;
+                self.storage.delta.object_id_claim_size = size;
             }
-            "storage.delta.data_cache_block_size" => {
-                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
-                    key, value,
-                )?;
-                self.storage.delta.data_cache_block_size = size;
-            }
-            "storage.delta.data_cache_num_blocks" => {
-                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
-                    key, value,
-                )?;
-                self.storage.delta.data_cache_num_blocks = size;
-            }
-            "storage.parquet.sort_order" => {
-                let value: RdfSortOrder = value.parse().map_err(|e| {
-                    DataFusionError::Configuration(format!(
-                        "Invalid value for storage.parquet.sort_order: {e}"
-                    ))
-                })?;
-                self.storage.parquet.sort_order = Some(value);
+            "storage.parquet.data_cache_block_size" => {
+                let size = SessionContext::parse_capacity_limit(key, value)?;
+                self.storage.parquet.data_cache_block_size = size;
             }
             "storage.parquet.data_cache_enabled" => {
                 let value: bool = value.parse().map_err(|e| {
@@ -199,17 +205,21 @@ impl ExtensionOptions for RdfFusionOptions {
                 })?;
                 self.storage.parquet.data_cache_enabled = value;
             }
-            "storage.parquet.data_cache_block_size" => {
-                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
-                    key, value,
-                )?;
-                self.storage.parquet.data_cache_block_size = size;
-            }
             "storage.parquet.data_cache_num_blocks" => {
-                let size = datafusion::prelude::SessionContext::parse_capacity_limit(
-                    key, value,
-                )?;
+                let size: usize = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.parquet.data_cache_num_blocks: {e}"
+                    ))
+                })?;
                 self.storage.parquet.data_cache_num_blocks = size;
+            }
+            "storage.parquet.sort_order" => {
+                let value: RdfSortOrder = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.parquet.sort_order: {e}"
+                    ))
+                })?;
+                self.storage.parquet.sort_order = Some(value);
             }
             "storage.rdf.assume_quads_unique_in_single_file" => {
                 let value: bool = value.parse().map_err(|e| {
@@ -219,9 +229,6 @@ impl ExtensionOptions for RdfFusionOptions {
                 })?;
 
                 self.storage.rdf_files.assume_quads_unique_in_single_file = value;
-            }
-            "local.work_dir" => {
-                self.local.work_dir = Some(value.to_string());
             }
             _ => {
                 return Err(DataFusionError::Configuration(format!(
@@ -235,37 +242,14 @@ impl ExtensionOptions for RdfFusionOptions {
     fn entries(&self) -> Vec<ConfigEntry> {
         vec![
             ConfigEntry {
-                key: format!("{}.storage.delta.log_max_age", Self::PREFIX),
-                value: self
-                    .storage
-                    .delta
-                    .log_max_age
-                    .map(|v| v.as_millis().to_string()),
-                description: "The maximum age of the operations log that should be queried before refreshing.",
+                key: format!("{}.execution.small_scan_buffering_threshold", Self::PREFIX),
+                value: Some(self.execution.small_scan_buffering_threshold.to_string()),
+                description: "The size in bytes below which a quad pattern scan is eagerly buffered during planning to allow parallel execution (e.g. \"1K\", \"1M\", \"1G\"; 0 disables).",
             },
             ConfigEntry {
-                key: format!("{}.storage.delta.object_id_claim_size", Self::PREFIX),
-                value: Some(self.storage.delta.object_id_claim_size.to_string()),
-                description: "The size of claimed ID ranges for delta dictionary coordination.",
-            },
-            ConfigEntry {
-                key: format!("{}.storage.delta.max_buffered_rows", Self::PREFIX),
-                value: self.storage.delta.max_buffered_rows.map(|r| r.to_string()),
-                description: "Maximum number of rows to buffer before committing delta dictionary transaction.",
-            },
-            ConfigEntry {
-                key: format!("{}.storage.delta.max_buffered_ids", Self::PREFIX),
-                value: self.storage.delta.max_buffered_ids.map(|i| i.to_string()),
-                description: "Maximum number of pending IDs to buffer before committing delta dictionary transaction.",
-            },
-            ConfigEntry {
-                key: format!("{}.storage.delta.object_id_cache_size", Self::PREFIX),
-                value: self
-                    .storage
-                    .delta
-                    .object_id_cache_size
-                    .map(|i| i.to_string()),
-                description: "The size of the cache in the local object id dictionary.",
+                key: format!("{}.local.work_dir", Self::PREFIX),
+                value: self.local.work_dir.clone(),
+                description: "Local workspace directory for storing cache/DB files.",
             },
             ConfigEntry {
                 key: format!("{}.storage.delta.assume_single_node", Self::PREFIX),
@@ -283,6 +267,54 @@ impl ExtensionOptions for RdfFusionOptions {
                 description: "The number of blocks to cache for object store reads.",
             },
             ConfigEntry {
+                key: format!("{}.storage.delta.log_max_age", Self::PREFIX),
+                value: self
+                    .storage
+                    .delta
+                    .log_max_age
+                    .map(|v| v.as_millis().to_string()),
+                description: "The maximum age of the operations log that should be queried before refreshing.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.max_buffered_ids", Self::PREFIX),
+                value: self.storage.delta.max_buffered_ids.map(|i| i.to_string()),
+                description: "Maximum number of pending IDs to buffer before committing delta dictionary transaction.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.max_buffered_rows", Self::PREFIX),
+                value: self.storage.delta.max_buffered_rows.map(|r| r.to_string()),
+                description: "Maximum number of rows to buffer before committing delta dictionary transaction.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.object_id_cache_size", Self::PREFIX),
+                value: self
+                    .storage
+                    .delta
+                    .object_id_cache_size
+                    .map(|i| i.to_string()),
+                description: "The size of the cache in the local object id dictionary.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.delta.object_id_claim_size", Self::PREFIX),
+                value: Some(self.storage.delta.object_id_claim_size.to_string()),
+                description: "The size of claimed ID ranges for delta dictionary coordination.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.parquet.data_cache_block_size", Self::PREFIX),
+                value: Some(self.storage.parquet.data_cache_block_size.to_string()),
+                description: "The size of the blocks used for caching object store reads in bytes.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.parquet.data_cache_enabled", Self::PREFIX),
+                value: Some(self.storage.parquet.data_cache_enabled.to_string()),
+                description: "Whether data caching is enabled for Parquet storage.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.parquet.data_cache_num_blocks", Self::PREFIX),
+                value: Some(self.storage.parquet.data_cache_num_blocks.to_string()),
+                description: "The number of blocks to cache for object store reads.",
+            },
+            ConfigEntry {
                 key: format!("{}.storage.parquet.sort_order", Self::PREFIX),
                 value: self
                     .storage
@@ -292,21 +324,6 @@ impl ExtensionOptions for RdfFusionOptions {
                     .map(|so| so.to_string())
                     .clone(),
                 description: "The sort order for the Parquet files.",
-            },
-            ConfigEntry {
-                key: format!("{}.storage.parquet.data_cache_enabled", Self::PREFIX),
-                value: Some(self.storage.parquet.data_cache_enabled.to_string()),
-                description: "Whether data caching is enabled for Parquet storage.",
-            },
-            ConfigEntry {
-                key: format!("{}.storage.parquet.data_cache_block_size", Self::PREFIX),
-                value: Some(self.storage.parquet.data_cache_block_size.to_string()),
-                description: "The size of the blocks used for caching object store reads in bytes.",
-            },
-            ConfigEntry {
-                key: format!("{}.storage.parquet.data_cache_num_blocks", Self::PREFIX),
-                value: Some(self.storage.parquet.data_cache_num_blocks.to_string()),
-                description: "The number of blocks to cache for object store reads.",
             },
             ConfigEntry {
                 key: format!(
@@ -320,11 +337,6 @@ impl ExtensionOptions for RdfFusionOptions {
                         .to_string(),
                 ),
                 description: "Sets whether the query engine should assume that the quads within a single file are unique.",
-            },
-            ConfigEntry {
-                key: format!("{}.local.work_dir", Self::PREFIX),
-                value: self.local.work_dir.clone(),
-                description: "Local workspace directory for storing cache/DB files.",
             },
         ]
     }
@@ -376,6 +388,11 @@ impl RdfFusionOptions {
         {
             config.set("storage.rdf.assume_quads_unique_in_single_file", &val)?;
         }
+        if let Ok(val) =
+            std::env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD")
+        {
+            config.set("execution.small_scan_buffering_threshold", &val)?;
+        }
         if let Ok(val) = std::env::var("RDF_FUSION_LOCAL_WORK_DIR") {
             config.set("local.work_dir", &val)?;
         }
@@ -384,27 +401,18 @@ impl RdfFusionOptions {
 }
 
 pub trait RdfFusionSessionConfigExt {
-    /// Extracts [`RdfFusionOptions`], falling back to a default.
-    fn rdf_fusion_options_or_default(&self) -> RdfFusionOptions;
+    /// Extracts [`RdfFusionOptions`].
+    fn rdf_fusion_options(&self) -> Option<&RdfFusionOptions>;
 
-    /// Extracts [`RdfFusionOptions`], falling back to environment variables.
-    fn rdf_fusion_options_or_from_env(&self) -> DFResult<RdfFusionOptions>;
+    /// Extracts [`RdfFusionOptions`], falling back to a default.
+    fn rdf_fusion_options_or_default(&self) -> RdfFusionOptions {
+        self.rdf_fusion_options().cloned().unwrap_or_default()
+    }
 }
 
 impl RdfFusionSessionConfigExt for SessionConfig {
-    fn rdf_fusion_options_or_default(&self) -> RdfFusionOptions {
-        self.options()
-            .extensions
-            .get::<RdfFusionOptions>()
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    fn rdf_fusion_options_or_from_env(&self) -> DFResult<RdfFusionOptions> {
-        match self.options().extensions.get::<RdfFusionOptions>() {
-            None => RdfFusionOptions::from_env(),
-            Some(config) => Ok(config.clone()),
-        }
+    fn rdf_fusion_options(&self) -> Option<&RdfFusionOptions> {
+        self.options().extensions.get::<RdfFusionOptions>()
     }
 }
 
@@ -440,6 +448,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 14);
+        assert_eq!(entries.len(), 15);
     }
 }

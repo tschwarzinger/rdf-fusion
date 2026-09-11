@@ -38,7 +38,9 @@ use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::QuadStorageEncoding;
-use rdf_fusion_logical::quad_pattern::QuadPattern;
+use rdf_fusion_logical::quad_pattern::{
+    QuadPattern, compute_quad_pattern_filters, compute_quad_pattern_schema,
+};
 use rdf_fusion_physical::distinct::SortedDistinctExec;
 use std::sync::Arc;
 
@@ -239,7 +241,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
         Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError>,
         DeltaQuadsStorageError,
     > {
-        let filters = self.pattern.compute_filters(&self.encoding).await?;
+        let filters = compute_quad_pattern_filters(&self.pattern, &self.encoding).await?;
 
         let context = ChangesetContext::default();
         let added_quads = changeset.added_quads(&context, &self.session_state).await?;
@@ -265,7 +267,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
     fn build_empty_scan(
         &self,
     ) -> Result<QuadPatternScanPlanningResult, DeltaQuadsStorageError> {
-        let schema = self.pattern.compute_schema(&self.encoding);
+        let schema = compute_quad_pattern_schema(&self.pattern, &self.encoding);
         let final_schema = match &self.projection_indices {
             None => Arc::clone(schema.inner()),
             Some(projection) => Arc::new(schema.inner().project(projection)?),
@@ -283,7 +285,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
         base_scan: Arc<dyn ExecutionPlan>,
         changeset: &DeltaQuadsStorageLogChangesetRef,
     ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
-        let filters = self.pattern.compute_filters(&self.encoding).await?;
+        let filters = compute_quad_pattern_filters(&self.pattern, &self.encoding).await?;
         let context = ChangesetContext {
             intended_sort_order: self.quad_table.as_ref().map(|i| i.components()),
         };

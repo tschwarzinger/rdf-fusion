@@ -7,7 +7,7 @@ use deltalake::logstore::{IORuntime, LogStoreRef, StorageConfig, logstore_with};
 use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::path::Path;
-use rdf_fusion_common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
+use rdf_fusion_common::config::RdfFusionSessionConfigExt;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,7 +28,6 @@ pub enum LoadMode {
 pub struct DeltaQuadsStorageBuilder {
     load_mode: LoadMode,
     log_store: Option<LogStoreRef>,
-    options: Option<RdfFusionOptions>,
     encoding: QuadStorageEncodingName,
     quad_tables: Vec<QuadTableName>,
     log_max_age: Option<Duration>,
@@ -41,7 +40,6 @@ impl DeltaQuadsStorageBuilder {
         Self {
             load_mode: LoadMode::NoLoading,
             log_store: None,
-            options: None,
             encoding: QuadStorageEncodingName::ObjectId,
             quad_tables: vec![
                 QuadTableName::GSPO,
@@ -62,12 +60,6 @@ impl DeltaQuadsStorageBuilder {
     /// Sets the log store
     pub fn with_log_store(mut self, log_store: LogStoreRef) -> Self {
         self.log_store = Some(log_store);
-        self
-    }
-
-    /// Sets the delta storage options
-    pub fn with_options(mut self, options: Option<RdfFusionOptions>) -> Self {
-        self.options = options;
         self
     }
 
@@ -130,9 +122,8 @@ impl DeltaQuadsStorageBuilder {
                         &log_store.to_uri(&prefix_path)
                     );
 
-                    let options = self.options.unwrap_or_default();
                     let result = DeltaQuadsStorage::try_load_with_cache(
-                        &session, &options, log_store, self.cache,
+                        &session, log_store, self.cache,
                     )
                     .await?;
                     result.set_transaction_max_age(self.log_max_age).await;
@@ -149,10 +140,10 @@ impl DeltaQuadsStorageBuilder {
                 LoadMode::Load(session) => Some(session.as_ref()),
                 LoadMode::NoLoading => None,
             };
-            let options = session
-                .map(|s| s.config().rdf_fusion_options_or_from_env())
-                .unwrap_or_else(RdfFusionOptions::from_env)?;
 
+            let options = session
+                .map(|s| s.config().rdf_fusion_options_or_default())
+                .unwrap_or_default();
             let result = DeltaQuadsStorage::new_at_location_with_cache(
                 &options,
                 self.encoding,

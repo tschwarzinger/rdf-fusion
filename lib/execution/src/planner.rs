@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::common::DataFusionError;
 use datafusion::execution::context::QueryPlanner;
-use datafusion::logical_expr::LogicalPlan;
+use datafusion::logical_expr::{LogicalPlan, ScalarUDF};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{
     DefaultPhysicalPlanner, ExtensionPlanner, PhysicalPlanner,
@@ -14,6 +14,7 @@ use rdf_fusion_extensions::storage::{QuadStorage, QuadStorageSnapshot};
 use rdf_fusion_physical::bgp::BgpPlanner;
 use rdf_fusion_physical::object_id::DecodeObjectIdsPlanner;
 use rdf_fusion_physical::paths::KleenePlusPathPlanner;
+use rdf_fusion_physical::quad_pattern::QuadPatternPlanner;
 use rdf_fusion_storage::rdf_files::RdfFilePlanner;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -73,23 +74,39 @@ impl QueryPlanner for RdfFusionPlanner {
             .udf(&FunctionName::Builtin(BuiltinName::DecodeTerm))
             .ok();
 
-        let mut planners: Vec<Arc<dyn ExtensionPlanner + Send + Sync>> = vec![
-            Arc::new(BgpPlanner::new(decoding_udf.clone())),
-            Arc::new(KleenePlusPathPlanner),
-            Arc::new(RdfFilePlanner),
-        ];
-
-        if let Some(decoding_udf) = decoding_udf {
-            planners.push(Arc::new(DecodeObjectIdsPlanner::new(decoding_udf)))
-        }
-
-        planners.extend(snapshot.planners(&self.context).await);
+        let sn = Arc::clone(&snapshot);
+        let planners = build_extension_planners(decoding_udf, &sn, &self.context).await;
 
         let planner = DefaultPhysicalPlanner::with_extension_planners(planners);
         planner
             .create_physical_plan(logical_plan, session_state)
             .await
     }
+}
+
+/// Assembles the extension planners used to create physical plans.
+///
+/// The list is ordered so that storage-specific planners (returned by the snapshot) are registered
+/// *before* the generic [`QuadPatternPlanner`], giving them priority when planning quad patterns.
+async fn build_extension_planners(
+    decoding_udf: Option<Arc<ScalarUDF>>,
+    snapshot: &Arc<dyn QuadStorageSnapshot>,
+    context: &RdfFusionContextView,
+) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
+    let mut planners: Vec<Arc<dyn ExtensionPlanner + Send + Sync>> = vec![
+        Arc::new(BgpPlanner::new(decoding_udf.clone())),
+        Arc::new(KleenePlusPathPlanner),
+        Arc::new(RdfFilePlanner),
+    ];
+
+    if let Some(decoding_udf) = decoding_udf {
+        planners.push(Arc::new(DecodeObjectIdsPlanner::new(decoding_udf)))
+    }
+
+    planners.extend(snapshot.planners(context).await);
+    planners.push(Arc::new(QuadPatternPlanner::new(Arc::clone(snapshot))));
+
+    planners
 }
 
 /// Stores the type of quad storage snapshot that is used by the [`RdfFusionPlanner`].

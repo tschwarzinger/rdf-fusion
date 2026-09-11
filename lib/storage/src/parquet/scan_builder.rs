@@ -1,3 +1,4 @@
+use crate::parquet::bytes_estimator::estimate_scan_statistics;
 use crate::parquet::reader::PreLoadedMetadataReaderFactory;
 use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use crate::parquet::scan::ParquetQuadScanExec;
@@ -8,7 +9,7 @@ use datafusion::common::{Column, DFSchema, DFSchemaRef, ExprSchema, Statistics};
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::parquet::{
     DefaultParquetFileReaderFactory, PagePruningAccessPlanFilter, ParquetAccessPlan,
-    ParquetFileReaderFactory, RowGroupAccess, RowGroupAccessPlanFilter,
+    ParquetFileReaderFactory, RowGroupAccessPlanFilter,
     can_expr_be_pushed_down_with_schemas,
 };
 use datafusion::datasource::physical_plan::{
@@ -32,13 +33,14 @@ use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::projection::{
     ProjectionExec, ProjectionExpr, ProjectionExprs,
 };
+use datafusion_datasource::compute_all_files_statistics;
 use object_store::ObjectMeta;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::{
     PlainTermEncoding, PlainTermScalar, PlainTermType,
 };
-use rdf_fusion_logical::quad_pattern::QuadPattern;
+use rdf_fusion_logical::quad_pattern::{QuadPattern, compute_quad_pattern_filters};
 use std::sync::Arc;
 
 /// Determines how the projection should be handled during the parquet scan.
@@ -157,7 +159,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
 
         // The original, logical filter over the quad table.
         let combined_logical_filter = if let Some(pattern) = &self.pattern {
-            conjunction(pattern.compute_filters(&self.encoding).await?)
+            conjunction(compute_quad_pattern_filters(pattern, &self.encoding).await?)
         } else {
             None
         };
@@ -366,8 +368,6 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             return Ok((self.file_groups.clone(), Some(stats)));
         }
 
-        let mut total_rows = 0;
-        let mut all_exact = true;
         let mut some_pruned = false;
         let mut all_file_groups = Vec::new();
 
@@ -386,17 +386,10 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                             combined_logical_filter.clone(),
                         )?;
 
-                    pf = pf.with_extension(access_plan);
+                    pf = pf
+                        .with_extension(access_plan)
+                        .with_statistics(Arc::new(stats));
                     some_pruned = true;
-
-                    match stats.num_rows {
-                        Precision::Exact(n) => total_rows += n,
-                        Precision::Inexact(n) => {
-                            total_rows += n;
-                            all_exact = false;
-                        }
-                        Precision::Absent => all_exact = false,
-                    }
                 }
                 new_files.push(pf);
             }
@@ -404,18 +397,14 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         }
 
         let overall_stats = if some_pruned {
-            let precision = if all_exact {
-                Precision::Exact(total_rows)
-            } else {
-                Precision::Inexact(total_rows)
-            };
-            Some(Statistics {
-                num_rows: precision,
-                total_byte_size: Precision::Absent,
-                column_statistics: Statistics::unknown_column(
-                    self.encoding.quad_schema().inner(),
-                ),
-            })
+            let (file_groups, stats) = compute_all_files_statistics(
+                all_file_groups,
+                Arc::clone(self.encoding.quad_schema().inner()),
+                true,
+                false,
+            )?;
+            all_file_groups = file_groups;
+            Some(stats)
         } else {
             None
         };
@@ -552,43 +541,11 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             (access_plan, None)
         };
 
-        // Determine if there are matching rows.
-        let mut row_count = 0;
-        let mut has_matching_row_group = false;
-
-        for (i, rg) in parquet_meta.row_groups().iter().enumerate() {
-            match access_plan.inner()[i] {
-                RowGroupAccess::Skip => {}
-                RowGroupAccess::Scan => {
-                    if rg.num_rows() > 0 {
-                        row_count += rg.num_rows();
-                        has_matching_row_group = true;
-                    }
-                }
-                RowGroupAccess::Selection(ref selection) => {
-                    let count = selection.row_count();
-                    if count > 0 {
-                        row_count += count as i64;
-                        has_matching_row_group = true;
-                    }
-                }
-            }
-        }
-
-        let statistics = if has_matching_row_group {
-            Statistics {
-                num_rows: Precision::Inexact(row_count as usize),
-                total_byte_size: Precision::Absent,
-                column_statistics: Statistics::unknown_column(base_schema.inner()),
-            }
-        } else {
-            Statistics {
-                num_rows: Precision::Exact(0),
-                total_byte_size: Precision::Absent,
-                column_statistics: Statistics::unknown_column(base_schema.inner()),
-            }
-        };
-
+        let statistics = estimate_scan_statistics(
+            parquet_meta,
+            &access_plan,
+            base_schema.inner().as_ref(),
+        );
         Ok((access_plan, physical_filter_expr, statistics))
     }
 }

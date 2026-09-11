@@ -1,5 +1,5 @@
-use crate::active_graph::ActiveGraph;
-use crate::quad_pattern::QuadPattern;
+use crate::ActiveGraph;
+use crate::quad_pattern::{QuadPattern, compute_quad_pattern_schema};
 use datafusion::arrow::datatypes::Fields;
 use datafusion::common::{DFSchema, DFSchemaRef, plan_err};
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
@@ -56,7 +56,7 @@ impl QuadPatternNode {
             pattern,
             BlankNodeMatchingMode::Variable,
         );
-        let schema = pattern.compute_schema(&storage_encoding);
+        let schema = compute_quad_pattern_schema(&pattern, &storage_encoding);
         Self {
             storage_encoding,
             pattern,
@@ -81,7 +81,7 @@ impl QuadPatternNode {
             pattern,
             BlankNodeMatchingMode::Filter,
         );
-        let schema = pattern.compute_schema(&storage_encoding);
+        let schema = compute_quad_pattern_schema(&pattern, &storage_encoding);
         Self {
             storage_encoding,
             pattern,

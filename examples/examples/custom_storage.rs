@@ -1,35 +1,26 @@
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
-use datafusion::catalog::Session;
 use datafusion::common::{HashSet, exec_datafusion_err};
 use datafusion::datasource::TableProvider;
 use datafusion::datasource::{DefaultTableSource, MemTable};
 use datafusion::execution::SessionState;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
-use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode};
-use datafusion::optimizer::{OptimizerContext, OptimizerRule};
+use datafusion::logical_expr::LogicalPlanBuilder;
 use datafusion::physical_plan::ExecutionPlan;
-use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use datafusion::prelude::SessionConfig;
 use rdf_fusion::common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion::common::{
-    DFResult, GraphName, NamedNode, Quad, StorageError, TermPattern,
-};
+use rdf_fusion::common::{GraphName, NamedNode, Quad, QuadPattern, StorageError};
 use rdf_fusion::encoding::object_id::ObjectIdDictionary;
 use rdf_fusion::encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion::encoding::typed_family::TypedFamilyEncoding;
 use rdf_fusion::encoding::{EncodingArray, QuadStorageEncoding};
 use rdf_fusion::execution::RdfFusionContext;
 use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::extensions::RdfFusionContextView;
 use rdf_fusion::extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
-use rdf_fusion::logical::RdfFusionLogicalPlanBuilderContext;
-use rdf_fusion::logical::patterns::PatternLoweringRule;
-use rdf_fusion::logical::quad_pattern::QuadPatternNode;
+use rdf_fusion::logical::quad_pattern::compute_quad_pattern_filters;
 use rdf_fusion::store::Store;
 use std::sync::Arc;
 
@@ -128,76 +119,6 @@ impl QuadStorage for VecQuadStorage {
     }
 }
 
-/// A custom planner that plans the quad pattern nodes based on a given [`MemTable`]. We assume that
-/// the table has the following schema: (graph, subject, predicate, object).
-///
-/// Evaluating a pattern will be done in three steps:
-/// 1. Create a new logical plan that scans the entire quads table
-/// 2. Apply a pattern node
-/// 3. PLan the new logical plan and return the result.
-///
-/// Usually, implementation will tightly couple these three steps to improve performance.
-struct VecQuadStoragePlanner(RdfFusionContextView, Arc<MemTable>);
-
-#[async_trait]
-impl ExtensionPlanner for VecQuadStoragePlanner {
-    async fn plan_extension(
-        &self,
-        planner: &dyn PhysicalPlanner,
-        node: &dyn UserDefinedLogicalNode,
-        _logical_inputs: &[&LogicalPlan],
-        _physical_inputs: &[Arc<dyn ExecutionPlan>],
-        session: &dyn Session,
-        _planning_ctx: &PhysicalPlanningContext,
-    ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
-        // Only plan quad pattern nodes.
-        let Some(node) = node.as_any().downcast_ref::<QuadPatternNode>() else {
-            return Ok(None);
-        };
-
-        // 1. Full Scan
-        let scan = LogicalPlanBuilder::scan(
-            "quads",
-            Arc::new(DefaultTableSource::new(
-                Arc::clone(&self.1) as Arc<dyn TableProvider>
-            )),
-            None,
-        )?;
-
-        // 2. Apply the pattern
-        let builder_context = RdfFusionLogicalPlanBuilderContext::new(self.0.clone());
-        let quad_pattern = node.quad_pattern();
-        let pattern = builder_context
-            .create(Arc::new(scan.build()?))
-            .pattern(vec![
-                quad_pattern
-                    .graph_variable
-                    .clone()
-                    .map(TermPattern::Variable),
-                Some(quad_pattern.triple_pattern.subject.clone()),
-                Some(quad_pattern.triple_pattern.predicate.clone().into()),
-                Some(quad_pattern.triple_pattern.object.clone()),
-            ])?
-            .build()?;
-
-        // 2.2 Lower pattern (Implementing the pattern is not trivial, therefore, we use existing
-        // machinery).
-        let optimizer_context = OptimizerContext::new_with_config_options(Arc::new(
-            session.config_options().clone(),
-        ));
-        let pattern_rewriting_rule = PatternLoweringRule::new(self.0.clone());
-        let pattern = pattern_rewriting_rule
-            .rewrite(pattern, &optimizer_context)?
-            .data;
-
-        // 3. Plan new logical plan
-        planner
-            .create_physical_plan(&pattern, session)
-            .await
-            .map(Some)
-    }
-}
-
 /// Represents a snapshot of the [`VecQuadStorage`].
 struct VecQuadStorageSnapshot {
     /// A copy of the original quad set.
@@ -259,15 +180,56 @@ impl VecQuadStorageSnapshot {
 
 #[async_trait]
 impl QuadStorageSnapshot for VecQuadStorageSnapshot {
-    async fn planners(
+    async fn scan_quad_pattern(
         &self,
-        context: &RdfFusionContextView,
-    ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
+        pattern: &QuadPattern,
+        projection: Option<Vec<usize>>,
+        session_state: &SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        // 1. Full scan of the quads table.
         let mem_table = self.create_mem_table();
-        vec![Arc::new(VecQuadStoragePlanner(
-            context.clone(),
-            Arc::new(mem_table),
-        ))]
+        let scan = LogicalPlanBuilder::scan(
+            "quads",
+            Arc::new(DefaultTableSource::new(
+                Arc::new(mem_table) as Arc<dyn TableProvider>
+            )),
+            None,
+        )?;
+
+        // 2. Apply the pattern as filters over the scan.
+        let filters =
+            compute_quad_pattern_filters(pattern, &QuadStorageEncoding::PlainTerm)
+                .await
+                .map_err(|e| StorageError::Other(Box::new(e)))?;
+        let mut builder = scan;
+        if !filters.is_empty() {
+            let filter = filters
+                .into_iter()
+                .reduce(|acc, expr| acc.and(expr))
+                .expect("filters is not empty");
+            builder = builder.filter(filter)?;
+        }
+
+        // 3. Project the matched quads to the pattern's output columns.
+        let full_projections: Vec<_> = pattern
+            .compute_projection()
+            .into_iter()
+            .map(|(expr, name)| expr.alias(name))
+            .collect();
+        let selected = match &projection {
+            Some(indices) => indices
+                .iter()
+                .map(|&idx| full_projections[idx].clone())
+                .collect::<Vec<_>>(),
+            None => full_projections,
+        };
+        let plan = builder.project(selected)?.build()?;
+
+        // 4. Plan the resulting logical plan through DataFusion.
+        session_state
+            .create_physical_plan(&plan)
+            .await
+            .map_err(|e| StorageError::Other(Box::new(e)))
     }
 
     async fn named_graphs(

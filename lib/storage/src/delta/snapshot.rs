@@ -99,6 +99,38 @@ impl DeltaQuadsStorageSnapshot {
         self.transactional_changeset = Some(changeset);
         self
     }
+
+    /// Plans a scan over the quads matching the given [`QuadPattern`].
+    pub(crate) async fn plan_quad_pattern_scan(
+        &self,
+        pattern: &QuadPattern,
+        projection: Option<Vec<usize>>,
+        session_state: &SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        let mut builder = DeltaQuadsStorageScanPlanBuilder::new(
+            session_state.clone(),
+            pattern.clone(),
+            self.encoding().clone(),
+        )
+        .with_cache(Arc::clone(self.cache()))
+        .with_best_quad_table(self.quad_tables())
+        .map_err(|e| StorageError::Other(Box::new(e)))?
+        .with_changeset_for_log(self.log(), Some(self.version))
+        .await
+        .map_err(|e| StorageError::Other(Box::new(e)))?
+        .with_projection_indices(projection);
+
+        if let Some(transactional) = self.transactional_changeset() {
+            builder = builder.with_changeset(Arc::clone(transactional));
+        }
+
+        let scan_planning_result = builder
+            .build()
+            .await
+            .map_err(|e| StorageError::Other(Box::new(e)))?;
+
+        Ok(scan_planning_result.scan)
+    }
 }
 
 #[async_trait]
@@ -110,6 +142,18 @@ impl QuadStorageSnapshot for DeltaQuadsStorageSnapshot {
         let snapshot = self.clone();
         let planner = DeltaQuadsStoragePlanner::new(snapshot);
         vec![Arc::new(planner)]
+    }
+
+    async fn scan_quad_pattern(
+        &self,
+        pattern: &QuadPattern,
+        projection: Option<Vec<usize>>,
+        session_state: &SessionState,
+    ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
+        let plan =
+            Box::pin(self.plan_quad_pattern_scan(pattern, projection, session_state))
+                .await?;
+        Ok(plan)
     }
 
     async fn named_graphs(
