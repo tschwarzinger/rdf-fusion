@@ -7,6 +7,7 @@ use datafusion::datasource::physical_plan::parquet::{
 use datafusion::error::{DataFusionError, Result as DFResult};
 use datafusion::parquet::arrow::arrow_reader::ArrowReaderOptions;
 use datafusion::parquet::arrow::async_reader::AsyncFileReader;
+use datafusion::parquet::bloom_filter::Sbbf;
 use datafusion::parquet::errors::ParquetError;
 use datafusion::parquet::file::metadata::PageIndexPolicy;
 use datafusion::parquet::file::metadata::ParquetMetaData;
@@ -57,7 +58,17 @@ impl PreloadedParquetMetadata {
     }
 }
 
-type PreloadedBloomFiltersList = Vec<(Range<u64>, Bytes)>;
+/// Represents a preloaded bloom filter along with its location and raw/bitset bytes.
+#[derive(Debug, Clone)]
+pub struct PreloadedBloomFilter {
+    pub row_group: usize,
+    pub column: usize,
+    pub range: Range<u64>,
+    pub raw_bytes: Bytes,
+    pub bitset: Bytes,
+}
+
+pub type PreloadedBloomFiltersList = Vec<PreloadedBloomFilter>;
 type PreloadedBloomFiltersMap =
     HashMap<object_store::path::Path, Arc<PreloadedBloomFiltersList>>;
 
@@ -85,8 +96,30 @@ impl PreloadedBloomFilters {
         if let Some(filters) = cache.get(path) {
             let match_opt = filters
                 .iter()
-                .find(|(r, _)| r == range)
-                .map(|(_, b)| b.clone());
+                .find(|f| &f.range == range)
+                .map(|f| f.raw_bytes.clone());
+            if match_opt.is_some() {
+                self.hit_counter
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            match_opt
+        } else {
+            None
+        }
+    }
+
+    pub fn get_bitset(
+        &self,
+        path: &object_store::path::Path,
+        row_group: usize,
+        column: usize,
+    ) -> Option<Bytes> {
+        let cache = self.cache.read().expect("poisoned lock");
+        if let Some(filters) = cache.get(path) {
+            let match_opt = filters
+                .iter()
+                .find(|f| f.row_group == row_group && f.column == column)
+                .map(|f| f.bitset.clone());
             if match_opt.is_some() {
                 self.hit_counter
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -156,17 +189,25 @@ pub async fn load_parquet_metadata_and_bloom_filters(
         ArrowReaderOptions::new().with_page_index_policy(PageIndexPolicy::Optional);
     let metadata = reader.get_metadata(Some(&options)).await?;
 
-    let mut bloom_filter_ranges = Vec::new();
-    for rg in metadata.row_groups() {
-        for col in rg.columns() {
+    let mut bloom_filter_requests = Vec::new();
+    for (rg_idx, rg) in metadata.row_groups().iter().enumerate() {
+        for (col_idx, col) in rg.columns().iter().enumerate() {
             if let Some(offset) = col.bloom_filter_offset() {
                 if let Some(length) = col.bloom_filter_length() {
-                    bloom_filter_ranges
-                        .push(offset as u64..(offset as u64 + length as u64));
+                    bloom_filter_requests.push((
+                        rg_idx,
+                        col_idx,
+                        offset as u64..(offset as u64 + length as u64),
+                    ));
                 }
             }
         }
     }
+
+    let bloom_filter_ranges: Vec<_> = bloom_filter_requests
+        .iter()
+        .map(|(_, _, range)| range.clone())
+        .collect();
 
     let bloom_filter_bytes = if bloom_filter_ranges.is_empty() {
         Vec::new()
@@ -177,10 +218,35 @@ pub async fn load_parquet_metadata_and_bloom_filters(
             .map_err(|e| DataFusionError::External(Box::new(e)))?
     };
 
-    let filters = bloom_filter_ranges
-        .into_iter()
-        .zip(bloom_filter_bytes)
-        .collect();
+    let mut filters = Vec::with_capacity(bloom_filter_requests.len());
+    for ((row_group, column, range), raw_bytes) in
+        bloom_filter_requests.into_iter().zip(bloom_filter_bytes)
+    {
+        let bitset = match Sbbf::from_bytes(&raw_bytes) {
+            Ok(sbbf) => {
+                let mut bitset_buf = Vec::new();
+                if sbbf.write_bitset(&mut bitset_buf).is_ok() {
+                    let bitset_len = bitset_buf.len();
+                    let bitset_offset = raw_bytes.len().saturating_sub(bitset_len);
+                    raw_bytes.slice(bitset_offset..)
+                } else {
+                    raw_bytes.clone()
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to parse bloom filter header: {e}");
+                raw_bytes.clone()
+            }
+        };
+
+        filters.push(PreloadedBloomFilter {
+            row_group,
+            column,
+            range,
+            raw_bytes,
+            bitset,
+        });
+    }
 
     Ok((metadata, filters))
 }

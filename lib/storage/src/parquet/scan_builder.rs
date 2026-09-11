@@ -8,8 +8,8 @@ use datafusion::common::stats::Precision;
 use datafusion::common::{Column, DFSchema, DFSchemaRef, ExprSchema, Statistics};
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::parquet::{
-    DefaultParquetFileReaderFactory, PagePruningAccessPlanFilter, ParquetAccessPlan,
-    ParquetFileReaderFactory, RowGroupAccessPlanFilter,
+    BloomFilterStatistics, DefaultParquetFileReaderFactory, PagePruningAccessPlanFilter,
+    ParquetAccessPlan, ParquetFileReaderFactory, RowGroupAccessPlanFilter,
     can_expr_be_pushed_down_with_schemas,
 };
 use datafusion::datasource::physical_plan::{
@@ -23,11 +23,16 @@ use datafusion::logical_expr::expr::{BinaryExpr, InList};
 use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::utils::conjunction;
 use datafusion::logical_expr::{Expr, Operator, lit};
+use datafusion::parquet::arrow::parquet_column;
+use datafusion::parquet::basic::Type;
+use datafusion::parquet::bloom_filter::Sbbf;
 use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::create_physical_expr;
 use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
-use datafusion::physical_optimizer::pruning::PruningPredicateBuilder;
+use datafusion::physical_optimizer::pruning::{
+    PruningPredicate, PruningPredicateBuilder,
+};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::projection::{
@@ -348,11 +353,15 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             return Ok((self.file_groups.clone(), None));
         }
 
-        let cache = match &self.reader_factory_type {
+        let (metadata_cache, bloom_cache) = match &self.reader_factory_type {
             ParquetQuadScanReaderFactoryType::Default => {
                 return Ok((self.file_groups.clone(), None));
             }
-            ParquetQuadScanReaderFactoryType::Preloaded(cache, _, _) => cache,
+            ParquetQuadScanReaderFactoryType::Preloaded(
+                metadata_cache,
+                bloom_cache,
+                _,
+            ) => (metadata_cache, bloom_cache),
         };
 
         let total_file_count: usize =
@@ -375,7 +384,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             let mut new_files = Vec::with_capacity(fg.files().len());
             for mut pf in fg.into_inner() {
                 if let Some((parquet_meta, object_meta)) =
-                    cache.get(&pf.object_meta.location)
+                    metadata_cache.get(&pf.object_meta.location)
                 {
                     let (access_plan, _, stats) =
                         ParquetQuadScanBuilder::compute_eager_pruning(
@@ -384,6 +393,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                             parquet_meta.as_ref(),
                             &object_meta,
                             combined_logical_filter.clone(),
+                            Some(bloom_cache),
                         )?;
 
                     pf = pf
@@ -488,6 +498,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         parquet_meta: &ParquetMetaData,
         object_meta: &ObjectMeta,
         combined_logical_filter: Option<Expr>,
+        bloom_cache: Option<&PreloadedBloomFilters>,
     ) -> DFResult<EagerPruningResult> {
         let base_schema = encoding.quad_schema();
         let num_row_groups = parquet_meta.num_row_groups();
@@ -519,6 +530,19 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                     &predicate,
                     &metrics,
                 );
+
+                if let Some(bloom_cache) = bloom_cache {
+                    prune_by_bloom_filters(
+                        &mut rg_filter,
+                        session_state,
+                        parquet_meta,
+                        object_meta,
+                        &base_schema,
+                        &metrics,
+                        predicate.as_ref(),
+                        bloom_cache,
+                    );
+                }
             }
 
             let access_plan = rg_filter.build();
@@ -547,6 +571,73 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             base_schema.inner().as_ref(),
         );
         Ok((access_plan, physical_filter_expr, statistics))
+    }
+}
+
+/// Applies bloom filters to prune row groups.
+#[allow(clippy::too_many_arguments)]
+fn prune_by_bloom_filters(
+    rg_filter: &mut RowGroupAccessPlanFilter,
+    session_state: &SessionState,
+    parquet_meta: &ParquetMetaData,
+    object_meta: &ObjectMeta,
+    base_schema: &DFSchemaRef,
+    metrics: &ParquetFileMetrics,
+    predicate: &PruningPredicate,
+    bloom_cache: &PreloadedBloomFilters,
+) {
+    let enable_bloom_filter = session_state
+        .table_options()
+        .parquet
+        .global
+        .bloom_filter_on_read;
+    if enable_bloom_filter && rg_filter.remaining_row_group_count() > 0 {
+        let parquet_schema = parquet_meta.file_metadata().schema_descr();
+        let arrow_schema = base_schema.inner().as_ref();
+        let literal_columns = predicate.literal_columns();
+        let parquet_columns: Vec<(String, usize, Type, i32)> = literal_columns
+            .into_iter()
+            .filter_map(|column_name| {
+                let (column_idx, _) =
+                    parquet_column(parquet_schema, arrow_schema, &column_name)?;
+                Some((
+                    column_name,
+                    column_idx,
+                    parquet_schema.column(column_idx).physical_type(),
+                    parquet_schema.column(column_idx).type_length(),
+                ))
+            })
+            .collect();
+
+        if !parquet_columns.is_empty() {
+            let mut row_group_bloom_filters =
+                vec![BloomFilterStatistics::new(); parquet_meta.num_row_groups()];
+            for idx in rg_filter.row_group_indexes() {
+                let mut bloom_filters =
+                    BloomFilterStatistics::with_capacity(parquet_columns.len());
+                for (column_name, column_idx, physical_type, type_length) in
+                    &parquet_columns
+                {
+                    if let Some(bitset) =
+                        bloom_cache.get_bitset(&object_meta.location, idx, *column_idx)
+                    {
+                        let bf = Sbbf::new(&bitset);
+                        bloom_filters.insert(
+                            column_name.clone(),
+                            bf,
+                            *physical_type,
+                            *type_length,
+                        );
+                    }
+                }
+                row_group_bloom_filters[idx] = bloom_filters;
+            }
+            rg_filter.prune_by_bloom_filters(
+                predicate,
+                metrics,
+                &row_group_bloom_filters,
+            );
+        }
     }
 }
 
