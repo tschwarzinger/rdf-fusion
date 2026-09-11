@@ -123,26 +123,25 @@ impl DeltaStorageQuadTableUpdater {
             SortExec::new(ordering.clone(), plan).with_preserve_partitioning(true),
         ) as Arc<dyn ExecutionPlan>;
 
-        let should_merge = sorted_plan
-            .properties()
-            .output_partitioning()
-            .partition_count()
-            > 1;
-        let merged_partitions = if should_merge {
-            Arc::new(SortPreservingMergeExec::new(ordering, sorted_plan))
-                as Arc<dyn ExecutionPlan>
-        } else {
-            sorted_plan
-        };
-
         let rules = [
             Arc::new(EnsureRequirements::new()) as Arc<dyn PhysicalOptimizerRule>,
             Arc::new(SanityCheckPlan::new()) as Arc<dyn PhysicalOptimizerRule>,
         ];
         let config = self.state.config_options();
-        let mut rewritten_plan = merged_partitions;
+        let mut rewritten_plan = sorted_plan;
         for rule in rules {
             rewritten_plan = rule.optimize(rewritten_plan, config)?;
+        }
+
+        let should_merge = rewritten_plan
+            .properties()
+            .output_partitioning()
+            .partition_count()
+            > 1;
+        if should_merge {
+            rewritten_plan =
+                Arc::new(SortPreservingMergeExec::new(ordering, rewritten_plan))
+                    as Arc<dyn ExecutionPlan>;
         }
 
         Ok(rewritten_plan)
@@ -152,6 +151,7 @@ impl DeltaStorageQuadTableUpdater {
         &self,
         quads: Arc<dyn ExecutionPlan>,
     ) -> Result<Vec<Action>, DeltaQuadsStorageError> {
+        let quads: Arc<dyn ExecutionPlan> = quads;
         if quads.output_partitioning().partition_count() != 1 {
             return Err(DeltaQuadsStorageError::Other(
                 "QuadTable update requires a single partition".to_string(),

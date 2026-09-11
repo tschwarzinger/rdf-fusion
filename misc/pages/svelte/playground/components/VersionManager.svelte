@@ -18,7 +18,8 @@
             showStatistics: false
         },
         dataFusion: {
-            enableDynamicFilterPushdown: true
+            enableDynamicFilterPushdown: true,
+            enableJoinReordering: false
         },
         rdfFusion: {
             enableDataCache: true,
@@ -86,7 +87,8 @@
                 showStatistics: false
             },
             dataFusion: {
-                enableDynamicFilterPushdown: true
+                enableDynamicFilterPushdown: true,
+                enableJoinReordering: false
             },
             rdfFusion: {
                 enableDataCache: true,

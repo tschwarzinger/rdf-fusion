@@ -49,6 +49,7 @@ const defaultEngineSettings = {
     },
     dataFusion: {
         enableDynamicFilterPushdown: true,
+        enableJoinReordering: false,
         targetPartitions: 1
     },
     rdfFusion: {

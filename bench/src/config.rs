@@ -1,7 +1,7 @@
 use clap::ValueEnum;
 use datafusion::prelude::SessionConfig;
-use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::execution::session_config_from_env_for_rdf_fusion;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -87,14 +87,7 @@ impl BenchmarkingConfig {
 
         // Populate our config variables using standard environment variables
         config.apply_env_vars(|key| std::env::var(key).ok())?;
-
-        // Initialize DataFusion session config from env
-        let mut df_config = SessionConfig::from_env()?;
-        df_config
-            .options_mut()
-            .extensions
-            .insert(RdfFusionOptions::from_env()?);
-        config.data_fusion_config = df_config;
+        config.data_fusion_config = session_config_from_env_for_rdf_fusion()?;
 
         Ok(config)
     }

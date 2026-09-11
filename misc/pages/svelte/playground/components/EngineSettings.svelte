@@ -47,7 +47,7 @@
             aria-controls="settingsDataFusionCollapse">
             <div>
                 <strong class="text-dark">DataFusion Options</strong>
-                <span class="text-muted small ms-2 d-none d-sm-inline">({settings.memoryLimit} MB RAM, Filter Pushdown: {settings.dataFusion.enableDynamicFilterPushdown ? 'On' : 'Off'})</span>
+                <span class="text-muted small ms-2 d-none d-sm-inline">({settings.memoryLimit} MB RAM, Filter Pushdown: {settings.dataFusion.enableDynamicFilterPushdown ? 'On' : 'Off'}, Join Reordering: {settings.dataFusion.enableJoinReordering ? 'On' : 'Off'})</span>
             </div>
             <i class="fa-solid fa-chevron-down text-muted small"></i>
         </div>
@@ -81,6 +81,13 @@
                         <label class="form-check-label small" for="dfDynamicFilter">
                             Enable Dynamic Filter Pushdown
                             <div class="text-muted" style="font-size: 0.75rem;">datafusion.optimizer.enable_dynamic_filter_pushdown</div>
+                        </label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="dfJoinReordering" bind:checked={settings.dataFusion.enableJoinReordering}>
+                        <label class="form-check-label small" for="dfJoinReordering">
+                            Enable Join Reordering
+                            <div class="text-muted" style="font-size: 0.75rem;">datafusion.optimizer.join_reordering</div>
                         </label>
                     </div>
                 </div>

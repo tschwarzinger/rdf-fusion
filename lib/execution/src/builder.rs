@@ -34,7 +34,7 @@ impl RdfFusionContextBuilder {
     pub fn new_from_env(quad_storage: Arc<dyn QuadStorage>) -> DFResult<Self> {
         Ok(Self {
             quad_storage,
-            session_config: Some(SessionConfig::from_env()?),
+            session_config: Some(session_config_from_env_for_rdf_fusion()?),
             query_runtime: None,
             register_in_memory_store: true,
         })
@@ -76,7 +76,7 @@ impl RdfFusionContextBuilder {
     pub fn build(self) -> DFResult<RdfFusionContext> {
         let typed_family_encoding = Arc::new(TypedFamilyEncoding::default());
         let mut session_config = match self.session_config {
-            None => SessionConfig::from_env()?,
+            None => session_config_from_env_for_rdf_fusion()?,
             Some(session_config) => session_config,
         };
 
@@ -121,4 +121,21 @@ impl RdfFusionContextBuilder {
             typed_family_encoding,
         ))
     }
+}
+
+/// Loads a [`SessionConfig`] from the environment with RDF Fusion defaults and [`RdfFusionOptions`]
+/// installed.
+pub fn session_config_from_env_for_rdf_fusion() -> DFResult<SessionConfig> {
+    let mut session_config = SessionConfig::from_env()?;
+
+    if std::env::var("DATAFUSION_OPTIMIZER_JOIN_REORDERING").is_err() {
+        session_config.options_mut().optimizer.join_reordering = false;
+    }
+
+    session_config
+        .options_mut()
+        .extensions
+        .insert(RdfFusionOptions::from_env()?);
+
+    Ok(session_config)
 }

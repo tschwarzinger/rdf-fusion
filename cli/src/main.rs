@@ -14,9 +14,11 @@ use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use object_store::aws::AmazonS3Builder;
 use object_store::http::HttpBuilder;
-use rdf_fusion::common::config::RdfFusionOptions;
+use rdf_fusion::common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::execution::{RdfFusionContext, RdfFusionContextBuilder};
+use rdf_fusion::execution::{
+    RdfFusionContext, RdfFusionContextBuilder, session_config_from_env_for_rdf_fusion,
+};
 use rdf_fusion::storage::delta::{DeltaQuadsStorageBuilder, LoadMode};
 use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::store::Store;
@@ -142,13 +144,15 @@ pub async fn main() -> anyhow::Result<()> {
 
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
+    let session_config = create_cli_session_config()?;
+    let rdf_fusion_options = session_config.rdf_fusion_options_or_default();
+
     let runtime_env = build_runtime_env(args)?;
 
     let encoding = QuadStorageEncodingName::from_str(&args.storage.encoding)?;
     let location = Url::parse(&resolve_location(&args.storage.location)?)
         .context("Invalid object store URL")?;
 
-    let (session_config, rdf_fusion_options) = create_engine_config(&location)?;
     let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
         cli::QuadStorageType::DeltaQuads => {
             create_delta_storage(
@@ -185,24 +189,18 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
     Ok(Store::new(context))
 }
 
-/// Creates the engine configuration from the environment.
-fn create_engine_config(
-    location: &Url,
-) -> anyhow::Result<(SessionConfig, RdfFusionOptions)> {
-    let mut session_config = SessionConfig::from_env()?;
-    let mut rdf_fusion_options = RdfFusionOptions::from_env()?;
-    let is_default_small_scan_buffering_threshold =
-        env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD").is_err();
-    if !matches!(location.scheme(), "file" | "memory")
-        && is_default_small_scan_buffering_threshold
-    {
-        rdf_fusion_options.execution.small_scan_buffering_threshold = 1024 * 1024;
+fn create_cli_session_config() -> anyhow::Result<SessionConfig> {
+    let mut config = session_config_from_env_for_rdf_fusion()?;
+
+    // CLI-specific overrides
+    if env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD").is_err() {
+        config = config.set_str(
+            "rdf_fusion.execution.small_scan_buffering_threshold",
+            "512K",
+        )
     }
-    session_config
-        .options_mut()
-        .extensions
-        .insert(rdf_fusion_options.clone());
-    Ok((session_config, rdf_fusion_options))
+
+    Ok(config)
 }
 
 /// Helper to create a `DeltaQuadsStorage` instance.
@@ -248,7 +246,7 @@ async fn create_context_for_parquet_load(
 ) -> anyhow::Result<RdfFusionContext> {
     let runtime_env = build_runtime_env(args)?;
 
-    let mut session_config = SessionConfig::from_env()?;
+    let mut session_config = session_config_from_env_for_rdf_fusion()?;
     let rdf_fusion_options = RdfFusionOptions::from_env()?;
     session_config
         .options_mut()

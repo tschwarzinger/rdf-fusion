@@ -524,6 +524,7 @@
 
         const dfConfigObj = {
             "datafusion.optimizer.enable_dynamic_filter_pushdown": $engineSettings.dataFusion.enableDynamicFilterPushdown ? "true" : "false",
+            "datafusion.optimizer.join_reordering": $engineSettings.dataFusion.enableJoinReordering ? "true" : "false",
             "datafusion.execution.target_partitions": String($engineSettings.dataFusion.targetPartitions || 1)
         };
 

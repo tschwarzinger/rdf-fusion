@@ -10,7 +10,9 @@ use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use rdf_fusion::common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
 use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::execution::RdfFusionContextBuilder;
+use rdf_fusion::execution::{
+    RdfFusionContextBuilder, session_config_from_env_for_rdf_fusion,
+};
 use rdf_fusion::storage::delta::{DeltaQuadsStorageBuilder, LoadMode};
 use rdf_fusion::storage::parquet::ParquetQuadStorage;
 use rdf_fusion::storage::parquet::RdfParquetLoader;
@@ -132,11 +134,12 @@ impl RdfFusionBenchContext {
         storage_encoding: QuadStorageEncodingName,
         target_partitions: usize,
     ) -> RdfFusionBenchContextBuilder {
-        let mut config = SessionConfig::new();
+        let mut config = session_config_from_env_for_rdf_fusion()
+            .expect("Could not create session config");
         config.options_mut().execution.target_partitions = target_partitions;
         config.options_mut().execution.parquet.pushdown_filters = true;
 
-        let mut options = RdfFusionOptions::default();
+        let mut options = RdfFusionOptions::from_env().expect("Could not create options");
         options.storage.delta.assume_single_node = true;
         config.options_mut().extensions.insert(options);
 
