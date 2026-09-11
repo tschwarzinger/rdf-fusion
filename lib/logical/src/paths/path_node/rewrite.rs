@@ -1,14 +1,10 @@
 use crate::logical_plan_builder_context::RdfFusionLogicalPlanBuilderContext;
 use crate::paths::kleene_plus::KleenePlusClosureNode;
 use crate::paths::{COL_PATH_GRAPH, COL_PATH_SOURCE, COL_PATH_TARGET, PropertyPathNode};
-use crate::patterns::PatternNode;
-use crate::{ActiveGraph, RdfFusionExprBuilderContext, check_same_schema};
-use datafusion::common::tree_node::{Transformed, TreeNode};
+use crate::patterns::{PatternNode, lower_pattern_nodes};
+use crate::{ActiveGraph, RdfFusionExprBuilderContext};
 use datafusion::common::{Column, JoinType, NullEquality, plan_datafusion_err};
-use datafusion::logical_expr::{
-    Expr, Extension, LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode, col,
-};
-use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
+use datafusion::logical_expr::{Expr, Extension, LogicalPlan, LogicalPlanBuilder, col};
 use datafusion::prelude::{and, not, or};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -20,43 +16,23 @@ use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_extensions::RdfFusionContextView;
 use std::sync::Arc;
 
-#[derive(Debug)]
-pub struct PropertyPathLoweringRule {
+/// The lowering of a [PropertyPathNode] into a regular logical plan.
+struct PropertyPathLowering<'a> {
     /// The RDF Fusion configuration.
-    context: RdfFusionContextView,
+    context: &'a RdfFusionContextView,
 }
 
-impl OptimizerRule for PropertyPathLoweringRule {
-    fn name(&self) -> &str {
-        "property-path-lowering"
-    }
-
-    fn rewrite(
-        &self,
-        plan: LogicalPlan,
-        _config: &dyn OptimizerConfig,
-    ) -> DFResult<Transformed<LogicalPlan>> {
-        plan.transform_up(|plan| {
-            let new_plan = match &plan {
-                LogicalPlan::Extension(Extension { node }) => {
-                    if let Some(node) = node.as_any().downcast_ref::<PropertyPathNode>() {
-                        let new_plan = self.rewrite_property_path_node(node)?;
-                        check_same_schema(node.schema(), new_plan.schema())?;
-                        Transformed::yes(new_plan)
-                    } else {
-                        Transformed::no(plan)
-                    }
-                }
-                _ => Transformed::no(plan),
-            };
-            Ok(new_plan)
-        })
-    }
+/// Rewrites a [PropertyPathNode] into a regular logical plan.
+pub(crate) fn rewrite_property_path_node(
+    node: &PropertyPathNode,
+    context: &RdfFusionContextView,
+) -> DFResult<LogicalPlan> {
+    PropertyPathLowering::new(context).rewrite_property_path_node(node)
 }
 
-impl PropertyPathLoweringRule {
-    /// Creates a new [PropertyPathLoweringRule].
-    pub fn new(context: RdfFusionContextView) -> Self {
+impl<'a> PropertyPathLowering<'a> {
+    /// Creates a new [PropertyPathLowering].
+    fn new(context: &'a RdfFusionContextView) -> Self {
         Self { context }
     }
 
@@ -82,7 +58,9 @@ impl PropertyPathLoweringRule {
                 ],
             )?),
         });
-        Ok(logical_plan)
+
+        // Fully lower the produced plan, including any nested [PatternNode]s.
+        lower_pattern_nodes(logical_plan, self.context)
     }
 
     /// The resulting query always has a column "start" and "end" that indicates the respective start
@@ -124,7 +102,7 @@ impl PropertyPathLoweringRule {
         node: &NamedNode,
     ) -> DFResult<LogicalPlanBuilder> {
         let filter = RdfFusionExprBuilderContext::new(
-            &self.context,
+            self.context,
             &QuadStorageEncoding::PlainTerm.quad_schema(),
         )
         .try_create_builder(col(COL_PREDICATE))?
@@ -140,7 +118,7 @@ impl PropertyPathLoweringRule {
         nodes: &[NamedNode],
     ) -> DFResult<LogicalPlanBuilder> {
         let schema = QuadStorageEncoding::PlainTerm.quad_schema();
-        let predicate_builder = RdfFusionExprBuilderContext::new(&self.context, &schema)
+        let predicate_builder = RdfFusionExprBuilderContext::new(self.context, &schema)
             .try_create_builder(col(COL_PREDICATE))?;
 
         let test_expressions = nodes
@@ -277,7 +255,7 @@ impl PropertyPathLoweringRule {
 
         let join_schema = lhs.schema().join(rhs.schema())?;
         let expr_builder_root =
-            RdfFusionExprBuilderContext::new(&self.context, &join_schema);
+            RdfFusionExprBuilderContext::new(self.context, &join_schema);
         let filter = create_path_sequence_join_filter(inf, expr_builder_root)?;
 
         let join_result = lhs.join_detailed(

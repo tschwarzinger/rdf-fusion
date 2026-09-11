@@ -1,66 +1,51 @@
+use crate::RdfFusionExprBuilderContext;
 use crate::expr_builder::RdfFusionExprBuilder;
 use crate::patterns::PatternNode;
-use crate::{RdfFusionExprBuilderContext, check_same_schema};
 use datafusion::common::tree_node::{Transformed, TreeNode};
-use datafusion::logical_expr::{
-    Extension, LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode, and, col,
-};
-use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
+use datafusion::logical_expr::{Extension, LogicalPlan, LogicalPlanBuilder, and, col};
 use datafusion::prelude::Expr;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::{Term, TermPattern};
 use rdf_fusion_extensions::RdfFusionContextView;
 use std::collections::{HashMap, HashSet};
 
-/// This rule is responsible for lowering a [PatternNode] into a set of filters and projections.
-#[derive(Debug)]
-pub struct PatternLoweringRule {
-    /// The RDF Fusion configuration.
-    context: RdfFusionContextView,
+/// Rewrites a [PatternNode] into a set of filters and projections.
+pub(crate) fn rewrite_pattern_node(
+    node: &PatternNode,
+    context: &RdfFusionContextView,
+) -> DFResult<LogicalPlan> {
+    let plan = LogicalPlanBuilder::from(node.input().clone());
+
+    let filter = compute_filters_for_pattern(context, node)?;
+    let plan = match filter {
+        None => plan,
+        Some(filter) => plan.filter(filter)?,
+    };
+    project_to_variables(plan, node.patterns())?.build()
 }
 
-impl PatternLoweringRule {
-    /// Creates a new [PatternLoweringRule].
-    pub fn new(context: RdfFusionContextView) -> Self {
-        Self { context }
-    }
-}
-
-impl OptimizerRule for PatternLoweringRule {
-    fn name(&self) -> &str {
-        "pattern-node-lowering"
-    }
-
-    fn rewrite(
-        &self,
-        plan: LogicalPlan,
-        _config: &dyn OptimizerConfig,
-    ) -> DFResult<Transformed<LogicalPlan>> {
-        plan.transform_up(|plan| {
-            let new_plan = match &plan {
-                LogicalPlan::Extension(Extension { node }) => {
-                    if let Some(node) = node.as_any().downcast_ref::<PatternNode>() {
-                        let plan = LogicalPlanBuilder::from(node.input().clone());
-
-                        let filter = compute_filters_for_pattern(&self.context, node)?;
-                        let plan = match filter {
-                            None => plan,
-                            Some(filter) => plan.filter(filter)?,
-                        };
-                        let new_plan =
-                            project_to_variables(plan, node.patterns())?.build()?;
-
-                        check_same_schema(node.schema(), new_plan.schema())?;
-                        Transformed::yes(new_plan)
-                    } else {
-                        Transformed::no(plan)
-                    }
+/// Lowers every [PatternNode] in the given plan into a set of filters and projections.
+///
+/// This is used by rewriters that introduce [PatternNode]s as part of their lowering (e.g.,
+/// property paths) so that the resulting plan is fully lowered.
+pub(crate) fn lower_pattern_nodes(
+    plan: LogicalPlan,
+    context: &RdfFusionContextView,
+) -> DFResult<LogicalPlan> {
+    plan.transform_up(|plan| {
+        let new_plan = match &plan {
+            LogicalPlan::Extension(Extension { node }) => {
+                if let Some(node) = node.as_any().downcast_ref::<PatternNode>() {
+                    Transformed::yes(rewrite_pattern_node(node, context)?)
+                } else {
+                    Transformed::no(plan)
                 }
-                _ => Transformed::no(plan),
-            };
-            Ok(new_plan)
-        })
-    }
+            }
+            _ => Transformed::no(plan),
+        };
+        Ok(new_plan)
+    })
+    .map(|t| t.data)
 }
 
 /// Computes the filters that will be applied for a given [PatternNode]. Callers can use this

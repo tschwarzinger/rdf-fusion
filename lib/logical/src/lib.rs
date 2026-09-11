@@ -24,6 +24,7 @@ pub mod extend;
 pub mod join;
 mod logical_plan_builder;
 mod logical_plan_builder_context;
+pub mod lowering;
 pub mod minus;
 pub mod paths;
 pub mod patterns; // TODO: Remove this once we have a better way for property paths

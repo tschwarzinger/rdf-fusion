@@ -1,59 +1,21 @@
 use crate::RdfFusionExprBuilderContext;
-use crate::check_same_schema;
 use crate::minus::MinusNode;
-use datafusion::common::tree_node::{Transformed, TreeNode};
 use datafusion::common::{
     Column, DFSchemaRef, JoinType, NullEquality, plan_datafusion_err,
 };
-use datafusion::logical_expr::{Expr, UserDefinedLogicalNode, and};
-use datafusion::logical_expr::{Extension, LogicalPlan, LogicalPlanBuilder};
-use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
+use datafusion::logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, and};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_extensions::RdfFusionContextView;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-/// An optimizer rule that lowers a [MinusNode] into a left-anti join.
-#[derive(Debug)]
-pub struct MinusLoweringRule {
+/// The lowering for a [MinusNode] into a left-anti join.
+struct MinusLowering<'a> {
     /// The RDF Fusion configuration.
-    context: RdfFusionContextView,
+    context: &'a RdfFusionContextView,
 }
 
-impl OptimizerRule for MinusLoweringRule {
-    fn name(&self) -> &str {
-        "minus-lowering"
-    }
-
-    fn rewrite(
-        &self,
-        plan: LogicalPlan,
-        _config: &dyn OptimizerConfig,
-    ) -> DFResult<Transformed<LogicalPlan>> {
-        plan.transform_up(|plan| {
-            let new_plan = match &plan {
-                LogicalPlan::Extension(Extension { node }) => {
-                    if let Some(node) = node.as_any().downcast_ref::<MinusNode>() {
-                        let new_plan = self.rewrite_minus(node)?;
-                        check_same_schema(node.schema(), new_plan.schema())?;
-                        Transformed::yes(new_plan)
-                    } else {
-                        Transformed::no(plan)
-                    }
-                }
-                _ => Transformed::no(plan),
-            };
-            Ok(new_plan)
-        })
-    }
-}
-
-impl MinusLoweringRule {
-    /// Creates a new [MinusLoweringRule].
-    pub fn new(context: RdfFusionContextView) -> Self {
-        Self { context }
-    }
-
+impl<'a> MinusLowering<'a> {
     /// Rewrites a [MinusNode] into a left-anti join.
     fn rewrite_minus(&self, node: &MinusNode) -> DFResult<LogicalPlan> {
         let overlapping_keys = compute_join_keys(node);
@@ -104,7 +66,7 @@ impl MinusLoweringRule {
         let mut join_schema = lhs_schema.as_ref().clone();
         join_schema.merge(rhs_schema);
         let expr_builder_root =
-            RdfFusionExprBuilderContext::new(&self.context, &join_schema);
+            RdfFusionExprBuilderContext::new(self.context, &join_schema);
 
         let mut join_filters = Vec::new();
 
@@ -133,6 +95,21 @@ impl MinusLoweringRule {
 
         let filter_expr = join_filters.into_iter().reduce(Expr::and);
         Ok(filter_expr)
+    }
+}
+
+/// Rewrites a [MinusNode] into a left-anti join.
+pub(crate) fn rewrite_minus_node(
+    node: &MinusNode,
+    context: &RdfFusionContextView,
+) -> DFResult<LogicalPlan> {
+    MinusLowering::new(context).rewrite_minus(node)
+}
+
+impl<'a> MinusLowering<'a> {
+    /// Creates a new [MinusLowering].
+    fn new(context: &'a RdfFusionContextView) -> Self {
+        Self { context }
     }
 }
 

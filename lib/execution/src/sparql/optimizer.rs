@@ -7,15 +7,9 @@ use datafusion::optimizer::{Optimizer, OptimizerRule};
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_optimizer::optimizer::PhysicalOptimizer;
 use rdf_fusion_extensions::RdfFusionContextView;
-use rdf_fusion_logical::bgp::{
-    BgpDecodePushdownRule, BgpFilterPushdownRule, BgpProjectionPushdownRule,
-};
+use rdf_fusion_logical::bgp::BgpPushdownRule;
 use rdf_fusion_logical::expr::SimplifySparqlExpressionsRule;
-use rdf_fusion_logical::extend::ExtendLoweringRule;
-use rdf_fusion_logical::join::SparqlJoinLoweringRule;
-use rdf_fusion_logical::minus::MinusLoweringRule;
-use rdf_fusion_logical::paths::PropertyPathLoweringRule;
-use rdf_fusion_logical::patterns::PatternLoweringRule;
+use rdf_fusion_logical::lowering::RdfFusionLoweringRule;
 use std::sync::Arc;
 
 /// Creates a list of optimizer rules based on the given `optimization_level`.
@@ -24,14 +18,8 @@ pub fn create_optimizer_rules(
     optimization_level: OptimizationLevel,
 ) -> Vec<Arc<dyn OptimizerRule + Send + Sync>> {
     let lowering_rules: Vec<Arc<dyn OptimizerRule + Send + Sync>> = vec![
-        Arc::new(BgpDecodePushdownRule),
-        Arc::new(BgpFilterPushdownRule),
-        Arc::new(BgpProjectionPushdownRule),
-        Arc::new(MinusLoweringRule::new(context.clone())),
-        Arc::new(ExtendLoweringRule::new()),
-        Arc::new(PropertyPathLoweringRule::new(context.clone())),
-        Arc::new(SparqlJoinLoweringRule::new(context.clone())),
-        Arc::new(PatternLoweringRule::new(context.clone())),
+        Arc::new(RdfFusionLoweringRule::new(context.clone())),
+        Arc::new(BgpPushdownRule),
     ];
 
     match optimization_level {

@@ -1,61 +1,30 @@
 use crate::RdfFusionExprBuilderContext;
-use crate::check_same_schema;
 use crate::join::{SparqlJoinNode, SparqlJoinType};
 use datafusion::common::tree_node::{Transformed, TreeNode};
 use datafusion::common::{
     Column, ExprSchema, JoinConstraint, JoinType, NullEquality, plan_err,
 };
 use datafusion::logical_expr::{Expr, ExprSchemable, Join, UserDefinedLogicalNode};
-use datafusion::logical_expr::{Extension, LogicalPlan, LogicalPlanBuilder};
-use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
+use datafusion::logical_expr::{LogicalPlan, LogicalPlanBuilder};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_extensions::RdfFusionContextView;
 use std::collections::HashSet;
 
-/// A rewriting rule that transforms SPARQL join operations into DataFusion join operations.
+/// The lowering of SPARQL join operations into DataFusion join operations.
 ///
-/// The rewriting rule incorporates nullability information to reduce the is_compatible check
+/// The lowering incorporates nullability information to reduce the is_compatible check
 /// to equality if the joined columns cannot be null.
 ///
 /// # Additional Resources
 /// /// - [SPARQL 1.1 - Compatibile Mappings](https://www.w3.org/TR/sparql11-query/#defn_algCompatibleMapping)
-#[derive(Debug)]
-pub struct SparqlJoinLoweringRule {
+struct SparqlJoinLowering<'a> {
     /// The RDF Fusion configuration
-    context: RdfFusionContextView,
+    context: &'a RdfFusionContextView,
 }
 
-impl OptimizerRule for SparqlJoinLoweringRule {
-    fn name(&self) -> &str {
-        "sparql-join-lowering"
-    }
-
-    fn rewrite(
-        &self,
-        plan: LogicalPlan,
-        _config: &dyn OptimizerConfig,
-    ) -> DFResult<Transformed<LogicalPlan>> {
-        plan.transform_up(|plan| {
-            let new_plan = match &plan {
-                LogicalPlan::Extension(Extension { node }) => {
-                    if let Some(node) = node.as_any().downcast_ref::<SparqlJoinNode>() {
-                        let new_plan = self.rewrite_sparql_join(node)?;
-                        check_same_schema(node.schema(), new_plan.schema())?;
-                        Transformed::yes(new_plan)
-                    } else {
-                        Transformed::no(plan)
-                    }
-                }
-                _ => Transformed::no(plan),
-            };
-            Ok(new_plan)
-        })
-    }
-}
-
-impl SparqlJoinLoweringRule {
-    /// Creates a new instance of the SPARQL join lowering rule.
-    pub fn new(context: RdfFusionContextView) -> Self {
+impl<'a> SparqlJoinLowering<'a> {
+    /// Creates a new instance of the SPARQL join lowering.
+    fn new(context: &'a RdfFusionContextView) -> Self {
         Self { context }
     }
 
@@ -193,7 +162,7 @@ impl SparqlJoinLoweringRule {
         let mut join_schema = lhs.schema().as_ref().clone();
         join_schema.merge(rhs.schema());
         let expr_builder_root =
-            RdfFusionExprBuilderContext::new(&self.context, &join_schema);
+            RdfFusionExprBuilderContext::new(self.context, &join_schema);
 
         let mut join_filters = join_on
             .iter()
@@ -245,7 +214,7 @@ impl SparqlJoinLoweringRule {
         let mut join_schema = lhs.schema().as_ref().clone();
         join_schema.merge(rhs.schema());
         let expr_builder_root =
-            RdfFusionExprBuilderContext::new(&self.context, &join_schema);
+            RdfFusionExprBuilderContext::new(self.context, &join_schema);
 
         let (lhs_keys, rhs_keys) = get_join_keys(node);
         let projections = node
@@ -291,7 +260,7 @@ impl SparqlJoinLoweringRule {
         let mut join_schema = lhs.schema().as_ref().clone();
         join_schema.merge(rhs.schema());
         let expr_builder_root =
-            RdfFusionExprBuilderContext::new(&self.context, &join_schema);
+            RdfFusionExprBuilderContext::new(self.context, &join_schema);
 
         let (lhs_keys, rhs_keys) = get_join_keys(node);
         let filter = filter
@@ -311,6 +280,14 @@ impl SparqlJoinLoweringRule {
             .data;
         Ok(filter)
     }
+}
+
+/// Rewrites a [SparqlJoinNode] into a DataFusion join operation.
+pub(crate) fn rewrite_sparql_join_node(
+    node: &SparqlJoinNode,
+    context: &RdfFusionContextView,
+) -> DFResult<LogicalPlan> {
+    SparqlJoinLowering::new(context).rewrite_sparql_join(node)
 }
 
 /// Returns an expression that obtains value `variable` from either the lhs, the rhs, or both
@@ -386,7 +363,7 @@ mod tests {
     use datafusion::arrow::datatypes::Field;
     use datafusion::common::DFSchema;
     use datafusion::logical_expr::EmptyRelation;
-    use datafusion::optimizer::OptimizerContext;
+    use datafusion::logical_expr::Extension;
     use insta::assert_snapshot;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
@@ -473,10 +450,10 @@ mod tests {
     }
 
     fn rewrite_plan(ctx: RdfFusionContextView, plan: LogicalPlan) -> LogicalPlan {
-        let config = OptimizerContext::new();
-        SparqlJoinLoweringRule::new(ctx)
-            .rewrite(plan, &config)
-            .unwrap()
-            .data
+        let LogicalPlan::Extension(Extension { node }) = &plan else {
+            panic!("expected extension node");
+        };
+        let node = node.as_any().downcast_ref::<SparqlJoinNode>().unwrap();
+        rewrite_sparql_join_node(node, &ctx).unwrap()
     }
 }
