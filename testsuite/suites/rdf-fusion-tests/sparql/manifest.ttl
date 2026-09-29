@@ -10,6 +10,7 @@
     mf:entries
     (
         :complex_expression_in_order_by
+        :order_by_aggregate_alias
     ) .
 
 :complex_expression_in_order_by rdf:type mf:QueryEvaluationTest ;
@@ -19,3 +20,9 @@
            qt:data   <complex_expression_in_order_by.ttl> ] ;
     mf:result  <complex_expression_in_order_by.srx> .
 
+:order_by_aggregate_alias rdf:type mf:QueryEvaluationTest ;
+    mf:name "A SPARQL query with an aggregate alias in the ORDER BY clause" ;
+    mf:action
+         [ qt:query  <order_by_aggregate_alias.rq> ;
+           qt:data   <order_by_aggregate_alias.ttl> ] ;
+    mf:result  <order_by_aggregate_alias.srx> .

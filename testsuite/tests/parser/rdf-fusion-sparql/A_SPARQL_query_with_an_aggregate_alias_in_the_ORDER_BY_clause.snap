@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: school AS school, ENC_PT(count) AS count
+  Limit: skip=0, fetch=1
+    Sort: AS_SORTABLE_BYTES(count) DESC NULLS FIRST
+      Aggregate: groupBy=[[school AS school]], aggr=[[COUNT(thesis) AS count]]
+        QuadPattern: triple_pattern=[?thesis <http://example.com/thesisAcceptedBySchool> ?school]

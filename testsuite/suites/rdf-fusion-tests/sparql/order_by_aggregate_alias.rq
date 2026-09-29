@@ -1,0 +1,8 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?school (COUNT(?thesis) AS ?count) WHERE {
+  ?thesis ex:thesisAcceptedBySchool ?school .
+}
+GROUP BY ?school
+ORDER BY DESC(?count)
+LIMIT 1

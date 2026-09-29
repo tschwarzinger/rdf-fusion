@@ -128,6 +128,9 @@ impl ExtensionOptions for RdfFusionOptions {
     }
 
     fn set(&mut self, key: &str, value: &str) -> DFResult<()> {
+        let key = key
+            .strip_prefix(&format!("{}.", Self::PREFIX))
+            .unwrap_or(key);
         match key {
             "execution.small_scan_buffering_threshold" => {
                 self.execution.small_scan_buffering_threshold =
@@ -224,7 +227,7 @@ impl ExtensionOptions for RdfFusionOptions {
             "storage.rdf.assume_quads_unique_in_single_file" => {
                 let value: bool = value.parse().map_err(|e| {
                     DataFusionError::Configuration(format!(
-                        "Invalid value for storage.delta.log_max_age: {e}"
+                        "Invalid value for storage.rdf.assume_quads_unique_in_single_file: {e}"
                     ))
                 })?;
 
@@ -348,53 +351,42 @@ impl RdfFusionOptions {
         Self::default()
     }
 
+    /// Returns the environment variable name corresponding to a configuration ID or key.
+    fn env_var_for_id(id: &str) -> String {
+        let prefix = format!("{}.", Self::PREFIX);
+        let full_key = if id.starts_with(&prefix) {
+            id.to_string()
+        } else {
+            format!("{prefix}{id}")
+        };
+        full_key.replace('.', "_").to_ascii_uppercase()
+    }
+
+    /// Returns a list of `(env_var_name, config_id)` mappings for all configuration options.
+    fn env_mappings() -> Vec<(String, String)> {
+        let prefix = format!("{}.", Self::PREFIX);
+        Self::default()
+            .entries()
+            .into_iter()
+            .map(|entry| {
+                let env_var = Self::env_var_for_id(&entry.key);
+                let id = entry
+                    .key
+                    .strip_prefix(&prefix)
+                    .unwrap_or(&entry.key)
+                    .to_string();
+                (env_var, id)
+            })
+            .collect()
+    }
+
     /// Create a new [`RdfFusionOptions`] by reading environment variables.
     pub fn from_env() -> DFResult<Self> {
         let mut config = Self::default();
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE") {
-            config.set("storage.delta.log_max_age", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_OBJECT_ID_CLAIM_SIZE") {
-            config.set("storage.delta.object_id_claim_size", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_MAX_BUFFERED_ROWS") {
-            config.set("storage.delta.max_buffered_rows", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_MAX_BUFFERED_IDS") {
-            config.set("storage.delta.max_buffered_ids", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_OBJECT_ID_CACHE_SIZE") {
-            config.set("storage.delta.object_id_cache_size", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE") {
-            config.set("storage.delta.assume_single_node", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_DATA_CACHE_BLOCK_SIZE") {
-            config.set("storage.delta.block_cache_block_size", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_DELTA_DATA_CACHE_NUM_BLOCKS") {
-            config.set("storage.delta.block_cache_num_blocks", &val)?;
-        }
-
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_PARQUET_TARGET_FILE_COUNT") {
-            config.set("storage.parquet.target_file_count", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_STORAGE_PARQUET_SORT_ORDER") {
-            config.set("storage.parquet.sort_order", &val)?;
-        }
-
-        if let Ok(val) =
-            std::env::var("RDF_FUSION_STORAGE_RDF_ASSUME_QUADS_UNIQUE_IN_SINGLE_FILE")
-        {
-            config.set("storage.rdf.assume_quads_unique_in_single_file", &val)?;
-        }
-        if let Ok(val) =
-            std::env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD")
-        {
-            config.set("execution.small_scan_buffering_threshold", &val)?;
-        }
-        if let Ok(val) = std::env::var("RDF_FUSION_LOCAL_WORK_DIR") {
-            config.set("local.work_dir", &val)?;
+        for (env_var, id) in Self::env_mappings() {
+            if let Ok(val) = std::env::var(&env_var) {
+                config.set(&id, &val)?;
+            }
         }
         Ok(config)
     }
@@ -442,6 +434,49 @@ mod tests {
         }
         let config = RdfFusionOptions::from_env().unwrap();
         assert_eq!(config.storage.delta.log_max_age, None);
+    }
+
+    #[test]
+    fn test_config_from_env_parquet_cache() {
+        unsafe {
+            std::env::set_var("RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_ENABLED", "true");
+            std::env::set_var("RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_NUM_BLOCKS", "2048");
+        }
+        let config = RdfFusionOptions::from_env().unwrap();
+        assert!(config.storage.parquet.data_cache_enabled);
+        assert_eq!(config.storage.parquet.data_cache_num_blocks, 2048);
+
+        unsafe {
+            std::env::remove_var("RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_ENABLED");
+            std::env::remove_var("RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_NUM_BLOCKS");
+        }
+    }
+
+    #[test]
+    fn test_env_mappings() {
+        let mappings = RdfFusionOptions::env_mappings();
+        assert_eq!(mappings.len(), 15);
+        assert!(mappings.iter().any(|(env, id)| {
+            env == "RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE"
+                && id == "storage.delta.log_max_age"
+        }));
+        assert!(mappings.iter().any(|(env, id)| {
+            env == "RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_ENABLED"
+                && id == "storage.parquet.data_cache_enabled"
+        }));
+        assert!(mappings.iter().any(|(env, id)| {
+            env == "RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD"
+                && id == "execution.small_scan_buffering_threshold"
+        }));
+    }
+
+    #[test]
+    fn test_set_with_prefix() {
+        let mut config = RdfFusionOptions::default();
+        config
+            .set("rdf_fusion.storage.parquet.data_cache_enabled", "true")
+            .unwrap();
+        assert!(config.storage.parquet.data_cache_enabled);
     }
 
     #[test]

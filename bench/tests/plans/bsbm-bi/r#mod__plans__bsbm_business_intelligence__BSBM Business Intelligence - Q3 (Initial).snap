@@ -5,9 +5,9 @@ expression: "&explanation.initial_logical_plan.to_string()"
 Projection: product AS product, ENC_PT(ratio) AS ratio
   Limit: skip=0, fetch=10
     Projection: product, ratio
-      Extend: variable=?ratio, expression=DIV(xsd:float(monthCount), monthBeforeCount)
-        Sort: AS_SORTABLE_BYTES(DIV(xsd:float(monthCount), monthBeforeCount)) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(product)) ASC NULLS FIRST
-          DecodeObjectIds: columns=[product]
+      Sort: AS_SORTABLE_BYTES(DIV(xsd:float(monthCount), monthBeforeCount)) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(product)) ASC NULLS FIRST
+        DecodeObjectIds: columns=[product]
+          Extend: variable=?ratio, expression=DIV(xsd:float(monthCount), monthBeforeCount)
             SparqlJoin: Inner 
               Aggregate: groupBy=[[product AS product]], aggr=[[COUNT(review) AS monthCount]]
                 DecodeObjectIds: columns=[review]

@@ -1,0 +1,6 @@
+PREFIX ex: <http://example.com/>
+
+ex:t1 ex:thesisAcceptedBySchool ex:SchoolA .
+
+ex:t2 ex:thesisAcceptedBySchool ex:SchoolB .
+ex:t3 ex:thesisAcceptedBySchool ex:SchoolB .

@@ -5,9 +5,9 @@ expression: "&explanation.initial_logical_plan.to_string()"
 Projection: feature AS feature, ENC_PT(priceRatio) AS priceRatio
   Limit: skip=0, fetch=10
     Projection: feature, priceRatio
-      Extend: variable=?priceRatio, expression=DIV(withFeaturePrice, withoutFeaturePrice)
-        Sort: AS_SORTABLE_BYTES(DIV(withFeaturePrice, withoutFeaturePrice)) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(feature)) ASC NULLS FIRST
-          DecodeObjectIds: columns=[feature]
+      Sort: AS_SORTABLE_BYTES(DIV(withFeaturePrice, withoutFeaturePrice)) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(feature)) ASC NULLS FIRST
+        DecodeObjectIds: columns=[feature]
+          Extend: variable=?priceRatio, expression=DIV(withFeaturePrice, withoutFeaturePrice)
             SparqlJoin: Inner 
               Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS withFeaturePrice]]
                 DecodeObjectIds: columns=[price]

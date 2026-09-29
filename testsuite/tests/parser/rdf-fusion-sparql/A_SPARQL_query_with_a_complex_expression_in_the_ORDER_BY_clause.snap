@@ -5,6 +5,6 @@ expression: snapshot
 Variant: Select
 Projection: ENC_PT(result) AS result
   Projection: result
-    Extend: variable=?result, expression=xsd:float(ENC_TF(value))
-      Sort: AS_SORTABLE_BYTES(xsd:float(ENC_TF(value))) ASC NULLS FIRST
+    Sort: AS_SORTABLE_BYTES(xsd:float(ENC_TF(value))) ASC NULLS FIRST
+      Extend: variable=?result, expression=xsd:float(ENC_TF(value))
         QuadPattern: triple_pattern=[_:<guid> <http://example.com/hasValue> ?value]

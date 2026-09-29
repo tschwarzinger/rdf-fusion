@@ -2,10 +2,10 @@
 source: bench/tests/plans/bsbm_business_intelligence.rs
 expression: "&explanation.optimized_logical_plan.to_string()"
 ---
-Projection: feature, ENC_PT(DIV(withFeaturePrice, withoutFeaturePrice)) AS priceRatio
+Projection: feature, ENC_PT(priceRatio) AS priceRatio
   Sort: AS_SORTABLE_BYTES(DIV(withFeaturePrice, withoutFeaturePrice)) DESC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(feature)) ASC NULLS FIRST, fetch=10
     DecodeObjectIds: columns=[feature]
-      Projection: lhs.feature AS feature, lhs.withFeaturePrice AS withFeaturePrice, rhs.withoutFeaturePrice AS withoutFeaturePrice
+      Projection: lhs.feature AS feature, lhs.withFeaturePrice AS withFeaturePrice, rhs.withoutFeaturePrice AS withoutFeaturePrice, DIV(lhs.withFeaturePrice, rhs.withoutFeaturePrice) AS priceRatio
         Inner Join: lhs.feature = rhs.feature
           SubqueryAlias: lhs
             Aggregate: groupBy=[[feature AS feature]], aggr=[[AVG(xsd:float(xsd:string(ENC_TF(price)))) AS withFeaturePrice]]

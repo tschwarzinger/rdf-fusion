@@ -32,8 +32,7 @@ pub struct GraphPatternRewriter {
 /// The result from analyzing a `SELECT`.
 struct SelectInformation<'a, 'b> {
     expr_ast: Option<&'b ast::Expression<'a>>,
-    pre_rewritten: Option<Expr>,
-    has_aggs: bool,
+    rewritten: Option<Expr>,
     var_name: Variable,
     var_span: Span,
 }
@@ -311,15 +310,9 @@ impl GraphPatternRewriter {
 
         let having_exprs =
             self.extract_having(&pre_group_schema, modifier, &mut all_aggregates)?;
-        let order_exprs =
-            self.extract_order_by(&pre_group_schema, modifier, &mut all_aggregates)?;
 
         let select_extensions = if let Some(select) = select_clause {
-            Some(self.extract_select_aggregates(
-                &pre_group_schema,
-                select,
-                &mut all_aggregates,
-            )?)
+            Some(self.extract_select(&pre_group_schema, select, &mut all_aggregates)?)
         } else {
             None
         };
@@ -331,18 +324,9 @@ impl GraphPatternRewriter {
 
         plan = self.apply_having(plan, having_exprs)?;
 
-        let has_distinct = select_clause.is_some_and(|s| {
-            matches!(
-                s.option,
-                ast::SelectionOption::Distinct | ast::SelectionOption::Reduced
-            )
-        });
-        let (new_plan, sort_exprs) =
-            self.apply_order_by(plan, order_exprs, has_distinct)?;
-        plan = new_plan;
-
+        let mut final_project_vars = None;
         if let Some(select) = select_clause {
-            plan = self.apply_select_projection(
+            let (new_plan, project_vars) = self.apply_select_extensions(
                 plan,
                 &pre_group_schema,
                 select,
@@ -352,6 +336,21 @@ impl GraphPatternRewriter {
                 select_extensions.unwrap(),
                 has_grouping,
             )?;
+            plan = new_plan;
+            final_project_vars = Some(project_vars);
+        }
+
+        let has_distinct = select_clause.is_some_and(|s| {
+            matches!(
+                s.option,
+                ast::SelectionOption::Distinct | ast::SelectionOption::Reduced
+            )
+        });
+        let (new_plan, sort_exprs) = self.apply_order_by(plan, modifier, has_distinct)?;
+        plan = new_plan;
+
+        if let Some(project_vars) = &final_project_vars {
+            plan = self.apply_select_project(plan, project_vars)?;
         }
 
         if has_distinct {
@@ -415,33 +414,7 @@ impl GraphPatternRewriter {
         Ok(having_exprs)
     }
 
-    fn extract_order_by<'a>(
-        &self,
-        schema: &DFSchema,
-        modifier: &ast::SolutionModifier<'a>,
-        all_aggregates: &mut Vec<(Variable, Expr)>,
-    ) -> Result<Vec<(Expr, bool)>, SparqlParseError> {
-        let expr_builder_context = self
-            .builder_context
-            .expr_builder_context_with_schema(schema);
-        let expr_rewriter = ExpressionRewriter::new(self, expr_builder_context);
-        let mut order_exprs = Vec::new();
-        for condition in &modifier.order_clause {
-            let (expr_ast, asc) = match condition {
-                ast::OrderCondition::Asc(e) => (&e.value, true),
-                ast::OrderCondition::Desc(e) => (&e.value, false),
-                ast::OrderCondition::Plain(e) => (&e.value, true),
-            };
-
-            let (rewritten, aggs) =
-                expr_rewriter.rewrite_expr_with_aggregates(expr_ast, None)?;
-            order_exprs.push((rewritten, asc));
-            all_aggregates.extend(aggs);
-        }
-        Ok(order_exprs)
-    }
-
-    fn extract_select_aggregates<'a, 'b>(
+    fn extract_select<'a, 'b>(
         &self,
         schema: &DFSchema,
         select_clause: &'b ast::SelectClause<'a>,
@@ -461,8 +434,7 @@ impl GraphPatternRewriter {
                 let var_ast = &select_var.variable;
                 let var_name = Variable::new_unchecked(var_ast.value);
                 let var_span = var_ast.span;
-                let mut pre_rewritten = None;
-                let mut has_aggs = false;
+                let mut rewritten = None;
 
                 if let Some(expr_ast) = expr_opt {
                     if let Some(&prev_span) = assigned_vars.get(var_ast.value) {
@@ -491,19 +463,19 @@ impl GraphPatternRewriter {
                     }
                     assigned_vars.insert(var_ast.value, var_span);
 
-                    let (rewritten, aggs) = expr_rewriter.rewrite_expr_with_aggregates(
-                        &expr_ast.value,
-                        Some(var_name.clone()),
-                    )?;
-                    has_aggs = !aggs.is_empty();
-                    all_aggregates.extend(aggs);
-                    pre_rewritten = Some(rewritten);
+                    if expr_has_aggregates(self, &expr_ast.value) {
+                        let (expr, aggs) = expr_rewriter.rewrite_expr_with_aggregates(
+                            &expr_ast.value,
+                            Some(var_name.clone()),
+                        )?;
+                        all_aggregates.extend(aggs);
+                        rewritten = Some(expr);
+                    }
                 }
 
                 select_explicit_vars.push(SelectInformation {
                     expr_ast: expr_opt.as_ref().map(|e| &e.value),
-                    pre_rewritten,
-                    has_aggs,
+                    rewritten,
                     var_name,
                     var_span,
                 });
@@ -531,17 +503,30 @@ impl GraphPatternRewriter {
     fn apply_order_by(
         &self,
         mut plan: RdfFusionLogicalPlanBuilder,
-        order_exprs: Vec<(Expr, bool)>,
+        modifier: &ast::SolutionModifier<'_>,
         has_distinct: bool,
     ) -> Result<(RdfFusionLogicalPlanBuilder, Vec<SortExpr>), SparqlParseError> {
         let mut sort_exprs = Vec::new();
-        for (expr, asc) in order_exprs {
+        for condition in &modifier.order_clause {
+            let (expr_ast, asc) = match condition {
+                ast::OrderCondition::Asc(e) => (&e.value, true),
+                ast::OrderCondition::Desc(e) => (&e.value, false),
+                ast::OrderCondition::Plain(e) => (&e.value, true),
+            };
+
             let schema = Arc::clone(plan.decoded_schema());
             let expr_builder_context = self
                 .builder_context
                 .expr_builder_context_with_schema(&schema);
+            let expr_rewriter = ExpressionRewriter::new(self, expr_builder_context);
+            let (rewritten, _) =
+                expr_rewriter.rewrite_expr_with_aggregates(expr_ast, None)?;
+
+            let expr_builder_context = self
+                .builder_context
+                .expr_builder_context_with_schema(&schema);
             let sort_expr = expr_builder_context
-                .try_create_builder(expr)?
+                .try_create_builder(rewritten)?
                 .build_as_sortable_bytes()?;
             sort_exprs.push(SortExpr::new(sort_expr, asc, true));
         }
@@ -553,7 +538,7 @@ impl GraphPatternRewriter {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn apply_select_projection<'a, 'b>(
+    fn apply_select_extensions<'a, 'b>(
         &self,
         mut plan: RdfFusionLogicalPlanBuilder,
         pre_group_schema: &DFSchema,
@@ -563,7 +548,7 @@ impl GraphPatternRewriter {
         modifier: &ast::SolutionModifier<'a>,
         extensions: Vec<SelectInformation<'a, 'b>>,
         has_grouping: bool,
-    ) -> Result<RdfFusionLogicalPlanBuilder, SparqlParseError> {
+    ) -> Result<(RdfFusionLogicalPlanBuilder, Vec<Variable>), SparqlParseError> {
         let mut project_vars = Vec::new();
         let is_star = matches!(select_clause.bindings.value, ast::SelectVariables::Star);
 
@@ -632,29 +617,50 @@ impl GraphPatternRewriter {
                     }
                 }
             }
+
+            let select_extension_vars: HashSet<&str> =
+                extensions.iter().map(|e| e.var_name.as_str()).collect();
+            for condition in &modifier.order_clause {
+                let expr_ast = match condition {
+                    ast::OrderCondition::Asc(e)
+                    | ast::OrderCondition::Desc(e)
+                    | ast::OrderCondition::Plain(e) => &e.value,
+                };
+                let mut non_agg_vars = std::collections::HashMap::new();
+                collect_non_aggregate_expr_variables(self, expr_ast, &mut non_agg_vars);
+                let mut sorted_vars: Vec<(&str, Span)> =
+                    non_agg_vars.into_iter().collect();
+                sorted_vars.sort_unstable_by_key(|(v, _)| *v);
+                for (v, span) in sorted_vars {
+                    if !grouped_vars.contains(&v) && !select_extension_vars.contains(v) {
+                        return Err(SparqlParseError::new(
+                            span,
+                            format!(
+                                "Variable ?{v} in ORDER BY is not grouped or aggregated"
+                            ),
+                        ));
+                    }
+                }
+            }
         }
 
         for ext in extensions {
             let var_in_schema = plan
                 .schema()
                 .has_column_with_unqualified_name(ext.var_name.as_str());
-            if let Some(expr_ast) = ext.expr_ast {
-                let rewritten = if ext.has_aggs {
-                    ext.pre_rewritten.unwrap()
-                } else {
-                    let schema = Arc::clone(plan.decoded_schema());
-                    let expr_builder_context = self
-                        .builder_context
-                        .expr_builder_context_with_schema(&schema);
-                    let expr_rewriter =
-                        ExpressionRewriter::new(self, expr_builder_context);
-                    let (rewritten, _) = expr_rewriter.rewrite_expr_with_aggregates(
-                        expr_ast,
-                        Some(ext.var_name.clone()),
-                    )?;
-                    rewritten
-                };
-
+            if let Some(rewritten) = ext.rewritten {
+                if rewritten
+                    != Expr::Column(Column::new_unqualified(ext.var_name.as_str()))
+                {
+                    plan = plan.extend(ext.var_name.clone(), rewritten)?;
+                }
+            } else if let Some(expr_ast) = ext.expr_ast {
+                let schema = Arc::clone(plan.decoded_schema());
+                let expr_builder_context = self
+                    .builder_context
+                    .expr_builder_context_with_schema(&schema);
+                let expr_rewriter = ExpressionRewriter::new(self, expr_builder_context);
+                let rewritten = expr_rewriter.rewrite_scalar_expr(expr_ast)?;
                 if rewritten
                     != Expr::Column(Column::new_unqualified(ext.var_name.as_str()))
                 {
@@ -676,13 +682,8 @@ impl GraphPatternRewriter {
         }
 
         let current_schema = plan.schema();
-        let current_vars: Vec<&str> = current_schema
-            .fields()
-            .iter()
-            .map(|f| f.name().as_str())
-            .collect();
 
-        if is_star {
+        let final_vars = if is_star {
             let mut star_vars = Vec::new();
             for f in current_schema.fields() {
                 let name = f.name().as_str();
@@ -706,24 +707,30 @@ impl GraphPatternRewriter {
                     star_vars.push(v);
                 }
             }
-            let current_vars: Vec<&str> = plan
-                .schema()
-                .fields()
-                .iter()
-                .map(|f| f.name().as_str())
-                .collect();
-            let star_vars_str: Vec<&str> = star_vars.iter().map(|v| v.as_str()).collect();
-            if current_vars != star_vars_str {
-                plan = plan.project(&star_vars)?;
-            }
+            star_vars
         } else {
-            let project_vars_str: Vec<&str> =
-                project_vars.iter().map(|v| v.as_str()).collect();
-            if current_vars != project_vars_str {
-                plan = plan.project(&project_vars)?;
-            }
-        }
+            project_vars
+        };
 
+        Ok((plan, final_vars))
+    }
+
+    fn apply_select_project(
+        &self,
+        mut plan: RdfFusionLogicalPlanBuilder,
+        project_vars: &[Variable],
+    ) -> Result<RdfFusionLogicalPlanBuilder, SparqlParseError> {
+        let current_vars: Vec<&str> = plan
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().as_str())
+            .collect();
+        let project_vars_str: Vec<&str> =
+            project_vars.iter().map(|v| v.as_str()).collect();
+        if current_vars != project_vars_str {
+            plan = plan.project(project_vars)?;
+        }
         Ok(plan)
     }
 
@@ -2160,4 +2167,49 @@ fn collect_non_aggregate_expr_variables<'a>(
 ) {
     let mut visitor = NonAggregateExprCollection { rewriter, map };
     visitor.visit_expression(expr);
+}
+
+struct AggregateCheckVisitor<'a> {
+    rewriter: &'a GraphPatternRewriter,
+    has_aggregate: bool,
+}
+
+impl<'a> GraphPatternVisitor<'a> for AggregateCheckVisitor<'a> {
+    fn visit_aggregate(&mut self, _agg: &'a ast::Aggregate<'a>) {
+        self.has_aggregate = true;
+    }
+
+    fn visit_function(&mut self, func: &'a ast::Function<'a>) {
+        if let ast::FunctionName::Iri(iri) = &func.name {
+            if let Ok(named_node) = self.rewriter.planner_context.resolve_iri(iri) {
+                let fn_name =
+                    rdf_fusion_extensions::functions::FunctionName::Custom(named_node);
+                if self
+                    .rewriter
+                    .builder_context
+                    .registry()
+                    .udaf(&fn_name)
+                    .is_ok()
+                {
+                    self.has_aggregate = true;
+                    return;
+                }
+            }
+        }
+        for arg in &func.args {
+            self.visit_function_arg(arg);
+        }
+    }
+}
+
+fn expr_has_aggregates<'a>(
+    rewriter: &GraphPatternRewriter,
+    expr: &'a ast::Expression<'a>,
+) -> bool {
+    let mut visitor = AggregateCheckVisitor {
+        rewriter,
+        has_aggregate: false,
+    };
+    visitor.visit_expression(expr);
+    visitor.has_aggregate
 }
