@@ -111,7 +111,7 @@
 </style>
 
 <div class="h-100 d-flex flex-column">
-    <div class="flex-grow-1 d-flex flex-column" bind:this={editorContainer}></div>
+    <div id="query-editor" class="flex-grow-1 d-flex flex-column" bind:this={editorContainer}></div>
     <div class="mt-3 text-end">
         {#if $queryResults.isExecuting}
             <button class="btn btn-danger px-4 btn-action" onclick={cancelQuery}>

@@ -9,7 +9,7 @@ jobs:
   needs-pages-label:
     runs-on: tuw-runner
     outputs:
-      run-web: ${{ steps.check.outputs.run_web }}
+      run_web: ${{ steps.check.outputs.run_web }}
 
     steps:
       - name: Check for pages label
@@ -48,6 +48,7 @@ jobs:
 
       - name: Lint HTML & CSS
         run: npx --yes prettier@3 --check "**/*.{css,html}"
+        working-directory: misc/pages
 
       - name: Lint JS & Svelte
         run: npm run lint

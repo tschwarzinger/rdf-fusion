@@ -19,6 +19,6 @@ export default [
         }
     },
     {
-        ignores: ['node_modules/**', 'public/**', 'assets/**', '.svelte-kit/**', 'dist/**', 'static/**']
+        ignores: ['node_modules/**', 'public/**', 'assets/**', '.svelte-kit/**', 'dist/**', 'static/**', 'e2e/**']
     }
 ];

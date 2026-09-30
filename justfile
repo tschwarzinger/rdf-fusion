@@ -34,11 +34,19 @@ lint-web:
 test profile="test":
     cargo test --workspace --exclude rdf-fusion-examples --exclude rdf-fusion-wasm --profile {{ profile }}
 
-# Run the tests related to RDF Fusion's Wasm bindings and the playground
-#
-# The tests run in release mode as we have had out-of-memory issues before.
+# Run the Playwright webdriver tests for the playground / Wasm bindings.
 test-web:
-    RUST_TEST_THREADS=1 wasm-pack test --firefox --headless --release ./lib/wasm
+    wasm-pack build --target web --dev lib/wasm
+    npm run e2e --prefix misc/pages
+
+# Re-generate the golden screenshot baselines for the playground E2E suite.
+test-web-update:
+    wasm-pack build --target web --dev lib/wasm
+    npm run e2e:update --prefix misc/pages
+
+# Install the Playwright browsers used by the E2E suite (needs network).
+playground-browsers:
+    npm run e2e:browsers --prefix misc/pages
 
 # Runs all examples to see whether they fail
 test-examples:

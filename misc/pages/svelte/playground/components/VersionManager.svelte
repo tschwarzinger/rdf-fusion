@@ -270,7 +270,7 @@
 </script>
 
 {#if $expandedStatusSection === 'engine'}
-    <div class="border-top bg-white overflow-hidden">
+    <div id="engine-config-panel" class="border-top bg-white overflow-hidden">
         <div in:slide={{ duration: 220, easing: cubicOut }} out:slide={{ duration: 160, easing: cubicInOut }} class="p-4 d-flex flex-column gap-3">
         <div class="d-flex align-items-center justify-content-between border-bottom pb-2">
             <h6 class="pane-heading mb-0 text-dark d-flex align-items-center gap-2">

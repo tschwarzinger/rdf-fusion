@@ -46,6 +46,9 @@ Hugo site.
 3. **View the site:**
    Navigate to the address shown by Hugo.
 
-> **Note on WASM Testing:** If you are testing changes to the RDF Fusion engine or the JavaScript bindings, you must
-> compile the WASM bindings in the `lib/wasm` directory (`wasm-pack build --target web --dev lib/wasm`) and upload the
-> resulting `.wasm` and `.js` files via the Playground's version manager UI.
+> **Note on WASM/E2E Testing:** The playground has a Playwright **webdriver** suite in `e2e/`, targeting Firefox. It
+> builds the current WASM bindings (`wasm-pack build --target web --dev ../../lib/wasm`), uploads them through the
+> Version Manager UI as a custom version and runs real queries, alongside screenshot render checks. Run it from the repo
+> root with `just test-web` (install the browser once with `just playground-browsers`); regenerate the golden screenshots
+> with `just test-web-update`. To upload a build manually, select `pkg/rdf_fusion_wasm.js` and
+> `pkg/rdf_fusion_wasm_bg.wasm` produced by `wasm-pack build --target web lib/wasm`.

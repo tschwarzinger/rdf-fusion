@@ -153,7 +153,7 @@
     );
 </script>
 
-<div class="h-100 d-flex flex-column">
+<div id="results-panel" class="h-100 d-flex flex-column">
     {#if $queryResults.isExecuting}
         <div class="text-center text-muted mt-4">
             <i class="fa-solid fa-circle-notch fa-spin fa-2x"></i><br>
@@ -191,7 +191,7 @@
             {#if activeTab === 'data'}
                 {#if resultsData.variables && Array.isArray(resultsData.solutions)}
                     {#if resultsData.solutions.length > 0}
-                        <table class="table table-sm table-striped table-hover table-bordered text-nowrap mb-0 bg-white" style="font-size: 0.875rem;">
+                        <table id="query-results" class="table table-sm table-striped table-hover table-bordered text-nowrap mb-0 bg-white" style="font-size: 0.875rem;">
                             <thead class="table-light sticky-top">
                                 <tr>
                                     <th scope="col" style="width: 45px;" class="text-center text-muted">#</th>
@@ -238,7 +238,7 @@
                         </div>
                     {/if}
                 {:else if resultsData.boolean !== undefined}
-                    <div class="p-4 bg-white border rounded h-100 d-flex flex-column justify-content-center align-items-center gap-3">
+                    <div id="ask-result-card" class="p-4 bg-white border rounded h-100 d-flex flex-column justify-content-center align-items-center gap-3">
                         <h6 class="text-muted text-uppercase mb-0 tracking-wider">ASK Query Result</h6>
                         {#if resultsData.boolean}
                             <div class="badge bg-success fs-5 px-4 py-2"><i class="fa-solid fa-check me-2"></i> TRUE</div>
@@ -250,11 +250,11 @@
                     <pre class="bg-white border rounded p-3 text-dark font-monospace h-100 mb-0" style="white-space: pre; font-size: 0.875rem;">{typeof resultsData === 'string' ? resultsData : JSON.stringify(resultsData, null, 2)}</pre>
                 {/if}
             {:else if activeTab === 'logical'}
-                <pre class="bg-white border rounded p-3 text-dark font-monospace h-100 mb-0" style="white-space: pre; font-size: 0.875rem;">{$queryResults.logicalPlan}</pre>
+                <pre id="query-plan-logical" class="bg-white border rounded p-3 text-dark font-monospace h-100 mb-0" style="white-space: pre; font-size: 0.875rem;">{$queryResults.logicalPlan}</pre>
             {:else if activeTab === 'optimized'}
-                <pre class="bg-white border rounded p-3 text-dark font-monospace h-100 mb-0" style="white-space: pre; font-size: 0.875rem;">{$queryResults.optimizedPlan}</pre>
+                <pre id="query-plan-optimized" class="bg-white border rounded p-3 text-dark font-monospace h-100 mb-0" style="white-space: pre; font-size: 0.875rem;">{$queryResults.optimizedPlan}</pre>
             {:else if activeTab === 'execution'}
-                <pre class="bg-white border rounded p-3 text-dark font-monospace h-100 mb-0" style="white-space: pre; font-size: 0.875rem;">{$queryResults.executionPlan}</pre>
+                <pre id="query-plan-execution" class="bg-white border rounded p-3 text-dark font-monospace h-100 mb-0" style="white-space: pre; font-size: 0.875rem;">{$queryResults.executionPlan}</pre>
             {/if}
         </div>
     {:else}

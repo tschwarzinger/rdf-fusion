@@ -22,7 +22,8 @@ export default [
       }),
       copy({
         targets: [
-          { src: 'node_modules/@fortawesome/fontawesome-free/webfonts', dest: 'static' }
+          { src: 'node_modules/@fortawesome/fontawesome-free/webfonts', dest: 'static' },
+          { src: 'node_modules/@fontsource/open-sans/files', dest: 'static/generated' }
         ]
       })
     ]

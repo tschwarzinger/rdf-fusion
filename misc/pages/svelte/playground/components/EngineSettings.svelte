@@ -20,7 +20,6 @@
     let memoryLimitExceedsWasm = $derived(settings.memoryLimit > WASM_MEMORY_LIMIT_MB);
     let cacheCapacityMb = $derived(((settings.rdfFusion?.dataCacheBlockSizeKb || 0) * (settings.rdfFusion?.dataCacheNumBlocks || 0)) / 1024);
     let cacheExceedsWasm = $derived(settings.rdfFusion?.enableDataCache && cacheCapacityMb > WASM_MEMORY_LIMIT_MB);
-    let smallScanThresholdMiB = $derived((settings.rdfFusion?.smallScanBufferingThresholdKb || 0) / 1024);
 </script>
 
 <style>

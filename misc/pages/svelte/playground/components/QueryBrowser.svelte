@@ -112,7 +112,7 @@
                   {/if}
               </div>
           </div>
-          <div class="flex-grow-1 preview-container d-flex flex-column overflow-auto" bind:this={editorContainer}></div>
+          <div id="example-query-preview" class="flex-grow-1 preview-container d-flex flex-column overflow-auto" bind:this={editorContainer}></div>
       </div>
       <div class="modal-footer bg-white border-top py-2 px-4">
           <button class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
