@@ -45,7 +45,11 @@ jobs:
           tools: 'just taplo-cli'
 
       - name: Run Tests
-        run: just lint bench::prepare-benches-tests test test-examples rustdoc
+        run: |
+          just lint
+          just bench::prepare-benches-tests
+          just test
+          just test-examples rustdoc
 
       - name: Publish
         run: cargo publish --workspace
