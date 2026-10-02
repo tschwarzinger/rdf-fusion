@@ -37,11 +37,11 @@ pub fn estimate_scan_statistics(
             let root = schema_descr.get_column_root_idx(leaf_idx);
 
             // Collect null statistics
-            if let Some(stats) = col.statistics() {
-                if let Some(null_count) = stats.null_count_opt() {
-                    column_null_counts[root] += null_count as i64;
-                    has_null_stats = true;
-                }
+            if let Some(stats) = col.statistics()
+                && let Some(null_count) = stats.null_count_opt()
+            {
+                column_null_counts[root] += null_count as i64;
+                has_null_stats = true;
             }
 
             // Calculate byte size based on access type and page index availability
@@ -90,14 +90,12 @@ pub fn estimate_scan_statistics(
 
                         // If any data pages are selected, the parquet reader must also fetch
                         // the dictionary page (if present) for this column chunk.
-                        if selected_bytes > 0 {
-                            if let Some(dict_offset) = col.dictionary_page_offset() {
-                                if let Some(first_page) = page_locations.first() {
-                                    if first_page.offset > dict_offset {
-                                        selected_bytes += first_page.offset - dict_offset;
-                                    }
-                                }
-                            }
+                        if selected_bytes > 0
+                            && let Some(dict_offset) = col.dictionary_page_offset()
+                            && let Some(first_page) = page_locations.first()
+                            && first_page.offset > dict_offset
+                        {
+                            selected_bytes += first_page.offset - dict_offset;
                         }
 
                         selected_bytes

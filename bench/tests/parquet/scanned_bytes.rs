@@ -19,10 +19,10 @@ fn find_bytes_scanned(plan: &Arc<dyn ExecutionPlan>) -> u64 {
     let mut total = 0;
     if let Some(metrics) = plan.metrics() {
         for metric in metrics.iter() {
-            if let MetricValue::Count { name, count } = metric.value() {
-                if name == "bytes_scanned" {
-                    total += count.value() as u64;
-                }
+            if let MetricValue::Count { name, count } = metric.value()
+                && name == "bytes_scanned"
+            {
+                total += count.value() as u64;
             }
         }
     }

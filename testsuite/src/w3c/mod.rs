@@ -155,10 +155,10 @@ impl W3CSparqlTestSuiteBuilder {
             }
         }
 
-        if let Some(id) = &self.builder.only_test {
-            if !test_ids.contains(id) {
-                bail!("Only test {id} not found in manifest");
-            }
+        if let Some(id) = &self.builder.only_test
+            && !test_ids.contains(id)
+        {
+            bail!("Only test {id} not found in manifest");
         }
 
         let store_factory = self.store_factory.unwrap_or_else(|| {

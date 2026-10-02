@@ -395,10 +395,10 @@ impl DeltaQuadsStorageLog {
                     })?;
 
                     // Table is append-only
-                    if let Action::Add(add) = action {
-                        if add.data_change {
-                            added_files.push(OperationLogFile::new(version, add));
-                        }
+                    if let Action::Add(add) = action
+                        && add.data_change
+                    {
+                        added_files.push(OperationLogFile::new(version, add));
                     }
                 }
             }

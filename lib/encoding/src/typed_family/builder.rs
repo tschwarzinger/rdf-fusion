@@ -83,15 +83,15 @@ impl TypedFamilyArrayBuilder {
             )),
         )?;
 
-        if let Some(array) = &array {
-            if array.data_type() != family.data_type() {
-                return Err(ArrowError::InvalidArgumentError(format!(
-                    "Type family {} has data type {:?} but array has data type {:?}",
-                    family.family_id(),
-                    family.data_type(),
-                    array.data_type()
-                )));
-            }
+        if let Some(array) = &array
+            && array.data_type() != family.data_type()
+        {
+            return Err(ArrowError::InvalidArgumentError(format!(
+                "Type family {} has data type {:?} but array has data type {:?}",
+                family.family_id(),
+                family.data_type(),
+                array.data_type()
+            )));
         }
 
         self.arrays[type_id as usize] = array;

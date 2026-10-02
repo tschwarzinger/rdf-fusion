@@ -510,22 +510,22 @@ impl RdfFusionLogicalPlanBuilder {
             if encodings.len() > 1 && encodings.contains(&EncodingName::ObjectId) {
                 let column = Column::new_unqualified(col_name);
                 // Check LHS
-                if let Ok(field) = self.schema().field_from_column(&column) {
-                    if matches!(
+                if let Ok(field) = self.schema().field_from_column(&column)
+                    && matches!(
                         field.data_type(),
                         DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
-                    ) {
-                        lhs_decoded_cols.push(col(column.clone()));
-                    }
+                    )
+                {
+                    lhs_decoded_cols.push(col(column.clone()));
                 }
                 // Check RHS
-                if let Ok(field) = rhs.schema().field_from_column(&column) {
-                    if matches!(
+                if let Ok(field) = rhs.schema().field_from_column(&column)
+                    && matches!(
                         field.data_type(),
                         DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
-                    ) {
-                        rhs_decoded_cols.push(col(column));
-                    }
+                    )
+                {
+                    rhs_decoded_cols.push(col(column));
                 }
             }
         }
@@ -595,10 +595,10 @@ impl RdfFusionLogicalPlanBuilder {
         let schema = self.schema();
         let mut columns_to_decode = Vec::new();
         for col in referenced_columns {
-            if let Ok(field) = schema.field_from_column(&col) {
-                if field.data_type() == encoding.data_type() {
-                    columns_to_decode.push(col);
-                }
+            if let Ok(field) = schema.field_from_column(&col)
+                && field.data_type() == encoding.data_type()
+            {
+                columns_to_decode.push(col);
             }
         }
 

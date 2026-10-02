@@ -192,14 +192,14 @@ pub async fn load_parquet_metadata_and_bloom_filters(
     let mut bloom_filter_requests = Vec::new();
     for (rg_idx, rg) in metadata.row_groups().iter().enumerate() {
         for (col_idx, col) in rg.columns().iter().enumerate() {
-            if let Some(offset) = col.bloom_filter_offset() {
-                if let Some(length) = col.bloom_filter_length() {
-                    bloom_filter_requests.push((
-                        rg_idx,
-                        col_idx,
-                        offset as u64..(offset as u64 + length as u64),
-                    ));
-                }
+            if let Some(offset) = col.bloom_filter_offset()
+                && let Some(length) = col.bloom_filter_length()
+            {
+                bloom_filter_requests.push((
+                    rg_idx,
+                    col_idx,
+                    offset as u64..(offset as u64 + length as u64),
+                ));
             }
         }
     }

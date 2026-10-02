@@ -362,13 +362,12 @@ async fn load_parquet_metadata_for_files(
 
             if let (Some(meta_cache), Some(bloom_cache)) =
                 (ext_meta_clone.as_ref(), ext_bloom_clone.as_ref())
-            {
-                if let (Some(meta), Some(bloom)) = (
+                && let (Some(meta), Some(bloom)) = (
                     meta_cache.get(&absolute_path),
                     bloom_cache.get_all(&absolute_path),
-                ) {
-                    return Ok((absolute_path, Some((meta, bloom)), None));
-                }
+                )
+            {
+                return Ok((absolute_path, Some((meta, bloom)), None));
             }
 
             let mut object_meta = object_store_clone
@@ -397,7 +396,7 @@ async fn load_parquet_metadata_for_files(
     let mut remaining = active_files.len();
     while let Some(res) = join_set.join_next().await {
         remaining -= 1;
-        if remaining > 0 && remaining % 10 == 0 {
+        if remaining > 0 && remaining.is_multiple_of(10) {
             info!("Progress: {} files remaining to process", remaining);
         }
 

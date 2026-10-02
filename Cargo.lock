@@ -4900,7 +4900,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "datafusion",
@@ -4928,7 +4928,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-bench"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4958,7 +4958,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-cli"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4984,7 +4984,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-common"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "datafusion",
  "itertools 0.15.0",
@@ -5000,7 +5000,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-compute"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "datafusion",
@@ -5012,7 +5012,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-encoding"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "criterion",
@@ -5025,7 +5025,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-examples"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5038,7 +5038,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-execution"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -5065,7 +5065,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-extensions"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -5077,7 +5077,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-functions"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "arrow-string",
  "async-trait",
@@ -5103,7 +5103,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-logical"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "datafusion",
  "futures",
@@ -5118,7 +5118,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-physical"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "criterion",
@@ -5135,7 +5135,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-sparql-parser"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "codespan-reporting",
  "datafusion-common",
@@ -5153,7 +5153,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-storage"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5208,7 +5208,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-wasm"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -5236,7 +5236,7 @@ dependencies = [
 
 [[package]]
 name = "rdf-fusion-web"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",

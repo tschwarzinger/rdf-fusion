@@ -259,18 +259,18 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             plan = Arc::new(FilterExec::try_new(phys_filter, plan)?);
         }
 
-        if let PushdownProjection::Yes(quad_tables) = pushdown_projection {
-            if let Some(pattern) = pattern {
-                let schema = plan.schema();
-                let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
-                let exprs = ParquetQuadScanBuilder::compute_projection_exprs(
-                    session_state,
-                    pattern,
-                    &df_schema,
-                    quad_tables.as_deref(),
-                )?;
-                plan = Arc::new(ProjectionExec::try_new(exprs, plan)?);
-            }
+        if let PushdownProjection::Yes(quad_tables) = pushdown_projection
+            && let Some(pattern) = pattern
+        {
+            let schema = plan.schema();
+            let df_schema = DFSchema::try_from(schema.as_ref().clone())?;
+            let exprs = ParquetQuadScanBuilder::compute_projection_exprs(
+                session_state,
+                pattern,
+                &df_schema,
+                quad_tables.as_deref(),
+            )?;
+            plan = Arc::new(ProjectionExec::try_new(exprs, plan)?);
         }
 
         Ok(plan)

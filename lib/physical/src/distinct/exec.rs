@@ -172,11 +172,11 @@ impl Stream for SortedDistinctStream {
 
                 // Check against last row from previous batch
                 let mut start_idx = 0;
-                if let Some(ref last) = self.last_row {
-                    if last.as_slice() == rows.row(0).as_ref() {
-                        has_duplicates = true;
-                        start_idx = 1;
-                    }
+                if let Some(ref last) = self.last_row
+                    && last.as_slice() == rows.row(0).as_ref()
+                {
+                    has_duplicates = true;
+                    start_idx = 1;
                 }
 
                 // Check for duplicates within the current batch

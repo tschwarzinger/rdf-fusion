@@ -911,36 +911,34 @@ impl GraphPatternRewriter {
                 let mut plan = self.rewrite_graph_pattern(pattern)?;
                 self.state.replace(old_state);
 
-                if let Some(graph_var) = graph_var_opt {
-                    if plan.schema().has_column(
+                if let Some(graph_var) = graph_var_opt
+                    && plan.schema().has_column(
                         &Column::new_unqualified(graph_var.as_str()),
-                    ) {
-                        if let Some(graphs) =
-                            self.planner_context.dataset().available_named_graphs()
+                    )
+                    && let Some(graphs) =
+                        self.planner_context.dataset().available_named_graphs()
+                {
+                    let schema = Arc::clone(plan.decoded_schema());
+                    let expr_builder_context = self
+                        .builder_context
+                        .expr_builder_context_with_schema(&schema);
+                    let var_builder =
+                        expr_builder_context.variable(graph_var.as_ref())?;
+                    let mut graph_filters = Vec::new();
+                    for g in graphs {
+                        if let rdf_fusion_common::NamedOrBlankNode::NamedNode(
+                            nn,
+                        ) = g
                         {
-                            let schema = Arc::clone(plan.decoded_schema());
-                            let expr_builder_context = self
-                                .builder_context
-                                .expr_builder_context_with_schema(&schema);
-                            let var_builder =
-                                expr_builder_context.variable(graph_var.as_ref())?;
-                            let mut graph_filters = Vec::new();
-                            for g in graphs {
-                                if let rdf_fusion_common::NamedOrBlankNode::NamedNode(
-                                    nn,
-                                ) = g
-                                {
-                                    let filter =
-                                        var_builder.clone().build_same_term_scalar(
-                                            TermRef::from(nn.as_ref()),
-                                        )?;
-                                    graph_filters.push(filter);
-                                }
-                            }
-                            if let Some(combined) = graph_filters.into_iter().reduce(or) {
-                                plan = plan.filter(combined)?;
-                            }
+                            let filter =
+                                var_builder.clone().build_same_term_scalar(
+                                    TermRef::from(nn.as_ref()),
+                                )?;
+                            graph_filters.push(filter);
                         }
+                    }
+                    if let Some(combined) = graph_filters.into_iter().reduce(or) {
+                        plan = plan.filter(combined)?;
                     }
                 }
 
@@ -2109,19 +2107,19 @@ impl<'a, 'm, 'r> GraphPatternVisitor<'a> for NonAggregateExprCollection<'a, 'm, 
     fn visit_aggregate(&mut self, _agg: &'a ast::Aggregate<'a>) {}
 
     fn visit_function(&mut self, func: &'a ast::Function<'a>) {
-        if let ast::FunctionName::Iri(iri) = &func.name {
-            if let Ok(named_node) = self.rewriter.planner_context.resolve_iri(iri) {
-                let fn_name =
-                    rdf_fusion_extensions::functions::FunctionName::Custom(named_node);
-                if self
-                    .rewriter
-                    .builder_context
-                    .registry()
-                    .udaf(&fn_name)
-                    .is_ok()
-                {
-                    return;
-                }
+        if let ast::FunctionName::Iri(iri) = &func.name
+            && let Ok(named_node) = self.rewriter.planner_context.resolve_iri(iri)
+        {
+            let fn_name =
+                rdf_fusion_extensions::functions::FunctionName::Custom(named_node);
+            if self
+                .rewriter
+                .builder_context
+                .registry()
+                .udaf(&fn_name)
+                .is_ok()
+            {
+                return;
             }
         }
         for arg in &func.args {
@@ -2180,20 +2178,20 @@ impl<'a> GraphPatternVisitor<'a> for AggregateCheckVisitor<'a> {
     }
 
     fn visit_function(&mut self, func: &'a ast::Function<'a>) {
-        if let ast::FunctionName::Iri(iri) = &func.name {
-            if let Ok(named_node) = self.rewriter.planner_context.resolve_iri(iri) {
-                let fn_name =
-                    rdf_fusion_extensions::functions::FunctionName::Custom(named_node);
-                if self
-                    .rewriter
-                    .builder_context
-                    .registry()
-                    .udaf(&fn_name)
-                    .is_ok()
-                {
-                    self.has_aggregate = true;
-                    return;
-                }
+        if let ast::FunctionName::Iri(iri) = &func.name
+            && let Ok(named_node) = self.rewriter.planner_context.resolve_iri(iri)
+        {
+            let fn_name =
+                rdf_fusion_extensions::functions::FunctionName::Custom(named_node);
+            if self
+                .rewriter
+                .builder_context
+                .registry()
+                .udaf(&fn_name)
+                .is_ok()
+            {
+                self.has_aggregate = true;
+                return;
             }
         }
         for arg in &func.args {

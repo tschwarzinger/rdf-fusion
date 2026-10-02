@@ -272,13 +272,13 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
         for (col_name, encodings) in &join_columns {
             if encodings.len() > 1 && encodings.contains(&EncodingName::ObjectId) {
                 let column = Column::new_unqualified(col_name);
-                if let Ok(field) = exists_plan.schema().field_from_column(&column) {
-                    if matches!(
+                if let Ok(field) = exists_plan.schema().field_from_column(&column)
+                    && matches!(
                         field.data_type(),
                         DataType::Int32 | DataType::Int64 | DataType::FixedSizeBinary(_)
-                    ) {
-                        inner_decoded_cols.push(col(column));
-                    }
+                    )
+                {
+                    inner_decoded_cols.push(col(column));
                 }
             }
         }

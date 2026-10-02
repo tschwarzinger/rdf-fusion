@@ -255,21 +255,19 @@ impl UpdateOperationRewriter {
                     ast::GraphOrDefault::Default => GraphName::DefaultGraph,
                 };
 
-                if let GraphName::NamedNode(nn) = &from_graph {
-                    if let Some(graphs) =
+                if let GraphName::NamedNode(nn) = &from_graph
+                    && let Some(graphs) =
                         self.rewriter_context.dataset().available_named_graphs()
-                    {
-                        if !graphs.contains(
-                            &rdf_fusion_common::NamedOrBlankNode::NamedNode(nn.clone()),
-                        ) {
-                            if !*silent {
-                                return Err(SparqlParseError::new_without_span(format!(
-                                    "The graph {nn} does not exist"
-                                )));
-                            } else {
-                                return Ok(Vec::new());
-                            }
-                        }
+                    && !graphs.contains(&rdf_fusion_common::NamedOrBlankNode::NamedNode(
+                        nn.clone(),
+                    ))
+                {
+                    if !*silent {
+                        return Err(SparqlParseError::new_without_span(format!(
+                            "The graph {nn} does not exist"
+                        )));
+                    } else {
+                        return Ok(Vec::new());
                     }
                 }
 
@@ -297,21 +295,19 @@ impl UpdateOperationRewriter {
                     ast::GraphOrDefault::Default => GraphName::DefaultGraph,
                 };
 
-                if let GraphName::NamedNode(nn) = &from_graph {
-                    if let Some(graphs) =
+                if let GraphName::NamedNode(nn) = &from_graph
+                    && let Some(graphs) =
                         self.rewriter_context.dataset().available_named_graphs()
-                    {
-                        if !graphs.contains(
-                            &rdf_fusion_common::NamedOrBlankNode::NamedNode(nn.clone()),
-                        ) {
-                            if !*silent {
-                                return Err(SparqlParseError::new_without_span(format!(
-                                    "The graph {nn} does not exist"
-                                )));
-                            } else {
-                                return Ok(Vec::new());
-                            }
-                        }
+                    && !graphs.contains(&rdf_fusion_common::NamedOrBlankNode::NamedNode(
+                        nn.clone(),
+                    ))
+                {
+                    if !*silent {
+                        return Err(SparqlParseError::new_without_span(format!(
+                            "The graph {nn} does not exist"
+                        )));
+                    } else {
+                        return Ok(Vec::new());
                     }
                 }
 
@@ -361,21 +357,19 @@ impl UpdateOperationRewriter {
                     ast::GraphOrDefault::Default => GraphName::DefaultGraph,
                 };
 
-                if let GraphName::NamedNode(nn) = &from_graph {
-                    if let Some(graphs) =
+                if let GraphName::NamedNode(nn) = &from_graph
+                    && let Some(graphs) =
                         self.rewriter_context.dataset().available_named_graphs()
-                    {
-                        if !graphs.contains(
-                            &rdf_fusion_common::NamedOrBlankNode::NamedNode(nn.clone()),
-                        ) {
-                            if !*silent {
-                                return Err(SparqlParseError::new_without_span(format!(
-                                    "The graph {nn} does not exist"
-                                )));
-                            } else {
-                                return Ok(Vec::new());
-                            }
-                        }
+                    && !graphs.contains(&rdf_fusion_common::NamedOrBlankNode::NamedNode(
+                        nn.clone(),
+                    ))
+                {
+                    if !*silent {
+                        return Err(SparqlParseError::new_without_span(format!(
+                            "The graph {nn} does not exist"
+                        )));
+                    } else {
+                        return Ok(Vec::new());
                     }
                 }
 
@@ -657,13 +651,11 @@ impl UpdateOperationRewriter {
         let mut bnodes = Vec::new();
         collect_quad_blank_nodes(quads, &mut bnodes);
 
-        if is_delete_data {
-            if let Some((_, span)) = bnodes.first() {
-                return Err(SparqlParseError::new(
-                    *span,
-                    "Blank nodes are not allowed in DELETE DATA",
-                ));
-            }
+        if is_delete_data && let Some((_, span)) = bnodes.first() {
+            return Err(SparqlParseError::new(
+                *span,
+                "Blank nodes are not allowed in DELETE DATA",
+            ));
         }
 
         let mut op_blank_nodes = std::collections::HashMap::new();

@@ -127,11 +127,11 @@ impl LocalObjectIdDictionarySnapshot for RedbObjectIdDictionarySnapshot {
                     continue;
                 };
 
-                if Some(id) == last_id {
-                    if let Some(term) = &last_term {
-                        append_term(&mut builder, &RedbTerm::from(term.as_ref()));
-                        continue;
-                    }
+                if Some(id) == last_id
+                    && let Some(term) = &last_term
+                {
+                    append_term(&mut builder, &RedbTerm::from(term.as_ref()));
+                    continue;
                 }
 
                 if let Some(cached_term) =
@@ -417,14 +417,14 @@ impl LocalObjectIdTransaction for RedbObjectIdDictionaryTransaction {
         }
 
         let mut claim_changed = false;
-        if let (Some(max_id), Some((next_free, last_free))) = (max_id, current_claim) {
-            if max_id >= next_free {
-                claim_changed = true;
-                if max_id >= last_free {
-                    self.reset_state_on_conflict = None;
-                } else {
-                    self.reset_state_on_conflict = Some((max_id + 1, last_free));
-                }
+        if let (Some(max_id), Some((next_free, last_free))) = (max_id, current_claim)
+            && max_id >= next_free
+        {
+            claim_changed = true;
+            if max_id >= last_free {
+                self.reset_state_on_conflict = None;
+            } else {
+                self.reset_state_on_conflict = Some((max_id + 1, last_free));
             }
         }
 

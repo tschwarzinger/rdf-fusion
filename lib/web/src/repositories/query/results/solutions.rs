@@ -77,10 +77,10 @@ pub fn serialize_solutions(
 
             try_or_send_err!(handle_record_batch(&mut serializer, &variables, batch));
 
-            if let Some(chunk) = shared_buffer.take_bytes() {
-                if tx.send(Ok(chunk)).await.is_err() {
-                    return; // Receiver dropped, exit early
-                }
+            if let Some(chunk) = shared_buffer.take_bytes()
+                && tx.send(Ok(chunk)).await.is_err()
+            {
+                return; // Receiver dropped, exit early
             }
         }
 

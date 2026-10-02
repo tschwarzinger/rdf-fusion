@@ -157,30 +157,30 @@ pub async fn evaluate_update(
                 }
                 .await;
 
-                if let Err(e) = res {
-                    if !silent {
-                        return Err(e);
-                    }
+                if let Err(e) = res
+                    && !silent
+                {
+                    return Err(e);
                 }
             }
             UpdateOperation::Clear { silent, graph } => {
                 let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
                     .await?;
                 let res = transaction.clear_graph(df).await;
-                if let Err(e) = res {
-                    if !silent {
-                        return Err(QueryEvaluationError::Storage(e));
-                    }
+                if let Err(e) = res
+                    && !silent
+                {
+                    return Err(QueryEvaluationError::Storage(e));
                 }
             }
             UpdateOperation::Drop { silent, graph } => {
                 let df = create_graph_target_dataframe(ctx, transaction.as_ref(), graph)
                     .await?;
                 let res = transaction.drop_graph(df).await;
-                if let Err(e) = res {
-                    if !silent {
-                        return Err(QueryEvaluationError::Storage(e));
-                    }
+                if let Err(e) = res
+                    && !silent
+                {
+                    return Err(QueryEvaluationError::Storage(e));
                 }
             }
             UpdateOperation::Create { silent, graph } => {
@@ -194,12 +194,10 @@ pub async fn evaluate_update(
                     .create_named_graph(df)
                     .await
                     .map_err(QueryEvaluationError::Storage)?;
-                if let Some(false) = res {
-                    if !silent {
-                        return Err(QueryEvaluationError::GraphAlreadyExists(
-                            graph.clone(),
-                        ));
-                    }
+                if let Some(false) = res
+                    && !silent
+                {
+                    return Err(QueryEvaluationError::GraphAlreadyExists(graph.clone()));
                 }
             }
         }

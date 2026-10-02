@@ -585,24 +585,22 @@ async fn idb_list_metadata_local(
         let key_val = keys_arr.get(i);
         let val_val = values_arr.get(i);
 
-        if let Some(key_str) = key_val.as_string() {
-            if key_str.starts_with(&prefix_str) {
-                if let Ok(metadata) = BlobMetadata::try_from(val_val) {
-                    let location = Path::parse(&key_str).map_err(|e| {
-                        object_store::Error::Generic {
-                            store: "IndexedDB",
-                            source: Box::new(e),
-                        }
-                    })?;
-                    results.push(ObjectMeta {
-                        location,
-                        last_modified: metadata.last_modified,
-                        size: metadata.size,
-                        e_tag: None,
-                        version: None,
-                    });
-                }
-            }
+        if let Some(key_str) = key_val.as_string()
+            && key_str.starts_with(&prefix_str)
+            && let Ok(metadata) = BlobMetadata::try_from(val_val)
+        {
+            let location =
+                Path::parse(&key_str).map_err(|e| object_store::Error::Generic {
+                    store: "IndexedDB",
+                    source: Box::new(e),
+                })?;
+            results.push(ObjectMeta {
+                location,
+                last_modified: metadata.last_modified,
+                size: metadata.size,
+                e_tag: None,
+                version: None,
+            });
         }
     }
 

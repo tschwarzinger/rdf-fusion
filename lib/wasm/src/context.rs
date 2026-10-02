@@ -98,12 +98,11 @@ impl JsEngineConfig {
     ) -> Self {
         let mut custom_config = HashMap::new();
         for key in js_sys::Object::keys(&custom_config_obj).iter() {
-            if let Some(key_str) = key.as_string() {
-                if let Ok(value) = js_sys::Reflect::get(&custom_config_obj, &key) {
-                    if let Some(val_str) = value.as_string() {
-                        custom_config.insert(key_str, val_str);
-                    }
-                }
+            if let Some(key_str) = key.as_string()
+                && let Ok(value) = js_sys::Reflect::get(&custom_config_obj, &key)
+                && let Some(val_str) = value.as_string()
+            {
+                custom_config.insert(key_str, val_str);
             }
         }
 

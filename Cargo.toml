@@ -21,11 +21,11 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Tobias Schwarzinger <tobias.schwarzinger@tuwien.ac.at>"]
 license = "Apache-2.0"
 edition = "2024"
-rust-version = "1.86"                                                # Minimum Supported Rust Version (Adopt from DataFusion)
+rust-version = "1.94"                                                # Minimum Supported Rust Version (Adopt from DataFusion)
 repository = "https://codeberg.org/tschwarzinger/rdf-fusion"
 
 [workspace.dependencies]
@@ -118,18 +118,18 @@ oxrdfio = { version = "0.2", features = ["async-tokio"] }
 sparesults = { version = "0.3", features = ["async-tokio"] }
 
 # Internal dependencies
-rdf-fusion-compute = { version = "=0.2.1", path = "lib/compute" }
-rdf-fusion-extensions = { version = "=0.2.1", path = "lib/extensions" }
-rdf-fusion-common = { version = "=0.2.1", path = "lib/common" }
-rdf-fusion-encoding = { version = "=0.2.1", path = "lib/encoding" }
-rdf-fusion-execution = { version = "=0.2.1", path = "lib/execution" }
-rdf-fusion-functions = { version = "=0.2.1", path = "lib/functions" }
-rdf-fusion-logical = { version = "=0.2.1", path = "lib/logical" }
-rdf-fusion-physical = { version = "=0.2.1", path = "lib/physical" }
-rdf-fusion-storage = { version = "=0.2.1", path = "lib/storage" }
-rdf-fusion-sparql-parser = { version = "=0.2.1", path = "lib/sparql-parser" }
-rdf-fusion = { version = "=0.2.1", path = "lib/rdf-fusion" }
-rdf-fusion-web = { version = "=0.2.1", path = "lib/web" }
+rdf-fusion-compute = { version = "=0.3.0", path = "lib/compute" }
+rdf-fusion-extensions = { version = "=0.3.0", path = "lib/extensions" }
+rdf-fusion-common = { version = "=0.3.0", path = "lib/common" }
+rdf-fusion-encoding = { version = "=0.3.0", path = "lib/encoding" }
+rdf-fusion-execution = { version = "=0.3.0", path = "lib/execution" }
+rdf-fusion-functions = { version = "=0.3.0", path = "lib/functions" }
+rdf-fusion-logical = { version = "=0.3.0", path = "lib/logical" }
+rdf-fusion-physical = { version = "=0.3.0", path = "lib/physical" }
+rdf-fusion-storage = { version = "=0.3.0", path = "lib/storage" }
+rdf-fusion-sparql-parser = { version = "=0.3.0", path = "lib/sparql-parser" }
+rdf-fusion = { version = "=0.3.0", path = "lib/rdf-fusion" }
+rdf-fusion-web = { version = "=0.3.0", path = "lib/web" }
 
 [profile.dev]
 # TODO: Remove once DF join estimation does not overflow

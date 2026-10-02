@@ -339,17 +339,16 @@ impl<'rewriter> ExpressionRewriter<'rewriter> {
         match name.as_str() {
             "IRI" | "URI" => {
                 let mut args = rewritten_args;
-                if args.len() == 1 {
-                    if let Some(base_iri) =
+                if args.len() == 1
+                    && let Some(base_iri) =
                         self.graph_rewriter.planner_context().base_iri()
-                    {
-                        let base_lit = self.expr_builder_root.literal(
-                            &rdf_fusion_common::Literal::new_simple_literal(
-                                base_iri.as_str(),
-                            ),
-                        )?;
-                        args.push(base_lit.build()?);
-                    }
+                {
+                    let base_lit = self.expr_builder_root.literal(
+                        &rdf_fusion_common::Literal::new_simple_literal(
+                            base_iri.as_str(),
+                        ),
+                    )?;
+                    args.push(base_lit.build()?);
                 }
                 return Ok(self.expr_builder_root.try_create_builder_for_udf(
                     &rdf_fusion_extensions::functions::FunctionName::Builtin(

@@ -97,13 +97,8 @@ Examples of using RDF Fusion can be found in the [examples](./examples) director
 
 ## Missing Feature?
 
-As mentioned above, RDF Fusion is still in an early stage.
-We are missing essential features for a standalone SPARQL engine, such as persistent storage, RDF 1.2 support, a
-graphical user interface, and many other features that have been developed in other engines over many years.
-Even though Arrow and DataFusion helps us in building these features (A LOT!), this is still a non-trivial task that
-requires sustained effort.
-If you are looking to implement some of these features, please create or comment on
-an [issue](https://codeberg.org/tschwarzinger/rdf-fusion/issues) to get in touch with us.
+As mentioned above, RDF Fusion is still in an early stage, please open an [issue]([issue](https://codeberg.org/tschwarzinger/rdf-fusion/issues)).
+If you are looking to implement some of these features, please comment on an issue to get in touch with us.
 We are more than happy to help you with your first steps and welcome all kinds of contributions!
 
 ## Project Structure
