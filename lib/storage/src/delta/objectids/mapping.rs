@@ -19,9 +19,7 @@ use deltalake::logstore::{LogStore, LogStoreRef};
 use deltalake::operations::create::CreateBuilder;
 use deltalake::protocol::{DeltaOperation, SaveMode};
 use deltalake::writer::{DeltaWriter, RecordBatchWriter};
-use deltalake::{
-    DataType as DeltaDataType, DeltaTable, DeltaTableConfig, DeltaTableError, StructField,
-};
+use deltalake::{DataType as DeltaDataType, DeltaTable, DeltaTableError, StructField};
 use futures::StreamExt;
 use md5::{Digest, Md5};
 use rdf_fusion_common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
@@ -154,8 +152,7 @@ impl DeltaObjectIdDictionary {
         session: &SessionState,
         log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadsStorageError> {
-        let mut table =
-            DeltaTable::new(Arc::clone(&log_store), DeltaTableConfig::default());
+        let mut table = DeltaTable::new(Arc::clone(&log_store));
         table.load().await?;
 
         let delta_columns = [

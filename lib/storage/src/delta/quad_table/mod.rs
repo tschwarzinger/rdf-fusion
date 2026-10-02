@@ -23,9 +23,7 @@ use deltalake::parquet::basic::{Compression, ZstdLevel};
 use deltalake::parquet::file::metadata::SortingColumn;
 use deltalake::parquet::file::properties::EnabledStatistics;
 use deltalake::parquet::schema::types::ColumnPath;
-use deltalake::{
-    DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField, TableProperty,
-};
+use deltalake::{DataType as DeltaDataType, DeltaTable, StructField, TableProperty};
 use futures::TryStreamExt;
 use object_store::ObjectStoreExt;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -151,8 +149,7 @@ impl DeltaQuadsQuadTable {
         log_store: LogStoreRef,
         components: QuadTableName,
     ) -> Result<Self, DeltaQuadsStorageError> {
-        let mut table =
-            DeltaTable::new(Arc::clone(&log_store), DeltaTableConfig::default());
+        let mut table = DeltaTable::new(Arc::clone(&log_store));
         table.load().await?;
 
         let snapshot = table.snapshot()?.snapshot();

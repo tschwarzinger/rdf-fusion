@@ -44,9 +44,7 @@ use deltalake::kernel::engine::arrow_conversion::{TryFromArrow, TryIntoArrow};
 use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
 use deltalake::table::state::DeltaTableState;
-use deltalake::{
-    DataType as DeltaDataType, DeltaTable, DeltaTableConfig, StructField, TableProperty,
-};
+use deltalake::{DataType as DeltaDataType, DeltaTable, StructField, TableProperty};
 use object_store::ObjectStore;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_encoding::QuadStorageEncoding;
@@ -278,7 +276,7 @@ impl DeltaQuadsStorageLog {
     pub async fn try_load(
         log_store: LogStoreRef,
     ) -> Result<Self, DeltaQuadsStorageError> {
-        let mut table = DeltaTable::new(log_store, DeltaTableConfig::default());
+        let mut table = DeltaTable::new(log_store);
         table.load().await?;
 
         let table_schema = table.snapshot()?.snapshot().arrow_schema();

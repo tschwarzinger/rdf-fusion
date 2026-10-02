@@ -38,12 +38,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
 
 [[package]]
+name = "alloc-no-stdlib"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2fb6cfd47bf496ff64095c20eaba0c201404ee38714d4142fcfa1dc334fcc7a"
+
+[[package]]
 name = "alloc-stdlib"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94fb8275041c72129eb51b7d0322c29b8387a0386127718b096429201a5d6ece"
 dependencies = [
- "alloc-no-stdlib",
+ "alloc-no-stdlib 2.0.4",
+]
+
+[[package]]
+name = "alloc-stdlib"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5c1865780388bfa186411ab5f247819487fc4864c6e9c3106611fa347586e1"
+dependencies = [
+ "alloc-no-stdlib 3.0.0",
 ]
 
 [[package]]
@@ -1067,9 +1082,9 @@ version = "8.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cc91aac060a7a1e25823bdccbfb6af1875b88f17c6daac97894eed8207166b3"
 dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
- "brotli-decompressor",
+ "alloc-no-stdlib 2.0.4",
+ "alloc-stdlib 0.2.2",
+ "brotli-decompressor 5.0.1",
 ]
 
 [[package]]
@@ -1078,8 +1093,18 @@ version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5962523e1b92ce1b5e793d9169b9943eece10d39f62550bc04bb605d75b94924"
 dependencies = [
- "alloc-no-stdlib",
- "alloc-stdlib",
+ "alloc-no-stdlib 2.0.4",
+ "alloc-stdlib 0.2.2",
+]
+
+[[package]]
+name = "brotli-decompressor"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46087801e40b785410c352bee60e9b6226312709cf52d5fff92776cdf5cf6490"
+dependencies = [
+ "alloc-no-stdlib 3.0.0",
+ "alloc-stdlib 0.3.0",
 ]
 
 [[package]]
@@ -1101,9 +1126,9 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "buoyant_kernel"
-version = "0.25.1"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1613e308b8de3a103bf6d87f60dc5218ac9b220e4e8974962416c8a28437e849"
+checksum = "6605210c22aaa8b9c5496548a860f43e6d0d27f8c153837d5e27739b4664c524"
 dependencies = [
  "arrow",
  "buoyant_kernel_derive",
@@ -1132,9 +1157,9 @@ dependencies = [
 
 [[package]]
 name = "buoyant_kernel_derive"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5cdc90bb920438aa9a39089b76f0614183af303f181bf18d05b456a30dd9740"
+checksum = "6f22616ba486e89c304e6bf092f573545220da1f3e1399bb594b47698578a588"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1143,15 +1168,19 @@ dependencies = [
 
 [[package]]
 name = "buoyant_kernel_engine"
-version = "0.25.0"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6281d772c5eb2a0b88e3d2f1b191ed793f90e58c1d4e3ed2e91db04607da678b"
+checksum = "b06f319906f8825edc80f9240225833e270d02fb893fad1457d24e960c71ad80"
 dependencies = [
+ "async-stream",
+ "async-trait",
  "buoyant_kernel",
  "bytes",
+ "chrono",
  "futures",
  "itertools 0.14.0",
  "reqwest 0.13.4",
+ "serde_json",
  "tokio",
  "tracing",
  "url",
@@ -1841,7 +1870,7 @@ dependencies = [
  "object_store",
  "parking_lot",
  "parquet",
- "sqlparser 0.62.0",
+ "sqlparser",
  "tempfile",
  "tokio",
  "url",
@@ -1919,7 +1948,7 @@ dependencies = [
  "object_store",
  "parquet",
  "recursive",
- "sqlparser 0.62.0",
+ "sqlparser",
  "tokio",
  "uuid",
  "web-time",
@@ -2133,7 +2162,7 @@ dependencies = [
  "itertools 0.15.0",
  "recursive",
  "serde_json",
- "sqlparser 0.62.0",
+ "sqlparser",
 ]
 
 [[package]]
@@ -2521,14 +2550,15 @@ dependencies = [
  "log",
  "recursive",
  "regex",
- "sqlparser 0.62.0",
+ "sqlparser",
  "stacker",
 ]
 
 [[package]]
 name = "deltalake"
-version = "1.0.0"
-source = "git+https://github.com/delta-io/delta-rs?rev=cee6f9ea9d1deab2f70d23221abb5386b60f3a9a#cee6f9ea9d1deab2f70d23221abb5386b60f3a9a"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27ef8d070c934154655f69963c9a59247a7b8698e2ce9dfda74adcf386264927"
 dependencies = [
  "buoyant_kernel",
  "ctor",
@@ -2539,7 +2569,8 @@ dependencies = [
 [[package]]
 name = "deltalake-aws"
 version = "1.0.0"
-source = "git+https://github.com/delta-io/delta-rs?rev=cee6f9ea9d1deab2f70d23221abb5386b60f3a9a#cee6f9ea9d1deab2f70d23221abb5386b60f3a9a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3e908f6f42a109ed01ce752c2dd8f92a84181cbd660f59f7af28ad93b450c93"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -2561,10 +2592,11 @@ dependencies = [
 
 [[package]]
 name = "deltalake-core"
-version = "1.0.0"
-source = "git+https://github.com/delta-io/delta-rs?rev=cee6f9ea9d1deab2f70d23221abb5386b60f3a9a#cee6f9ea9d1deab2f70d23221abb5386b60f3a9a"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb39c467bc0744374f5474fbe8a1444802262d6d1c592297c12077d4b0a6afa3"
 dependencies = [
- "alloc-stdlib",
+ "alloc-stdlib 0.2.2",
  "arrow",
  "arrow-arith",
  "arrow-array",
@@ -2577,7 +2609,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "async-trait",
- "brotli-decompressor",
+ "brotli-decompressor 6.0.0",
  "buoyant_kernel",
  "buoyant_kernel_engine",
  "bytes",
@@ -2591,11 +2623,11 @@ dependencies = [
  "deltalake-derive",
  "dirs",
  "either",
+ "foldhash 0.2.0",
  "futures",
  "humantime",
  "indexmap",
  "itertools 0.14.0",
- "num_cpus",
  "object_store",
  "parking_lot",
  "parquet",
@@ -2607,7 +2639,8 @@ dependencies = [
  "roaring",
  "serde",
  "serde_json",
- "sqlparser 0.61.0",
+ "sqlparser",
+ "sysinfo",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -2619,7 +2652,8 @@ dependencies = [
 [[package]]
 name = "deltalake-derive"
 version = "1.0.0"
-source = "git+https://github.com/delta-io/delta-rs?rev=cee6f9ea9d1deab2f70d23221abb5386b60f3a9a#cee6f9ea9d1deab2f70d23221abb5386b60f3a9a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5a646e2b05608db1e5f91e75b6af841d92294ea0864789bb01f3f818e5f7b25"
 dependencies = [
  "convert_case",
  "itertools 0.14.0",
@@ -4020,6 +4054,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ntapi"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
+dependencies = [
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4118,13 +4161,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "num_cpus"
-version = "1.17.0"
+name = "objc2-core-foundation"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
+checksum = "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
 dependencies = [
- "hermit-abi",
+ "bitflags",
+]
+
+[[package]]
+name = "objc2-io-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33fafba39597d6dc1fb709123dfa8289d39406734be322956a69f0931c73bb15"
+dependencies = [
  "libc",
+ "objc2-core-foundation",
 ]
 
 [[package]]
@@ -5376,6 +5428,8 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
+ "serde",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -5844,16 +5898,6 @@ dependencies = [
 
 [[package]]
 name = "sqlparser"
-version = "0.61.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbf5ea8d4d7c808e1af1cbabebca9a2abe603bcefc22294c5b95018d53200cb7"
-dependencies = [
- "log",
- "recursive",
-]
-
-[[package]]
-name = "sqlparser"
 version = "0.62.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c6d1b651dc4edf07eead2a0c6c78016ce971bc2c10da5266861b13f25e7cec"
@@ -5975,6 +6019,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.38.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ab6a2f8bfe508deb3c6406578252e491d299cbbf3bc0529ecc3313aee4a52f"
+dependencies = [
+ "libc",
+ "memchr",
+ "ntapi",
+ "objc2-core-foundation",
+ "objc2-io-kit",
+ "windows",
 ]
 
 [[package]]
@@ -6862,6 +6920,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
+name = "windows"
+version = "0.62.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "527fadee13e0c05939a6a05d5bd6eec6cd2e3dbd648b9f8e447c6518133d8580"
+dependencies = [
+ "windows-collections",
+ "windows-core",
+ "windows-future",
+ "windows-numerics",
+]
+
+[[package]]
+name = "windows-collections"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23b2d95af1a8a14a3c7367e1ed4fc9c20e0a26e79551b1454d72583c97cc6610"
+dependencies = [
+ "windows-core",
+]
+
+[[package]]
 name = "windows-core"
 version = "0.62.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6872,6 +6951,17 @@ dependencies = [
  "windows-link",
  "windows-result",
  "windows-strings",
+]
+
+[[package]]
+name = "windows-future"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1d6f90251fe18a279739e78025bd6ddc52a7e22f921070ccdc67dde84c605cb"
+dependencies = [
+ "windows-core",
+ "windows-link",
+ "windows-threading",
 ]
 
 [[package]]
@@ -6901,6 +6991,16 @@ name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-numerics"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e2e40844ac143cdb44aead537bbf727de9b044e107a0f1220392177d15b0f26"
+dependencies = [
+ "windows-core",
+ "windows-link",
+]
 
 [[package]]
 name = "windows-registry"
@@ -6963,6 +7063,15 @@ dependencies = [
  "windows_x86_64_gnu",
  "windows_x86_64_gnullvm",
  "windows_x86_64_msvc",
+]
+
+[[package]]
+name = "windows-threading"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3949bd5b99cafdf1c7ca86b43ca564028dfe27d66958f2470940f73d86d75b37"
+dependencies = [
+ "windows-link",
 ]
 
 [[package]]
