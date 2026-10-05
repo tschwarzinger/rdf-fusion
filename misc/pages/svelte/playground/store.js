@@ -3,6 +3,7 @@ import { writable } from 'svelte/store';
 export const jsStore = writable(null);
 export const wasmModule = writable(null);
 export const activeVersionMetadata = writable(null);
+export const activeDatasetId = writable(null);
 export const activeDatasetMetadata = writable(null);
 export const downloadedDatasets = writable([]);
 export const customDatasets = writable([]);

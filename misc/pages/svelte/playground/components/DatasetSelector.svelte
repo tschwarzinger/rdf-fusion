@@ -2,7 +2,7 @@
     import { onMount, untrack } from 'svelte';
     import { slide } from 'svelte/transition';
     import { cubicInOut, cubicOut } from 'svelte/easing';
-    import { jsStore, wasmModule, activeVersionMetadata, activeDatasetMetadata, downloadedDatasets, customDatasets, isDatasetLoading, setStatus, engineSettings, reloadStoreTrigger, clearQueryResults, queryResults, expandedStatusSection } from '../store.js';
+    import { jsStore, wasmModule, activeVersionMetadata, activeDatasetMetadata, activeDatasetId, downloadedDatasets, customDatasets, isDatasetLoading, setStatus, engineSettings, reloadStoreTrigger, clearQueryResults, queryResults, expandedStatusSection } from '../store.js';
     import { getCustomDatasets, saveCustomDataset, getDownloadedDatasets, saveDownloadedDataset, putBlob, getBlob, deleteBlob, DB_NAME } from '../db.js';
     import { DATASETS } from '../data_datasets.js';
 
@@ -386,6 +386,17 @@
         const distId = selectedDistributionId;
         if (distId) {
             localStorage.setItem('rdfFusionLastDataset', distId);
+            activeDatasetId.set(distId);
+        } else {
+            activeDatasetId.set(null);
+        }
+    });
+
+    $effect(() => {
+        const storeId = $activeDatasetId;
+        const currentId = selectedDistributionId;
+        if (storeId && storeId !== currentId) {
+            selectedDistributionId = storeId;
         }
     });
 

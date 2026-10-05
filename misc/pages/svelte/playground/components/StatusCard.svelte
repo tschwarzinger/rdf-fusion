@@ -1,6 +1,6 @@
 <script>
     import { onMount } from 'svelte';
-    import { jsStore, wasmModule, activeVersionMetadata, activeDatasetMetadata, queryResults, isDatasetLoading, isEngineInitializing, setStatus, expandedStatusSection } from '../store.js';
+    import { jsStore, wasmModule, activeVersionMetadata, activeDatasetMetadata, activeDatasetId, queryResults, isDatasetLoading, isEngineInitializing, setStatus, expandedStatusSection } from '../store.js';
     import { ensureOfficialVersionDownloaded, activateVersion, OFFICIAL_VERSIONS } from '../engine.js';
     import { getLocalVersion } from '../db.js';
     import VersionManager from './VersionManager.svelte';
@@ -39,8 +39,8 @@
         isQuickConfiguring = true;
         setStatus('Setting up stable WASM release & BSBM 10000 dataset...', 'fa-cog fa-spin', 'brown');
         try {
-            const targetVersionId = "initial";
-            const targetDatasetId = "bsbm-10000-parquet";
+            const targetVersionId = "0.3.0";
+            const targetDatasetId = "bsbm-1000-parquet";
 
             // 1. Ensure the stable release is available locally.
             const localVer = await ensureOfficialVersionDownloaded(targetVersionId);
@@ -48,7 +48,7 @@
             // 2. Record the dataset selection, then activate the engine via the shared
             //    engine.js path (same as selecting it in the UI). This also triggers the
             //    dataset store (re-)creation for BSBM 10000 via reloadStoreTrigger.
-            localStorage.setItem('rdfFusionLastDataset', targetDatasetId);
+            activeDatasetId.set(targetDatasetId);
             await activateVersion(targetVersionId, { localVersion: localVer });
             if ($wasmModule === null) {
                 throw new Error("Engine did not initialize.");
