@@ -10,14 +10,29 @@ jobs:
     name: Validate Version
     runs-on: tuw-runner
     steps:
+      - name: Install git-lfs
+        run: |
+          apt-get update
+          apt-get install -y git-lfs
+          git lfs install --skip-repo
+
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
 
       - name: Setup Rust Environment
         uses: ./.forgejo/actions/setup-rust
         with:
-          components: ''
-          tools: ''
+          tools: 'just taplo-cli'
+
+      - name: Run Tests
+        run: |
+          just lint
+          just bench::prepare-benches-tests
+          just test
+          just test-examples rustdoc
 
       - name: Check Version
         run: bash misc/ci/check-version.sh ${{ github.ref_name }}
@@ -42,14 +57,8 @@ jobs:
       - name: Setup Rust Environment
         uses: ./.forgejo/actions/setup-rust
         with:
-          tools: 'just taplo-cli'
-
-      - name: Run Tests
-        run: |
-          just lint
-          just bench::prepare-benches-tests
-          just test
-          just test-examples rustdoc
+          components: ''
+          tools: ''
 
       - name: Publish
         run: cargo publish --workspace
@@ -98,8 +107,17 @@ jobs:
     needs: validate
     runs-on: tuw-runner
     steps:
+      - name: Install git-lfs
+        run: |
+          apt-get update
+          apt-get install -y git-lfs
+          git lfs install --skip-repo
+
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: true
 
       - name: Setup Rust Environment
         uses: ./.forgejo/actions/setup-rust
@@ -130,9 +148,6 @@ jobs:
     needs: [ build-binaries, build-wasm ]
     runs-on: tuw-runner
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
       - name: Download Binaries
         uses: https://data.forgejo.org/forgejo/download-artifact@v4
         with:

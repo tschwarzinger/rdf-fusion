@@ -1,5 +1,6 @@
 [package]
 name = "rdf-fusion-testsuite"
+publish = false
 version = "0.0.0"
 authors.workspace = true
 license.workspace = true
