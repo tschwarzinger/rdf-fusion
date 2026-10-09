@@ -145,7 +145,10 @@ pub async fn main() -> anyhow::Result<()> {
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
     let session_config = create_cli_session_config()?;
-    let rdf_fusion_options = session_config.rdf_fusion_options_or_default();
+    let rdf_fusion_options = session_config
+        .rdf_fusion_options()
+        .expect("RDF fusion options must be set")
+        .clone();
 
     let runtime_env = build_runtime_env(args)?;
 
@@ -170,10 +173,11 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
             }
 
             Arc::new(
-                ParquetQuadStorage::try_load(
+                ParquetQuadStorage::try_load_with_options(
                     location,
                     encoding,
                     runtime_env.object_store_registry.as_ref(),
+                    rdf_fusion_options.storage.parquet.clone(),
                 )
                 .await
                 .context("Failed to create Parquet storage")?,
