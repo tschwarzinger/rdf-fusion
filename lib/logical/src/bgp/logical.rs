@@ -185,10 +185,6 @@ impl UserDefinedLogicalNodeCore for BgpNode {
             self.columns_to_decode.clone(),
         )?)
     }
-
-    fn supports_limit_pushdown(&self) -> bool {
-        true
-    }
 }
 
 /// Computes the schema of the BGP node.

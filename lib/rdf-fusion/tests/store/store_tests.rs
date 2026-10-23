@@ -296,3 +296,57 @@ async fn query_with_string_encoding_option() -> Result<(), Box<dyn Error>> {
     );
     Ok(())
 }
+
+/// A limit must not be pushed into the inputs of a join. Only the last subject has both
+/// predicates, so limiting the inputs before joining them would produce no solution.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_limit_is_not_pushed_into_join_inputs() -> Result<(), Box<dyn Error>> {
+    let store = Store::new_in_memory().await;
+    let p1 = NamedNode::new_unchecked("http://example.com/p1");
+    let p2 = NamedNode::new_unchecked("http://example.com/p2");
+    let o = NamedNode::new_unchecked("http://example.com/o");
+    for i in 0..100 {
+        let s = NamedNode::new_unchecked(format!("http://example.com/s{i:03}"));
+        store
+            .insert(&Quad::new(
+                s.clone(),
+                p1.clone(),
+                o.clone(),
+                GraphName::DefaultGraph,
+            ))
+            .await?;
+        if i == 99 {
+            store
+                .insert(&Quad::new(
+                    s,
+                    p2.clone(),
+                    o.clone(),
+                    GraphName::DefaultGraph,
+                ))
+                .await?;
+        }
+    }
+
+    for query in [
+        "SELECT ?s WHERE { ?s <http://example.com/p1> ?a . ?s <http://example.com/p2> ?b } LIMIT 1",
+        "SELECT ?s WHERE {
+            ?s <http://example.com/p2> ?b .
+            ?s ?p ?a
+            FILTER(?p IN (<http://example.com/p1>))
+        } LIMIT 1",
+    ] {
+        let QueryResults::Solutions(solutions) = store.query(query).await? else {
+            panic!("Expected QueryResults::Solutions");
+        };
+        let batches = solutions
+            .into_record_batch_stream()?
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        let num_rows = batches.iter().map(|b| b.num_rows()).sum::<usize>();
+        assert_eq!(num_rows, 1, "Wrong number of solutions for {query}");
+    }
+
+    Ok(())
+}
