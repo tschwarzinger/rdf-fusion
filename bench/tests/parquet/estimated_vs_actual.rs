@@ -2,8 +2,10 @@ use crate::parquet::{ParquetTestConfig, setup_test_store};
 use datafusion::logical_expr::{Extension, LogicalPlan};
 use datafusion::physical_plan::metrics::MetricValue;
 use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
+use datafusion::prelude::SessionConfig;
 use futures::StreamExt;
 use prettytable::{Row, Table, cell};
+use rdf_fusion::common::config::{PlanningBloomFilters, RdfFusionOptions};
 use rdf_fusion::common::sparql::{QueryVariant, RdfFusionQuery};
 use rdf_fusion::common::{
     NamedNode, NamedNodePattern, QuadComponent, RdfDumpFormat, RdfSortOrder, TermPattern,
@@ -20,10 +22,61 @@ use rdf_fusion_storage::parquet::ParquetQuadStorage;
 use std::sync::Arc;
 use url::Url;
 
-/// Asserts that the estimated scanned bytes produced by the estimator are consistent with the
-/// bytes actually scanned during execution for a selection of triple patterns.
+/// Compares the estimated scanned bytes with the bytes actually scanned during execution for a
+/// selection of triple patterns, without using Bloom filters during planning.
+///
+/// Bound columns that are not part of the sort order prefix (here, the subject and the object) are
+/// barely pruned by the row group statistics. Hence, their scans are heavily overestimated, while
+/// the Bloom filters prune most row groups during execution. The actual bytes also contain the
+/// Bloom filters that are read during execution.
 #[tokio::test]
-async fn test_estimated_bytes_match_actual_scanned_bytes() {
+async fn test_estimated_bytes_without_planning_bloom_filters() {
+    let table = estimated_vs_actual_table(PlanningBloomFilters::Never).await;
+    insta::assert_snapshot!(table, @"
+    +-----------------------+-----------+-----------+---------+----------+
+    | Pattern               | Row Count | Estimated | Actual  | Ratio    |
+    +-----------------------+-----------+-----------+---------+----------+
+    | bound-subject         | 10        | 3527292   | 1998138 | 176.53%  |
+    +-----------------------+-----------+-----------+---------+----------+
+    | bound-predicate       | 5930      | 812875    | 812875  | 100.00%  |
+    +-----------------------+-----------+-----------+---------+----------+
+    | bound-object          | 47        | 2152536   | 210314  | 1023.49% |
+    +-----------------------+-----------+-----------+---------+----------+
+    | subject-and-predicate | 0         | 795707    | 8209    | 9693.11% |
+    +-----------------------+-----------+-----------+---------+----------+
+    | free                  | 374911    | 9663754   | 9663754 | 100.00%  |
+    +-----------------------+-----------+-----------+---------+----------+
+    ");
+}
+
+/// Same as [`test_estimated_bytes_without_planning_bloom_filters`] but with Bloom filters during
+/// planning. The row groups that are pruned by the Bloom filters are not part of the estimate,
+/// which brings the estimate close to the actual bytes.
+#[tokio::test]
+async fn test_estimated_bytes_with_planning_bloom_filters() {
+    let table = estimated_vs_actual_table(PlanningBloomFilters::Always).await;
+    insta::assert_snapshot!(table, @"
+    +-----------------------+-----------+-----------+---------+---------+
+    | Pattern               | Row Count | Estimated | Actual  | Ratio   |
+    +-----------------------+-----------+-----------+---------+---------+
+    | bound-subject         | 10        | 1969894   | 1981720 | 99.40%  |
+    +-----------------------+-----------+-----------+---------+---------+
+    | bound-predicate       | 5930      | 812875    | 812875  | 100.00% |
+    +-----------------------+-----------+-----------+---------+---------+
+    | bound-object          | 47        | 171556    | 171910  | 99.79%  |
+    +-----------------------+-----------+-----------+---------+---------+
+    | subject-and-predicate | 0         | 0         | 0       | -       |
+    +-----------------------+-----------+-----------+---------+---------+
+    | free                  | 374911    | 9663754   | 9663754 | 100.00% |
+    +-----------------------+-----------+-----------+---------+---------+
+    ");
+}
+
+/// Returns a table that compares the estimated with the actual scanned bytes for a selection of
+/// triple patterns on a POS-sorted file.
+async fn estimated_vs_actual_table(
+    planning_bloom_filters: PlanningBloomFilters,
+) -> String {
     let base_store = setup_test_store().await;
 
     let config = ParquetTestConfig::new(
@@ -99,23 +152,30 @@ async fn test_estimated_bytes_match_actual_scanned_bytes() {
         .await
         .unwrap();
 
-    let registry = Arc::clone(
-        &base_store
-            .context()
-            .session_context()
-            .runtime_env()
-            .object_store_registry,
-    );
-    let storage = ParquetQuadStorage::try_load(
-        Url::parse(test_url).unwrap(),
-        config.config.encoding().into(),
-        Arc::as_ref(&registry),
-    )
-    .await
-    .unwrap();
+    let state = base_store.context().session_context().state();
+    let storage = ParquetQuadStorage::builder(Url::parse(test_url).unwrap())
+        .with_encoding(config.config.encoding().into())
+        .build(&state)
+        .await
+        .unwrap();
+
+    let mut session_config = SessionConfig::new()
+        .with_batch_size(8192)
+        .with_target_partitions(1);
+    session_config
+        .options_mut()
+        .execution
+        .parquet
+        .pushdown_filters = true;
+    let mut rdf_fusion_options = RdfFusionOptions::default();
+    rdf_fusion_options.execution.planning_bloom_filters = planning_bloom_filters;
+    session_config
+        .options_mut()
+        .extensions
+        .insert(rdf_fusion_options);
 
     let context = RdfFusionContextBuilder::new(Arc::new(storage))
-        .with_single_partition_session_config()
+        .with_session_config(Some(session_config))
         .with_runtime_env(Some(Arc::clone(
             &base_store.context().session_context().runtime_env(),
         )))
@@ -138,21 +198,7 @@ async fn test_estimated_bytes_match_actual_scanned_bytes() {
         ]));
     }
 
-    insta::assert_snapshot!(table.to_string(), @"
-    +-----------------------+-----------+-----------+---------+---------+
-    | Pattern               | Row Count | Estimated | Actual  | Ratio   |
-    +-----------------------+-----------+-----------+---------+---------+
-    | bound-subject         | 10        | 1969894   | 1907839 | 103.25% |
-    +-----------------------+-----------+-----------+---------+---------+
-    | bound-predicate       | 5930      | 812875    | 812875  | 100.00% |
-    +-----------------------+-----------+-----------+---------+---------+
-    | bound-object          | 47        | 171556    | 161637  | 106.14% |
-    +-----------------------+-----------+-----------+---------+---------+
-    | subject-and-predicate | 0         | 0         | 0       | -       |
-    +-----------------------+-----------+-----------+---------+---------+
-    | free                  | 374911    | 9663754   | 9663754 | 100.00% |
-    +-----------------------+-----------+-----------+---------+---------+
-    ");
+    table.to_string()
 }
 
 /// Returns the estimated number of bytes scanned, obtained from the statistics.

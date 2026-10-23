@@ -1,13 +1,19 @@
+use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
+use object_store::ObjectStore;
+use object_store::memory::InMemory;
 use rdf_fusion::common::{GraphNameRef, NamedNode, Quad, RdfFormat};
 use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
 use rdf_fusion::store::Store;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_execution::RdfFusionContextBuilder;
-use rdf_fusion_storage::delta::DeltaQuadsStorage;
+use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::quad_tables::QuadTableName;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::sync::Arc;
 use tokio::fs::File;
+use tokio::runtime::Handle;
+use url::Url;
 
 mod bgp;
 mod exists;
@@ -20,14 +26,31 @@ pub struct StoreTestContext {
 impl StoreTestContext {
     /// Bootstraps a fresh, empty in-memory Store.
     pub async fn new() -> Self {
-        let storage = DeltaQuadsStorage::new_in_memory(
-            QuadStorageEncodingName::ObjectId,
-            vec![QuadTableName::GPOS],
+        // The storage and the query engine must share the object store, as planning reads the
+        // Parquet metadata of the storage's files.
+        let memory_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let runtime_env = RuntimeEnvBuilder::default().build_arc().unwrap();
+        runtime_env.register_object_store(
+            &Url::parse("memory:///").unwrap(),
+            Arc::clone(&memory_store),
+        );
+        let log_store = logstore_with(
+            memory_store,
+            &Url::parse("memory:///").unwrap(),
+            StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
         )
-        .await;
+        .unwrap();
+
+        let storage = DeltaQuadsStorageBuilder::new()
+            .with_log_store(log_store)
+            .with_encoding(QuadStorageEncodingName::ObjectId)
+            .with_quad_tables(vec![QuadTableName::GPOS])
+            .build()
+            .await
+            .unwrap();
 
         let ctx = RdfFusionContextBuilder::new(Arc::new(storage))
-            .with_register_in_memory_store(true)
+            .with_runtime_env(Some(runtime_env))
             .with_single_partition_session_config()
             .build()
             .unwrap();

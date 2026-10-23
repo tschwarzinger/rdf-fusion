@@ -4,9 +4,9 @@ use datafusion::datasource::object_store::{
     DefaultObjectStoreRegistry, ObjectStoreRegistry,
 };
 use datafusion::execution::DiskManager;
-use datafusion::execution::SessionState;
 use datafusion::execution::disk_manager::DiskManagerMode;
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
+use datafusion::execution::{SessionState, SessionStateBuilder};
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::ExtensionPlanner;
 use datafusion::prelude::SessionConfig;
@@ -376,14 +376,6 @@ async fn create_parquet_context(
             .cloned()
             .unwrap_or_default();
 
-        let storage = ParquetQuadStorage::builder(url)
-            .with_encoding(encoding.into())
-            .with_object_store_registry(registry.as_ref())
-            .with_options(rdf_fusion_options.storage.parquet)
-            .build()
-            .await
-            .map_err(|e| e.to_string())?;
-
         let runtime = RuntimeEnvBuilder::default()
             .with_object_store_registry(registry)
             .with_disk_manager_builder(
@@ -391,6 +383,19 @@ async fn create_parquet_context(
             )
             .with_memory_limit(settings.memory_limit_mb * 1024 * 1024, 1.0)
             .build_arc()
+            .map_err(|e| e.to_string())?;
+
+        // Use the same runtime environment as the query engine, such that the eagerly loaded
+        // Parquet footers are cached for querying.
+        let loading_state = SessionStateBuilder::new()
+            .with_runtime_env(Arc::clone(&runtime))
+            .with_config(session_config.clone())
+            .build();
+        let storage = ParquetQuadStorage::builder(url)
+            .with_encoding(encoding.into())
+            .with_options(rdf_fusion_options.storage.parquet)
+            .build(&loading_state)
+            .await
             .map_err(|e| e.to_string())?;
 
         let context = RdfFusionContextBuilder::new(Arc::new(storage))

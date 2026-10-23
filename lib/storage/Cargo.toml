@@ -12,6 +12,7 @@ RDF Fusion Storage Layers
 [dependencies]
 async-trait.workspace = true
 bytes.workspace = true
+chrono.workspace = true
 futures.workspace = true
 md-5.workspace = true
 object_store.workspace = true

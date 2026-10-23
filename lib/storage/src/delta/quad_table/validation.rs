@@ -52,7 +52,6 @@ pub async fn validate_quad_table(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parquet::{PreloadedBloomFilters, PreloadedParquetMetadata};
     use datafusion::arrow::array::StringArray;
     use datafusion::arrow::datatypes::{DataType, Field, Schema};
     use datafusion::arrow::record_batch::RecordBatch;
@@ -146,8 +145,6 @@ mod tests {
             snapshot,
             log_store,
             Arc::new(vec![]),
-            PreloadedParquetMetadata::new(),
-            PreloadedBloomFilters::new(),
             components,
             0,
         )

@@ -60,6 +60,10 @@ impl RdfParquetLoader {
     }
 
     /// Loads the given RDF input into a Parquet database at the specified output URL.
+    ///
+    /// If the URL points to a `.parquet` file, a single file is written. Otherwise, the URL is
+    /// treated as a directory and the quads are split into multiple files of approximately
+    /// `datafusion.execution.soft_max_rows_per_output_file` rows.
     pub async fn load_many(
         &self,
         inputs: Vec<RdfInput>,
@@ -137,21 +141,57 @@ impl RdfParquetLoader {
             }
         };
 
+        let max_rows_per_file = ctx
+            .state()
+            .config_options()
+            .execution
+            .soft_max_rows_per_output_file
+            .get();
         let mut stream = df.execute_stream().await?;
         let schema = stream.schema();
 
         let properties = RdfFusionParquetWriterProperties::new(self.encoding.clone())
             .with_sort_order(self.sort_order.clone());
         let arrow_properties = properties.to_arrow();
-        let mut parquet_writer = AsyncArrowWriter::try_new(
-            BufWriter::new(Arc::clone(&object_store), path.clone()),
-            schema,
-            Some(arrow_properties),
-        )?;
 
+        // A URL that points to a `.parquet` file produces a single file. Otherwise, the URL is
+        // treated as a directory and the quads are split into multiple files. If a sort order is
+        // configured, consecutive files only overlap at their boundaries, which allows pruning
+        // entire files.
+        let single_file = output_url.path().ends_with(".parquet");
+        let mut file_index = 0;
+        let mut create_writer = || {
+            let file_path = if single_file {
+                path.clone()
+            } else {
+                path.clone().join(format!("part-{file_index:05}.parquet"))
+            };
+            file_index += 1;
+            AsyncArrowWriter::try_new(
+                BufWriter::new(Arc::clone(&object_store), file_path),
+                Arc::clone(&schema),
+                Some(arrow_properties.clone()),
+            )
+        };
+
+        let mut parquet_writer = create_writer()?;
+        let mut rows_in_file = 0;
         while let Some(batch) = stream.next().await {
             let batch = batch?;
+            if batch.num_rows() == 0 {
+                continue;
+            }
+
+            // The limit is approximate, as batches are never split (similar to DataFusion's
+            // `soft_max_rows_per_output_file`).
+            if !single_file && rows_in_file >= max_rows_per_file {
+                parquet_writer.close().await?;
+                parquet_writer = create_writer()?;
+                rows_in_file = 0;
+            }
+
             parquet_writer.write(&batch).await?;
+            rows_in_file += batch.num_rows();
         }
 
         parquet_writer.close().await?;

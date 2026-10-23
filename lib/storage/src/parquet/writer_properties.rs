@@ -13,9 +13,6 @@ pub const PAGE_ROW_COUNT: usize = 1_024;
 pub const ROW_GROUP_ROW_COUNT: usize = PAGE_ROW_COUNT * 32;
 /// TODO: Make this configurable
 pub const BLOOM_FILTER_NDV: usize = ROW_GROUP_ROW_COUNT / 4;
-/// TODO: Make this configurable
-#[allow(dead_code)]
-pub const FILE_ROW_COUNT: usize = ROW_GROUP_ROW_COUNT * 32;
 
 /// Options for writing RDF data into Parquet files.
 #[derive(Debug)]

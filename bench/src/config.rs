@@ -89,6 +89,14 @@ impl BenchmarkingConfig {
         config.apply_env_vars(|key| std::env::var(key).ok())?;
         config.data_fusion_config = session_config_from_env_for_rdf_fusion()?;
 
+        // Like the CLI, the data cache of Parquet storages is enabled by default, as Bloom filters
+        // are only used during planning if they are cached (see `planning_bloom_filters`).
+        if std::env::var("RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_ENABLED").is_err() {
+            config.data_fusion_config = config
+                .data_fusion_config
+                .set_str("rdf_fusion.storage.parquet.data_cache_enabled", "true");
+        }
+
         Ok(config)
     }
 

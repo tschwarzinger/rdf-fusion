@@ -406,13 +406,12 @@ impl<'ctx> BenchmarkContext<'ctx> {
                     }
 
                     let url = Url::parse(&format!("{base_url}/dataset.parquet")).unwrap();
-                    let storage = ParquetQuadStorage::try_load(
-                        url,
-                        self.context.config.storage_encoding,
-                        runtime_env.object_store_registry.as_ref(),
-                    )
-                    .await
-                    .expect("Failed to create ParquetQuadStorage");
+                    let storage = ParquetQuadStorage::builder(url)
+                        .with_encoding(self.context.config.storage_encoding)
+                        .with_options(rdf_fusion_config.storage.parquet.clone())
+                        .build(&session_state)
+                        .await
+                        .expect("Failed to create ParquetQuadStorage");
                     Arc::new(storage)
                 }
             };

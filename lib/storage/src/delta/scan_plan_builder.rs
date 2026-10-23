@@ -4,10 +4,8 @@ use crate::delta::log::{
     ChangesetContext, DeltaQuadsStorageLog, DeltaQuadsStorageLogChangesetRef,
     DeltaStorageLogVersionRange,
 };
-use crate::delta::quad_table::DeltaQuadsQuadTableSnapshot;
-use crate::parquet::{
-    ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
-};
+use crate::delta::quad_table::{DeltaQuadsQuadTableSnapshot, add_to_object_meta};
+use crate::parquet::{ParquetQuadScanBuilder, PushdownProjection};
 use crate::quad_tables::QuadTableName;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::datatypes::DataType;
@@ -445,8 +443,8 @@ impl DeltaQuadsStorageScanPlanBuilder {
         let mut file_groups = vec![Vec::new(); target_partitions];
 
         for (i, file) in quad_table.active_files().as_ref().iter().enumerate() {
-            let full_path = table_path.clone().join(file.path.as_str()).to_string();
-            let partitioned_file = PartitionedFile::new(full_path, file.size as u64);
+            let partitioned_file =
+                PartitionedFile::new_from_meta(add_to_object_meta(&table_path, file)?);
             file_groups[i % target_partitions].push(partitioned_file);
         }
 
@@ -476,12 +474,6 @@ impl DeltaQuadsStorageScanPlanBuilder {
             }
         };
 
-        let custom_factory = ParquetQuadScanReaderFactoryType::Preloaded(
-            quad_table.parquet_metadata().clone(),
-            quad_table.bloom_filters().clone(),
-            self.cache.clone(),
-        );
-
         let plan = ParquetQuadScanBuilder::new(
             &self.session_state,
             self.encoding.clone(),
@@ -491,7 +483,7 @@ impl DeltaQuadsStorageScanPlanBuilder {
         .with_output_ordering(vec![ordering])
         .with_quad_pattern(self.pattern.clone())
         .with_pushdown_projection(pushdown_projection)
-        .with_reader_factory_type(custom_factory)
+        .with_block_cache(self.cache.clone())
         .with_eager_pruning(true)
         .build()
         .await?;

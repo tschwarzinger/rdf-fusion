@@ -3,6 +3,8 @@ use datafusion::common::config::{ConfigEntry, ConfigExtension, ExtensionOptions}
 use datafusion::error::DataFusionError;
 use datafusion::prelude::{SessionConfig, SessionContext};
 use std::any::Any;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 use std::time::Duration;
 
 /// Configuration for RDF Fusion.
@@ -27,6 +29,49 @@ pub struct ExecutionOptions {
     /// scans to be evaluated in parallel instead of sequentially waiting on dynamic filters. A
     /// value of `0` disables this optimization.
     pub small_scan_buffering_threshold: usize,
+    /// Whether Bloom filters are used for pruning Parquet row groups during planning.
+    pub planning_bloom_filters: PlanningBloomFilters,
+}
+
+/// Defines whether Bloom filters are used for pruning Parquet row groups during planning. Pruning
+/// during planning improves the cardinality estimates but requires reading the Bloom filters.
+/// Regardless of this option, Bloom filters are used during execution.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PlanningBloomFilters {
+    /// Uses Bloom filters during planning if the scan caches the data it reads. Hence, the Bloom
+    /// filters are only read once.
+    #[default]
+    Auto,
+    /// Always uses Bloom filters during planning.
+    Always,
+    /// Never uses Bloom filters during planning.
+    Never,
+}
+
+impl Display for PlanningBloomFilters {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            PlanningBloomFilters::Auto => "auto",
+            PlanningBloomFilters::Always => "always",
+            PlanningBloomFilters::Never => "never",
+        };
+        f.write_str(value)
+    }
+}
+
+impl FromStr for PlanningBloomFilters {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "auto" => Ok(PlanningBloomFilters::Auto),
+            "always" => Ok(PlanningBloomFilters::Always),
+            "never" => Ok(PlanningBloomFilters::Never),
+            _ => Err(format!(
+                "Expected one of \"auto\", \"always\", or \"never\" but got \"{value}\""
+            )),
+        }
+    }
 }
 
 /// Local configuration for RDF Fusion.
@@ -135,6 +180,13 @@ impl ExtensionOptions for RdfFusionOptions {
             "execution.small_scan_buffering_threshold" => {
                 self.execution.small_scan_buffering_threshold =
                     SessionContext::parse_capacity_limit(key, value)?;
+            }
+            "execution.planning_bloom_filters" => {
+                self.execution.planning_bloom_filters = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for execution.planning_bloom_filters: {e}"
+                    ))
+                })?;
             }
             "local.work_dir" => {
                 self.local.work_dir = Some(value.to_string());
@@ -248,6 +300,11 @@ impl ExtensionOptions for RdfFusionOptions {
                 key: format!("{}.execution.small_scan_buffering_threshold", Self::PREFIX),
                 value: Some(self.execution.small_scan_buffering_threshold.to_string()),
                 description: "The size in bytes below which a quad pattern scan is eagerly buffered during planning to allow parallel execution (e.g. \"1K\", \"1M\", \"1G\"; 0 disables).",
+            },
+            ConfigEntry {
+                key: format!("{}.execution.planning_bloom_filters", Self::PREFIX),
+                value: Some(self.execution.planning_bloom_filters.to_string()),
+                description: "Whether Bloom filters are used for pruning Parquet row groups during planning (\"auto\", \"always\", or \"never\"). \"auto\" only uses them if the scan caches the data it reads.",
             },
             ConfigEntry {
                 key: format!("{}.local.work_dir", Self::PREFIX),
@@ -455,7 +512,7 @@ mod tests {
     #[test]
     fn test_env_mappings() {
         let mappings = RdfFusionOptions::env_mappings();
-        assert_eq!(mappings.len(), 15);
+        assert_eq!(mappings.len(), 16);
         assert!(mappings.iter().any(|(env, id)| {
             env == "RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE"
                 && id == "storage.delta.log_max_age"
@@ -471,6 +528,27 @@ mod tests {
     }
 
     #[test]
+    fn test_set_planning_bloom_filters() {
+        let mut config = RdfFusionOptions::default();
+        assert_eq!(
+            config.execution.planning_bloom_filters,
+            PlanningBloomFilters::Auto
+        );
+        config
+            .set("rdf_fusion.execution.planning_bloom_filters", "Always")
+            .unwrap();
+        assert_eq!(
+            config.execution.planning_bloom_filters,
+            PlanningBloomFilters::Always
+        );
+        assert!(
+            config
+                .set("execution.planning_bloom_filters", "sometimes")
+                .is_err()
+        );
+    }
+
+    #[test]
     fn test_set_with_prefix() {
         let mut config = RdfFusionOptions::default();
         config
@@ -483,6 +561,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 15);
+        assert_eq!(entries.len(), 16);
     }
 }

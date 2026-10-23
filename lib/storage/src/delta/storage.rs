@@ -267,6 +267,7 @@ impl DeltaQuadsStorage {
             .map_err(DeltaQuadsStorageError::from)?;
 
             let new_quad_table = DeltaQuadsQuadTable::try_load(
+                state,
                 storage_encoding.clone(),
                 quad_table_log_store,
                 *quad_table,

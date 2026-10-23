@@ -1,12 +1,22 @@
 use crate::block_cache::BlockCache;
-use crate::parquet::reader::PreloadedBloomFilters;
+use crate::parquet::reader::{ParquetMetadataFetcher, max_concurrent_files};
 use crate::parquet::snapshot::ParquetQuadStorageSnapshot;
 use async_trait::async_trait;
-use datafusion::datasource::object_store::ObjectStoreRegistry;
+use datafusion::arrow::compute::SortOptions;
+use datafusion::arrow::datatypes::Schema;
+use datafusion::common::Result as DFResult;
+use datafusion::common::instant::Instant;
+use datafusion::datasource::file_format::parquet::ParquetFormat;
+use datafusion::datasource::listing::{
+    ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl, PartitionedFile,
+};
+use datafusion::datasource::object_store::ObjectStoreUrl;
+use datafusion::datasource::physical_plan::FileGroup;
+use datafusion::datasource::physical_plan::parquet::metadata::DFParquetMetadata;
 use datafusion::execution::context::SessionState;
 use datafusion::parquet::file::metadata::ParquetMetaData;
-use object_store::path::Path;
-use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt};
+use datafusion::physical_expr::expressions::Column;
+use datafusion::physical_expr::{LexOrdering, PhysicalSortExpr};
 use rdf_fusion_common::StorageError;
 use rdf_fusion_common::config::ParquetStorageOptions;
 use rdf_fusion_encoding::object_id::ObjectIdDictionary;
@@ -20,24 +30,23 @@ use tracing::info;
 use url::Url;
 
 /// Builder for [`ParquetQuadStorage`].
-pub struct ParquetQuadStorageBuilder<'a> {
+pub struct ParquetQuadStorageBuilder {
     url: Url,
     encoding: QuadStorageEncodingName,
     options: ParquetStorageOptions,
-    object_store: Option<Arc<dyn ObjectStore>>,
-    object_store_registry: Option<&'a dyn ObjectStoreRegistry>,
     cache: Option<Arc<BlockCache>>,
 }
 
-impl<'a> ParquetQuadStorageBuilder<'a> {
+impl ParquetQuadStorageBuilder {
     /// Creates a new [`ParquetQuadStorageBuilder`].
+    ///
+    /// The URL can either point to a single Parquet file, to a directory / prefix containing
+    /// Parquet files, or to a glob (see [`ListingTableUrl`]).
     pub fn new(url: Url) -> Self {
         Self {
             url,
             encoding: QuadStorageEncodingName::String,
             options: ParquetStorageOptions::default(),
-            object_store: None,
-            object_store_registry: None,
             cache: None,
         }
     }
@@ -54,21 +63,6 @@ impl<'a> ParquetQuadStorageBuilder<'a> {
         self
     }
 
-    /// Sets the object store.
-    pub fn with_object_store(mut self, object_store: Arc<dyn ObjectStore>) -> Self {
-        self.object_store = Some(object_store);
-        self
-    }
-
-    /// Sets the object store registry to lookup object stores by URL.
-    pub fn with_object_store_registry(
-        mut self,
-        object_store_registry: &'a dyn ObjectStoreRegistry,
-    ) -> Self {
-        self.object_store_registry = Some(object_store_registry);
-        self
-    }
-
     /// Sets the block cache for caching Parquet file reads.
     pub fn with_cache(mut self, cache: Option<Arc<BlockCache>>) -> Self {
         self.cache = cache;
@@ -76,7 +70,17 @@ impl<'a> ParquetQuadStorageBuilder<'a> {
     }
 
     /// Builds the [`ParquetQuadStorage`].
-    pub async fn build(self) -> Result<ParquetQuadStorage, StorageError> {
+    ///
+    /// This lists all Parquet files and eagerly loads their footers into the file metadata cache
+    /// of the `state`'s runtime environment. The page index of a file is only loaded when a scan
+    /// needs it. The object store for the URL must be registered in this runtime environment.
+    ///
+    /// The same runtime environment should be used for querying the storage. Otherwise, the
+    /// metadata is loaded again during the first query.
+    pub async fn build(
+        self,
+        state: &SessionState,
+    ) -> Result<ParquetQuadStorage, StorageError> {
         let encoding = match self.encoding {
             QuadStorageEncodingName::PlainTerm => QuadStorageEncoding::PlainTerm,
             QuadStorageEncodingName::String => QuadStorageEncoding::String,
@@ -87,17 +91,8 @@ impl<'a> ParquetQuadStorageBuilder<'a> {
             }
         };
 
-        let object_store = if let Some(store) = self.object_store {
-            store
-        } else if let Some(registry) = self.object_store_registry {
-            registry
-                .get_store(&self.url)
-                .map_err(|e| StorageError::Other(e.to_string().into()))?
-        } else {
-            return Err(StorageError::Other(
-                "Either object_store or object_store_registry must be provided".into(),
-            ));
-        };
+        let table_url =
+            ListingTableUrl::parse(self.url.as_str()).map_err(to_storage_error)?;
 
         let cache = if let Some(cache) = self.cache {
             Some(cache)
@@ -110,50 +105,197 @@ impl<'a> ParquetQuadStorageBuilder<'a> {
             None
         };
 
-        let path = Path::from_url_path(self.url.path())
-            .map_err(|e| StorageError::Other(e.to_string().into()))?;
-        let object_meta = object_store
-            .head(&path)
-            .await
-            .map_err(|e| StorageError::Other(e.to_string().into()))?;
-
         info!(
-            "Loading Parquet metadata and Bloom filters for file {}...",
+            "Listing Parquet files and loading their footers for {}...",
             self.url
         );
-        let (parquet_meta, bloom_filters) =
-            crate::parquet::reader::load_parquet_metadata_and_bloom_filters(
-                Arc::clone(&object_store),
-                path.clone(),
-                object_meta.clone(),
-            )
-            .await
-            .map_err(|e| StorageError::Other(e.to_string().into()))?;
-        info!(
-            "Parquet metadata and Bloom filters loaded for file {}.",
-            self.url
-        );
+        let start = Instant::now();
 
-        let bloom_filter_cache = PreloadedBloomFilters::new();
-        bloom_filter_cache.insert(path, bloom_filters);
+        let files = list_parquet_files(state, &table_url, &encoding)
+            .await
+            .map_err(to_storage_error)?;
+        if files.is_empty() {
+            return Err(StorageError::Other(
+                format!("No Parquet files found at {}", self.url).into(),
+            ));
+        }
+        let footers = load_footers(state, &table_url, &files)
+            .await
+            .map_err(to_storage_error)?;
+        let schema = encoding.quad_schema();
+        let files = with_footer_statistics(schema.inner(), files, &footers)
+            .map_err(to_storage_error)?;
+        let output_ordering = output_ordering_from_footers(schema.inner(), &footers);
+
+        let num_quads = files
+            .iter()
+            .filter_map(|file| file.statistics.as_ref()?.num_rows.get_value().copied())
+            .sum::<usize>();
+        info!(
+            "Loaded footers of {} Parquet files ({num_quads} quads) for {} in {:.2?}.",
+            files.len(),
+            self.url,
+            start.elapsed()
+        );
 
         Ok(ParquetQuadStorage {
             url: self.url,
+            object_store_url: table_url.object_store(),
             encoding,
-            object_meta,
-            parquet_meta,
-            bloom_filter_cache,
+            files: Arc::new(files),
+            output_ordering,
             options: self.options,
             cache,
         })
     }
 }
 
-/// A quad storage that reads from Parquet files.
+/// Lists the Parquet files at `table_url` using DataFusion's [`ListingTable`]. The files are
+/// sorted by their path and do not have statistics.
+async fn list_parquet_files(
+    state: &SessionState,
+    table_url: &ListingTableUrl,
+    encoding: &QuadStorageEncoding,
+) -> DFResult<Vec<PartitionedFile>> {
+    // DataFusion's statistics collection would also load the page index of every file. Hence, the
+    // statistics are computed from the footers in `with_footer_statistics`.
+    let mut listing_state = state.clone();
+    listing_state
+        .config_mut()
+        .options_mut()
+        .execution
+        .collect_statistics = false;
+
+    let format =
+        ParquetFormat::default().with_options(state.table_options().parquet.clone());
+    let listing_options =
+        ListingOptions::new(Arc::new(format)).with_file_extension(".parquet");
+    let listing_table = ListingTable::try_new(
+        ListingTableConfig::new(table_url.clone())
+            .with_listing_options(listing_options)
+            .with_schema(Arc::clone(encoding.quad_schema().inner())),
+    )?;
+    let listed = listing_table
+        .list_files_for_scan(&listing_state, &[], None)
+        .await?;
+
+    let mut files = listed
+        .file_groups
+        .into_iter()
+        .flat_map(FileGroup::into_inner)
+        .collect::<Vec<_>>();
+    files.sort_by(|a, b| a.path().cmp(b.path()));
+    Ok(files)
+}
+
+/// Loads the footers of the `files` into the file metadata cache. The footers are returned in the
+/// order of `files`.
+///
+/// Only the footers are loaded. The page index of a file is loaded on demand during planning, if
+/// the file survives the row group pruning.
+async fn load_footers(
+    state: &SessionState,
+    table_url: &ListingTableUrl,
+    files: &[PartitionedFile],
+) -> DFResult<Vec<Arc<ParquetMetaData>>> {
+    let store = state.runtime_env().object_store(table_url.object_store())?;
+    let object_metas = files
+        .iter()
+        .map(|file| file.object_meta.clone())
+        .collect::<Vec<_>>();
+    ParquetMetadataFetcher::new(state, store)
+        .fetch_footers(&object_metas, max_concurrent_files(state))
+        .await
+}
+
+/// Attaches the statistics computed from the `footers` to the `files`.
+fn with_footer_statistics(
+    schema: &Arc<Schema>,
+    files: Vec<PartitionedFile>,
+    footers: &[Arc<ParquetMetaData>],
+) -> DFResult<Vec<PartitionedFile>> {
+    files
+        .into_iter()
+        .zip(footers)
+        .map(|(file, footer)| {
+            let statistics =
+                DFParquetMetadata::statistics_from_parquet_metadata(footer, schema)?;
+            Ok(file.with_statistics(Arc::new(statistics)))
+        })
+        .collect()
+}
+
+/// Returns the ordering of the quads within each file, if all files declare the same
+/// `sorting_columns` in all their row groups. Otherwise, returns [`None`].
+///
+/// Whether the concatenation of multiple files is also ordered is checked by DataFusion based on
+/// the statistics of the files.
+fn output_ordering_from_footers(
+    schema: &Schema,
+    footers: &[Arc<ParquetMetaData>],
+) -> Option<LexOrdering> {
+    let (first, rest) = footers.split_first()?;
+    let ordering = file_output_ordering(schema, first)?;
+    rest.iter()
+        .all(|footer| file_output_ordering(schema, footer).as_ref() == Some(&ordering))
+        .then_some(ordering)
+}
+
+/// Returns the ordering of a single file, if all its row groups declare the same
+/// `sorting_columns`.
+///
+/// Only sorting columns that refer to top-level columns of the `schema` are supported, as the
+/// sorting columns refer to the leaf columns of the Parquet schema.
+fn file_output_ordering(
+    schema: &Schema,
+    footer: &ParquetMetaData,
+) -> Option<LexOrdering> {
+    let row_groups = footer.row_groups();
+    let sorting_columns = row_groups.first()?.sorting_columns()?;
+    if row_groups
+        .iter()
+        .any(|row_group| row_group.sorting_columns() != Some(sorting_columns))
+    {
+        return None;
+    }
+
+    let parquet_schema = footer.file_metadata().schema_descr();
+    let sort_exprs = sorting_columns
+        .iter()
+        .map(|sorting_column| {
+            let leaf_idx = usize::try_from(sorting_column.column_idx).ok()?;
+            let column = parquet_schema.columns().get(leaf_idx)?;
+            let [name] = column.path().parts() else {
+                return None;
+            };
+            let idx = schema.index_of(name).ok()?;
+            Some(PhysicalSortExpr::new(
+                Arc::new(Column::new(name, idx)),
+                SortOptions {
+                    descending: sorting_column.descending,
+                    nulls_first: sorting_column.nulls_first,
+                },
+            ))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    LexOrdering::new(sort_exprs)
+}
+
+fn to_storage_error(
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> StorageError {
+    StorageError::Other(Box::new(error))
+}
+
+/// A quad storage that reads from one or multiple Parquet files.
 ///
 /// The core approach of this storage layer is based on the storing a large triples / quad table
 /// in Parquet. The Parquet files themselves are not specialized for RDF. Any off-the-shelve Parquet
 /// reader can access them.
+///
+/// The files are discovered using DataFusion's [`ListingTable`] machinery. Their metadata (footer
+/// and, once needed, page index) is held in DataFusion's file metadata cache, while the data (including Bloom
+/// filters) can be cached in an optional [`BlockCache`].
 ///
 /// # References
 ///
@@ -163,50 +305,30 @@ impl<'a> ParquetQuadStorageBuilder<'a> {
 #[derive(Clone)]
 pub struct ParquetQuadStorage {
     url: Url,
+    object_store_url: ObjectStoreUrl,
     encoding: QuadStorageEncoding,
-    object_meta: ObjectMeta,
-    parquet_meta: Arc<ParquetMetaData>,
-    bloom_filter_cache: PreloadedBloomFilters,
+    files: Arc<Vec<PartitionedFile>>,
+    /// The ordering of the quads within each file, as declared in the Parquet footers.
+    output_ordering: Option<LexOrdering>,
     options: ParquetStorageOptions,
     cache: Option<Arc<BlockCache>>,
 }
 
 impl ParquetQuadStorage {
     /// Creates a [`ParquetQuadStorageBuilder`].
-    pub fn builder(url: Url) -> ParquetQuadStorageBuilder<'static> {
+    pub fn builder(url: Url) -> ParquetQuadStorageBuilder {
         ParquetQuadStorageBuilder::new(url)
     }
 
-    /// Creates a new [`ParquetQuadStorage`].
-    pub async fn try_load(
-        url: Url,
-        encoding: QuadStorageEncodingName,
-        object_store: &dyn ObjectStoreRegistry,
-    ) -> Result<Self, StorageError> {
-        Self::builder(url)
-            .with_encoding(encoding)
-            .with_object_store_registry(object_store)
-            .build()
-            .await
+    /// Returns the Parquet files of this storage.
+    pub fn files(&self) -> &[PartitionedFile] {
+        &self.files
     }
 
-    /// Creates a new [`ParquetQuadStorage`] with the given options.
-    pub async fn try_load_with_options(
-        url: Url,
-        encoding: QuadStorageEncodingName,
-        object_store: &dyn ObjectStoreRegistry,
-        options: ParquetStorageOptions,
-    ) -> Result<Self, StorageError> {
-        Self::builder(url)
-            .with_encoding(encoding)
-            .with_object_store_registry(object_store)
-            .with_options(options)
-            .build()
-            .await
-    }
-
-    pub fn bloom_filter_cache(&self) -> &PreloadedBloomFilters {
-        &self.bloom_filter_cache
+    /// Returns the ordering of the quads within each file, if all files declare the same sort
+    /// order in their footers.
+    pub fn output_ordering(&self) -> Option<&LexOrdering> {
+        self.output_ordering.as_ref()
     }
 
     pub fn options(&self) -> &ParquetStorageOptions {
@@ -223,7 +345,7 @@ impl Debug for ParquetQuadStorage {
         f.debug_struct("ParquetQuadStorage")
             .field("url", &self.url)
             .field("encoding", &self.encoding)
-            .field("metadata", &self.parquet_meta)
+            .field("num_files", &self.files.len())
             .field("options", &self.options)
             .finish()
     }
@@ -243,9 +365,9 @@ impl QuadStorage for ParquetQuadStorage {
         Ok(Arc::new(ParquetQuadStorageSnapshot::new(
             self.encoding.clone(),
             self.url.clone(),
-            self.object_meta.clone(),
-            Arc::clone(&self.parquet_meta),
-            self.bloom_filter_cache.clone(),
+            self.object_store_url.clone(),
+            Arc::clone(&self.files),
+            self.output_ordering.clone(),
             self.cache.clone(),
         )))
     }

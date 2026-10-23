@@ -6,11 +6,9 @@ use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::DeltaQuadsStorageLogChangesetRef;
 use crate::delta::quad_table::update::DeltaStorageQuadTableUpdater;
 use crate::delta::quad_table::validation::validate_quad_table;
-use crate::parquet::{
-    PreloadedBloomFilters, PreloadedParquetMetadata,
-    load_parquet_metadata_and_bloom_filters,
-};
+use crate::parquet::{ParquetMetadataFetcher, max_concurrent_files};
 use crate::quad_tables::QuadTableName;
+use chrono::DateTime;
 use datafusion::execution::SessionState;
 use datafusion::parquet::basic::Encoding;
 use datafusion::parquet::file::properties::WriterProperties;
@@ -25,7 +23,8 @@ use deltalake::parquet::file::properties::EnabledStatistics;
 use deltalake::parquet::schema::types::ColumnPath;
 use deltalake::{DataType as DeltaDataType, DeltaTable, StructField, TableProperty};
 use futures::TryStreamExt;
-use object_store::ObjectStoreExt;
+use object_store::ObjectMeta;
+use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{BlankNodeMatchingMode, NamedNodePattern, TermPattern};
 use rdf_fusion_encoding::QuadStorageEncoding;
@@ -49,10 +48,6 @@ struct QuadTableState {
     table: DeltaTable,
     /// The active files in the quad_table.
     active_files: Arc<Vec<Add>>,
-    /// Preloaded parquet metadata.
-    parquet_metadata: PreloadedParquetMetadata,
-    /// Preloaded bloom filters.
-    bloom_filters: PreloadedBloomFilters,
     /// The log transaction version of the quad_table.
     log_transaction_version: u64,
 }
@@ -62,15 +57,11 @@ impl QuadTableState {
     fn new(
         table: DeltaTable,
         active_files: Arc<Vec<Add>>,
-        parquet_metadata: PreloadedParquetMetadata,
-        bloom_filters: PreloadedBloomFilters,
         log_transaction_version: u64,
     ) -> Self {
         Self {
             table,
             active_files,
-            parquet_metadata,
-            bloom_filters,
             log_transaction_version,
         }
     }
@@ -130,21 +121,17 @@ impl DeltaQuadsQuadTable {
 
         let quad_table = Self {
             storage_encoding,
-            table: Arc::new(RwLock::new(QuadTableState::new(
-                table,
-                Arc::new(vec![]),
-                PreloadedParquetMetadata::new(),
-                PreloadedBloomFilters::new(),
-                0,
-            ))),
+            table: Arc::new(RwLock::new(QuadTableState::new(table, Arc::new(vec![]), 0))),
             components,
         };
 
         Ok(quad_table)
     }
 
-    /// TODO
+    /// Loads an existing quad_table and warms the file metadata cache of the `state`'s runtime
+    /// environment with the footers of its files.
     pub async fn try_load(
+        state: &SessionState,
         storage_encoding: QuadStorageEncoding,
         log_store: LogStoreRef,
         components: QuadTableName,
@@ -169,19 +156,13 @@ impl DeltaQuadsQuadTable {
             .unwrap_or(0) as u64;
 
         info!(
-            "Loading Parquet metadata and Bloom filters for {} files in quad_table {}.",
+            "Loading Parquet footers for {} files in quad_table {}.",
             active_files.len(),
             components.to_string()
         );
-        let (parquet_metadata, bloom_filters) = load_parquet_metadata_for_files(
-            log_store.as_ref(),
-            &active_files,
-            None,
-            None,
-        )
-        .await?;
+        load_parquet_metadata_for_files(state, log_store.as_ref(), &active_files).await?;
         info!(
-            "Parquet metadata and Bloom filters loaded for quad_table {}.",
+            "Parquet footers loaded for quad_table {}.",
             components.to_string()
         );
 
@@ -190,8 +171,6 @@ impl DeltaQuadsQuadTable {
             table: Arc::new(RwLock::new(QuadTableState::new(
                 table,
                 active_files,
-                parquet_metadata,
-                bloom_filters,
                 log_transaction_version,
             ))),
             components,
@@ -217,8 +196,6 @@ impl DeltaQuadsQuadTable {
             guard.table.snapshot()?.snapshot().clone(),
             guard.table.log_store(),
             Arc::clone(&guard.active_files),
-            guard.parquet_metadata.clone(),
-            guard.bloom_filters.clone(),
             self.components,
             guard.log_transaction_version,
         ))
@@ -239,7 +216,8 @@ impl DeltaQuadsQuadTable {
         );
 
         let (new_table, new_version) = Box::pin(updater.apply_update()).await?;
-        self.update_table_state(new_table, new_version).await?;
+        self.update_table_state(state, new_table, new_version)
+            .await?;
 
         Ok(())
     }
@@ -257,6 +235,7 @@ impl DeltaQuadsQuadTable {
     /// Sets the new table state.
     async fn update_table_state(
         &self,
+        state: &SessionState,
         new_table: DeltaTable,
         log_transaction_version: u64,
     ) -> Result<(), DeltaQuadsStorageError> {
@@ -271,19 +250,17 @@ impl DeltaQuadsQuadTable {
             .try_collect::<Vec<_>>()
             .await?;
 
-        let (parquet_metadata, bloom_filters) = load_parquet_metadata_for_files(
+        // Unchanged files are already in the cache and are not loaded again.
+        load_parquet_metadata_for_files(
+            state,
             new_table.log_store().as_ref(),
             &active_files,
-            Some(table_lock.parquet_metadata.clone()),
-            Some(table_lock.bloom_filters.clone()),
         )
         .await?;
 
         *table_lock = QuadTableState::new(
             new_table,
             Arc::new(active_files),
-            parquet_metadata,
-            bloom_filters,
             log_transaction_version,
         );
         Ok(())
@@ -329,91 +306,54 @@ impl DeltaQuadsQuadTable {
     }
 }
 
-/// Loads the Parquet Metadata and Bloom filters for the given files. Multiple requests are issued
-/// concurrently.
+/// Returns the [`ObjectMeta`] of a file in a quad_table, as derived from the Delta log.
+///
+/// The [`ObjectMeta`] is used as a key for DataFusion's file metadata cache. Hence, the planner
+/// and the cache warm-up must use the same [`ObjectMeta`] for a given file.
+///
+/// Returns an error if the modification time in the Delta log is out of range, as all such files
+/// would otherwise share the same fallback timestamp.
+pub fn add_to_object_meta(
+    table_path: &Path,
+    add: &Add,
+) -> Result<ObjectMeta, DeltaQuadsStorageError> {
+    let last_modified = DateTime::from_timestamp_millis(add.modification_time)
+        .ok_or_else(|| {
+            DeltaQuadsStorageError::Corruption(format!(
+                "Invalid modification time {} for file '{}' in the Delta log.",
+                add.modification_time, add.path
+            ))
+        })?;
+    Ok(ObjectMeta {
+        location: table_path.clone().join(add.path.as_str()),
+        last_modified,
+        size: add.size as u64,
+        e_tag: None,
+        version: None,
+    })
+}
+
+/// Loads the Parquet footers of the given files into the file metadata cache of the `state`'s
+/// runtime environment. Multiple requests are issued concurrently.
+///
+/// The page index is not loaded, as it is only required for files that survive the row group
+/// pruning during planning. It is loaded on demand by the planner.
 async fn load_parquet_metadata_for_files(
+    state: &SessionState,
     log_store: &dyn deltalake::logstore::LogStore,
     active_files: &[Add],
-    existing_meta: Option<PreloadedParquetMetadata>,
-    existing_bloom: Option<PreloadedBloomFilters>,
-) -> Result<(PreloadedParquetMetadata, PreloadedBloomFilters), DeltaQuadsStorageError> {
-    use object_store::path::Path;
-    use std::sync::Arc;
-    use tokio::task::JoinSet;
+) -> Result<(), DeltaQuadsStorageError> {
+    let table_path = Path::from(log_store.config().location().path());
+    let object_metas = active_files
+        .iter()
+        .map(|add| add_to_object_meta(&table_path, add))
+        .collect::<Result<Vec<_>, _>>()?;
+    ParquetMetadataFetcher::new(state, log_store.root_object_store(None))
+        .fetch_footers(&object_metas, max_concurrent_files(state))
+        .await
+        .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
 
-    let object_store = log_store.object_store(None);
-    let base_path = Path::from(log_store.config().location().path());
-    let new_meta = PreloadedParquetMetadata::new();
-    let new_bloom = PreloadedBloomFilters::new();
-    let existing_meta = Arc::new(existing_meta);
-    let existing_bloom = Arc::new(existing_bloom);
-    let mut join_set: JoinSet<Result<_, DeltaQuadsStorageError>> = JoinSet::new();
-
-    for add in active_files {
-        let path_str = add.path.clone();
-        let ext_meta_clone = Arc::clone(&existing_meta);
-        let ext_bloom_clone = Arc::clone(&existing_bloom);
-        let object_store_clone = Arc::clone(&object_store);
-        let base_path_clone = base_path.clone();
-
-        join_set.spawn(async move {
-            let relative_path = Path::from(path_str.as_str());
-            let absolute_path = base_path_clone.join(path_str.as_str());
-
-            if let (Some(meta_cache), Some(bloom_cache)) =
-                (ext_meta_clone.as_ref(), ext_bloom_clone.as_ref())
-                && let (Some(meta), Some(bloom)) = (
-                    meta_cache.get(&absolute_path),
-                    bloom_cache.get_all(&absolute_path),
-                )
-            {
-                return Ok((absolute_path, Some((meta, bloom)), None));
-            }
-
-            let mut object_meta = object_store_clone
-                .head(&relative_path)
-                .await
-                .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
-
-            let (parquet_meta, bloom_filters) = load_parquet_metadata_and_bloom_filters(
-                object_store_clone,
-                relative_path.clone(),
-                object_meta.clone(),
-            )
-            .await
-            .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
-
-            object_meta.location = absolute_path.clone();
-
-            Ok((
-                absolute_path,
-                None,
-                Some((parquet_meta, object_meta, bloom_filters)),
-            ))
-        });
-    }
-
-    let mut remaining = active_files.len();
-    while let Some(res) = join_set.join_next().await {
-        remaining -= 1;
-        if remaining > 0 && remaining.is_multiple_of(10) {
-            info!("Progress: {} files remaining to process", remaining);
-        }
-
-        let (absolute_path, cached, fetched) = res.map_err(|e| {
-            DeltaQuadsStorageError::Other(format!("Task execution failed: {e}"))
-        })??;
-
-        if let Some((meta, bloom)) = cached {
-            new_meta.insert(absolute_path.clone(), meta);
-            new_bloom.insert_arc(absolute_path, bloom);
-        } else if let Some((parquet_meta, object_meta, bloom_filters)) = fetched {
-            new_meta.insert(absolute_path.clone(), (parquet_meta, object_meta));
-            new_bloom.insert(absolute_path, bloom_filters);
-        }
-    }
-
-    Ok((new_meta, new_bloom))
+    Ok(())
 }
 
 fn is_term_bound(pattern: TermPattern, mode: BlankNodeMatchingMode) -> bool {

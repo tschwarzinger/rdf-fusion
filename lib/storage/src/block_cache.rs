@@ -41,6 +41,16 @@ impl BlockCache {
         self.block_size
     }
 
+    /// Returns the number of cached blocks.
+    pub fn len(&self) -> usize {
+        self.cache.len()
+    }
+
+    /// Returns true if no block is cached.
+    pub fn is_empty(&self) -> bool {
+        self.cache.is_empty()
+    }
+
     /// Gets a cached block if present.
     pub fn get(&self, path: &OSPath, block_index: u64) -> Option<Bytes> {
         self.cache.get(&BlockKey {

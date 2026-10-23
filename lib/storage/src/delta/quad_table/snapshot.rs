@@ -1,5 +1,4 @@
 use crate::delta::quad_table::{is_named_node_bound, is_term_bound};
-use crate::parquet::{PreloadedBloomFilters, PreloadedParquetMetadata};
 use crate::quad_tables::QuadTableName;
 use deltalake::kernel::{Add, EagerSnapshot};
 use deltalake::logstore::LogStoreRef;
@@ -23,10 +22,6 @@ pub struct DeltaQuadsQuadTableSnapshot {
     snapshot: EagerSnapshot,
     /// The active files of the quad_table table.
     active_files: Arc<Vec<Add>>,
-    /// Preloaded parquet metadata.
-    parquet_metadata: PreloadedParquetMetadata,
-    /// Preloaded bloom filters.
-    bloom_filters: PreloadedBloomFilters,
     /// The components of the quad_table.
     components: QuadTableName,
     /// The log version that this snapshot represents.
@@ -42,8 +37,6 @@ impl DeltaQuadsQuadTableSnapshot {
         snapshot: EagerSnapshot,
         log_store: LogStoreRef,
         active_files: Arc<Vec<Add>>,
-        parquet_metadata: PreloadedParquetMetadata,
-        bloom_filters: PreloadedBloomFilters,
         components: QuadTableName,
         log_version: u64,
     ) -> Self {
@@ -52,8 +45,6 @@ impl DeltaQuadsQuadTableSnapshot {
             snapshot,
             active_files,
             log_store,
-            parquet_metadata,
-            bloom_filters,
             components,
             log_version,
         }
@@ -62,16 +53,6 @@ impl DeltaQuadsQuadTableSnapshot {
     /// Returns the encoding used for storing quads.
     pub fn encoding(&self) -> QuadStorageEncoding {
         self.storage_encoding.clone()
-    }
-
-    /// Returns the preloaded parquet metadata cache.
-    pub fn parquet_metadata(&self) -> &PreloadedParquetMetadata {
-        &self.parquet_metadata
-    }
-
-    /// Returns the preloaded bloom filters cache.
-    pub fn bloom_filters(&self) -> &PreloadedBloomFilters {
-        &self.bloom_filters
     }
 
     /// Returns the current version of the quad storage database that this quad_table snapshot reflects.

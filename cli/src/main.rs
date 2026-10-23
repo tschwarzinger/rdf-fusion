@@ -172,15 +172,19 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
                 bail!("ObjectId encoding is not supported for Parquet storage");
             }
 
+            // Use the same runtime environment as the query engine, such that the eagerly loaded
+            // Parquet footers are cached for querying.
+            let loading_state = SessionStateBuilder::new()
+                .with_runtime_env(Arc::clone(&runtime_env))
+                .with_config(session_config.clone())
+                .build();
             Arc::new(
-                ParquetQuadStorage::try_load_with_options(
-                    location,
-                    encoding,
-                    runtime_env.object_store_registry.as_ref(),
-                    rdf_fusion_options.storage.parquet.clone(),
-                )
-                .await
-                .context("Failed to create Parquet storage")?,
+                ParquetQuadStorage::builder(location)
+                    .with_encoding(encoding)
+                    .with_options(rdf_fusion_options.storage.parquet.clone())
+                    .build(&loading_state)
+                    .await
+                    .context("Failed to create Parquet storage")?,
             )
         }
     };
@@ -202,6 +206,11 @@ fn create_cli_session_config() -> anyhow::Result<SessionConfig> {
             "rdf_fusion.execution.small_scan_buffering_threshold",
             "512K",
         )
+    }
+
+    // Bloom filters of Parquet storages are only cached in the data cache.
+    if env::var("RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_ENABLED").is_err() {
+        config = config.set_str("rdf_fusion.storage.parquet.data_cache_enabled", "true")
     }
 
     Ok(config)

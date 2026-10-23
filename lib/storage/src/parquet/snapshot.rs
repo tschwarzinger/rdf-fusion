@@ -1,8 +1,5 @@
 use crate::block_cache::BlockCache;
-use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
-use crate::parquet::scan_builder::{
-    ParquetQuadScanBuilder, ParquetQuadScanReaderFactoryType, PushdownProjection,
-};
+use crate::parquet::scan_builder::{ParquetQuadScanBuilder, PushdownProjection};
 #[allow(unused_imports)]
 use crate::parquet::storage::ParquetQuadStorage;
 use async_trait::async_trait;
@@ -10,18 +7,18 @@ use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::common::Result as DFResult;
 use datafusion::common::stats::Precision;
 use datafusion::datasource::listing::PartitionedFile;
+use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::FileGroup;
 use datafusion::execution::{SessionState, TaskContext};
-use datafusion::parquet::file::metadata::ParquetMetaData;
+use datafusion::physical_expr::LexOrdering;
 use datafusion::physical_expr::expressions::Column;
 use datafusion::physical_plan::aggregates::{
     AggregateExec, AggregateMode, PhysicalGroupBy,
 };
 use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
 use futures::StreamExt;
-use object_store::ObjectMeta;
+use rdf_fusion_common::StorageError;
 use rdf_fusion_common::quads::COL_GRAPH;
-use rdf_fusion_common::{StorageError, url_to_object_store_url};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
@@ -34,9 +31,9 @@ use url::Url;
 pub struct ParquetQuadStorageSnapshot {
     encoding: QuadStorageEncoding,
     url: Url,
-    object_meta: ObjectMeta,
-    parquet_meta: Arc<ParquetMetaData>,
-    bloom_filter_cache: PreloadedBloomFilters,
+    object_store_url: ObjectStoreUrl,
+    files: Arc<Vec<PartitionedFile>>,
+    output_ordering: Option<LexOrdering>,
     block_cache: Option<Arc<BlockCache>>,
 }
 
@@ -45,17 +42,17 @@ impl ParquetQuadStorageSnapshot {
     pub fn new(
         encoding: QuadStorageEncoding,
         url: Url,
-        object_meta: ObjectMeta,
-        parquet_meta: Arc<ParquetMetaData>,
-        bloom_filter_cache: PreloadedBloomFilters,
+        object_store_url: ObjectStoreUrl,
+        files: Arc<Vec<PartitionedFile>>,
+        output_ordering: Option<LexOrdering>,
         block_cache: Option<Arc<BlockCache>>,
     ) -> Self {
         Self {
             encoding,
             url,
-            object_meta,
-            parquet_meta,
-            bloom_filter_cache,
+            object_store_url,
+            files,
+            output_ordering,
             block_cache,
         }
     }
@@ -67,32 +64,21 @@ impl ParquetQuadStorageSnapshot {
         projection: Option<Vec<usize>>,
         session_state: &SessionState,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        let cache = PreloadedParquetMetadata::new();
-        cache.insert(
-            self.object_meta.location.clone(),
-            (Arc::clone(&self.parquet_meta), self.object_meta.clone()),
-        );
-
-        let custom_factory = ParquetQuadScanReaderFactoryType::Preloaded(
-            cache,
-            self.bloom_filter_cache.clone(),
-            self.block_cache.clone(),
-        );
-
-        let partitioned_file = PartitionedFile::new_from_meta(self.object_meta.clone());
-
-        let plan = ParquetQuadScanBuilder::new(
+        let mut builder = ParquetQuadScanBuilder::new(
             session_state,
             self.encoding.clone(),
-            url_to_object_store_url(&self.url)?,
-            vec![FileGroup::new(vec![partitioned_file])],
+            self.object_store_url.clone(),
+            vec![FileGroup::new(self.files.as_ref().clone())],
         )
         .with_quad_pattern(pattern.clone())
-        .with_reader_factory_type(custom_factory)
+        .with_block_cache(self.block_cache.clone())
         .with_eager_pruning(true)
-        .with_pushdown_projection(PushdownProjection::Yes(projection))
-        .build()
-        .await?;
+        .with_split_file_groups(session_state.config().target_partitions())
+        .with_pushdown_projection(PushdownProjection::Yes(projection));
+        if let Some(output_ordering) = &self.output_ordering {
+            builder = builder.with_output_ordering(vec![output_ordering.clone()]);
+        }
+        let plan = builder.build().await?;
 
         Ok(plan)
     }
@@ -102,7 +88,7 @@ impl Debug for ParquetQuadStorageSnapshot {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParquetQuadStorageSnapshot")
             .field("url", &self.url)
-            .field("metadata", &self.parquet_meta)
+            .field("num_files", &self.files.len())
             .finish()
     }
 }

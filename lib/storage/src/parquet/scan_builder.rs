@@ -1,32 +1,37 @@
 use crate::parquet::bytes_estimator::estimate_scan_statistics;
-use crate::parquet::reader::PreLoadedMetadataReaderFactory;
-use crate::parquet::reader::{PreloadedBloomFilters, PreloadedParquetMetadata};
+use crate::parquet::reader::{
+    BlockCachedReaderFactory, ParquetMetadataFetcher, max_concurrent_files,
+};
 use crate::parquet::scan::ParquetQuadScanExec;
+use datafusion::arrow::datatypes::Schema;
 use datafusion::common::ScalarValue;
 use datafusion::common::plan_datafusion_err;
 use datafusion::common::stats::Precision;
 use datafusion::common::{Column, DFSchema, DFSchemaRef, ExprSchema, Statistics};
+use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::parquet::{
-    BloomFilterStatistics, DefaultParquetFileReaderFactory, PagePruningAccessPlanFilter,
-    ParquetAccessPlan, ParquetFileReaderFactory, RowGroupAccessPlanFilter,
-    can_expr_be_pushed_down_with_schemas,
+    BloomFilterStatistics, PagePruningAccessPlanFilter, ParquetAccessPlan,
+    RowGroupAccessPlanFilter, can_expr_be_pushed_down_with_schemas,
 };
 use datafusion::datasource::physical_plan::{
-    FileGroup, FileScanConfigBuilder, FileSource, ParquetFileMetrics, ParquetSource,
+    FileGroup, FileScanConfigBuilder, FileSource, ParquetFileMetrics,
+    ParquetFileReaderFactory, ParquetSource,
 };
 use datafusion::datasource::source::DataSourceExec;
 use datafusion::datasource::table_schema::TableSchemaBuilder;
+use datafusion::error::DataFusionError;
 use datafusion::execution::SessionState;
 use datafusion::functions::core::expr_fn::get_field;
 use datafusion::logical_expr::expr::{BinaryExpr, InList};
 use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::utils::conjunction;
 use datafusion::logical_expr::{Expr, Operator, lit};
-use datafusion::parquet::arrow::parquet_column;
-use datafusion::parquet::basic::Type;
-use datafusion::parquet::bloom_filter::Sbbf;
-use datafusion::parquet::file::metadata::ParquetMetaData;
+use datafusion::parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
+use datafusion::parquet::arrow::async_reader::AsyncFileReader;
+use datafusion::parquet::arrow::{ParquetRecordBatchStreamBuilder, parquet_column};
+use datafusion::parquet::basic::Type as PhysicalType;
+use datafusion::parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::create_physical_expr;
 use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
@@ -39,14 +44,18 @@ use datafusion::physical_plan::projection::{
     ProjectionExec, ProjectionExpr, ProjectionExprs,
 };
 use datafusion_datasource::compute_all_files_statistics;
-use object_store::ObjectMeta;
+use futures::{StreamExt, TryStreamExt};
+use object_store::ObjectStore;
 use rdf_fusion_common::DFResult;
+use rdf_fusion_common::config::{PlanningBloomFilters, RdfFusionSessionConfigExt};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::{
     PlainTermEncoding, PlainTermScalar, PlainTermType,
 };
 use rdf_fusion_logical::quad_pattern::{QuadPattern, compute_quad_pattern_filters};
+use std::collections::HashSet;
 use std::sync::Arc;
+use tracing::debug;
 
 /// Determines how the projection should be handled during the parquet scan.
 pub enum PushdownProjection {
@@ -58,20 +67,6 @@ pub enum PushdownProjection {
 
 use crate::block_cache::BlockCache;
 
-type EagerPruningResult = (ParquetAccessPlan, Option<Arc<dyn PhysicalExpr>>, Statistics);
-
-/// Defines which [`ParquetFileReaderFactory`] should be used during scanning.
-pub enum ParquetQuadScanReaderFactoryType {
-    /// Uses the default DataFusion parquet reader
-    Default,
-    /// Create a cached reader that already knows the parquet metadata
-    Preloaded(
-        PreloadedParquetMetadata,
-        PreloadedBloomFilters,
-        Option<Arc<BlockCache>>,
-    ),
-}
-
 /// A builder for constructing `ParquetQuadScanExec` with optional predicate pushdown and projection.
 pub struct ParquetQuadScanBuilder<'a> {
     session_state: &'a SessionState,
@@ -79,11 +74,11 @@ pub struct ParquetQuadScanBuilder<'a> {
     file_groups: Vec<FileGroup>,
     pattern: Option<QuadPattern>,
     object_store_url: ObjectStoreUrl,
-    reader_factory_type: ParquetQuadScanReaderFactoryType,
+    block_cache: Option<Arc<BlockCache>>,
     pushdown_projection: PushdownProjection,
     eager_pruning: bool,
     output_ordering: Option<Vec<datafusion::physical_expr::LexOrdering>>,
-    object_store: Option<Arc<dyn object_store::ObjectStore>>,
+    split_file_groups: Option<usize>,
 }
 
 impl<'a> ParquetQuadScanBuilder<'a> {
@@ -99,11 +94,11 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             file_groups,
             pattern: None,
             object_store_url,
-            reader_factory_type: ParquetQuadScanReaderFactoryType::Default,
+            block_cache: None,
             pushdown_projection: PushdownProjection::No,
             eager_pruning: false,
             output_ordering: None,
-            object_store: None,
+            split_file_groups: None,
         }
     }
 
@@ -114,12 +109,10 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         self
     }
 
-    /// Defines how the [`ParquetFileReaderFactory`] should be constructed during the scan.
-    pub fn with_reader_factory_type(
-        mut self,
-        reader_factory_type: ParquetQuadScanReaderFactoryType,
-    ) -> Self {
-        self.reader_factory_type = reader_factory_type;
+    /// Caches the byte ranges read from the Parquet files (including Bloom filters) in the given
+    /// block cache.
+    pub fn with_block_cache(mut self, block_cache: Option<Arc<BlockCache>>) -> Self {
+        self.block_cache = block_cache;
         self
     }
 
@@ -149,12 +142,10 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         self
     }
 
-    /// Caches the byte ranges of the parquet files being scanned in the given chunk cache.
-    pub fn with_object_store(
-        mut self,
-        object_store: Arc<dyn object_store::ObjectStore>,
-    ) -> Self {
-        self.object_store = Some(object_store);
+    /// After eager pruning, redistributes the remaining files into (at most) `n` file groups. This
+    /// ensures that the files that survive pruning are spread across the partitions.
+    pub fn with_split_file_groups(mut self, n: usize) -> Self {
+        self.split_file_groups = Some(n);
         self
     }
 
@@ -205,7 +196,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         )?;
 
         let (file_groups, statistics) =
-            self.apply_eager_pruning(pushed_filter.clone())?;
+            self.apply_eager_pruning(pushed_filter.clone()).await?;
 
         let mut file_scan_config =
             FileScanConfigBuilder::new(self.object_store_url.clone(), file_source)
@@ -276,7 +267,42 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         Ok(plan)
     }
 
+    /// Returns the object store that is used for the scan.
+    fn object_store(&self) -> DFResult<Arc<dyn ObjectStore>> {
+        self.session_state
+            .runtime_env()
+            .object_store(&self.object_store_url)
+    }
+
+    /// Returns the factory for the readers of the Parquet files. The metadata is served from the
+    /// session's file metadata cache and the byte reads are cached in the block cache.
+    fn reader_factory(&self) -> DFResult<BlockCachedReaderFactory> {
+        let metadata_cache = self
+            .session_state
+            .runtime_env()
+            .cache_manager
+            .get_file_metadata_cache();
+        Ok(BlockCachedReaderFactory::new(
+            self.object_store()?,
+            metadata_cache,
+            self.block_cache.clone(),
+        ))
+    }
+
+    /// Returns the metadata size hint from the session's Parquet options.
+    fn metadata_size_hint(&self) -> Option<usize> {
+        self.session_state
+            .table_options()
+            .parquet
+            .global
+            .metadata_size_hint
+    }
+
     /// Builds the [`FileSource`] that is used to implement the scan.
+    ///
+    /// This mirrors what DataFusion's `ParquetFormat::create_physical_plan` does for a
+    /// `ListingTable` (session Parquet options, metadata size hint, cached metadata reader) and
+    /// additionally configures our predicate, projection, and block cache.
     fn build_file_source(
         &self,
         combined_logical_filter: Option<Expr>,
@@ -286,33 +312,17 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         let table_schema =
             TableSchemaBuilder::new(Arc::clone(base_schema.inner())).build();
 
-        let store = if let Some(store) = self.object_store.clone() {
-            store
-        } else {
-            self.session_state
-                .runtime_env()
-                .object_store(&self.object_store_url)?
-        };
-        let default_reader = Arc::new(DefaultParquetFileReaderFactory::new(store));
-        let reader_factory: Arc<dyn ParquetFileReaderFactory> = match &self
-            .reader_factory_type
-        {
-            ParquetQuadScanReaderFactoryType::Default => Arc::clone(&default_reader) as _,
-            ParquetQuadScanReaderFactoryType::Preloaded(
-                cache,
-                bloom_filter_cache,
-                block_cache,
-            ) => Arc::new(PreLoadedMetadataReaderFactory::new(
-                default_reader,
-                cache.clone(),
-                bloom_filter_cache.clone(),
-                block_cache.clone(),
-            )),
-        };
+        let reader_factory = Arc::new(self.reader_factory()?);
 
         let mut parquet_source = ParquetSource::new(table_schema)
+            .with_table_parquet_options(
+                self.session_state.table_options().parquet.clone(),
+            )
             .with_pushdown_filters(true)
             .with_parquet_file_reader_factory(reader_factory);
+        if let Some(metadata_size_hint) = self.metadata_size_hint() {
+            parquet_source = parquet_source.with_metadata_size_hint(metadata_size_hint);
+        }
 
         if let Some(filter) = combined_logical_filter {
             let predicate = self
@@ -343,9 +353,21 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         }
     }
 
-    /// Applies pruning eagerly, if configured and returns the resulting estimated statistics which
-    /// can be used for planning.
-    fn apply_eager_pruning(
+    /// Applies pruning eagerly, if configured, and returns the pruned file groups and the
+    /// resulting estimated statistics which can be used for planning.
+    ///
+    /// The pruning happens in three phases:
+    /// 1. The row groups of each file are pruned using the statistics in the footer. Files for
+    ///    which no row group remains are removed from the scan.
+    /// 2. The remaining row groups are pruned using Bloom filters, if the statistics are unlikely
+    ///    to be effective for some bound columns (see [`bloom_filter_columns`]). Whether this is
+    ///    done is controlled by [`PlanningBloomFilters`].
+    /// 3. The page index of the remaining files is loaded and used for pruning pages.
+    ///
+    /// Hence, the Bloom filters and the (comparatively large) page index are only loaded for files
+    /// that may contain matching rows. The metadata is obtained from DataFusion's file metadata
+    /// cache, while the Bloom filters are cached in the block cache.
+    async fn apply_eager_pruning(
         &self,
         combined_logical_filter: Option<Expr>,
     ) -> DFResult<(Vec<FileGroup>, Option<Statistics>)> {
@@ -353,20 +375,56 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             return Ok((self.file_groups.clone(), None));
         }
 
-        let (metadata_cache, bloom_cache) = match &self.reader_factory_type {
-            ParquetQuadScanReaderFactoryType::Default => {
-                return Ok((self.file_groups.clone(), None));
-            }
-            ParquetQuadScanReaderFactoryType::Preloaded(
-                metadata_cache,
-                bloom_cache,
-                _,
-            ) => (metadata_cache, bloom_cache),
-        };
+        let fetcher =
+            ParquetMetadataFetcher::new(self.session_state, self.object_store()?);
+        let reader_factory = self.reader_factory()?;
+        let filters = self.create_pruning_filters(combined_logical_filter)?;
+        let (fetcher, reader_factory, filters) = (&fetcher, &reader_factory, &filters);
 
-        let total_file_count: usize =
-            self.file_groups.iter().map(|fg| fg.files().len()).sum();
-        if total_file_count == 0 {
+        // Up to `max_concurrent_files` files are pruned concurrently. Afterward, the remaining files
+        // are put back into their original groups.
+        let files = self
+            .file_groups
+            .iter()
+            .enumerate()
+            .flat_map(|(group, fg)| fg.iter().map(move |file| (group, file.clone())))
+            .collect::<Vec<_>>();
+        let pruned: Vec<(usize, Option<PartitionedFile>)> = futures::stream::iter(files)
+            .map(|(group, file)| async move {
+                let pruned = self
+                    .prune_file(fetcher, reader_factory, filters, file)
+                    .await?;
+                Ok::<_, DataFusionError>((group, pruned))
+            })
+            .buffered(max_concurrent_files(self.session_state))
+            .try_collect()
+            .await?;
+
+        let total_files = pruned.len();
+        let mut groups = vec![Vec::new(); self.file_groups.len()];
+        for (group, file) in pruned {
+            groups[group].extend(file);
+        }
+        let mut all_file_groups = groups
+            .into_iter()
+            .filter(|files| !files.is_empty())
+            .map(FileGroup::new)
+            .collect::<Vec<_>>();
+        let remaining_files = all_file_groups.iter().map(FileGroup::len).sum::<usize>();
+        debug!(
+            "Eager pruning removed {}/{total_files} files from the scan.",
+            total_files - remaining_files
+        );
+
+        if let Some(n) = self.split_file_groups {
+            let files = all_file_groups
+                .into_iter()
+                .flat_map(FileGroup::into_inner)
+                .collect::<Vec<_>>();
+            all_file_groups = FileGroup::new(files).split_files(n.max(1));
+        }
+
+        if all_file_groups.is_empty() {
             let stats = Statistics {
                 num_rows: Precision::Exact(0),
                 total_byte_size: Precision::Exact(0),
@@ -374,52 +432,107 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                     self.encoding.quad_schema().inner(),
                 ),
             };
-            return Ok((self.file_groups.clone(), Some(stats)));
+            // Keep a single empty group, such that the scan still has one (empty) partition.
+            return Ok((vec![FileGroup::new(vec![])], Some(stats)));
         }
 
-        let mut some_pruned = false;
-        let mut all_file_groups = Vec::new();
+        let (file_groups, stats) = compute_all_files_statistics(
+            all_file_groups,
+            Arc::clone(self.encoding.quad_schema().inner()),
+            true,
+            false,
+        )?;
+        Ok((file_groups, Some(stats)))
+    }
 
-        for fg in self.file_groups.clone() {
-            let mut new_files = Vec::with_capacity(fg.files().len());
-            for mut pf in fg.into_inner() {
-                if let Some((parquet_meta, object_meta)) =
-                    metadata_cache.get(&pf.object_meta.location)
-                {
-                    let (access_plan, _, stats) =
-                        ParquetQuadScanBuilder::compute_eager_pruning(
-                            self.session_state,
-                            &self.encoding,
-                            parquet_meta.as_ref(),
-                            &object_meta,
-                            combined_logical_filter.clone(),
-                            Some(bloom_cache),
-                        )?;
+    /// Prunes a single file in three phases (see [`Self::apply_eager_pruning`]). Returns [`None`]
+    /// if no row group of the file remains.
+    async fn prune_file(
+        &self,
+        fetcher: &ParquetMetadataFetcher,
+        reader_factory: &BlockCachedReaderFactory,
+        filters: &PruningFilters,
+        file: PartitionedFile,
+    ) -> DFResult<Option<PartitionedFile>> {
+        let schema = self.encoding.quad_schema();
+        let schema = schema.inner().as_ref();
+        let metrics_set = ExecutionPlanMetricsSet::new();
+        let metrics =
+            ParquetFileMetrics::new(0, file.object_meta.location.as_ref(), &metrics_set);
 
-                    pf = pf
-                        .with_extension(access_plan)
-                        .with_statistics(Arc::new(stats));
-                    some_pruned = true;
-                }
-                new_files.push(pf);
-            }
-            all_file_groups.push(FileGroup::new(new_files));
+        // Phase 1: Prune row groups using the footer.
+        let footer = fetcher
+            .fetch(&file.object_meta, PageIndexPolicy::Skip)
+            .await?;
+        let mut access_plan =
+            prune_row_groups(schema, &footer, filters.row_group.as_deref(), &metrics);
+        if access_plan.row_group_indexes().is_empty() {
+            return Ok(None);
         }
 
-        let overall_stats = if some_pruned {
-            let (file_groups, stats) = compute_all_files_statistics(
-                all_file_groups,
-                Arc::clone(self.encoding.quad_schema().inner()),
-                true,
-                false,
-            )?;
-            all_file_groups = file_groups;
-            Some(stats)
-        } else {
-            None
+        // Phase 2: Prune row groups using the Bloom filters.
+        let (bloom_filter_predicate, bloom_filter_columns) = match &filters.row_group {
+            Some(predicate) if filters.bloom_filter => (
+                Some(predicate.as_ref()),
+                bloom_filter_columns(schema, &footer, predicate),
+            ),
+            _ => (None, Vec::new()),
         };
+        if let Some(predicate) = bloom_filter_predicate
+            && !bloom_filter_columns.is_empty()
+        {
+            let reader = reader_factory.create_reader(
+                0,
+                file.clone(),
+                self.metadata_size_hint(),
+                &metrics_set,
+            )?;
+            access_plan = prune_row_groups_by_bloom_filters(
+                reader,
+                &footer,
+                predicate,
+                &bloom_filter_columns,
+                access_plan,
+                &metrics,
+            )
+            .await?;
+            if access_plan.row_group_indexes().is_empty() {
+                return Ok(None);
+            }
+        }
 
-        Ok((all_file_groups, overall_stats))
+        // Phase 3: Prune pages using the page index. The page index is not loaded if the footer
+        // already guarantees that all rows of the remaining row groups match.
+        let page_filter = filters.page.as_ref().filter(|_| {
+            !filters.full_match.as_ref().is_some_and(|full_match| {
+                all_row_groups_fully_match(schema, &footer, &access_plan, full_match)
+            })
+        });
+        let (parquet_meta, access_plan) = match page_filter {
+            Some(page_filter) => {
+                let parquet_meta = fetcher
+                    .fetch(&file.object_meta, PageIndexPolicy::Optional)
+                    .await?;
+                let access_plan = page_filter.prune_plan_with_page_index(
+                    access_plan,
+                    schema,
+                    parquet_meta.file_metadata().schema_descr(),
+                    &parquet_meta,
+                    &metrics,
+                );
+                (parquet_meta, access_plan)
+            }
+            None => (footer, access_plan),
+        };
+        if access_plan.row_group_indexes().is_empty() {
+            return Ok(None);
+        }
+
+        let stats = estimate_scan_statistics(&parquet_meta, &access_plan, schema);
+        Ok(Some(
+            file.with_extension(access_plan)
+                .with_statistics(Arc::new(stats)),
+        ))
     }
 
     /// Computes the physical expressions and names for renaming quad components to variables,
@@ -491,153 +604,284 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         }
     }
 
-    /// Evaluates eager pruning logic to construct a `ParquetAccessPlan` and statistics.
-    pub fn compute_eager_pruning(
-        session_state: &SessionState,
-        encoding: &QuadStorageEncoding,
-        parquet_meta: &ParquetMetaData,
-        object_meta: &ObjectMeta,
+    /// Creates the filters used for eager pruning from the logical filter.
+    fn create_pruning_filters(
+        &self,
         combined_logical_filter: Option<Expr>,
-        bloom_cache: Option<&PreloadedBloomFilters>,
-    ) -> DFResult<EagerPruningResult> {
-        let base_schema = encoding.quad_schema();
-        let num_row_groups = parquet_meta.num_row_groups();
-        let access_plan = ParquetAccessPlan::new_all(num_row_groups);
-
-        let (access_plan, physical_filter_expr) = if let Some(logical_expr) =
-            combined_logical_filter
-        {
-            let phys_expr = create_physical_expr(
-                &logical_expr,
-                base_schema.as_ref(),
-                session_state.execution_props(),
-                &PhysicalPlanningContext::default(),
-            )?;
-
-            let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan);
-            let metrics_set = ExecutionPlanMetricsSet::new();
-            let metrics =
-                ParquetFileMetrics::new(0, object_meta.location.as_ref(), &metrics_set);
-
-            let predicate = PruningPredicateBuilder::new()
-                .with_file_schema(Arc::clone(base_schema.inner()))
-                .build(Arc::clone(&phys_expr));
-            if let Some(predicate) = predicate {
-                rg_filter.prune_by_statistics(
-                    base_schema.inner().as_ref(),
-                    parquet_meta.file_metadata().schema_descr(),
-                    parquet_meta.row_groups(),
-                    &predicate,
-                    &metrics,
-                );
-
-                if let Some(bloom_cache) = bloom_cache {
-                    prune_by_bloom_filters(
-                        &mut rg_filter,
-                        session_state,
-                        parquet_meta,
-                        object_meta,
-                        &base_schema,
-                        &metrics,
-                        predicate.as_ref(),
-                        bloom_cache,
-                    );
-                }
-            }
-
-            let access_plan = rg_filter.build();
-
-            // Page QuadTable Pruning
-            let page_filter = PagePruningAccessPlanFilter::new(
-                &phys_expr,
-                Arc::clone(base_schema.inner()),
-            );
-            let access_plan = page_filter.prune_plan_with_page_index(
-                access_plan,
-                base_schema.inner().as_ref(),
-                parquet_meta.file_metadata().schema_descr(),
-                parquet_meta,
-                &metrics,
-            );
-
-            (access_plan, Some(phys_expr))
-        } else {
-            (access_plan, None)
+    ) -> DFResult<PruningFilters> {
+        let Some(logical_expr) = combined_logical_filter else {
+            return Ok(PruningFilters::default());
         };
 
-        let statistics = estimate_scan_statistics(
-            parquet_meta,
-            &access_plan,
-            base_schema.inner().as_ref(),
-        );
-        Ok((access_plan, physical_filter_expr, statistics))
+        let base_schema = self.encoding.quad_schema();
+        let phys_expr = create_physical_expr(
+            &logical_expr,
+            base_schema.as_ref(),
+            self.session_state.execution_props(),
+            &PhysicalPlanningContext::default(),
+        )?;
+
+        let row_group = PruningPredicateBuilder::new()
+            .with_file_schema(Arc::clone(base_schema.inner()))
+            .build(Arc::clone(&phys_expr));
+
+        let enable_page_index = self
+            .session_state
+            .table_options()
+            .parquet
+            .global
+            .enable_page_index;
+        let page = enable_page_index
+            .then(|| {
+                PagePruningAccessPlanFilter::new(
+                    &phys_expr,
+                    Arc::clone(base_schema.inner()),
+                )
+            })
+            .filter(|page_filter| page_filter.filter_number() > 0);
+
+        // The full match predicate is only required for deciding whether to load the page index.
+        let full_match = match (&page, negate_filter(&logical_expr)) {
+            (Some(_), Some(negated)) => {
+                let negated = create_physical_expr(
+                    &negated,
+                    base_schema.as_ref(),
+                    self.session_state.execution_props(),
+                    &PhysicalPlanningContext::default(),
+                )?;
+                PruningPredicateBuilder::new()
+                    .with_file_schema(Arc::clone(base_schema.inner()))
+                    .build(negated)
+            }
+            _ => None,
+        };
+
+        let planning_bloom_filters = self
+            .session_state
+            .config()
+            .rdf_fusion_options_or_default()
+            .execution
+            .planning_bloom_filters;
+        let bloom_filter = self
+            .session_state
+            .table_options()
+            .parquet
+            .global
+            .bloom_filter_on_read
+            && match planning_bloom_filters {
+                PlanningBloomFilters::Auto => self.block_cache.is_some(),
+                PlanningBloomFilters::Always => true,
+                PlanningBloomFilters::Never => false,
+            };
+
+        Ok(PruningFilters {
+            row_group,
+            bloom_filter,
+            page,
+            full_match,
+        })
     }
 }
 
-/// Applies bloom filters to prune row groups.
-#[allow(clippy::too_many_arguments)]
-fn prune_by_bloom_filters(
-    rg_filter: &mut RowGroupAccessPlanFilter,
-    session_state: &SessionState,
-    parquet_meta: &ParquetMetaData,
-    object_meta: &ObjectMeta,
-    base_schema: &DFSchemaRef,
-    metrics: &ParquetFileMetrics,
-    predicate: &PruningPredicate,
-    bloom_cache: &PreloadedBloomFilters,
-) {
-    let enable_bloom_filter = session_state
-        .table_options()
-        .parquet
-        .global
-        .bloom_filter_on_read;
-    if enable_bloom_filter && rg_filter.remaining_row_group_count() > 0 {
-        let parquet_schema = parquet_meta.file_metadata().schema_descr();
-        let arrow_schema = base_schema.inner().as_ref();
-        let literal_columns = predicate.literal_columns();
-        let parquet_columns: Vec<(String, usize, Type, i32)> = literal_columns
-            .into_iter()
-            .filter_map(|column_name| {
-                let (column_idx, _) =
-                    parquet_column(parquet_schema, arrow_schema, &column_name)?;
-                Some((
-                    column_name,
-                    column_idx,
-                    parquet_schema.column(column_idx).physical_type(),
-                    parquet_schema.column(column_idx).type_length(),
-                ))
-            })
-            .collect();
+/// The filters used for eager pruning. If a filter is not present, no pruning is done on that
+/// level.
+#[derive(Default)]
+struct PruningFilters {
+    /// Prunes row groups based on the statistics in the footer. Also used for pruning row groups
+    /// based on Bloom filters.
+    row_group: Option<Arc<PruningPredicate>>,
+    /// Whether row groups should be pruned based on Bloom filters (see
+    /// [`PlanningBloomFilters`]).
+    bloom_filter: bool,
+    /// Prunes pages based on the page index. If not present (e.g., the page index is disabled or
+    /// no page-level pruning is possible), the page index is never loaded.
+    page: Option<PagePruningAccessPlanFilter>,
+    /// The negation of the filter. A row group that is pruned by this predicate only contains
+    /// rows that match the filter. Hence, the page index cannot prune any of its pages.
+    ///
+    /// Only present if `page` is present, as it is only used for deciding whether to load the
+    /// page index. If `page` is present but this is not (i.e., the filter cannot be negated), the
+    /// page index is loaded for every file with remaining row groups.
+    full_match: Option<Arc<PruningPredicate>>,
+}
 
-        if !parquet_columns.is_empty() {
-            let mut row_group_bloom_filters =
-                vec![BloomFilterStatistics::new(); parquet_meta.num_row_groups()];
-            for idx in rg_filter.row_group_indexes() {
-                let mut bloom_filters =
-                    BloomFilterStatistics::with_capacity(parquet_columns.len());
-                for (column_name, column_idx, physical_type, type_length) in
-                    &parquet_columns
-                {
-                    if let Some(bitset) =
-                        bloom_cache.get_bitset(&object_meta.location, idx, *column_idx)
-                    {
-                        let bf = Sbbf::new(&bitset);
-                        bloom_filters.insert(
-                            column_name.clone(),
-                            bf,
-                            *physical_type,
-                            *type_length,
-                        );
-                    }
-                }
-                row_group_bloom_filters[idx] = bloom_filters;
+/// Prunes the row groups of a file using the statistics in its footer.
+fn prune_row_groups(
+    schema: &Schema,
+    parquet_meta: &ParquetMetaData,
+    predicate: Option<&PruningPredicate>,
+    metrics: &ParquetFileMetrics,
+) -> ParquetAccessPlan {
+    let access_plan = ParquetAccessPlan::new_all(parquet_meta.num_row_groups());
+    let Some(predicate) = predicate else {
+        return access_plan;
+    };
+
+    let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan);
+    rg_filter.prune_by_statistics(
+        schema,
+        parquet_meta.file_metadata().schema_descr(),
+        parquet_meta.row_groups(),
+        predicate,
+        metrics,
+    );
+    rg_filter.build()
+}
+
+/// A Parquet column whose Bloom filters are used for pruning row groups.
+struct BloomFilterColumn {
+    /// The name of the column in the pruning predicate.
+    name: String,
+    /// The index of the column in the Parquet schema.
+    parquet_idx: usize,
+    physical_type: PhysicalType,
+    type_length: i32,
+}
+
+/// Returns the columns whose Bloom filters should be used for pruning the row groups of a file.
+///
+/// These are the columns that are bound to literals in the `predicate`, except the bound prefix
+/// of the file's sort order. For example, for a file sorted by GPOS and a pattern that binds G, P,
+/// and S, the row group statistics already prune G and P effectively. However, the values of S
+/// are spread across many row groups, such that only the Bloom filters of S can help. If the file
+/// has no sort order, all bound columns are considered.
+fn bloom_filter_columns(
+    schema: &Schema,
+    parquet_meta: &ParquetMetaData,
+    predicate: &PruningPredicate,
+) -> Vec<BloomFilterColumn> {
+    let parquet_schema = parquet_meta.file_metadata().schema_descr();
+    let bound_columns = predicate
+        .literal_columns()
+        .into_iter()
+        .filter_map(|name| {
+            let (parquet_idx, _) = parquet_column(parquet_schema, schema, &name)?;
+            Some((name, parquet_idx))
+        })
+        .collect::<Vec<_>>();
+
+    let sorted_prefix = parquet_meta
+        .row_groups()
+        .first()
+        .and_then(|row_group| row_group.sorting_columns())
+        .into_iter()
+        .flatten()
+        .map_while(|sorting_column| usize::try_from(sorting_column.column_idx).ok())
+        .take_while(|idx| bound_columns.iter().any(|(_, bound)| bound == idx))
+        .collect::<HashSet<_>>();
+
+    bound_columns
+        .into_iter()
+        .filter(|(_, parquet_idx)| !sorted_prefix.contains(parquet_idx))
+        .map(|(name, parquet_idx)| {
+            let column = parquet_schema.column(parquet_idx);
+            BloomFilterColumn {
+                name,
+                parquet_idx,
+                physical_type: column.physical_type(),
+                type_length: column.type_length(),
             }
-            rg_filter.prune_by_bloom_filters(
-                predicate,
-                metrics,
-                &row_group_bloom_filters,
+        })
+        .collect()
+}
+
+/// Prunes the row groups in `access_plan` using the Bloom filters of the given `columns`. The
+/// Bloom filters are only read for the row groups in `access_plan`.
+async fn prune_row_groups_by_bloom_filters(
+    reader: Box<dyn AsyncFileReader>,
+    parquet_meta: &Arc<ParquetMetaData>,
+    predicate: &PruningPredicate,
+    columns: &[BloomFilterColumn],
+    access_plan: ParquetAccessPlan,
+    metrics: &ParquetFileMetrics,
+) -> DFResult<ParquetAccessPlan> {
+    let reader_metadata = ArrowReaderMetadata::try_new(
+        Arc::clone(parquet_meta),
+        ArrowReaderOptions::new(),
+    )?;
+    let mut builder =
+        ParquetRecordBatchStreamBuilder::new_with_metadata(reader, reader_metadata);
+
+    let mut bloom_filters = vec![BloomFilterStatistics::new(); access_plan.len()];
+    for idx in access_plan.row_group_indexes() {
+        for column in columns {
+            let Some(sbbf) = builder
+                .get_row_group_column_bloom_filter(idx, column.parquet_idx)
+                .await?
+            else {
+                continue;
+            };
+            bloom_filters[idx].insert(
+                column.name.clone(),
+                sbbf,
+                column.physical_type,
+                column.type_length,
             );
         }
+    }
+
+    let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan);
+    rg_filter.prune_by_bloom_filters(predicate, metrics, &bloom_filters);
+    Ok(rg_filter.build())
+}
+
+/// Returns true if the footer statistics guarantee that all rows of the row groups in the
+/// `access_plan` match the filter (see [`PruningFilters::full_match`]).
+///
+/// The access plan only contains the row groups that *may* contain matching rows, so this cannot
+/// be derived from it. DataFusion also marks fully matched row groups in the access plan, but it
+/// adds `OR col IS NULL` to its inverted predicate for each nullable column. As patterns on the
+/// default graph filter for `graph IS NULL`, it never considers such row groups fully matched.
+fn all_row_groups_fully_match(
+    schema: &Schema,
+    parquet_meta: &ParquetMetaData,
+    access_plan: &ParquetAccessPlan,
+    full_match: &PruningPredicate,
+) -> bool {
+    let metrics_set = ExecutionPlanMetricsSet::new();
+    let metrics = ParquetFileMetrics::new(0, "full_match", &metrics_set);
+    let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan.clone());
+    rg_filter.prune_by_statistics(
+        schema,
+        parquet_meta.file_metadata().schema_descr(),
+        parquet_meta.row_groups(),
+        full_match,
+        &metrics,
+    );
+    rg_filter.remaining_row_group_count() == 0
+}
+
+/// Negates a conjunction of (in)equality and null checks, such that a row matches the result if
+/// it does not match `expr`. Returns [`None`] for unsupported expressions.
+///
+/// SQL's three-valued logic is considered: `a = v` is negated to `a != v OR a IS NULL`, as a row
+/// with a null `a` does not match `a = v`.
+fn negate_filter(expr: &Expr) -> Option<Expr> {
+    match expr {
+        Expr::BinaryExpr(BinaryExpr {
+            left,
+            op: Operator::And,
+            right,
+        }) => Some(negate_filter(left)?.or(negate_filter(right)?)),
+        Expr::BinaryExpr(BinaryExpr {
+            left,
+            op: Operator::Eq,
+            right,
+        }) => {
+            let value = match (left.as_ref(), right.as_ref()) {
+                (value, Expr::Literal(..)) | (Expr::Literal(..), value) => value,
+                _ => return None,
+            };
+            Some(
+                left.as_ref()
+                    .clone()
+                    .not_eq(right.as_ref().clone())
+                    .or(value.clone().is_null()),
+            )
+        }
+        Expr::IsNull(inner) => Some(inner.as_ref().clone().is_not_null()),
+        Expr::IsNotNull(inner) => Some(inner.as_ref().clone().is_null()),
+        _ => None,
     }
 }
 
@@ -945,6 +1189,30 @@ mod tests {
         assert!(
             rewrite(predicate).is_err(),
             "Expected an error when the other side is not a column"
+        );
+    }
+
+    #[test]
+    fn negates_filter() {
+        let filter = col("a").eq(lit(1)).and(col("b").is_null());
+        assert_eq!(
+            negate_filter(&filter),
+            Some(
+                col("a")
+                    .not_eq(lit(1))
+                    .or(col("a").is_null())
+                    .or(col("b").is_not_null())
+            )
+        );
+    }
+
+    #[test]
+    fn negate_filter_rejects_unsupported_expressions() {
+        assert_eq!(negate_filter(&col("a").eq(col("b"))), None);
+        assert_eq!(negate_filter(&col("a").in_list(vec![lit(1)], false)), None);
+        assert_eq!(
+            negate_filter(&col("a").eq(lit(1)).and(col("b").gt(lit(1)))),
+            None
         );
     }
 }

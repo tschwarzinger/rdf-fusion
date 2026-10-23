@@ -9,12 +9,15 @@ use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::displayable;
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use datafusion::prelude::{SessionConfig, SessionContext};
-use rdf_fusion_common::{NamedNode, Quad, StorageError, TermPattern, TriplePattern};
+use rdf_fusion_common::{
+    GraphName, NamedNode, Quad, StorageError, TermPattern, TriplePattern,
+};
 use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
 use rdf_fusion_execution::RdfFusionPlanner;
 use rdf_fusion_extensions::storage::{QuadStorage, QuadStorageSnapshot};
 use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_logical::quad_pattern::QuadPatternNode;
+use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::quad_tables::QuadTableName;
 use std::sync::Arc;
 
@@ -216,11 +219,11 @@ async fn test_generic_planner_installed_by_default_and_buffers_small_scans() {
         1,
     )
     .await
-    .with_existing_quads(&[test_quad(
-        "https://my.com/s",
-        "https://my.com/p",
-        "https://my.com/o",
-        "https://my.com/g",
+    .with_existing_quads(&[Quad::new(
+        NamedNode::new_unchecked("https://my.com/s"),
+        NamedNode::new_unchecked("https://my.com/p"),
+        NamedNode::new_unchecked("https://my.com/o"),
+        GraphName::DefaultGraph,
     )])
     .await;
 
@@ -232,14 +235,19 @@ async fn test_generic_planner_installed_by_default_and_buffers_small_scans() {
 
     // With an eager buffering threshold the small matching scan gets buffered.
     ctx.session
-        .state()
+        .state_ref()
+        .write()
         .config_mut()
-        .clone()
-        .set_str("rdf_fusion.execution.small_scan_buffering_threshold", "10K");
+        .options_mut()
+        .set("rdf_fusion.execution.small_scan_buffering_threshold", "10K")
+        .unwrap();
     let plan = ctx.get_plan_string().await;
     assert_plan_snapshot!(
         plan,
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/part-<file>.parquet]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.com/s>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.com/s> AND <https://my.com/s> <= subject_max@2, required_guarantees=[subject in (<https://my.com/s>)]"
+        @"
+    BufferExec: capacity=10240
+      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/part-<file>.parquet]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.com/s>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.com/s> AND <https://my.com/s> <= subject_max@2, required_guarantees=[subject in (<https://my.com/s>)]
+    "
     );
 }
 
@@ -295,14 +303,31 @@ impl PlannerTestContext {
         options.optimizer.enable_dynamic_filter_pushdown = true;
         options.execution.parquet.pushdown_filters = true;
 
-        let storage =
-            Arc::new(DeltaQuadsStorage::new_in_memory(encoding, quad_tables).await);
+        let log_store = create_test_log_store();
+        let storage = Arc::new(
+            DeltaQuadsStorageBuilder::new()
+                .with_log_store(Arc::clone(&log_store))
+                .with_encoding(encoding)
+                .with_quad_tables(quad_tables)
+                .build()
+                .await
+                .unwrap(),
+        );
 
         let context =
             RdfFusionContextBuilder::new(Arc::clone(&storage) as Arc<dyn QuadStorage>)
                 .with_session_config(Some(config))
                 .build()
                 .unwrap();
+        // The storage and the query engine must share the object store, as planning reads the
+        // Parquet metadata of the storage's files.
+        context
+            .session_context()
+            .runtime_env()
+            .register_object_store(
+                &Url::parse("memory://").unwrap(),
+                log_store.root_object_store(None),
+            );
 
         let node = QuadPatternNode::new(
             context.storage().encoding(),

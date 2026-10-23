@@ -18,9 +18,13 @@ pub struct StorageConfigArgs {
     pub storage_type: QuadStorageType,
     /// The location of the storage.
     ///
-    /// The semantics of this setting differ depending on the chosen storage type. For example,
-    /// a `delta-quads` storage requires a single location to directory, while a `rdf-file` storage
-    /// requires a list of locations that point to individual RDF files.
+    /// The accepted values for this setting differ depending on the chosen storage type. For
+    /// example, a `delta-quads` storage requires a single location to a storage prefix, while a
+    /// `parquet` storage accepts a single Parquet file or a prefix containing Parquet files.
+    ///
+    /// When loading into a `parquet` storage, a location that does not end with `.parquet` is
+    /// treated as a directory and the data is split into multiple files (see
+    /// `DATAFUSION_EXECUTION_SOFT_MAX_ROWS_PER_OUTPUT_FILE`).
     ///
     /// Supported locations:
     /// - in-memory database [`memory://`]
