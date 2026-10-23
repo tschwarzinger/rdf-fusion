@@ -134,6 +134,16 @@ rdf-fusion-web = { version = "=0.3.0", path = "lib/web" }
 [profile.dev]
 # TODO: Remove once DF join estimation does not overflow
 overflow-checks = false
+# Full debug info for all crates makes every binary (tests, benches, examples) link the debug info
+# of DataFusion, Arrow, and Delta Lake, which is very slow and uses a lot of disk space. Hence, our
+# crates only get line tables (enough for backtraces) and dependencies get no debug info.
+#
+# For debugging, set `debug = true` here and remove `[profile.dev.package."*"]` below.
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = false
 
 [profile.test]
 # TODO: Remove once DF join estimation does not overflow
