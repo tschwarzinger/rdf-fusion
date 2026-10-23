@@ -166,10 +166,17 @@ async fn list_parquet_files(
         .execution
         .collect_statistics = false;
 
+    // Only the files of a directory are filtered by their extension. A URL that points to a single
+    // object is used as is, as it may not have an extension (e.g., objects in IndexedDB).
+    let file_extension = if table_url.is_collection() {
+        ".parquet"
+    } else {
+        ""
+    };
     let format =
         ParquetFormat::default().with_options(state.table_options().parquet.clone());
     let listing_options =
-        ListingOptions::new(Arc::new(format)).with_file_extension(".parquet");
+        ListingOptions::new(Arc::new(format)).with_file_extension(file_extension);
     let listing_table = ListingTable::try_new(
         ListingTableConfig::new(table_url.clone())
             .with_listing_options(listing_options)

@@ -61,9 +61,10 @@ impl RdfParquetLoader {
 
     /// Loads the given RDF input into a Parquet database at the specified output URL.
     ///
-    /// If the URL points to a `.parquet` file, a single file is written. Otherwise, the URL is
-    /// treated as a directory and the quads are split into multiple files of approximately
-    /// `datafusion.execution.soft_max_rows_per_output_file` rows.
+    /// If the URL ends with a `/`, it is treated as a directory and the quads are split into
+    /// multiple files of approximately `datafusion.execution.soft_max_rows_per_output_file` rows.
+    /// Otherwise, a single file is written to the URL (which does not need a `.parquet`
+    /// extension, e.g., for objects in IndexedDB).
     pub async fn load_many(
         &self,
         inputs: Vec<RdfInput>,
@@ -154,11 +155,11 @@ impl RdfParquetLoader {
             .with_sort_order(self.sort_order.clone());
         let arrow_properties = properties.to_arrow();
 
-        // A URL that points to a `.parquet` file produces a single file. Otherwise, the URL is
-        // treated as a directory and the quads are split into multiple files. If a sort order is
-        // configured, consecutive files only overlap at their boundaries, which allows pruning
-        // entire files.
-        let single_file = output_url.path().ends_with(".parquet");
+        // A URL that ends with a `/` is treated as a directory and the quads are split into
+        // multiple files (the same convention as for reading, see `ListingTableUrl`). If a sort
+        // order is configured, consecutive files only overlap at their boundaries, which allows
+        // pruning entire files. Otherwise, a single file is written.
+        let single_file = !output_url.path().ends_with('/');
         let mut file_index = 0;
         let mut create_writer = || {
             let file_path = if single_file {

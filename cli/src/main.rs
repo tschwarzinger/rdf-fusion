@@ -307,9 +307,14 @@ fn resolve_location(location: &str) -> anyhow::Result<String> {
         } else {
             env::current_dir()?.join(path)
         };
-        Ok(Url::from_file_path(absolute_path)
+        let mut url = Url::from_file_path(absolute_path)
             .map_err(|_| anyhow::anyhow!("Failed to convert path to URL: {location}"))?
-            .to_string())
+            .to_string();
+        // A trailing `/` denotes a directory, which `Url::from_file_path` drops.
+        if location.ends_with('/') && !url.ends_with('/') {
+            url.push('/');
+        }
+        Ok(url)
     }
 }
 
@@ -425,4 +430,27 @@ fn register_s3_store(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_location_keeps_trailing_slash_of_directories() {
+        assert!(
+            resolve_location("/tmp/dataset/")
+                .unwrap()
+                .ends_with("/tmp/dataset/")
+        );
+        assert!(
+            resolve_location("/tmp/dataset.parquet")
+                .unwrap()
+                .ends_with("/tmp/dataset.parquet")
+        );
+        assert_eq!(
+            resolve_location("s3a://bucket/dataset/").unwrap(),
+            "s3a://bucket/dataset/"
+        );
+    }
 }

@@ -71,6 +71,23 @@ async fn test_parquet_loader_writes_and_reads_multiple_files() {
     );
 }
 
+/// A URL without a trailing `/` produces a single file, even if it has no `.parquet` extension
+/// (e.g., objects in IndexedDB).
+#[tokio::test]
+async fn test_parquet_loader_writes_single_file_without_extension() {
+    let env = TestEnv::new(MAX_ROWS_PER_FILE).await;
+    env.put_ntriples("input.nt", NUM_TRIPLES).await;
+
+    let output_url = Url::parse("memory:///dataset").unwrap();
+    env.load("memory:///input.nt", &output_url).await;
+    // A single object, not a directory.
+    assert!(env.store.head(&Path::from("dataset")).await.is_ok());
+    assert!(env.list_files("dataset").await.is_empty());
+
+    let storage = env.open_storage(output_url).await;
+    assert_eq!(rows_per_file(&storage), vec![NUM_TRIPLES]);
+}
+
 /// A session with an in-memory object store registered for `memory:///`.
 struct TestEnv {
     session_config: SessionConfig,

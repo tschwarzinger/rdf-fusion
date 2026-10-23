@@ -228,6 +228,16 @@ async fn test_parquet_storage_derives_sort_order_from_footers() {
     assert!(unsorted_storage.output_ordering().is_none());
 }
 
+/// A URL that points to a single object is used, even if the object has no `.parquet` extension
+/// (e.g., objects in IndexedDB).
+#[tokio::test]
+async fn test_parquet_storage_reads_single_file_without_extension() {
+    let (_, storage) =
+        prepare_test_store(&BLOOM_FILTER_TEST_QUADS, false, "dataset-without-extension")
+            .await;
+    assert_eq!(storage.files().len(), 1);
+}
+
 #[tokio::test]
 async fn test_parquet_scan_sort_order_enables_sorted_aggregation() {
     let query = "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o } GROUP BY ?s";

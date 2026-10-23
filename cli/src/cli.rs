@@ -22,9 +22,9 @@ pub struct StorageConfigArgs {
     /// example, a `delta-quads` storage requires a single location to a storage prefix, while a
     /// `parquet` storage accepts a single Parquet file or a prefix containing Parquet files.
     ///
-    /// When loading into a `parquet` storage, a location that does not end with `.parquet` is
-    /// treated as a directory and the data is split into multiple files (see
-    /// `DATAFUSION_EXECUTION_SOFT_MAX_ROWS_PER_OUTPUT_FILE`).
+    /// When loading into a `parquet` storage, a location that ends with `/` is treated as a
+    /// directory and the data is split into multiple files (see
+    /// `DATAFUSION_EXECUTION_SOFT_MAX_ROWS_PER_OUTPUT_FILE`). Otherwise, a single file is written.
     ///
     /// Supported locations:
     /// - in-memory database [`memory://`]
