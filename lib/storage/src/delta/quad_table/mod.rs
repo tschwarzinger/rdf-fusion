@@ -10,17 +10,11 @@ use crate::parquet::{ParquetMetadataFetcher, max_concurrent_files};
 use crate::quad_tables::QuadTableName;
 use chrono::DateTime;
 use datafusion::execution::SessionState;
-use datafusion::parquet::basic::Encoding;
-use datafusion::parquet::file::properties::WriterProperties;
 use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
 use deltalake::kernel::transaction::CommitProperties;
 use deltalake::kernel::{Add, Transaction};
 use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
-use deltalake::parquet::basic::{Compression, ZstdLevel};
-use deltalake::parquet::file::metadata::SortingColumn;
-use deltalake::parquet::file::properties::EnabledStatistics;
-use deltalake::parquet::schema::types::ColumnPath;
 use deltalake::{DataType as DeltaDataType, DeltaTable, StructField, TableProperty};
 use futures::TryStreamExt;
 use object_store::ObjectMeta;
@@ -32,13 +26,6 @@ pub use snapshot::DeltaQuadsQuadTableSnapshot;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
-
-/// TODO: Make this configurable
-const PAGE_ROW_COUNT: usize = 8_192;
-/// TODO: Make this configurable
-const ROW_GROUP_ROW_COUNT: usize = PAGE_ROW_COUNT * 32;
-/// TODO: Make this configurable
-const FILE_ROW_COUNT: usize = ROW_GROUP_ROW_COUNT * 32;
 
 /// The state of the quad_table table.
 ///
@@ -212,7 +199,6 @@ impl DeltaQuadsQuadTable {
             self.table.read().await.table.clone(),
             changeset,
             state.clone(),
-            self.create_write_properties_for_update(),
         );
 
         let (new_table, new_version) = Box::pin(updater.apply_update()).await?;
@@ -264,45 +250,6 @@ impl DeltaQuadsQuadTable {
             log_transaction_version,
         );
         Ok(())
-    }
-
-    /// Creates the Parquet writer properties for the quad_table update.
-    fn create_write_properties_for_update(&self) -> WriterProperties {
-        let sorting_columns = self
-            .components
-            .inner()
-            .iter()
-            .map(|c| SortingColumn {
-                column_idx: c.gspo_quad_table() as i32,
-                descending: false,
-                nulls_first: true,
-            })
-            .collect();
-
-        let last_component =
-            ColumnPath::new(vec![self.components.inner()[3].column_name().to_owned()]);
-        let mut writer_properties_builder = WriterProperties::builder()
-            .set_max_row_group_row_count(Some(ROW_GROUP_ROW_COUNT))
-            .set_data_page_row_count_limit(PAGE_ROW_COUNT)
-            .set_bloom_filter_enabled(true)
-            .set_column_bloom_filter_enabled(last_component.clone(), true)
-            .set_sorting_columns(Some(sorting_columns))
-            .set_column_dictionary_enabled(last_component.clone(), false)
-            .set_statistics_enabled(EnabledStatistics::Page);
-
-        if self.storage_encoding.term_type().is_primitive() {
-            writer_properties_builder = writer_properties_builder
-                .set_column_encoding(last_component, Encoding::PLAIN)
-                .set_compression(Compression::UNCOMPRESSED)
-        } else {
-            writer_properties_builder = writer_properties_builder
-                .set_encoding(Encoding::DELTA_LENGTH_BYTE_ARRAY) // Good for common prefixes
-                .set_statistics_truncate_length(Some(256)) // IRIs might be long
-                .set_column_index_truncate_length(Some(256)) // IRIs might be long;
-                .set_compression(Compression::ZSTD(ZstdLevel::default()))
-        }
-
-        writer_properties_builder.build()
     }
 }
 

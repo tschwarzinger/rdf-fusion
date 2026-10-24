@@ -51,6 +51,7 @@ impl RdfFusionContextBuilder {
         let mut session_config = SessionConfig::new()
             .with_batch_size(8192)
             .with_target_partitions(1);
+        apply_rdf_fusion_parquet_defaults(&mut session_config);
         let options = session_config.options_mut();
         options.execution.parquet.pushdown_filters = true;
         self.with_session_config(Some(session_config))
@@ -131,6 +132,7 @@ pub fn session_config_from_env_for_rdf_fusion() -> DFResult<SessionConfig> {
     if std::env::var("DATAFUSION_OPTIMIZER_JOIN_REORDERING").is_err() {
         session_config.options_mut().optimizer.join_reordering = false;
     }
+    apply_rdf_fusion_parquet_defaults(&mut session_config);
 
     session_config
         .options_mut()
@@ -138,4 +140,38 @@ pub fn session_config_from_env_for_rdf_fusion() -> DFResult<SessionConfig> {
         .insert(RdfFusionOptions::from_env()?);
 
     Ok(session_config)
+}
+
+/// Applies RDF Fusion's defaults for writing Parquet files to the `session_config`.
+///
+/// An option is only changed if it has not been set via its environment variable (e.g.,
+/// `DATAFUSION_EXECUTION_PARQUET_MAX_ROW_GROUP_SIZE`). The defaults differ from DataFusion's
+/// defaults as follows:
+/// - Smaller pages and row groups allow more fine-grained pruning for selective lookups.
+/// - Longer statistics, as IRIs often share long prefixes.
+/// - Bloom filters are written, with a number of distinct values that fits the row group size.
+pub fn apply_rdf_fusion_parquet_defaults(session_config: &mut SessionConfig) {
+    let is_unset = |name: &str| {
+        std::env::var(format!("DATAFUSION_EXECUTION_PARQUET_{name}")).is_err()
+    };
+    let parquet = &mut session_config.options_mut().execution.parquet;
+
+    if is_unset("DATA_PAGE_ROW_COUNT_LIMIT") {
+        parquet.data_page_row_count_limit = 1024;
+    }
+    if is_unset("MAX_ROW_GROUP_SIZE") {
+        parquet.max_row_group_size = 32 * 1024;
+    }
+    if is_unset("STATISTICS_TRUNCATE_LENGTH") {
+        parquet.statistics_truncate_length = Some(256);
+    }
+    if is_unset("COLUMN_INDEX_TRUNCATE_LENGTH") {
+        parquet.column_index_truncate_length = Some(256);
+    }
+    if is_unset("BLOOM_FILTER_ON_WRITE") {
+        parquet.bloom_filter_on_write = true;
+    }
+    if is_unset("BLOOM_FILTER_NDV") && parquet.bloom_filter_on_write {
+        parquet.bloom_filter_ndv = Some((parquet.max_row_group_size / 4) as u64);
+    }
 }

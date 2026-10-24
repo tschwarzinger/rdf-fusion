@@ -1,9 +1,8 @@
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::log::DeltaQuadsStorageLogChangesetRef;
-use crate::delta::quad_table::{
-    DeltaQuadsQuadTable, DeltaQuadsQuadTableSnapshot, FILE_ROW_COUNT,
-};
+use crate::delta::quad_table::{DeltaQuadsQuadTable, DeltaQuadsQuadTableSnapshot};
 use crate::delta::scan_plan_builder::DeltaQuadsStorageScanPlanBuilder;
+use crate::delta::writer::create_delta_writer;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::execution::SessionState;
@@ -18,9 +17,7 @@ use datafusion::physical_plan::{ExecutionPlan, ExecutionPlanProperties};
 use deltalake::DeltaTable;
 use deltalake::kernel::transaction::CommitBuilder;
 use deltalake::kernel::{Action, Remove, Transaction};
-use deltalake::parquet::file::properties::WriterProperties;
 use deltalake::protocol::{DeltaOperation, SaveMode};
-use deltalake::writer::{DeltaWriter, RecordBatchWriter};
 use futures::StreamExt;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::sync::Arc;
@@ -36,8 +33,6 @@ pub struct DeltaStorageQuadTableUpdater {
     changeset: DeltaQuadsStorageLogChangesetRef,
     /// The session state to use.
     state: SessionState,
-    /// The writer properties to use.
-    writer_properties: WriterProperties,
 }
 
 impl DeltaStorageQuadTableUpdater {
@@ -47,14 +42,12 @@ impl DeltaStorageQuadTableUpdater {
         quad_delta_table: DeltaTable,
         changeset: DeltaQuadsStorageLogChangesetRef,
         state: SessionState,
-        writer_properties: WriterProperties,
     ) -> Self {
         Self {
             quad_table,
             quad_delta_table,
             changeset,
             state,
-            writer_properties,
         }
     }
 
@@ -158,44 +151,37 @@ impl DeltaStorageQuadTableUpdater {
             ));
         }
 
-        let mut stream = quads.execute(0, self.state.task_ctx())?;
-        let mut writer = RecordBatchWriter::for_table(&self.quad_delta_table)?
-            .with_writer_properties(self.writer_properties.clone());
+        let schema = self.quad_delta_table.snapshot()?.snapshot().arrow_schema();
+        let sort_columns = self
+            .quad_table
+            .components()
+            .inner()
+            .iter()
+            .map(|c| c.column_name())
+            .collect::<Vec<_>>();
+        let mut writer = create_delta_writer(
+            &self.quad_delta_table,
+            Arc::clone(&schema),
+            &self.state.default_table_options().parquet,
+            &sort_columns,
+        )?;
 
-        let mut current_rows = 0;
-        let mut all_actions = Vec::new();
+        // The writer starts new files once the target file size is reached. As the input is a
+        // single sorted partition, the files do not overlap.
+        let mut stream = quads.execute(0, self.state.task_ctx())?;
         while let Some(batch_result) = stream.next().await {
             let batch = batch_result?;
-            let num_rows = batch.num_rows();
-
-            if num_rows == 0 {
+            if batch.num_rows() == 0 {
                 continue;
             }
 
-            let aligned_batch = RecordBatch::try_new(
-                Arc::clone(&writer.arrow_schema()),
-                batch.columns().to_vec(),
-            )?;
-
-            writer.write(aligned_batch).await?;
-
-            current_rows += num_rows;
-
-            // If the update exceeds the target row count, flush and recreate the writer (new file)
-            if current_rows >= FILE_ROW_COUNT {
-                let file_actions = writer.flush().await?;
-                all_actions.extend(file_actions.into_iter().map(Action::Add));
-                current_rows = 0;
-                writer = RecordBatchWriter::for_table(&self.quad_delta_table)?
-                    .with_writer_properties(self.writer_properties.clone());
-            }
+            let aligned_batch =
+                RecordBatch::try_new(Arc::clone(&schema), batch.columns().to_vec())?;
+            writer.write(&aligned_batch).await?;
         }
 
-        if current_rows > 0 {
-            let file_actions = writer.flush().await?;
-            all_actions.extend(file_actions.into_iter().map(Action::Add));
-        }
-        Ok(all_actions)
+        let add_actions = writer.close().await?;
+        Ok(add_actions.into_iter().map(Action::Add).collect())
     }
 
     /// Removes all files from the current snapshot of the table.

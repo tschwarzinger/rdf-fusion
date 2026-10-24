@@ -40,6 +40,8 @@ pub mod results;
 pub mod sparql;
 
 pub use builder::RdfFusionContextBuilder;
-pub use builder::session_config_from_env_for_rdf_fusion;
+pub use builder::{
+    apply_rdf_fusion_parquet_defaults, session_config_from_env_for_rdf_fusion,
+};
 pub use engine::RdfFusionContext;
 pub use planner::RdfFusionPlanner;

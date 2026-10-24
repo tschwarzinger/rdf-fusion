@@ -1,4 +1,4 @@
-use crate::parquet::RdfFusionParquetWriterProperties;
+use crate::parquet::RdfParquetWriterOptions;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::datasource::sink::DataSink;
@@ -17,7 +17,7 @@ use std::sync::Arc;
 pub struct RdfParquetDataSink {
     object_store: Arc<dyn ObjectStore>,
     path: Path,
-    properties: RdfFusionParquetWriterProperties,
+    options: RdfParquetWriterOptions,
     schema: SchemaRef,
 }
 
@@ -26,13 +26,13 @@ impl RdfParquetDataSink {
     pub fn new(
         object_store: Arc<dyn ObjectStore>,
         path: Path,
-        properties: RdfFusionParquetWriterProperties,
+        options: RdfParquetWriterOptions,
         schema: SchemaRef,
     ) -> Self {
         Self {
             object_store,
             path,
-            properties,
+            options,
             schema,
         }
     }
@@ -59,7 +59,7 @@ impl DataSink for RdfParquetDataSink {
         mut data: SendableRecordBatchStream,
         _context: &Arc<TaskContext>,
     ) -> datafusion::common::Result<u64> {
-        let arrow_properties = self.properties.to_arrow();
+        let arrow_properties = self.options.to_writer_properties()?;
         let mut writer = AsyncArrowWriter::try_new(
             BufWriter::new(Arc::clone(&self.object_store), self.path.clone()),
             Arc::clone(&self.schema),

@@ -9,8 +9,8 @@ use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{
     GraphName, RdfDumpFormat, RdfSortOrder, url_to_object_store_url,
 };
-use rdf_fusion_encoding::{EncodingName, QuadStorageEncoding, QuadStorageEncodingName};
-use rdf_fusion_storage::parquet::RdfFusionParquetWriterProperties;
+use rdf_fusion_encoding::{EncodingName, QuadStorageEncodingName};
+use rdf_fusion_storage::parquet::RdfParquetWriterOptions;
 use rdf_fusion_storage::rdf_files::{RdfFileDataSink, RdfParquetDataSink};
 use std::sync::Arc;
 use url::Url;
@@ -166,16 +166,15 @@ pub(crate) async fn dump_store(
     let sink_schema = physical_plan.schema();
     let sink: Arc<dyn DataSink> = match format {
         RdfDumpFormat::Parquet => {
-            let storage_encoding = match options.encoding {
-                DumpEncoding::PlainTerm => QuadStorageEncoding::PlainTerm,
-                DumpEncoding::String => QuadStorageEncoding::String,
-            };
-            let properties = RdfFusionParquetWriterProperties::new(storage_encoding)
-                .with_sort_order(options.sort_by.clone());
+            let writer_options = RdfParquetWriterOptions::try_new_for_sort_order(
+                &session.default_table_options().parquet,
+                &sink_schema,
+                options.sort_by.as_ref(),
+            )?;
             Arc::new(RdfParquetDataSink::new(
                 Arc::clone(&object_store),
                 Path::from(url.path()),
-                properties,
+                writer_options,
                 Arc::clone(&sink_schema),
             ))
         }

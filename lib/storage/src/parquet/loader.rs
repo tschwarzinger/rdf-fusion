@@ -1,4 +1,4 @@
-use crate::parquet::RdfFusionParquetWriterProperties;
+use crate::parquet::RdfParquetWriterOptions;
 use crate::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::exec_datafusion_err;
@@ -151,9 +151,12 @@ impl RdfParquetLoader {
         let mut stream = df.execute_stream().await?;
         let schema = stream.schema();
 
-        let properties = RdfFusionParquetWriterProperties::new(self.encoding.clone())
-            .with_sort_order(self.sort_order.clone());
-        let arrow_properties = properties.to_arrow();
+        let arrow_properties = RdfParquetWriterOptions::try_new_for_sort_order(
+            &ctx.state().default_table_options().parquet,
+            &schema,
+            self.sort_order.as_ref(),
+        )?
+        .to_writer_properties()?;
 
         // A URL that ends with a `/` is treated as a directory and the quads are split into
         // multiple files (the same convention as for reading, see `ListingTableUrl`). If a sort

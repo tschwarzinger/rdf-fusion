@@ -158,7 +158,8 @@ macro_rules! assert_plan_snapshot {
     ($plan:expr, @$snapshot:literal) => {
         insta::with_settings!({filters => vec![
             (r"part-[0-9a-f-]+\.snappy\.parquet", "<file>"),
-            (r"part-[0-9a-f-]+\.parquet", "<file>.parquet"),
+            // Delta Lake includes the compression codec in the name (e.g., `.zstd.parquet`).
+            (r"part-[0-9a-f-]+(\.[a-z0-9]+)?\.parquet", "<file>.parquet"),
         ]}, {
             insta::assert_snapshot!($plan, @$snapshot);
         });

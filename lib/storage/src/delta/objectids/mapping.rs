@@ -1,6 +1,7 @@
 use crate::delta::error::DeltaQuadsStorageError;
 use crate::delta::objectids::encoding::writer::DeltaObjectIdDictionaryWriter;
 use crate::delta::objectids::{DeltaObjectIdClaimer, ObjectIdClaimerPutMode};
+use crate::delta::writer::create_delta_writer;
 use crate::local_object_ids::{
     LocalObjectIdDictionary, LocalObjectIdTransaction, RedbObjectIdDictionaryBuilder,
 };
@@ -8,6 +9,7 @@ use async_trait::async_trait;
 use datafusion::arrow::array::{Array, ArrayRef, Int64Array, Int64Builder, RecordBatch};
 use datafusion::arrow::datatypes::{Field, SchemaRef};
 use datafusion::common::ScalarValue;
+use datafusion::common::config::TableParquetOptions;
 use datafusion::execution::SessionState;
 use datafusion::prelude::SessionContext;
 use deltalake::arrow::datatypes::Schema;
@@ -18,7 +20,6 @@ use deltalake::kernel::transaction::{CommitBuilder, CommitProperties, Transactio
 use deltalake::logstore::{LogStore, LogStoreRef};
 use deltalake::operations::create::CreateBuilder;
 use deltalake::protocol::{DeltaOperation, SaveMode};
-use deltalake::writer::{DeltaWriter, RecordBatchWriter};
 use deltalake::{DataType as DeltaDataType, DeltaTable, DeltaTableError, StructField};
 use futures::StreamExt;
 use md5::{Digest, Md5};
@@ -355,9 +356,12 @@ impl DeltaObjectIdDictionary {
 
     /// Commits the current transaction to Delta Lake. Returns Ok(true) if successful, Ok(false) on
     /// conflict.
+    ///
+    /// The Parquet files are written using the given `parquet_options` of the session.
     pub async fn commit_dictionary_transaction_to_delta(
         &self,
         txn: &dyn LocalObjectIdTransaction,
+        parquet_options: &TableParquetOptions,
     ) -> Result<bool, DeltaQuadsStorageError> {
         let pending_count = txn.pending_ids().len();
         if pending_count == 0 {
@@ -386,9 +390,15 @@ impl DeltaObjectIdDictionary {
             vec![id_array, term_array],
         )?;
 
-        let mut writer = RecordBatchWriter::for_table(&table)?;
-        writer.write(batch).await?;
-        let add_actions = writer.flush().await?;
+        // The pending ids are not ordered.
+        let mut writer = create_delta_writer(
+            &table,
+            Arc::clone(&self.table_schema),
+            parquet_options,
+            &[],
+        )?;
+        writer.write(&batch).await?;
+        let add_actions = writer.close().await?;
 
         let table_state = table.state.as_ref().expect("Table state loaded");
         let current_version = table_state.version();

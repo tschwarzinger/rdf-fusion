@@ -9,6 +9,7 @@ mod scan_plan_builder;
 mod snapshot;
 mod storage;
 mod transaction;
+mod writer;
 
 pub use builder::{DeltaQuadsStorageBuilder, LoadMode};
 pub use storage::DeltaQuadsStorage;

@@ -193,10 +193,12 @@ impl ObjectIdEncodingStream {
     fn create_commit_future(
         mapping: Arc<DeltaObjectIdDictionary>,
         txn: Box<dyn LocalObjectIdTransaction>,
+        session_state: SessionState,
     ) -> BoxFuture<'static, DFResult<bool>> {
         Box::pin(async move {
+            let parquet_options = session_state.default_table_options().parquet;
             let success = mapping
-                .commit_dictionary_transaction_to_delta(txn.as_ref())
+                .commit_dictionary_transaction_to_delta(txn.as_ref(), &parquet_options)
                 .await
                 .map_err(|e| DataFusionError::External(Box::new(e)))?;
 
@@ -313,7 +315,11 @@ impl Stream for ObjectIdEncodingStream {
                         ForceCommitResult::TriggeredCommit { txn, sender, .. } => {
                             self.state =
                                 EncoderStreamState::AwaitingDictionaryDeltaCommit(
-                                    Self::create_commit_future(mapping, txn),
+                                    Self::create_commit_future(
+                                        mapping,
+                                        txn,
+                                        session_state.clone(),
+                                    ),
                                     sender,
                                 );
                         }
@@ -363,7 +369,11 @@ impl Stream for ObjectIdEncodingStream {
 
                             self.state =
                                 EncoderStreamState::AwaitingDictionaryDeltaCommit(
-                                    Self::create_commit_future(mapping, txn),
+                                    Self::create_commit_future(
+                                        mapping,
+                                        txn,
+                                        session_state.clone(),
+                                    ),
                                     sender,
                                 );
                         }

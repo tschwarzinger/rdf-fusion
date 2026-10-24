@@ -5,9 +5,11 @@ use crate::delta::log::{
 };
 use crate::delta::snapshot::DeltaQuadsStorageSnapshot;
 use crate::delta::storage::DeltaQuadsStorage;
+use crate::delta::writer::create_delta_writer;
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use datafusion::common::config::TableParquetOptions;
 use datafusion::common::{ScalarValue, SchemaExt};
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::FunctionRegistry;
@@ -18,7 +20,7 @@ use datafusion::prelude::{Expr, SessionContext, lit};
 use deltalake::DeltaTable;
 use deltalake::kernel::Action;
 use deltalake::kernel::transaction::CommitBuilder;
-use deltalake::operations::write::writer::{DeltaWriter, WriterConfig};
+use deltalake::operations::write::writer::DeltaWriter;
 use deltalake::protocol::{DeltaOperation, SaveMode};
 use futures::StreamExt;
 use rdf_fusion_common::StorageError;
@@ -34,7 +36,6 @@ use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::RwLock;
-use tracing::info;
 
 /// A transaction on a [`DeltaQuadsStorage`].
 pub struct DeltaQuadsStorageTransaction {
@@ -221,18 +222,22 @@ impl DeltaQuadsStorageTransaction {
         let mut tasks = Vec::new();
         let target_partitions = state.config().target_partitions();
         let workers = std::cmp::max(1, target_partitions);
+        let parquet_options = state.default_table_options().parquet;
 
         for _ in 0..workers {
             let table = Arc::clone(&table);
             let aligned_schema = Arc::clone(&aligned_schema);
             let streams = Arc::clone(&streams);
+            let parquet_options = parquet_options.clone();
 
             let task = datafusion::common::runtime::SpawnedTask::spawn(async move {
-                let mut writer =
-                    create_record_batch_writer(&table, Arc::clone(&aligned_schema))
-                        .await?;
-                let mut add_actions = Vec::new();
-                let mut current_count = 0;
+                // The writer starts new files once the target file size is reached.
+                let mut writer = create_log_writer(
+                    &table,
+                    Arc::clone(&aligned_schema),
+                    &parquet_options,
+                )
+                .await?;
 
                 loop {
                     let mut batch_stream = {
@@ -254,33 +259,17 @@ impl DeltaQuadsStorageTransaction {
                         )
                         .expect("Failed to align schema nullability");
 
-                        current_count += batch.num_rows();
                         writer
                             .write(&batch)
                             .await
                             .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
-
-                        if current_count >= 1_000_000 {
-                            info!("Flushing ~1M operations during large transaction ...");
-                            let new_files = writer.close().await.map_err(|e| {
-                                DeltaQuadsStorageError::Other(e.to_string())
-                            })?;
-                            add_actions.extend(new_files);
-                            current_count = 0;
-                            writer = create_record_batch_writer(
-                                &table,
-                                Arc::clone(&aligned_schema),
-                            )
-                            .await?;
-                        }
                     }
                 }
 
-                let new_files = writer
+                let add_actions = writer
                     .close()
                     .await
                     .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
-                add_actions.extend(new_files);
 
                 Ok::<Vec<deltalake::kernel::Add>, DeltaQuadsStorageError>(add_actions)
             });
@@ -607,28 +596,15 @@ impl Debug for DeltaQuadsStorageTransaction {
     }
 }
 
-async fn create_record_batch_writer(
+/// Returns a new writer for the log table.
+///
+/// Immediately drops the lock on `table` after creating the writer. This is necessary as the read
+/// lock will not be automatically promoted to a write lock.
+async fn create_log_writer(
     table: &RwLock<DeltaTable>,
     schema: Arc<Schema>,
+    parquet_options: &TableParquetOptions,
 ) -> Result<DeltaWriter, DeltaQuadsStorageError> {
-    use deltalake::table::config::TablePropertiesExt;
-
     let table = table.read().await;
-    let table_state = table.state.as_ref().unwrap();
-    let table_props = table_state.table_config();
-
-    let config = WriterConfig::new(
-        schema,
-        table_state.metadata().partition_columns().to_vec(),
-        None,
-        Some(table_props.target_file_size()),
-        None,
-        table_props.num_indexed_cols(),
-        table_props
-            .data_skipping_stats_columns
-            .as_ref()
-            .map(|c| c.iter().map(|c| c.to_string()).collect::<Vec<_>>()),
-    );
-    let writer = DeltaWriter::new(table.object_store(), config);
-    Ok(writer)
+    create_delta_writer(&table, schema, parquet_options, &[])
 }

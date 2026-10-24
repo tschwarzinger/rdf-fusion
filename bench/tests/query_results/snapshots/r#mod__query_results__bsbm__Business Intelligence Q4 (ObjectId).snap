@@ -117,7 +117,7 @@ expression: "run_select_query(&store, &query_str).await"
         },
         "priceRatio": {
           "type": "literal",
-          "value": "1.0916775",
+          "value": "1.0916777",
           "datatype": "http://www.w3.org/2001/XMLSchema#float"
         }
       }
