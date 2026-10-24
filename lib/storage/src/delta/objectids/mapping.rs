@@ -349,11 +349,6 @@ impl DeltaObjectIdDictionary {
         Ok(())
     }
 
-    /// Flushes the object id table to disk.
-    pub async fn flush(&self) -> Result<(), DeltaQuadsStorageError> {
-        Ok(())
-    }
-
     /// Commits the current transaction to Delta Lake. Returns Ok(true) if successful, Ok(false) on
     /// conflict.
     ///

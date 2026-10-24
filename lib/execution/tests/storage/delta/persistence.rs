@@ -153,13 +153,6 @@ async fn test_load_storage_object_id() {
         );
 
         populate_storage(Arc::clone(&storage), "http://example.org/s1").await;
-
-        storage
-            .delta_object_id_mapping()
-            .unwrap()
-            .flush()
-            .await
-            .unwrap();
     }
 
     // 2. Reload and verify
@@ -252,8 +245,6 @@ async fn test_concurrent_dictionary_inserts() {
         .unwrap();
 
     let mapping = storage.delta_object_id_mapping().unwrap();
-    mapping.flush().await.unwrap();
-
     let local_dict = mapping.dictionary().snapshot().await.unwrap();
 
     // 10 overlapping_subj, 1 predicate, 500 unique objects (10 tasks * 5 batches * 10 objects)
@@ -385,8 +376,6 @@ async fn test_parallel_encoding_streams() {
     transaction.commit().await.unwrap();
 
     let mapping = storage.delta_object_id_mapping().unwrap();
-    mapping.flush().await.unwrap();
-
     let snapshot = storage.snapshot().await.unwrap();
     let quads_len = snapshot.len(&ctx.state()).await.unwrap();
     assert_eq!(quads_len, 10_000, "Quads table should have 10_000 rows");
