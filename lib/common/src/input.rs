@@ -86,6 +86,14 @@ impl RdfInputSource {
         }
     }
 
+    /// Returns the URL of the source, if the source is a URL.
+    pub fn url(&self) -> Option<&Url> {
+        match &self.inner {
+            RdfFileSourceInner::Url(url) => Some(url),
+            RdfFileSourceInner::Stream(_) => None,
+        }
+    }
+
     /// Returns a stream of quads from the source.
     pub async fn stream(
         &self,

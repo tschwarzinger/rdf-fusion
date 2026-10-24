@@ -3,6 +3,7 @@ use crate::encoding::EncodingArray;
 use crate::string::StringTermArray;
 use datafusion::arrow::array::{ArrayBuilder, RecordBatch, StringBuilder};
 use rdf_fusion_common::QuadRef;
+use std::fmt::{Display, Write};
 use std::sync::Arc;
 
 /// A structure containing four [`StringTermArray`] components: graph, subject, predicate, object.
@@ -75,16 +76,16 @@ impl StringQuadsBuilder {
     pub fn append_quad(&mut self, quad: QuadRef<'_>) {
         match quad.graph_name {
             rdf_fusion_common::GraphNameRef::NamedNode(nn) => {
-                self.graphs.append_value(nn.to_string())
+                append_term(&mut self.graphs, nn)
             }
             rdf_fusion_common::GraphNameRef::BlankNode(bn) => {
-                self.graphs.append_value(bn.to_string())
+                append_term(&mut self.graphs, bn)
             }
             rdf_fusion_common::GraphNameRef::DefaultGraph => self.graphs.append_null(),
         }
-        self.subjects.append_value(quad.subject.to_string());
-        self.predicates.append_value(quad.predicate.to_string());
-        self.objects.append_value(quad.object.to_string());
+        append_term(&mut self.subjects, quad.subject);
+        append_term(&mut self.predicates, quad.predicate);
+        append_term(&mut self.objects, quad.object);
     }
 
     pub fn append_graph(
@@ -93,10 +94,10 @@ impl StringQuadsBuilder {
     ) {
         match graph_name {
             Some(rdf_fusion_common::NamedOrBlankNodeRef::NamedNode(nn)) => {
-                self.graphs.append_value(nn.to_string());
+                append_term(&mut self.graphs, nn);
             }
             Some(rdf_fusion_common::NamedOrBlankNodeRef::BlankNode(bn)) => {
-                self.graphs.append_value(bn.to_string());
+                append_term(&mut self.graphs, bn);
             }
             None => self.graphs.append_null(),
         };
@@ -125,4 +126,13 @@ impl StringQuadsBuilder {
             objects: StringTermArray::new_unchecked(Arc::new(self.objects.finish())),
         }
     }
+}
+
+/// Appends the string representation of `term` to the `builder`.
+///
+/// The term is formatted directly into the value buffer of the builder, which avoids allocating
+/// a temporary [`String`] for every term.
+fn append_term(builder: &mut StringBuilder, term: impl Display) {
+    write!(builder, "{term}").expect("Writing to a StringBuilder cannot fail");
+    builder.append_value("");
 }

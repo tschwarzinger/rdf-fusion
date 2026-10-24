@@ -19,32 +19,44 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use tokio::io::AsyncRead;
 
-use crate::rdf_files::detect_encoding_from_schema;
+use crate::rdf_files::{BlankNodeRenamer, detect_encoding_from_schema};
 
-/// The execution plan for reading RDF data from an [`AsyncRead`] stream.
+/// The execution plan for reading RDF data from [`AsyncRead`] streams.
+///
+/// Each parser is executed in its own partition.
 pub struct RdfParserExec<R: AsyncRead + Unpin + Send + 'static> {
     /// The quad schema.
     schema: SchemaRef,
-    /// The parser that reads the RDF data. The Mutex allows us to move the parser out of it once
-    /// the stream has been created.
-    parser: Mutex<Option<TokioAsyncReaderQuadParser<R>>>,
+    /// The parsers that read the RDF data, one for each partition. The Mutex allows us to move
+    /// the parser out of it once the stream has been created.
+    parsers: Vec<Mutex<Option<TokioAsyncReaderQuadParser<R>>>>,
+    /// Renames the blank nodes of all parsers, if present.
+    blank_node_renamer: Option<BlankNodeRenamer>,
     /// The properties of the execution plan.
     properties: Arc<PlanProperties>,
 }
 
 impl<R: AsyncRead + Unpin + Send + 'static> RdfParserExec<R> {
-    /// Creates a new [`RdfParserExec`].
-    pub fn new(parser: TokioAsyncReaderQuadParser<R>, schema: SchemaRef) -> Self {
+    /// Creates a new [`RdfParserExec`] with one partition for each parser.
+    pub fn new(
+        parsers: Vec<TokioAsyncReaderQuadParser<R>>,
+        schema: SchemaRef,
+        blank_node_renamer: Option<BlankNodeRenamer>,
+    ) -> Self {
         let properties = PlanProperties::new(
             EquivalenceProperties::new(Arc::clone(&schema)),
-            Partitioning::UnknownPartitioning(1),
+            Partitioning::UnknownPartitioning(parsers.len()),
             EmissionType::Incremental,
             // This assumes that the underlying stream is bounded.
             Boundedness::Bounded,
         );
 
         Self {
-            parser: Mutex::new(Some(parser)),
+            parsers: parsers
+                .into_iter()
+                .map(|parser| Mutex::new(Some(parser)))
+                .collect(),
+            blank_node_renamer,
             schema,
             properties: Arc::new(properties),
         }
@@ -63,7 +75,7 @@ impl<R: AsyncRead + Unpin + Send + 'static> DisplayAs for RdfParserExec<R> {
         _t: DisplayFormatType,
         f: &mut std::fmt::Formatter,
     ) -> std::fmt::Result {
-        write!(f, "RdfParserExec:")
+        write!(f, "RdfParserExec: partitions={}", self.parsers.len())
     }
 }
 
@@ -102,12 +114,19 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
 
     fn execute(
         &self,
-        _partition: usize,
+        partition: usize,
         context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        let parser = self.parser.lock().unwrap().take().ok_or_else(|| {
-            exec_datafusion_err!("ExecutionPlan has already been executed")
-        })?;
+        let parser = self
+            .parsers
+            .get(partition)
+            .ok_or_else(|| exec_datafusion_err!("Invalid partition {partition}"))?
+            .lock()
+            .unwrap()
+            .take()
+            .ok_or_else(|| {
+                exec_datafusion_err!("Partition {partition} has already been executed")
+            })?;
 
         let schema = Arc::clone(&self.schema);
         let encoding = detect_encoding_from_schema(&schema)?;
@@ -148,6 +167,7 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
 
         struct ParserStreamState<R: AsyncRead + Unpin + Send + 'static> {
             parser: TokioAsyncReaderQuadParser<R>,
+            blank_node_renamer: Option<BlankNodeRenamer>,
             builder: QuadsBuilder,
             encoding: QuadStorageEncoding,
             target_batch_size: usize,
@@ -156,6 +176,7 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
 
         let initial_state = ParserStreamState {
             parser,
+            blank_node_renamer: self.blank_node_renamer.clone(),
             builder: QuadsBuilder::new(&encoding, target_batch_size),
             encoding,
             target_batch_size,
@@ -168,7 +189,10 @@ impl<R: AsyncRead + Unpin + Send + 'static> ExecutionPlan for RdfParserExec<R> {
         let stream = try_unfold(initial_state, |mut state| async move {
             loop {
                 match state.parser.next().await {
-                    Some(Ok(quad)) => {
+                    Some(Ok(mut quad)) => {
+                        if let Some(renamer) = &state.blank_node_renamer {
+                            renamer.rename_quad(&mut quad);
+                        }
                         state.builder.append_quad(quad.as_ref());
                         state.progress.pending_batch += 1;
                         state.progress.total_processed += 1;

@@ -1,12 +1,16 @@
 //! Contains implementations related to querying RDF data (e.g., Turtle).
 
+mod blank_nodes;
 mod exec;
+mod line_range_reader;
 mod logical_node;
 mod parquet_sink;
 mod planner;
 mod sink;
 
+pub use blank_nodes::*;
 pub use exec::*;
+pub use line_range_reader::*;
 pub use logical_node::*;
 pub use parquet_sink::*;
 pub use planner::*;
@@ -55,6 +59,10 @@ pub struct RdfFileScanOptions {
     /// The base IRI for the parser.
     pub base_iri: Option<Iri<String>>,
     /// Whether to rename blank nodes.
+    ///
+    /// The renaming is not done by the parser itself but by the [`RdfParserExec`] using a
+    /// [`BlankNodeRenamer`], such that a file that is parsed in multiple chunks is renamed
+    /// consistently.
     pub rename_blank_nodes: bool,
     /// The default graph for the parser.
     pub default_graph: Option<GraphName>,
@@ -130,6 +138,8 @@ impl RdfFileScanOptions {
     }
 
     /// Creates a new [`TokioAsyncReaderQuadParser`] from the given `reader` and the current options.
+    ///
+    /// Blank nodes are not renamed by the parser (see [`Self::rename_blank_nodes`]).
     pub fn create_parser<R: AsyncRead + Unpin + Send + 'static>(
         &self,
         reader: R,
@@ -139,9 +149,6 @@ impl RdfFileScanOptions {
             parser = parser
                 .with_base_iri(base_iri.as_str())
                 .expect("Invalid base IRI");
-        }
-        if self.rename_blank_nodes {
-            parser = parser.rename_blank_nodes();
         }
         if self.without_named_graphs {
             parser = parser.without_named_graphs();

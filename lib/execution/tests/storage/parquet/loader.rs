@@ -1,12 +1,14 @@
 use datafusion::common::stats::Precision;
+use datafusion::logical_expr::{Extension, LogicalPlan};
 use datafusion::physical_plan::displayable;
-use datafusion::prelude::{SessionConfig, SessionContext};
+use datafusion::prelude::{DataFrame, SessionConfig, SessionContext};
 use futures::StreamExt;
 use object_store::memory::InMemory;
 use object_store::path::Path;
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
-use rdf_fusion_common::{GraphName, RdfInput, RdfSortOrder};
-use rdf_fusion_encoding::QuadStorageEncodingName;
+use rdf_fusion_common::config::RdfFusionOptions;
+use rdf_fusion_common::{GraphName, RdfFormat, RdfInput, RdfInputSource, RdfSortOrder};
+use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_execution::results::QueryResults;
 use rdf_fusion_execution::sparql::QueryOptions;
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
@@ -14,6 +16,7 @@ use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_sparql_parser::ParserOptions;
 use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
+use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::Arc;
 use url::Url;
 
@@ -97,13 +100,19 @@ struct TestEnv {
 
 impl TestEnv {
     async fn new(max_rows_per_file: usize) -> Self {
-        let session_config = SessionConfig::new()
-            .with_batch_size(10)
-            .with_target_partitions(1)
-            .set_usize(
-                "datafusion.execution.soft_max_rows_per_output_file",
-                max_rows_per_file,
-            );
+        Self::with_config(
+            SessionConfig::new()
+                .with_batch_size(10)
+                .with_target_partitions(1)
+                .set_usize(
+                    "datafusion.execution.soft_max_rows_per_output_file",
+                    max_rows_per_file,
+                ),
+        )
+        .await
+    }
+
+    async fn with_config(session_config: SessionConfig) -> Self {
         let context = SessionContext::new_with_config(session_config.clone());
         let store = Arc::new(InMemory::new());
         context
@@ -126,18 +135,39 @@ impl TestEnv {
                 )
             })
             .collect::<String>();
+        self.put(path, ntriples).await;
+    }
+
+    async fn put(&self, path: &str, content: String) {
         self.store
-            .put(&Path::from(path), PutPayload::from(ntriples))
+            .put(&Path::from(path), PutPayload::from(content))
             .await
             .unwrap();
     }
 
+    /// Returns the physical plan for parsing the N-Triples file at `input_url`.
+    async fn parse_plan(&self, input_url: &str) -> String {
+        let node = ParseRdfFileNode::new(
+            RdfInputSource::from_url(Url::parse(input_url).unwrap()),
+            RdfFileScanOptions::with_format(RdfFormat::NTriples)
+                .with_rename_blank_nodes(true),
+            QuadStorageEncoding::String.quad_schema(),
+        );
+        let plan = DataFrame::new(
+            self.loading_context().await.session_context().state(),
+            LogicalPlan::Extension(Extension {
+                node: Arc::new(node),
+            }),
+        )
+        .create_physical_plan()
+        .await
+        .unwrap();
+        displayable(plan.as_ref()).indent(true).to_string()
+    }
+
     /// Loads the RDF file at `input_url` into a Parquet storage (sorted by SPOG) at `output_url`.
     async fn load(&self, input_url: &str, output_url: &Url) {
-        // The loader only uses the context for planning the load. The storage is a dummy.
-        let dummy_storage =
-            Arc::new(DeltaQuadsStorageBuilder::new().build().await.unwrap());
-        let loading_context = self.rdf_fusion_context(dummy_storage);
+        let loading_context = self.loading_context().await;
         let loader = RdfParquetLoader::try_new(
             loading_context.session_context().clone(),
             loading_context.create_view(),
@@ -149,6 +179,13 @@ impl TestEnv {
             RdfInput::try_new(Url::parse(input_url).unwrap(), GraphName::DefaultGraph)
                 .unwrap();
         loader.load(input, output_url.clone()).await.unwrap();
+    }
+
+    /// Creates an [`RdfFusionContext`] for planning the load. The storage is a dummy.
+    async fn loading_context(&self) -> RdfFusionContext {
+        let dummy_storage =
+            Arc::new(DeltaQuadsStorageBuilder::new().build().await.unwrap());
+        self.rdf_fusion_context(dummy_storage)
     }
 
     /// Returns the sorted paths of all objects below `prefix`.
@@ -182,6 +219,87 @@ impl TestEnv {
             .build()
             .unwrap()
     }
+}
+
+const NUM_SUBJECTS: usize = 210;
+const NUM_BLANK_NODES: usize = 7;
+
+#[tokio::test]
+async fn test_parquet_loader_parses_line_based_files_in_parallel() {
+    let mut options = RdfFusionOptions::default();
+    // Split even the small test file into chunks.
+    options.storage.rdf_files.parallel_parsing_min_chunk_size = 1024;
+    let env = TestEnv::with_config(
+        SessionConfig::new()
+            .with_batch_size(16)
+            .with_target_partitions(4)
+            .with_option_extension(options),
+    )
+    .await;
+    env.put("input.nt", ntriples_with_shared_blank_nodes())
+        .await;
+
+    let parse_plan = env.parse_plan("memory:///input.nt").await;
+    assert!(
+        parse_plan.contains("RdfParserExec: partitions=4"),
+        "Expected the file to be parsed in parallel: {parse_plan}"
+    );
+
+    let output_url = Url::parse("memory:///dataset/").unwrap();
+    env.load("memory:///input.nt", &output_url).await;
+    let storage = env.open_storage(output_url).await;
+    let rdf_context = env.rdf_fusion_context(storage);
+
+    // Every triple is loaded exactly once.
+    let (count, _) = run_query(&rdf_context, "SELECT * WHERE { ?s ?p ?o }").await;
+    assert_eq!(count, 3 * NUM_SUBJECTS);
+
+    // Blank nodes are renamed consistently across chunks (otherwise, each chunk would produce
+    // its own blank nodes) and positions.
+    let (count, _) = run_query(
+        &rdf_context,
+        "SELECT DISTINCT ?b WHERE { ?b ?p ?o FILTER(isBlank(?b)) }",
+    )
+    .await;
+    assert_eq!(count, NUM_BLANK_NODES);
+    let (count, _) = run_query(
+        &rdf_context,
+        "SELECT * WHERE {
+            ?s <http://example.org/group> ?b .
+            ?b <http://example.org/member> ?s .
+            FILTER(isBlank(?b))
+        }",
+    )
+    .await;
+    assert_eq!(count, NUM_SUBJECTS);
+
+    // Escaped line breaks in literals are preserved.
+    let (count, _) = run_query(
+        &rdf_context,
+        "SELECT * WHERE { <http://example.org/s5> <http://example.org/label> \"line\\nbreak 5\" }",
+    )
+    .await;
+    assert_eq!(count, 1);
+}
+
+/// Returns an N-Triples document with three triples per subject.
+///
+/// The blank nodes are used in the entire document, such that their occurrences end up in
+/// different chunks. Literals contain escaped line breaks, which must not split a chunk. The
+/// document also contains comments, empty lines, and mixed line endings.
+fn ntriples_with_shared_blank_nodes() -> String {
+    let mut ntriples = String::from("# A comment that spans the first line.\n\n");
+    for i in 0..NUM_SUBJECTS {
+        let line_end = if i % 3 == 0 { "\r\n" } else { "\n" };
+        let blank_node = i % NUM_BLANK_NODES;
+        ntriples.push_str(&format!(
+            "<http://example.org/s{i}> <http://example.org/label> \"line\\nbreak {i}\" .{line_end}\
+             _:b{blank_node} <http://example.org/member> <http://example.org/s{i}> .{line_end}\
+             <http://example.org/s{i}> <http://example.org/group> _:b{blank_node} .{line_end}\
+             {line_end}"
+        ));
+    }
+    ntriples
 }
 
 /// Returns the exact number of rows in each file of the storage.

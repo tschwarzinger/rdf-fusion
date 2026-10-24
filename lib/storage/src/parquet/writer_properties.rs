@@ -59,9 +59,9 @@ impl RdfParquetWriterOptions {
         schema: &Schema,
         sort_order: Option<&RdfSortOrder>,
     ) -> DFResult<Self> {
-        let columns = sort_order
+        let columns: Vec<_> = sort_order
             .map(|o| o.components().iter().map(|c| c.column_name()).collect())
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
         let is_native = matches!(sort_order, Some(RdfSortOrder::NativeOrder(_)));
         let sort_columns = if is_native { columns.as_slice() } else { &[] };
         Self::try_new_impl(base, schema, &columns, sort_columns)

@@ -6,6 +6,8 @@ use datafusion::error::DataFusionError;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::parquet::arrow::AsyncArrowWriter;
 use datafusion::parquet::errors::ParquetError;
+use datafusion::physical_plan::buffer::BufferExec;
+use datafusion::physical_plan::execute_stream;
 use datafusion::prelude::*;
 use futures::StreamExt;
 use object_store::buffered::BufWriter;
@@ -18,6 +20,9 @@ use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 use std::sync::Arc;
 use url::Url;
+
+/// The capacity (in bytes) of the buffer between producing the quads and writing them.
+const LOADER_BUFFER_CAPACITY: usize = 64 * 1024 * 1024;
 
 /// A loader that converts RDF files into Parquet format.
 pub struct RdfParquetLoader {
@@ -148,7 +153,11 @@ impl RdfParquetLoader {
             .execution
             .soft_max_rows_per_output_file
             .get();
-        let mut stream = df.execute_stream().await?;
+        let plan = df.create_physical_plan().await?;
+        // Produce the batches (e.g., merging the sorted runs) in the background, such that it
+        // runs in parallel to encoding the Parquet files.
+        let plan = Arc::new(BufferExec::new(plan, LOADER_BUFFER_CAPACITY));
+        let mut stream = execute_stream(plan, ctx.task_ctx())?;
         let schema = stream.schema();
 
         let arrow_properties = RdfParquetWriterOptions::try_new_for_sort_order(

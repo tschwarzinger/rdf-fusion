@@ -153,10 +153,22 @@ impl Default for DeltaStorageOptions {
 }
 
 /// Options related to working with RDF files (e.g., Turtle).
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RdfFileStorageOptions {
     /// Whether the query engine should assume that the quads within one file are unique.
     pub assume_quads_unique_in_single_file: bool,
+    /// The minimum size in bytes of a chunk of a line-based RDF file (N-Triples, N-Quads) that is
+    /// parsed in parallel. A file is split into at most `target_partitions` chunks.
+    pub parallel_parsing_min_chunk_size: usize,
+}
+
+impl Default for RdfFileStorageOptions {
+    fn default() -> Self {
+        Self {
+            assume_quads_unique_in_single_file: false,
+            parallel_parsing_min_chunk_size: 16 * 1024 * 1024, // 16 MiB
+        }
+    }
 }
 
 impl ExtensionOptions for RdfFusionOptions {
@@ -285,6 +297,10 @@ impl ExtensionOptions for RdfFusionOptions {
 
                 self.storage.rdf_files.assume_quads_unique_in_single_file = value;
             }
+            "storage.rdf.parallel_parsing_min_chunk_size" => {
+                self.storage.rdf_files.parallel_parsing_min_chunk_size =
+                    SessionContext::parse_capacity_limit(key, value)?;
+            }
             _ => {
                 return Err(DataFusionError::Configuration(format!(
                     "Unknown configuration key: {key}"
@@ -397,6 +413,19 @@ impl ExtensionOptions for RdfFusionOptions {
                         .to_string(),
                 ),
                 description: "Sets whether the query engine should assume that the quads within a single file are unique.",
+            },
+            ConfigEntry {
+                key: format!(
+                    "{}.storage.rdf.parallel_parsing_min_chunk_size",
+                    Self::PREFIX
+                ),
+                value: Some(
+                    self.storage
+                        .rdf_files
+                        .parallel_parsing_min_chunk_size
+                        .to_string(),
+                ),
+                description: "The minimum size in bytes of a chunk of an N-Triples or N-Quads file that is parsed in parallel (e.g. \"1K\", \"16M\").",
             },
         ]
     }
@@ -512,7 +541,7 @@ mod tests {
     #[test]
     fn test_env_mappings() {
         let mappings = RdfFusionOptions::env_mappings();
-        assert_eq!(mappings.len(), 16);
+        assert_eq!(mappings.len(), 17);
         assert!(mappings.iter().any(|(env, id)| {
             env == "RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE"
                 && id == "storage.delta.log_max_age"
@@ -561,6 +590,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 16);
+        assert_eq!(entries.len(), 17);
     }
 }
