@@ -33,6 +33,7 @@ export function emptyQueryResults() {
         error: "",
         isExecuting: false,
         totalSeconds: null,
+        network: null,
         planningLatencyMs: null,
         planningComputeMs: null
     };
@@ -109,6 +110,7 @@ export function clearAllState() {
         error: "",
         isExecuting: false,
         totalSeconds: null,
+        network: null,
         planningLatencyMs: null,
         planningComputeMs: null
     });

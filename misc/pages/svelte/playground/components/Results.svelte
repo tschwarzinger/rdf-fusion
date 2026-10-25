@@ -1,6 +1,13 @@
 <script>
     import { queryResults, activeQueryText } from '../store.js';
     
+    const TABS = [
+        { id: 'data', label: 'Data', short: 'Data', icon: 'fa-table' },
+        { id: 'logical', label: 'Logical Plan', short: 'Logical', icon: 'fa-code-branch' },
+        { id: 'optimized', label: 'Optimized Plan', short: 'Optimized', icon: 'fa-wand-magic-sparkles' },
+        { id: 'execution', label: 'Execution Plan', short: 'Execution', icon: 'fa-microchip' }
+    ];
+
     let activeTab = $state('data');
     let resultsData = $derived($queryResults.results ?? $queryResults.data);
 
@@ -25,6 +32,17 @@
             prefixes[match[1]] = match[2];
         }
         return prefixes;
+    }
+
+    function formatBytes(bytes) {
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let value = bytes;
+        let unit = 0;
+        while (value >= 1024 && unit < units.length - 1) {
+            value /= 1024;
+            unit += 1;
+        }
+        return (unit === 0 ? value : value.toFixed(1)) + ' ' + units[unit];
     }
 
     let prefixes = $derived(extractPrefixes($activeQueryText));
@@ -153,6 +171,64 @@
     );
 </script>
 
+<style>
+    .result-tabs {
+        border: 1px solid #dee2e6;
+    }
+    .result-tabs .btn {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+    /* Wide results scroll inside the panel: keep the row number visible and cap
+       long values (the full value is in the cell's tooltip). */
+    #query-results .row-num {
+        position: sticky;
+        /* -1px: with collapsed borders, a 0 offset leaves a 1px gap at the
+           left edge through which scrolled cells show. */
+        left: -1px;
+        z-index: 1;
+        /* Collapsed borders do not move with sticky cells, so draw the right
+           edge as a shadow on top of Bootstrap's stripe/hover shadow. */
+        box-shadow: inset -1px 0 0 var(--bs-border-color),
+            inset 0 0 0 9999px var(--bs-table-bg-state, var(--bs-table-bg-type, var(--bs-table-accent-bg)));
+    }
+    #query-results thead .row-num {
+        z-index: 3;
+    }
+    #query-results .term-cell {
+        max-width: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .stat {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.6rem;
+        border: 1px solid #dee2e6;
+        border-radius: 999px;
+        background: #f8f9fa;
+        color: #6c757d;
+        white-space: nowrap;
+    }
+    .stat strong {
+        color: #212529;
+    }
+    @media (max-width: 575.98px) {
+        .result-tabs .tab-label {
+            font-size: 0.75rem;
+        }
+    }
+    @media (min-width: 992px) {
+        .result-tabs .btn {
+            flex: 0 0 auto;
+        }
+        .result-stats {
+            justify-content: flex-end;
+        }
+    }
+</style>
+
 <div id="results-panel" class="h-100 d-flex flex-column">
     {#if $queryResults.isExecuting}
         <div class="text-center text-muted mt-4">
@@ -165,28 +241,37 @@
             <span class="font-monospace small">{$queryResults.error}</span>
         </div>
     {:else if resultsData}
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-end mb-3 gap-2">
-            <div class="d-flex bg-light rounded-3 p-1 overflow-x-auto" style="border: 1px solid #dee2e6; max-width: 100%; scrollbar-width: none;">
-                <button class="btn btn-sm text-nowrap {activeTab === 'data' ? 'bg-brown text-white shadow-sm' : 'text-muted'} border-0 rounded-2 pane-heading py-1 flex-shrink-0" onclick={() => activeTab = 'data'}><i class="fa-solid fa-table me-1"></i> Data</button>
-                <button class="btn btn-sm text-nowrap {activeTab === 'logical' ? 'bg-brown text-white shadow-sm' : 'text-muted'} border-0 rounded-2 pane-heading py-1 flex-shrink-0" onclick={() => activeTab = 'logical'}><i class="fa-solid fa-code-branch me-1"></i> Logical Plan</button>
-                <button class="btn btn-sm text-nowrap {activeTab === 'optimized' ? 'bg-brown text-white shadow-sm' : 'text-muted'} border-0 rounded-2 pane-heading py-1 flex-shrink-0" onclick={() => activeTab = 'optimized'}><i class="fa-solid fa-wand-magic-sparkles me-1"></i> Optimized Plan</button>
-                <button class="btn btn-sm text-nowrap {activeTab === 'execution' ? 'bg-brown text-white shadow-sm' : 'text-muted'} border-0 rounded-2 pane-heading py-1 flex-shrink-0" onclick={() => activeTab = 'execution'}><i class="fa-solid fa-microchip me-1"></i> Execution Plan</button>
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-stretch align-items-lg-center mb-3 gap-2">
+            <div class="result-tabs d-flex bg-light rounded-3 p-1 gap-1">
+                {#each TABS as tab (tab.id)}
+                    <button class="btn btn-sm border-0 rounded-2 pane-heading py-1 px-2 d-flex flex-column flex-sm-row align-items-center justify-content-center gap-1 {activeTab === tab.id ? 'bg-brown text-white shadow-sm' : 'text-muted'}"
+                            aria-label={tab.label} aria-pressed={activeTab === tab.id}
+                            onclick={() => activeTab = tab.id}>
+                        <i class="fa-solid {tab.icon}"></i>
+                        <span class="tab-label text-nowrap">{tab.short}<span class="d-none d-sm-inline">{tab.label.slice(tab.short.length)}</span></span>
+                    </button>
+                {/each}
             </div>
-            
+
             {#if $queryResults.totalSeconds}
-                <div class="text-muted small pb-2 pe-2 d-flex align-items-center flex-wrap gap-3">
+                <div class="result-stats d-flex flex-wrap gap-1 small">
                     {#if resultsData.solutions}
-                        <span title="Total number of rows the query returned (rows beyond the shown set are evaluated but not transferred to the UI).">
-                            <strong><i class="fa-solid fa-list-ol me-1"></i> {resultsData.total_count ?? resultsData.solutions.length}</strong> rows{#if resultsData.total_count != null && resultsData.total_count > resultsData.solutions.length}&nbsp;<span class="fst-italic text-secondary">(first {resultsData.solutions.length} shown)</span>{/if}
+                        <span class="stat" title="Total number of rows the query returned (rows beyond the shown set are evaluated but not transferred to the UI).">
+                            <i class="fa-solid fa-list-ol"></i><strong>{resultsData.total_count ?? resultsData.solutions.length}</strong> rows{#if resultsData.total_count != null && resultsData.total_count > resultsData.solutions.length}&nbsp;<span class="fst-italic text-secondary">(first {resultsData.solutions.length} shown)</span>{/if}
                         </span>
                     {/if}
-                    <span title="Query evaluation + conversion to a JSON object, measured in the worker. Does not include time for copying the results to the UI or rendering them, so the observed latency can be higher.">
-                        <i class="fa-regular fa-clock me-1"></i> {$queryResults.totalSeconds}s
+                    <span class="stat" title="Query evaluation + conversion to a JSON object, measured in the worker. Does not include time for copying the results to the UI or rendering them, so the observed latency can be higher.">
+                        <i class="fa-regular fa-clock"></i><strong>{$queryResults.totalSeconds}</strong>s
                     </span>
+                    {#if $queryResults.network}
+                        <span class="stat" title="Bytes the engine downloaded while evaluating this query (sum of the response Content-Lengths) and the number of HTTP requests it issued (e.g. Parquet range reads). Locally stored datasets issue none.">
+                            <i class="fa-solid fa-download"></i><strong>{formatBytes($queryResults.network.bytes)}</strong>({$queryResults.network.requests} {$queryResults.network.requests === 1 ? 'request' : 'requests'})
+                        </span>
+                    {/if}
                 </div>
             {/if}
         </div>
-        
+
         <div class="flex-grow-1 overflow-auto">
             {#if activeTab === 'data'}
                 {#if resultsData.variables && Array.isArray(resultsData.solutions)}
@@ -194,7 +279,7 @@
                         <table id="query-results" class="table table-sm table-striped table-hover table-bordered text-nowrap mb-0 bg-white" style="font-size: 0.875rem;">
                             <thead class="table-light sticky-top">
                                 <tr>
-                                    <th scope="col" style="width: 45px;" class="text-center text-muted">#</th>
+                                    <th scope="col" style="width: 45px;" class="row-num text-center text-muted">#</th>
                                     {#each resultsData.variables as variable (variable)}
                                         <th scope="col">{variable}</th>
                                     {/each}
@@ -203,9 +288,9 @@
                             <tbody>
                                 {#each visibleRows as row, rowIdx (rowIdx)}
                                     <tr>
-                                        <td class="text-center text-muted small" style="width: 45px;">{rowIdx + 1}</td>
+                                        <td class="row-num text-center text-muted small" style="width: 45px;">{rowIdx + 1}</td>
                                         {#each row as term, colIdx (colIdx)}
-                                            <td>
+                                            <td class="term-cell" title={term.type === 'iri' ? term.fullIri : term.value}>
                                                 {#if term.type === 'iri'}
                                                     <a href={term.fullIri} target="_blank" rel="noopener noreferrer" class="text-decoration-none text-primary" title={term.fullIri}>{term.display}</a>
                                                 {:else if term.type === 'typed_literal'}

@@ -162,15 +162,15 @@
                 <div class="text-muted small mt-1">{guidance.detail}</div>
             </div>
         </div>
-        <div class="d-flex align-items-center gap-2 align-self-stretch align-self-md-auto justify-content-end flex-wrap">
-            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
+        <div class="status-actions d-flex align-items-center gap-2 align-self-stretch align-self-md-auto justify-content-end">
+            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center gap-2"
                     data-bs-toggle="modal" data-bs-target="#manageDownloadsModal"
                     title="Manage downloaded engine builds, custom datasets, and library data stored locally">
                 <i class="fa-solid fa-hard-drive"></i>
-                <span>Manage Local Data</span>
+                <span class="text-nowrap"><span class="d-none d-sm-inline">Manage </span>Local Data</span>
             </button>
             {#if showRecreate}
-                <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
+                <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center gap-2"
                         onclick={handleRecreateInstance}
                         disabled={isRecreating}
                         title="Recreate the RDF Fusion engine instance (e.g. after a crash)">
@@ -182,7 +182,7 @@
                     <span>Recreate</span>
                 </button>
             {/if}
-            <button type="button" class="btn btn-sm btn-outline-danger d-flex align-items-center gap-2"
+            <button type="button" class="btn btn-sm btn-outline-danger d-flex align-items-center justify-content-center gap-2"
                     data-bs-toggle="modal" data-bs-target="#clearAllModal"
                     title="Clear all IndexedDB databases, LocalStorage, and reload the playground">
                 <i class="fa-solid fa-trash-can"></i>
@@ -320,5 +320,13 @@
     }
     .border-dashed {
         border-style: dashed !important;
+    }
+    /* On phones the actions share one row with equal widths instead of wrapping. */
+    @media (max-width: 767.98px) {
+        .status-actions .btn {
+            flex: 1 1 0;
+            min-width: 0;
+            white-space: nowrap;
+        }
     }
 </style>

@@ -76,6 +76,7 @@
                 optimizedPlan: explanation?.optimized_logical_plan || "Optimized Plan not available.",
                 executionPlan: explanation?.execution_plan || "Execution Plan not available.",
                 totalSeconds,
+                network: res.network ?? null,
                 planningLatencyMs: explanation?.planning_latency_ms !== undefined ? explanation.planning_latency_ms.toFixed(2) : null,
                 planningComputeMs: explanation?.planning_compute_ms !== undefined ? explanation.planning_compute_ms.toFixed(2) : null
             });

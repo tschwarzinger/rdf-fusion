@@ -8,7 +8,7 @@
 // Message protocol (application-specific, not a mirror of the Wasm API):
 //   - init        { glueUrl, wasmUrl }                    load the engine
 //   - setDataset  { dataset }                             load a dataset
-//   - runQuery    { query }      -> { results, explanation }
+//   - runQuery    { query }      -> { results, elapsedMs, network, explanation }
 //   - cancelQuery             (acknowledged; interrupts the in-flight query)
 //
 // Result codes (on { ok:false } replies and the fatal event):
@@ -26,6 +26,24 @@
 export const ENGINE_WORKER_SOURCE = `
 let wasm = null;
 let activeStore = null;
+
+// Network traffic issued by the engine (e.g. Parquet range reads for
+// URL-backed datasets). The engine fetches through the worker's global fetch,
+// so wrapping it here sees every request. Bytes come from the CORS-safelisted
+// Content-Length header, which (unlike resource-timing transferSize) is also
+// readable for cross-origin responses. HEAD responses carry the size of the
+// whole object without transferring it, so they only count as a request.
+// runQuery reports the per-query delta.
+const netStats = { requests: 0, bytes: 0 };
+const originalFetch = self.fetch.bind(self);
+self.fetch = async function (input, init) {
+    netStats.requests += 1;
+    const response = await originalFetch(input, init);
+    const method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+    const len = parseInt(response.headers.get('content-length') || '', 10);
+    if (method !== 'HEAD' && len > 0) netStats.bytes += len;
+    return response;
+};
 
 // RPCs are handled one at a time so concurrent engine operations never overlap
 // (each one drives the shared Tokio runtime). Cancellation is handled outside
@@ -172,6 +190,8 @@ const MAX_RESULTS_ROWS = 100;
 
 async function runQuery(store, query) {
     const t0 = performance.now();
+    const requests0 = netStats.requests;
+    const bytes0 = netStats.bytes;
     const res = await store.query_explain(query, MAX_RESULTS_ROWS);
     const exp = res.explanation;
     const results = res.results;
@@ -180,6 +200,10 @@ async function runQuery(store, query) {
     return {
         results,
         elapsedMs,
+        network: {
+            requests: netStats.requests - requests0,
+            bytes: netStats.bytes - bytes0
+        },
         explanation: {
             planning_latency_ms: exp.planning_latency_ms,
             planning_compute_ms: exp.planning_compute_ms,
