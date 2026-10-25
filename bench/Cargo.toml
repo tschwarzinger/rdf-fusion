@@ -65,6 +65,10 @@ name = "store_preparation"
 harness = false
 
 [[bench]]
+name = "load_parquet"
+harness = false
+
+[[bench]]
 name = "dump"
 harness = false
 

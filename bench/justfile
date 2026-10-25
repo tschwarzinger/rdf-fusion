@@ -4,7 +4,7 @@ set unstable := true
 prepare-benches-tests: (prepare-bsbm "1000")
     @echo "BSBM use cases share the data"
 
-prepare-benches: (prepare-bsbm "10000")
+prepare-benches: (prepare-bsbm "10000") (prepare-dblp "100k") (prepare-dblp "1m")
     @echo "BSBM use cases share the data"
 
 # Prepares the BSBM Explore benchmarks
@@ -48,6 +48,49 @@ prepare-bsbm num_products:
     fi
 
     echo "Benchmarks prepared."
+
+# Prepares a prefix of the dblp RDF dump with `size` triples (e.g., 100k, 1m, 10m, 100m).
+#
+# Only the required prefix of the monthly release is downloaded, such that the subsets are
+# reproducible.
+prepare-dblp size release="2026-09-01":
+    #!/usr/bin/env bash
+    set -eo pipefail
+
+    size="{{ size }}"
+    case "${size,,}" in
+        *k) num_triples=$(( ${size%[kK]} * 1000 )) ;;
+        *m) num_triples=$(( ${size%[mM]} * 1000000 )) ;;
+        *) num_triples="$size" ;;
+    esac
+
+    DATA_DIR="data/dblp-${size,,}"
+    if [ -f "$DATA_DIR/dblp.nt" ] && [ "$(wc -l < "$DATA_DIR/dblp.nt")" -eq "$num_triples" ]; then
+        echo "$DATA_DIR/dblp.nt is already prepared."
+        exit 0
+    fi
+    mkdir -p "$DATA_DIR"
+    year="{{ release }}"
+    url="https://drops.dagstuhl.de/storage/artifacts/dblp/rdf/${year%%-*}/dblp-{{ release }}.nt.gz"
+
+    # The download below cannot detect HTTP errors (see below), so check the release up front.
+    if ! curl -fsSLI -o /dev/null "$url"; then
+        echo "The dblp release {{ release }} is not available at $url." >&2
+        exit 1
+    fi
+
+    echo "Downloading the first $num_triples triples of $url ..."
+    # `head` closes the pipe once it has enough lines, which aborts the download. Hence, errors of
+    # the download are ignored and an incomplete download is detected by the check below.
+    (curl -sL "$url" || true) | (gzip -dc 2>/dev/null || true) \
+        | (grep -v '^$' || true) | head -n "$num_triples" > "$DATA_DIR/dblp.nt"
+
+    actual=$(wc -l < "$DATA_DIR/dblp.nt")
+    if [ "$actual" -ne "$num_triples" ]; then
+        echo "Expected $num_triples triples, but got $actual." >&2
+        exit 1
+    fi
+    echo "Prepared $DATA_DIR/dblp.nt."
 
 # Executes the BSBM Explore benchmark against Parquet files with multiple sort orders.
 bench-bsbm-explore num_products="10000" max_query_count="" parallel_tasks="" sort_orders="Native(SPO) Native(POS) Native(OSP)":

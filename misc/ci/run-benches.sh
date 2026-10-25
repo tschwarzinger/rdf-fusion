@@ -13,6 +13,13 @@ all_benchmarks() {
         | sort -u
 }
 
+# Checks whether a crate of the workspace has a bench target named $1.
+bench_exists() {
+    cargo metadata --no-deps --format-version 1 \
+        | jq -e --arg name "$1" \
+            'any(.packages[].targets[]; (.kind | index("bench")) and .name == $name)' > /dev/null
+}
+
 BENCHES_TO_RUN=()
 # LABELS is comma separated, e.g., "bsbm,scalar-udfs"
 IFS=',' read -ra LABEL_ARRAY <<< "$LABELS"
@@ -53,11 +60,21 @@ export RDF_FUSION_STORAGE_DELTA_ASSUME_SINGLE_NODE=true
 
 for bench in "${UNIQUE_BENCHES[@]}"; do
     if [[ "$STEP" == "main" ]]; then
+        # Benchmarks that are introduced by the candidate branch do not exist on main.
+        if ! bench_exists "$bench"; then
+            echo "Skipping $bench: it does not exist on main."
+            continue
+        fi
         cargo bench --bench "$bench" -- --save-baseline "main-$bench"
     elif [[ "$STEP" == "candidate" ]]; then
         cargo bench --bench "$bench" -- --save-baseline "candidate-$bench"
     elif [[ "$STEP" == "compare" ]]; then
-        critcmp "main-$bench" "candidate-$bench"
+        if critcmp --baselines | grep -qx "main-$bench"; then
+            critcmp "main-$bench" "candidate-$bench"
+        else
+            echo "No baseline for $bench on main. Showing the candidate only."
+            critcmp "candidate-$bench"
+        fi
     else
         echo "Unknown step: $STEP"
         exit 1
