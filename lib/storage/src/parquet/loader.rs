@@ -2,15 +2,19 @@ use crate::parquet::RdfParquetWriterOptions;
 use crate::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::exec_datafusion_err;
+use datafusion::datasource::file_format::parquet::ParquetSink;
+use datafusion::datasource::listing::ListingTableUrl;
+use datafusion::datasource::physical_plan::{FileGroup, FileOutputMode, FileSinkConfig};
+use datafusion::datasource::sink::DataSinkExec;
 use datafusion::error::DataFusionError;
 use datafusion::logical_expr::LogicalPlan;
-use datafusion::parquet::arrow::AsyncArrowWriter;
+use datafusion::logical_expr::dml::InsertOp;
 use datafusion::parquet::errors::ParquetError;
-use datafusion::physical_plan::buffer::BufferExec;
-use datafusion::physical_plan::execute_stream;
+use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
+use datafusion::physical_plan::{ExecutionPlanProperties, collect};
 use datafusion::prelude::*;
 use futures::StreamExt;
-use object_store::buffered::BufWriter;
+use object_store::ObjectStore;
 use object_store::path::Path;
 use rdf_fusion_common::{
     RdfFormat, RdfInput, RdfInputSource, RdfSortOrder, url_to_object_store_url,
@@ -20,9 +24,6 @@ use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
 use std::sync::Arc;
 use url::Url;
-
-/// The capacity (in bytes) of the buffer between producing the quads and writing them.
-const LOADER_BUFFER_CAPACITY: usize = 64 * 1024 * 1024;
 
 /// A loader that converts RDF files into Parquet format.
 pub struct RdfParquetLoader {
@@ -147,67 +148,57 @@ impl RdfParquetLoader {
             }
         };
 
-        let max_rows_per_file = ctx
-            .state()
-            .config_options()
-            .execution
-            .soft_max_rows_per_output_file
-            .get();
-        let plan = df.create_physical_plan().await?;
-        // Produce the batches (e.g., merging the sorted runs) in the background, such that it
-        // runs in parallel to encoding the Parquet files.
-        let plan = Arc::new(BufferExec::new(plan, LOADER_BUFFER_CAPACITY));
-        let mut stream = execute_stream(plan, ctx.task_ctx())?;
-        let schema = stream.schema();
-
-        let arrow_properties = RdfParquetWriterOptions::try_new_for_sort_order(
-            &ctx.state().default_table_options().parquet,
-            &schema,
-            self.sort_order.as_ref(),
-        )?
-        .to_writer_properties()?;
-
-        // A URL that ends with a `/` is treated as a directory and the quads are split into
-        // multiple files (the same convention as for reading, see `ListingTableUrl`). If a sort
-        // order is configured, consecutive files only overlap at their boundaries, which allows
-        // pruning entire files. Otherwise, a single file is written.
+        // A URL that ends with a `/` is treated as a directory and the sink splits the quads into
+        // multiple files of approximately `datafusion.execution.soft_max_rows_per_output_file`
+        // rows (the same convention as for reading, see `ListingTableUrl`). Otherwise, a single
+        // file is written.
         let single_file = !output_url.path().ends_with('/');
-        let mut file_index = 0;
-        let mut create_writer = || {
-            let file_path = if single_file {
-                path.clone()
-            } else {
-                path.clone().join(format!("part-{file_index:05}.parquet"))
-            };
-            file_index += 1;
-            AsyncArrowWriter::try_new(
-                BufWriter::new(Arc::clone(&object_store), file_path),
-                Arc::clone(&schema),
-                Some(arrow_properties.clone()),
-            )
-        };
 
-        let mut parquet_writer = create_writer()?;
-        let mut rows_in_file = 0;
-        while let Some(batch) = stream.next().await {
-            let batch = batch?;
-            if batch.num_rows() == 0 {
-                continue;
-            }
-
-            // The limit is approximate, as batches are never split (similar to DataFusion's
-            // `soft_max_rows_per_output_file`).
-            if !single_file && rows_in_file >= max_rows_per_file {
-                parquet_writer.close().await?;
-                parquet_writer = create_writer()?;
-                rows_in_file = 0;
-            }
-
-            parquet_writer.write(&batch).await?;
-            rows_in_file += batch.num_rows();
+        let (mut state, plan) = df.into_parts();
+        if self.sort_order.is_some() {
+            // Avoid redistributes the batches round-robin across multiple files.
+            state
+                .config_mut()
+                .options_mut()
+                .set("datafusion.execution.minimum_parallel_output_files", "1")?;
         }
 
-        parquet_writer.close().await?;
+        let mut physical_plan = state.create_physical_plan(&plan).await?;
+        if physical_plan.output_partitioning().partition_count() > 1 {
+            physical_plan = Arc::new(CoalescePartitionsExec::new(physical_plan));
+        }
+        let schema = physical_plan.schema();
+
+        let writer_options = RdfParquetWriterOptions::try_new_for_sort_order(
+            &state.default_table_options().parquet,
+            &schema,
+            self.sort_order.as_ref(),
+        )?;
+        let config = FileSinkConfig {
+            original_url: output_url.to_string(),
+            object_store_url,
+            file_group: FileGroup::default(),
+            table_paths: vec![ListingTableUrl::parse(output_url.as_str())?],
+            output_schema: Arc::clone(&schema),
+            table_partition_cols: vec![],
+            insert_op: InsertOp::Append,
+            keep_partition_by_columns: false,
+            file_extension: "parquet".to_owned(),
+            file_output_mode: if single_file {
+                FileOutputMode::SingleFile
+            } else {
+                FileOutputMode::Directory
+            },
+        };
+        let sink = Arc::new(
+            ParquetSink::new(config, writer_options.table_parquet_options().clone())
+                .with_sorting_columns(writer_options.sorting_columns()),
+        );
+
+        // The sink writes the files in separate tasks, such that producing the batches (e.g.,
+        // merging the sorted runs) runs in parallel to encoding the Parquet files.
+        let sink_exec = Arc::new(DataSinkExec::new(physical_plan, sink, None));
+        collect(sink_exec, state.task_ctx()).await?;
 
         Ok(())
     }

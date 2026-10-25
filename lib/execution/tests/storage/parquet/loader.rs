@@ -31,21 +31,14 @@ async fn test_parquet_loader_writes_and_reads_multiple_files() {
     let output_url = Url::parse("memory:///dataset/").unwrap();
     env.load("memory:///input.nt", &output_url).await;
 
-    // Writing: the quads are split into multiple files with the expected size.
-    assert_eq!(
-        env.list_files("dataset").await,
-        vec![
-            "dataset/part-00000.parquet",
-            "dataset/part-00001.parquet",
-            "dataset/part-00002.parquet",
-            "dataset/part-00003.parquet",
-        ]
-    );
-
-    // Reading: all files are found and contain all quads.
+    // Writing: the quads are split into multiple, non-overlapping files with the expected size.
+    assert_eq!(env.list_files("dataset").await.len(), 4);
     let storage = env.open_storage(output_url).await;
     // The limit is approximate, as batches (of 10 rows) are not split.
     assert_eq!(rows_per_file(&storage), vec![30, 30, 30, 10]);
+    assert_files_do_not_overlap(&storage);
+
+    // Reading: all files are found and contain all quads.
     assert_eq!(
         storage
             .snapshot()
@@ -57,7 +50,7 @@ async fn test_parquet_loader_writes_and_reads_multiple_files() {
         NUM_TRIPLES
     );
 
-    let rdf_context = env.rdf_fusion_context(storage);
+    let rdf_context = env.rdf_fusion_context(Arc::clone(&storage) as _);
     let (count, _) = run_query(&rdf_context, "SELECT * WHERE { ?s ?p ?o }").await;
     assert_eq!(count, NUM_TRIPLES);
 
@@ -68,9 +61,46 @@ async fn test_parquet_loader_writes_and_reads_multiple_files() {
     )
     .await;
     assert_eq!(count, 1);
+    let second_file = storage.files()[1].path().to_string();
     assert!(
-        plan.contains("file_groups={1 group: [[dataset/part-00001.parquet]]}"),
+        plan.contains(&format!("file_groups={{1 group: [[{second_file}]]}}")),
         "Expected only a single file to be scanned: {plan}"
+    );
+}
+
+#[tokio::test]
+async fn test_parquet_loader_files_are_ordered_by_statistics() {
+    let env = TestEnv::new(10).await;
+    env.put_ntriples("input.nt", 120).await;
+
+    let output_url = Url::parse("memory:///dataset/").unwrap();
+    env.load_with_sort_order("memory:///input.nt", &output_url, "Native(SPOG)")
+        .await;
+
+    let storage = env.open_storage(output_url).await;
+    assert_eq!(rows_per_file(&storage), vec![10; 12]);
+    assert_files_do_not_overlap(&storage);
+    let paths = storage
+        .files()
+        .iter()
+        .map(|file| file.path().to_string())
+        .collect::<Vec<_>>();
+    assert!(
+        !paths.is_sorted(),
+        "Expected the path order to differ: {paths:?}"
+    );
+
+    // The scan of all files is ordered. Hence, the grouping can exploit the order of the scan.
+    let rdf_context = env.rdf_fusion_context(storage);
+    let (count, plan) = run_query(
+        &rdf_context,
+        "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o } GROUP BY ?s",
+    )
+    .await;
+    assert_eq!(count, 120);
+    assert!(
+        plan.contains("ordering_mode=Sorted"),
+        "Expected a sorted aggregation: {plan}"
     );
 }
 
@@ -167,12 +197,24 @@ impl TestEnv {
 
     /// Loads the RDF file at `input_url` into a Parquet storage (sorted by SPOG) at `output_url`.
     async fn load(&self, input_url: &str, output_url: &Url) {
+        self.load_with_sort_order(input_url, output_url, "SPOG")
+            .await;
+    }
+
+    /// Loads the RDF file at `input_url` into a Parquet storage (sorted by `sort_order`) at
+    /// `output_url`.
+    async fn load_with_sort_order(
+        &self,
+        input_url: &str,
+        output_url: &Url,
+        sort_order: &str,
+    ) {
         let loading_context = self.loading_context().await;
         let loader = RdfParquetLoader::try_new(
             loading_context.session_context().clone(),
             loading_context.create_view(),
             QuadStorageEncodingName::String,
-            Some("SPOG".parse::<RdfSortOrder>().unwrap()),
+            Some(sort_order.parse::<RdfSortOrder>().unwrap()),
         )
         .unwrap();
         let input =
@@ -300,6 +342,30 @@ fn ntriples_with_shared_blank_nodes() -> String {
         ));
     }
     ntriples
+}
+
+/// Asserts that the subjects of consecutive files of the storage do not overlap (except at their
+/// boundaries).
+fn assert_files_do_not_overlap(storage: &ParquetQuadStorage) {
+    let subject = QuadStorageEncoding::String
+        .quad_schema()
+        .inner()
+        .index_of("subject")
+        .unwrap();
+    let ranges = storage
+        .files()
+        .iter()
+        .map(|file| {
+            let stats = &file.statistics.as_ref().unwrap().column_statistics[subject];
+            (
+                stats.min_value.get_value().unwrap().clone(),
+                stats.max_value.get_value().unwrap().clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    for window in ranges.windows(2) {
+        assert!(window[0].1 <= window[1].0, "Files overlap: {ranges:?}");
+    }
 }
 
 /// Returns the exact number of rows in each file of the storage.

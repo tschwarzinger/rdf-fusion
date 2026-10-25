@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::Result as DFResult;
+use datafusion::common::ScalarValue;
 use datafusion::common::instant::Instant;
 use datafusion::datasource::file_format::parquet::ParquetFormat;
 use datafusion::datasource::listing::{
@@ -24,6 +25,7 @@ use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
+use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use tracing::info;
@@ -126,6 +128,10 @@ impl ParquetQuadStorageBuilder {
         let files = with_footer_statistics(schema.inner(), files, &footers)
             .map_err(to_storage_error)?;
         let output_ordering = output_ordering_from_footers(schema.inner(), &footers);
+        let files = match &output_ordering {
+            Some(ordering) => sort_files_by_statistics(files, ordering),
+            None => files,
+        };
 
         let num_quads = files
             .iter()
@@ -151,7 +157,8 @@ impl ParquetQuadStorageBuilder {
 }
 
 /// Lists the Parquet files at `table_url` using DataFusion's [`ListingTable`]. The files are
-/// sorted by their path and do not have statistics.
+/// sorted by their path (see [`sort_files_by_statistics`] for the final order) and do not have
+/// statistics.
 async fn list_parquet_files(
     state: &SessionState,
     table_url: &ListingTableUrl,
@@ -230,6 +237,96 @@ fn with_footer_statistics(
             Ok(file.with_statistics(Arc::new(statistics)))
         })
         .collect()
+}
+
+/// Sorts the `files` by the first row of each file according to `ordering`, as given by the
+/// statistics of the files.
+///
+/// If the files do not overlap, their concatenation is ordered, which DataFusion verifies based on
+/// the same statistics. Hence, the order does not depend on the file names (e.g., the unpadded
+/// indices of the files written by DataFusion's sinks). If a file lacks the required statistics,
+/// the files are kept in their path order.
+fn sort_files_by_statistics(
+    files: Vec<PartitionedFile>,
+    ordering: &LexOrdering,
+) -> Vec<PartitionedFile> {
+    let Some(keys) = files
+        .iter()
+        .map(|file| first_row_key(file, ordering))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return files;
+    };
+
+    let mut keyed = keys.into_iter().zip(files).collect::<Vec<_>>();
+    // The sort is stable. Hence, files with the same key remain in their path order.
+    keyed.sort_by(|(a, _), (b, _)| compare_keys(a, b, ordering));
+    keyed.into_iter().map(|(_, file)| file).collect()
+}
+
+/// Returns the values of the first row of the `file` according to `ordering`, where [`None`]
+/// represents a null value.
+///
+/// Returns [`None`] if the statistics of the file are insufficient.
+fn first_row_key(
+    file: &PartitionedFile,
+    ordering: &LexOrdering,
+) -> Option<Vec<Option<ScalarValue>>> {
+    let statistics = file.statistics.as_ref()?;
+    ordering
+        .iter()
+        .map(|sort_expr| {
+            let column = sort_expr.expr.downcast_ref::<Column>()?;
+            let column_statistics = statistics.column_statistics.get(column.index())?;
+            let has_nulls = column_statistics
+                .null_count
+                .get_value()
+                .is_some_and(|null_count| *null_count > 0);
+            if has_nulls && sort_expr.options.nulls_first {
+                return Some(None);
+            }
+
+            let first_value = if sort_expr.options.descending {
+                &column_statistics.max_value
+            } else {
+                &column_statistics.min_value
+            };
+            match first_value.get_value() {
+                Some(value) if !value.is_null() => Some(Some(value.clone())),
+                // Only null values
+                _ if has_nulls => Some(None),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// Compares two keys created by [`first_row_key`] according to `ordering`.
+fn compare_keys(
+    a: &[Option<ScalarValue>],
+    b: &[Option<ScalarValue>],
+    ordering: &LexOrdering,
+) -> Ordering {
+    a.iter()
+        .zip(b)
+        .zip(ordering.iter())
+        .map(|((a, b), sort_expr)| match (a, b) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) if sort_expr.options.nulls_first => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) if sort_expr.options.nulls_first => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (Some(a), Some(b)) => {
+                let ordering = a.partial_cmp(b).unwrap_or(Ordering::Equal);
+                if sort_expr.options.descending {
+                    ordering.reverse()
+                } else {
+                    ordering
+                }
+            }
+        })
+        .find(|ordering| ordering.is_ne())
+        .unwrap_or(Ordering::Equal)
 }
 
 /// Returns the ordering of the quads within each file, if all files declare the same

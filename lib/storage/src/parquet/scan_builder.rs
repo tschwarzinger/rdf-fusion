@@ -421,7 +421,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                 .into_iter()
                 .flat_map(FileGroup::into_inner)
                 .collect::<Vec<_>>();
-            all_file_groups = FileGroup::new(files).split_files(n.max(1));
+            all_file_groups = split_files_in_order(files, n.max(1));
         }
 
         if all_file_groups.is_empty() {
@@ -528,7 +528,20 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             return Ok(None);
         }
 
-        let stats = estimate_scan_statistics(&parquet_meta, &access_plan, schema);
+        let mut stats = estimate_scan_statistics(&parquet_meta, &access_plan, schema);
+        // The bounds of the file remain valid for the remaining rows. DataFusion requires them,
+        // for example, to verify that the files of a group are ordered. They are inexact, as the
+        // pruned rows may have contained the minimum or maximum.
+        if let Some(file_stats) = &file.statistics {
+            for (column, file_column) in stats
+                .column_statistics
+                .iter_mut()
+                .zip(&file_stats.column_statistics)
+            {
+                column.min_value = file_column.min_value.clone().to_inexact();
+                column.max_value = file_column.max_value.clone().to_inexact();
+            }
+        }
         Ok(Some(
             file.with_extension(access_plan)
                 .with_statistics(Arc::new(stats)),
@@ -938,6 +951,22 @@ fn is_plain_term_column(column: &Column, schema: &DFSchema) -> bool {
     schema
         .field_from_column(column)
         .is_ok_and(|field| field.data_type() == &PlainTermEncoding::data_type())
+}
+
+/// Splits the `files` into up to `n` groups of consecutive files.
+///
+/// In contrast to [`FileGroup::split_files`], which sorts the files by their path, the order of
+/// the files is preserved. The storage orders the files by their statistics, such that the files
+/// of each group remain ordered.
+fn split_files_in_order(files: Vec<PartitionedFile>, n: usize) -> Vec<FileGroup> {
+    if files.is_empty() {
+        return Vec::new();
+    }
+    let chunk_size = files.len().div_ceil(n);
+    files
+        .chunks(chunk_size)
+        .map(|chunk| FileGroup::new(chunk.to_vec()))
+        .collect()
 }
 
 /// Rewrites an equality between two PlainTerm columns (e.g. a graph bound to an object/variable) into
