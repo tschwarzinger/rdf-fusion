@@ -26,7 +26,7 @@ use datafusion::execution::SessionState;
 use datafusion::functions::core::expr_fn::get_field;
 use datafusion::logical_expr::expr::{BinaryExpr, InList};
 use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
-use datafusion::logical_expr::utils::conjunction;
+use datafusion::logical_expr::utils::{conjunction, split_conjunction_owned};
 use datafusion::logical_expr::{Expr, Operator, lit};
 use datafusion::parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
 use datafusion::parquet::arrow::async_reader::AsyncFileReader;
@@ -173,6 +173,16 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             }
             (_, other) => other,
         };
+        // Conjuncts that the statistics prove for all rows (e.g., `graph IS NULL` for files without
+        // named graphs) are not pushed down. Otherwise, the Parquet source would load the page
+        // index of every file for a predicate that cannot prune anything.
+        let pushed_filter = pushed_filter.and_then(|filter| {
+            remove_conjuncts_proven_by_statistics(
+                filter,
+                base_schema.inner(),
+                &self.file_groups,
+            )
+        });
 
         // Determine whether every part of the pushed predicate can be evaluated by the parquet
         // decoder. If not, the source silently drops those conjuncts, so we re-apply the full
@@ -859,6 +869,60 @@ async fn prune_row_groups_by_bloom_filters(
     Ok(rg_filter.build())
 }
 
+/// Removes the conjuncts of `filter` that all rows of the files in `file_groups` match according
+/// to their statistics. Returns [`None`] if no conjunct remains.
+fn remove_conjuncts_proven_by_statistics(
+    filter: Expr,
+    schema: &Schema,
+    file_groups: &[FileGroup],
+) -> Option<Expr> {
+    conjunction(
+        split_conjunction_owned(filter)
+            .into_iter()
+            .filter(|conjunct| !is_proven_by_statistics(conjunct, schema, file_groups)),
+    )
+}
+
+/// Returns true if the exact statistics of all files in `file_groups` guarantee that all rows
+/// match `expr`. Only `col IS NULL` and `col IS NOT NULL` are supported.
+fn is_proven_by_statistics(
+    expr: &Expr,
+    schema: &Schema,
+    file_groups: &[FileGroup],
+) -> bool {
+    let (inner, is_null) = match expr {
+        Expr::IsNull(inner) => (inner, true),
+        Expr::IsNotNull(inner) => (inner, false),
+        _ => return false,
+    };
+    let Expr::Column(column) = inner.as_ref() else {
+        return false;
+    };
+    let Ok(idx) = schema.index_of(&column.name) else {
+        return false;
+    };
+
+    file_groups.iter().flat_map(FileGroup::iter).all(|file| {
+        let Some(statistics) = &file.statistics else {
+            return false;
+        };
+        let null_count = statistics
+            .column_statistics
+            .get(idx)
+            .map(|column| column.null_count);
+        match (statistics.num_rows, null_count) {
+            (Precision::Exact(num_rows), Some(Precision::Exact(null_count))) => {
+                if is_null {
+                    null_count == num_rows
+                } else {
+                    null_count == 0
+                }
+            }
+            _ => false,
+        }
+    })
+}
+
 /// Returns true if the footer statistics guarantee that all rows of the row groups in the
 /// `access_plan` match the filter (see [`PruningFilters::full_match`]).
 ///
@@ -1161,6 +1225,8 @@ fn rewrite_plain_term_eq(other: &Expr, literal: &Expr) -> DFResult<Option<Expr>>
 mod tests {
     use super::*;
     use datafusion::arrow::array::StringArray;
+    use datafusion::arrow::datatypes::{DataType, Field};
+    use datafusion::common::ColumnStatistics;
     use datafusion::common::ScalarValue;
     use datafusion::logical_expr::{col, lit};
     use rdf_fusion_common::NamedNodeRef;
@@ -1263,6 +1329,92 @@ mod tests {
         assert_eq!(
             negate_filter(&col("a").eq(lit(1)).and(col("b").gt(lit(1)))),
             None
+        );
+    }
+
+    /// Creates a file with `num_rows` rows of which `null_counts[i]` are null in column `i`.
+    fn file_with_null_counts(
+        num_rows: usize,
+        null_counts: &[Precision<usize>],
+    ) -> PartitionedFile {
+        let column_statistics = null_counts
+            .iter()
+            .map(|null_count| ColumnStatistics {
+                null_count: *null_count,
+                ..ColumnStatistics::new_unknown()
+            })
+            .collect();
+        PartitionedFile::new("file.parquet", 0).with_statistics(Arc::new(Statistics {
+            num_rows: Precision::Exact(num_rows),
+            total_byte_size: Precision::Absent,
+            column_statistics,
+        }))
+    }
+
+    fn null_check_schema() -> Schema {
+        Schema::new(vec![
+            Field::new("a", DataType::Utf8, true),
+            Field::new("b", DataType::Utf8, true),
+        ])
+    }
+
+    #[test]
+    fn removes_null_checks_proven_by_statistics() {
+        let file_groups = vec![
+            FileGroup::new(vec![file_with_null_counts(
+                10,
+                &[Precision::Exact(10), Precision::Exact(0)],
+            )]),
+            FileGroup::new(vec![file_with_null_counts(
+                5,
+                &[Precision::Exact(5), Precision::Exact(0)],
+            )]),
+        ];
+        let filter = col("a")
+            .is_null()
+            .and(col("b").is_not_null())
+            .and(col("b").eq(lit("x")));
+        assert_eq!(
+            remove_conjuncts_proven_by_statistics(
+                filter,
+                &null_check_schema(),
+                &file_groups
+            ),
+            Some(col("b").eq(lit("x")))
+        );
+    }
+
+    #[test]
+    fn keeps_null_checks_not_proven_by_statistics() {
+        let schema = null_check_schema();
+        let filter = col("a").is_null().and(col("b").is_not_null());
+
+        // One file has non-null values in `a` and null values in `b`.
+        let file_groups = vec![FileGroup::new(vec![
+            file_with_null_counts(10, &[Precision::Exact(10), Precision::Exact(0)]),
+            file_with_null_counts(10, &[Precision::Exact(9), Precision::Exact(1)]),
+        ])];
+        assert_eq!(
+            remove_conjuncts_proven_by_statistics(filter.clone(), &schema, &file_groups),
+            Some(filter.clone())
+        );
+
+        // Inexact statistics and files without statistics prove nothing.
+        let file_groups = vec![FileGroup::new(vec![file_with_null_counts(
+            10,
+            &[Precision::Inexact(10), Precision::Inexact(0)],
+        )])];
+        assert_eq!(
+            remove_conjuncts_proven_by_statistics(filter.clone(), &schema, &file_groups),
+            Some(filter.clone())
+        );
+        let file_groups = vec![FileGroup::new(vec![PartitionedFile::new(
+            "file.parquet",
+            0,
+        )])];
+        assert_eq!(
+            remove_conjuncts_proven_by_statistics(filter.clone(), &schema, &file_groups),
+            Some(filter)
         );
     }
 }

@@ -48,7 +48,7 @@ async fn test_parquet_scan_filter_pushdown_with_equality_with_named_node() {
 
     assert_snapshot!(
         displayable(plan_pushed.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[ENC_PT(subject@1) as s], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@2 AND object_null_count@7 != row_count@4 AND object_min@5 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@6, required_guarantees=[object in (<http://example.org/o1>), predicate in (<http://example.org/p1>)]"
+        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[ENC_PT(subject@1) as s], file_type=parquet, predicate=predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@1 AND object_null_count@6 != row_count@3 AND object_min@4 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@5, required_guarantees=[object in (<http://example.org/o1>), predicate in (<http://example.org/p1>)]"
     );
 }
 
@@ -76,10 +76,10 @@ async fn test_parquet_scan_filter_pushdown_with_function_prevented() {
     let plan_not_pushed = explanation_not_pushed.execution_plan;
 
     assert_snapshot!(displayable(plan_not_pushed.as_ref()).indent(true), @"
-        ProjectionExec: expr=[ENC_PT(s@0) as s]
-          FilterExec: EBV(EQ(LCASE(ENC_TF(STR(ENC_PT(o@1)))), 3:{value:http://example.org/o1,language:})), projection=[s@0]
-            ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p1>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@2, required_guarantees=[predicate in (<http://example.org/p1>)]
-        ");
+    ProjectionExec: expr=[ENC_PT(s@0) as s]
+      FilterExec: EBV(EQ(LCASE(ENC_TF(STR(ENC_PT(o@1)))), 3:{value:http://example.org/o1,language:})), projection=[s@0]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p1>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@1, required_guarantees=[predicate in (<http://example.org/p1>)]
+    ");
 }
 
 /// Two quads whose objects (o1 and o3) surround o2. Hence, only the Bloom filter can prune a
@@ -368,6 +368,31 @@ async fn test_parquet_multi_file_skips_page_index_if_all_rows_match() {
 }
 
 #[tokio::test]
+async fn test_parquet_scan_skips_default_graph_filter_proven_by_statistics() {
+    let (rdf_context, storage) =
+        prepare_multi_file_test_store(&multi_file_data(), 1).await;
+
+    // No file contains named graphs. Hence, the statistics prove `graph IS NULL` for all rows and
+    // the filter is not pushed into the scan, which would load the page index of each file.
+    let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o . } LIMIT 1";
+    assert!(
+        !plan_to_string(&rdf_context, query)
+            .await
+            .contains("predicate="),
+        "Expected no predicate in the scan"
+    );
+    assert_eq!(execute_query(&rdf_context, query).await, 1);
+
+    assert!(
+        cached_metadata(&rdf_context, &storage)
+            .iter()
+            .all(|(_, has_page_index)| !has_page_index),
+        "Expected no page index to be loaded: {:?}",
+        cached_metadata(&rdf_context, &storage)
+    );
+}
+
+#[tokio::test]
 async fn test_parquet_multi_file_scan_prunes_files_during_planning() {
     let (rdf_context, _) = prepare_multi_file_test_store(&multi_file_data(), 1).await;
 
@@ -383,7 +408,7 @@ async fn test_parquet_multi_file_scan_prunes_files_during_planning() {
     // Only the file that contains p2 remains in the plan.
     assert_snapshot!(
         displayable(explanation.execution_plan.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o], blank_node_mode=Variable, file_groups={1 group: [[dataset/part-00001.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=graph@0 IS NULL AND predicate@2 = <http://example.org/p2>, pruning_predicate=graph_null_count@0 > 0 AND predicate_null_count@3 != row_count@4 AND predicate_min@1 <= <http://example.org/p2> AND <http://example.org/p2> <= predicate_max@2, required_guarantees=[predicate in (<http://example.org/p2>)]"
+        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o], blank_node_mode=Variable, file_groups={1 group: [[dataset/part-00001.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p2>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p2> AND <http://example.org/p2> <= predicate_max@1, required_guarantees=[predicate in (<http://example.org/p2>)]"
     );
     assert_eq!(count_solutions(results).await, 2);
 }
@@ -402,7 +427,7 @@ async fn test_parquet_multi_file_scan_all_files() {
     // The files are spread across the two partitions.
     assert_snapshot!(
         displayable(explanation.execution_plan.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={2 groups: [[dataset/part-00000.parquet, dataset/part-00001.parquet], [dataset/part-00002.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=graph@0 IS NULL, pruning_predicate=graph_null_count@0 > 0, required_guarantees=[]"
+        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={2 groups: [[dataset/part-00000.parquet, dataset/part-00001.parquet], [dataset/part-00002.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet"
     );
     assert_eq!(count_solutions(results).await, 6);
 
@@ -510,7 +535,7 @@ async fn test_parquet_scan_small_scan_buffering() {
         plan,
         @"
     BufferExec: capacity=1048576
-      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[buffered_test.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=graph@0 IS NULL, pruning_predicate=graph_null_count@0 > 0, required_guarantees=[]
+      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[buffered_test.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet
     "
     );
 }
