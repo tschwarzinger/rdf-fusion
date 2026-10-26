@@ -1,8 +1,7 @@
-use crate::delta::quad_table::{is_named_node_bound, is_term_bound};
-use crate::quad_tables::QuadTableName;
+use crate::quad_tables::{QuadTableName, compute_scan_score};
 use deltalake::kernel::{Add, EagerSnapshot};
 use deltalake::logstore::LogStoreRef;
-use rdf_fusion_common::{BlankNodeMatchingMode, QuadComponent, TriplePattern};
+use rdf_fusion_common::{BlankNodeMatchingMode, TriplePattern};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::ActiveGraph;
 use std::sync::Arc;
@@ -87,33 +86,12 @@ impl DeltaQuadsQuadTableSnapshot {
         pattern: &TriplePattern,
         blank_node_mode: BlankNodeMatchingMode,
     ) -> usize {
-        let graph_bound = matches!(
+        compute_scan_score(
+            self.components.inner(),
             active_graph,
-            ActiveGraph::DefaultGraph | ActiveGraph::Union(_)
-        );
-        let subject_bound = is_term_bound(pattern.subject.clone(), blank_node_mode);
-        let predicate_bound =
-            is_named_node_bound(pattern.predicate.clone(), blank_node_mode);
-        let object_bound = is_term_bound(pattern.object.clone(), blank_node_mode);
-
-        let mut score = 0;
-        for (i, component) in self.components.inner().iter().enumerate() {
-            let is_bound = match component {
-                QuadComponent::GraphName => graph_bound,
-                QuadComponent::Subject => subject_bound,
-                QuadComponent::Predicate => predicate_bound,
-                QuadComponent::Object => object_bound,
-            };
-
-            // We don't stop after finding a non-bound component, because components that are
-            // part of the sort order should still exhibit a better clustering, even though the
-            // scan is no longer restricted to a slice of the quad_table.
-            if is_bound {
-                let position = 3 - i;
-                score += 1 << position;
-            }
-        }
-        score
+            pattern,
+            blank_node_mode,
+        )
     }
 }
 

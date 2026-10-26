@@ -4,11 +4,15 @@ use crate::parquet::reader::{
     BlockCachedReaderFactory, ParquetMetadataFetcher, max_concurrent_files,
 };
 use crate::parquet::scan::ParquetQuadScanExec;
+use datafusion::arrow::array::{ArrayRef, BooleanArray, UInt64Array};
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::ScalarValue;
 use datafusion::common::plan_datafusion_err;
+use datafusion::common::pruning::PruningStatistics;
 use datafusion::common::stats::Precision;
-use datafusion::common::{Column, DFSchema, DFSchemaRef, ExprSchema, Statistics};
+use datafusion::common::{
+    Column, ColumnStatistics, DFSchema, DFSchemaRef, ExprSchema, Statistics,
+};
 use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::parquet::{
@@ -491,6 +495,15 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         let metrics =
             ParquetFileMetrics::new(0, file.object_meta.location.as_ref(), &metrics_set);
 
+        // Phase 0: Prune the file using its statistics (e.g., from the dataset description), such
+        // that a file that cannot match is not opened at all.
+        if let (Some(predicate), Some(statistics)) =
+            (&filters.row_group, &file.statistics)
+            && !file_may_match(predicate, statistics, schema)
+        {
+            return Ok(None);
+        }
+
         // Phase 1: Prune row groups using the footer.
         let footer = fetcher
             .fetch(&file.object_meta, PageIndexPolicy::Skip)
@@ -747,6 +760,82 @@ struct PruningFilters {
     /// page index. If `page` is present but this is not (i.e., the filter cannot be negated), the
     /// page index is loaded for every file with remaining row groups.
     full_match: Option<Arc<PruningPredicate>>,
+}
+
+/// Returns whether a file with the given `statistics` may contain rows that match the
+/// `predicate`.
+fn file_may_match(
+    predicate: &PruningPredicate,
+    statistics: &Statistics,
+    schema: &Schema,
+) -> bool {
+    let statistics = FileBoundStatistics { statistics, schema };
+    predicate
+        .prune(&statistics)
+        .map_or(true, |may_match| may_match.first().copied().unwrap_or(true))
+}
+
+/// The [`PruningStatistics`] of a single file.
+///
+/// Unlike DataFusion's `PrunableStatistics`, inexact minimum and maximum values are used as well.
+/// The statistics of a file are computed from its footer, where inexact values are bounds of the
+/// actual values (e.g., values truncated by the Parquet writer).
+struct FileBoundStatistics<'a> {
+    statistics: &'a Statistics,
+    schema: &'a Schema,
+}
+
+impl FileBoundStatistics<'_> {
+    fn column_statistics(&self, column: &Column) -> Option<&ColumnStatistics> {
+        let index = self.schema.index_of(column.name()).ok()?;
+        self.statistics.column_statistics.get(index)
+    }
+
+    fn bound(
+        &self,
+        column: &Column,
+        get_bound: impl Fn(&ColumnStatistics) -> &Precision<ScalarValue>,
+    ) -> Option<ArrayRef> {
+        let value = get_bound(self.column_statistics(column)?).get_value()?;
+        value.to_array_of_size(1).ok()
+    }
+}
+
+impl PruningStatistics for FileBoundStatistics<'_> {
+    fn min_values(&self, column: &Column) -> Option<ArrayRef> {
+        self.bound(column, |stats| &stats.min_value)
+    }
+
+    fn max_values(&self, column: &Column) -> Option<ArrayRef> {
+        self.bound(column, |stats| &stats.max_value)
+    }
+
+    fn num_containers(&self) -> usize {
+        1
+    }
+
+    fn null_counts(&self, column: &Column) -> Option<ArrayRef> {
+        let Precision::Exact(null_count) = self.column_statistics(column)?.null_count
+        else {
+            return None;
+        };
+        Some(Arc::new(UInt64Array::from(vec![null_count as u64])))
+    }
+
+    fn row_counts(&self) -> Option<ArrayRef> {
+        let Precision::Exact(num_rows) = self.statistics.num_rows else {
+            return None;
+        };
+        Some(Arc::new(UInt64Array::from(vec![num_rows as u64])))
+    }
+
+    fn contained(
+        &self,
+        _column: &Column,
+        _values: &HashSet<ScalarValue>,
+    ) -> Option<BooleanArray> {
+        None
+    }
 }
 
 /// Prunes the row groups of a file using the statistics in its footer.

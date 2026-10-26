@@ -19,7 +19,8 @@
         },
         dataFusion: {
             enableDynamicFilterPushdown: true,
-            enableJoinReordering: false
+            enableJoinReordering: false,
+            metadataCacheLimitMb: 50
         },
         rdfFusion: {
             enableDataCache: true,
@@ -88,7 +89,8 @@
             },
             dataFusion: {
                 enableDynamicFilterPushdown: true,
-                enableJoinReordering: false
+                enableJoinReordering: false,
+                metadataCacheLimitMb: 50
             },
             rdfFusion: {
                 enableDataCache: true,

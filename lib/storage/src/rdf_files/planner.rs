@@ -1,5 +1,5 @@
 use crate::rdf_files::logical_node::ParseRdfFileNode;
-use crate::rdf_files::{BlankNodeRenamer, RdfParserExec, open_line_range_reader};
+use crate::rdf_files::{RdfParserExec, open_line_range_reader};
 use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::execution::context::SessionState;
@@ -41,10 +41,7 @@ impl ExtensionPlanner for RdfFilePlanner {
             .into_iter()
             .map(|reader| node.options.create_parser(reader))
             .collect();
-        let blank_node_renamer = node
-            .options
-            .rename_blank_nodes
-            .then(BlankNodeRenamer::new_random);
+        let blank_node_renamer = node.options.blank_node_renamer.clone();
 
         Ok(Some(Arc::new(RdfParserExec::new(
             parsers,

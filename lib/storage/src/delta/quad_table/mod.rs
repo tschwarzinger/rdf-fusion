@@ -20,7 +20,6 @@ use futures::TryStreamExt;
 use object_store::ObjectMeta;
 use object_store::path::Path;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_common::{BlankNodeMatchingMode, NamedNodePattern, TermPattern};
 use rdf_fusion_encoding::QuadStorageEncoding;
 pub use snapshot::DeltaQuadsQuadTableSnapshot;
 use std::sync::Arc;
@@ -301,19 +300,4 @@ async fn load_parquet_metadata_for_files(
         .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
 
     Ok(())
-}
-
-fn is_term_bound(pattern: TermPattern, mode: BlankNodeMatchingMode) -> bool {
-    match pattern {
-        TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
-        TermPattern::BlankNode(_) => mode == BlankNodeMatchingMode::Filter,
-        TermPattern::Variable(_) => false,
-    }
-}
-
-fn is_named_node_bound(pattern: NamedNodePattern, _mode: BlankNodeMatchingMode) -> bool {
-    match pattern {
-        NamedNodePattern::NamedNode(_) => true,
-        NamedNodePattern::Variable(_) => false,
-    }
 }

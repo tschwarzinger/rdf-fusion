@@ -6,7 +6,7 @@ use rdf_fusion_common::{BlankNode, GraphName, NamedOrBlankNode, Quad, Term};
 /// The new identifier only depends on the seed and the original label. Therefore, multiple
 /// parsers that share a renamer (e.g., when parsing chunks of a file in parallel) rename the same
 /// blank node consistently, without having to keep a mapping of all encountered blank nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlankNodeRenamer {
     seed: String,
 }

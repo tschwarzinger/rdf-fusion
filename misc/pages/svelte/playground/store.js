@@ -52,7 +52,8 @@ const defaultEngineSettings = {
     dataFusion: {
         enableDynamicFilterPushdown: true,
         enableJoinReordering: false,
-        targetPartitions: 1
+        targetPartitions: 1,
+        metadataCacheLimitMb: 50
     },
     rdfFusion: {
         enableDataCache: false,

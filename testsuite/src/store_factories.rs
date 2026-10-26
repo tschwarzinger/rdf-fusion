@@ -87,7 +87,7 @@ pub fn parquet_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory 
                 context.session_context().clone(),
                 context.create_view(),
                 encoding,
-                None,
+                Vec::new(),
             )
             .unwrap();
             let mut inputs = Vec::new();

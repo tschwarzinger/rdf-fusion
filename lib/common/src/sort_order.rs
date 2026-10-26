@@ -128,13 +128,11 @@ impl std::str::FromStr for RdfSortOrder {
     }
 }
 
-/// Parses the components of a sort order (e.g., SPO)
+/// Parses the components of a sort order (e.g., SPO). The components are not separated (e.g.,
+/// `S,P,O` is invalid).
 fn parse_components(inner: &str) -> Result<Vec<QuadComponent>, RdfSortOrderParsingError> {
     let mut components = Vec::new();
     for c in inner.chars() {
-        if c == ',' || c.is_whitespace() {
-            continue;
-        }
         let comp = QuadComponent::from_char(c)
             .ok_or(RdfSortOrderParsingError::UnknownComponent(c))?;
         components.push(comp);
@@ -167,6 +165,15 @@ mod tests {
             RdfSortOrder::from_str("NATIVE(S)").unwrap(),
             RdfSortOrder::NativeOrder(vec![QuadComponent::Subject])
         );
+    }
+
+    #[test]
+    fn test_rdf_sort_order_rejects_separators() {
+        assert!(matches!(
+            RdfSortOrder::from_str("NATIVE(G,P,S,O)"),
+            Err(RdfSortOrderParsingError::UnknownComponent(','))
+        ));
+        assert!(RdfSortOrder::from_str("G P S O").is_err());
     }
 
     #[test]

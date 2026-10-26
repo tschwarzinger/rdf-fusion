@@ -85,16 +85,21 @@ pub struct JsEngineConfig {
     memory_limit_mb: usize,
     metrics: JsExplainConfig,
     custom_config: HashMap<String, String>,
+    metadata_cache_limit_mb: usize,
 }
 
 #[wasm_bindgen]
 impl JsEngineConfig {
     /// Create a new [`JsEngineConfig`].
+    ///
+    /// The `metadata_cache_limit_mb` is the last parameter, such that callers of older versions
+    /// remain compatible.
     #[wasm_bindgen(constructor)]
     pub fn new(
         memory_limit_mb: usize,
         metrics: JsExplainConfig,
         custom_config_obj: js_sys::Object,
+        metadata_cache_limit_mb: usize,
     ) -> Self {
         let mut custom_config = HashMap::new();
         for key in js_sys::Object::keys(&custom_config_obj).iter() {
@@ -110,12 +115,18 @@ impl JsEngineConfig {
             memory_limit_mb,
             metrics,
             custom_config,
+            metadata_cache_limit_mb,
         }
     }
 
     /// The configured memory limit of the engine in MB.
     pub fn memory_limit_mb(&self) -> usize {
         self.memory_limit_mb
+    }
+
+    /// The configured size limit of the file metadata cache (e.g., Parquet footers) in MB.
+    pub fn metadata_cache_limit_mb(&self) -> usize {
+        self.metadata_cache_limit_mb
     }
 
     /// The configuration for displaying metrics.
@@ -324,7 +335,7 @@ pub async fn convert_rdf_to_parquet_stream(
         session_context,
         context_view,
         encoding.into(),
-        sort_order,
+        sort_order.into_iter().collect(),
     )
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
@@ -382,6 +393,7 @@ async fn create_parquet_context(
                 DiskManager::builder().with_mode(DiskManagerMode::Disabled),
             )
             .with_memory_limit(settings.memory_limit_mb * 1024 * 1024, 1.0)
+            .with_metadata_cache_limit(settings.metadata_cache_limit_mb * 1024 * 1024)
             .build_arc()
             .map_err(|e| e.to_string())?;
 

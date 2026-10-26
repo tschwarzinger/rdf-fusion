@@ -1,4 +1,5 @@
 use datafusion::common::stats::Precision;
+use datafusion::datasource::physical_plan::parquet::metadata::CachedParquetMetaData;
 use datafusion::logical_expr::{Extension, LogicalPlan};
 use datafusion::physical_plan::displayable;
 use datafusion::prelude::{DataFrame, SessionConfig, SessionContext};
@@ -15,7 +16,9 @@ use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_sparql_parser::ParserOptions;
 use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
-use rdf_fusion_storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
+use rdf_fusion_storage::parquet::{
+    ParquetQuadStorage, RdfParquetLoader, RdfParquetLoadingError,
+};
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::Arc;
 use url::Url;
@@ -31,8 +34,17 @@ async fn test_parquet_loader_writes_and_reads_multiple_files() {
     let output_url = Url::parse("memory:///dataset/").unwrap();
     env.load("memory:///input.nt", &output_url).await;
 
-    // Writing: the quads are split into multiple, non-overlapping files with the expected size.
-    assert_eq!(env.list_files("dataset").await.len(), 4);
+    // Writing: the quads are split into multiple, non-overlapping files with the expected size,
+    // and the dataset is described in a `dataset.ttl`.
+    let files = env.list_files("dataset").await;
+    assert_eq!(files[0], "dataset/dataset.ttl");
+    assert_eq!(files.len(), 5);
+    assert!(
+        files[1..]
+            .iter()
+            .all(|file| file.starts_with("dataset/sparql-spog/")),
+        "Expected all files in the SPOG quad table: {files:?}"
+    );
     let storage = env.open_storage(output_url).await;
     // The limit is approximate, as batches (of 10 rows) are not split.
     assert_eq!(rows_per_file(&storage), vec![30, 30, 30, 10]);
@@ -74,8 +86,9 @@ async fn test_parquet_loader_files_are_ordered_by_statistics() {
     env.put_ntriples("input.nt", 120).await;
 
     let output_url = Url::parse("memory:///dataset/").unwrap();
-    env.load_with_sort_order("memory:///input.nt", &output_url, "Native(SPOG)")
-        .await;
+    env.load_with_sort_orders("memory:///input.nt", &output_url, &["Native(SPOG)"])
+        .await
+        .unwrap();
 
     let storage = env.open_storage(output_url).await;
     assert_eq!(rows_per_file(&storage), vec![10; 12]);
@@ -119,6 +132,209 @@ async fn test_parquet_loader_writes_single_file_without_extension() {
 
     let storage = env.open_storage(output_url).await;
     assert_eq!(rows_per_file(&storage), vec![NUM_TRIPLES]);
+}
+
+/// A dataset with multiple sort orders stores one quad table per sort order. The storage reads
+/// the files and their statistics from the dataset description, chooses the best quad table for
+/// each pattern, and only opens the files that may contain matching quads.
+#[tokio::test]
+async fn test_parquet_loader_writes_dataset_with_multiple_sort_orders() {
+    let env = TestEnv::new(MAX_ROWS_PER_FILE).await;
+    env.put_ntriples("input.nt", NUM_TRIPLES).await;
+
+    let output_url = Url::parse("memory:///dataset/").unwrap();
+    env.load_with_sort_orders(
+        "memory:///input.nt",
+        &output_url,
+        &["NATIVE(SPOG)", "NATIVE(OSPG)"],
+    )
+    .await
+    .unwrap();
+
+    // Writing: one quad table per sort order and the description of the dataset.
+    let files = env.list_files("dataset").await;
+    assert_eq!(files[0], "dataset/dataset.ttl");
+    for table in ["dataset/ospg/", "dataset/spog/"] {
+        assert_eq!(
+            files.iter().filter(|file| file.starts_with(table)).count(),
+            4,
+            "Expected four files in {table}: {files:?}"
+        );
+    }
+    assert_eq!(files.len(), 9);
+
+    // Reading: the files and their statistics are read from the description, so no file is
+    // opened. The dataset can be opened via its directory or its description.
+    let explicit = env
+        .open_storage(output_url.join("dataset.ttl").unwrap())
+        .await;
+    assert_eq!(explicit.files().len(), 8);
+    // The size of each file and the time it was written are recorded when writing, such that a
+    // rewritten file does not use stale cache entries.
+    for file in explicit.files() {
+        let object_meta = env.store.head(&file.object_meta.location).await.unwrap();
+        assert_eq!(file.object_meta.size, object_meta.size);
+        assert_eq!(file.object_meta.last_modified, object_meta.last_modified);
+    }
+    let storage = env.open_storage(output_url).await;
+    assert_eq!(storage.quad_tables().len(), 2);
+    let rdf_context =
+        env.rdf_fusion_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
+    assert_eq!(cached_files(&rdf_context, &storage), Vec::<String>::new());
+    // The quad tables are ordered by their directory, and their files by their statistics.
+    let second_ospg_file = storage.quad_tables()[0].files()[1].path().to_string();
+    let second_spog_file = storage.quad_tables()[1].files()[1].path().to_string();
+    assert!(second_ospg_file.starts_with("dataset/ospg/"));
+    assert!(second_spog_file.starts_with("dataset/spog/"));
+
+    // A lookup by subject uses the SPOG quad table, and a lookup by object the OSPG quad table.
+    // Only the file whose statistics may contain the term is opened.
+    let (count, plan) = run_query(
+        &rdf_context,
+        "SELECT ?o WHERE { <http://example.org/s042> ?p ?o }",
+    )
+    .await;
+    assert_eq!(count, 1);
+    assert!(
+        plan.contains(&format!("file_groups={{1 group: [[{second_spog_file}]]}}")),
+        "Expected a single file of the SPOG quad table to be scanned: {plan}"
+    );
+    let (count, plan) = run_query(
+        &rdf_context,
+        "SELECT ?s WHERE { ?s ?p <http://example.org/o042> }",
+    )
+    .await;
+    assert_eq!(count, 1);
+    assert!(
+        plan.contains(&format!("file_groups={{1 group: [[{second_ospg_file}]]}}")),
+        "Expected a single file of the OSPG quad table to be scanned: {plan}"
+    );
+    assert_eq!(
+        cached_files(&rdf_context, &storage),
+        vec![second_ospg_file, second_spog_file]
+    );
+
+    // All quads are in each quad table.
+    let (count, _) = run_query(&rdf_context, "SELECT * WHERE { ?s ?p ?o }").await;
+    assert_eq!(count, NUM_TRIPLES);
+}
+
+/// All quad tables of a dataset rename the blank nodes in the same way. Otherwise, joining two
+/// patterns that are answered from different quad tables would not match.
+#[tokio::test]
+async fn test_parquet_loader_renames_blank_nodes_consistently_across_quad_tables() {
+    let env = TestEnv::new(MAX_ROWS_PER_FILE).await;
+    let ntriples = (0..NUM_TRIPLES)
+        .map(|i| {
+            format!(
+                "_:b{i} <http://example.org/type> <http://example.org/Thing> .\n\
+                 _:b{i} <http://example.org/name> \"name {i}\" .\n"
+            )
+        })
+        .collect::<String>();
+    env.store
+        .put(&Path::from("input.nt"), PutPayload::from(ntriples))
+        .await
+        .unwrap();
+
+    let output_url = Url::parse("memory:///dataset/").unwrap();
+    env.load_with_sort_orders(
+        "memory:///input.nt",
+        &output_url,
+        &["NATIVE(SPOG)", "NATIVE(OSPG)"],
+    )
+    .await
+    .unwrap();
+    let storage = env.open_storage(output_url).await;
+    let rdf_context = env.rdf_fusion_context(storage);
+
+    // The first pattern binds the object and is answered from OSPG, the second one from SPOG.
+    let (count, plan) = run_query(
+        &rdf_context,
+        "SELECT ?name WHERE {
+            ?b <http://example.org/type> <http://example.org/Thing> .
+            ?b <http://example.org/name> ?name .
+        }",
+    )
+    .await;
+    assert!(
+        plan.contains("dataset/ospg/") && plan.contains("dataset/spog/"),
+        "Expected both quad tables to be scanned: {plan}"
+    );
+    assert_eq!(count, NUM_TRIPLES);
+}
+
+/// A directory is only opened via its `dataset.ttl`. Parquet files in a directory without a
+/// description are not listed.
+#[tokio::test]
+async fn test_parquet_storage_rejects_directory_without_description() {
+    let env = TestEnv::new(MAX_ROWS_PER_FILE).await;
+    env.put_ntriples("input.nt", NUM_TRIPLES).await;
+    env.load(
+        "memory:///input.nt",
+        &Url::parse("memory:///dataset/file.parquet").unwrap(),
+    )
+    .await;
+
+    let state = env.context.state();
+    let result = ParquetQuadStorage::builder(Url::parse("memory:///dataset/").unwrap())
+        .with_encoding(QuadStorageEncodingName::String)
+        .build(&state)
+        .await;
+    let Err(error) = result else {
+        panic!("Expected an error for a directory without a dataset.ttl");
+    };
+    assert!(error.to_string().contains("dataset.ttl"), "{error}");
+}
+
+/// A single file can only be written in a single sort order.
+#[tokio::test]
+async fn test_parquet_loader_rejects_multiple_sort_orders_for_single_file() {
+    let env = TestEnv::new(MAX_ROWS_PER_FILE).await;
+    env.put_ntriples("input.nt", NUM_TRIPLES).await;
+
+    let output_url = Url::parse("memory:///dataset.parquet").unwrap();
+    let result = env
+        .load_with_sort_orders(
+            "memory:///input.nt",
+            &output_url,
+            &["NATIVE(SPOG)", "NATIVE(OSPG)"],
+        )
+        .await;
+    assert!(matches!(
+        result,
+        Err(RdfParquetLoadingError::MultipleSortOrdersForSingleFile)
+    ));
+}
+
+/// Returns the sorted paths of the files of the storage whose metadata is cached.
+fn cached_files(
+    rdf_context: &RdfFusionContext,
+    storage: &ParquetQuadStorage,
+) -> Vec<String> {
+    let metadata_cache = rdf_context
+        .session_context()
+        .runtime_env()
+        .cache_manager
+        .get_file_metadata_cache();
+    let mut files = storage
+        .files()
+        .iter()
+        .filter(|file| {
+            metadata_cache
+                .get(&file.object_meta.location)
+                .is_some_and(|entry| {
+                    entry
+                        .file_metadata
+                        .as_any()
+                        .downcast_ref::<CachedParquetMetaData>()
+                        .is_some()
+                })
+        })
+        .map(|file| file.object_meta.location.to_string())
+        .collect::<Vec<_>>();
+    files.sort();
+    files
 }
 
 /// A session with an in-memory object store registered for `memory:///`.
@@ -197,30 +413,34 @@ impl TestEnv {
 
     /// Loads the RDF file at `input_url` into a Parquet storage (sorted by SPOG) at `output_url`.
     async fn load(&self, input_url: &str, output_url: &Url) {
-        self.load_with_sort_order(input_url, output_url, "SPOG")
-            .await;
+        self.load_with_sort_orders(input_url, output_url, &["SPOG"])
+            .await
+            .unwrap();
     }
 
-    /// Loads the RDF file at `input_url` into a Parquet storage (sorted by `sort_order`) at
-    /// `output_url`.
-    async fn load_with_sort_order(
+    /// Loads the RDF file at `input_url` into a Parquet storage at `output_url`, writing each of
+    /// the `sort_orders`.
+    async fn load_with_sort_orders(
         &self,
         input_url: &str,
         output_url: &Url,
-        sort_order: &str,
-    ) {
+        sort_orders: &[&str],
+    ) -> Result<(), RdfParquetLoadingError> {
         let loading_context = self.loading_context().await;
         let loader = RdfParquetLoader::try_new(
             loading_context.session_context().clone(),
             loading_context.create_view(),
             QuadStorageEncodingName::String,
-            Some(sort_order.parse::<RdfSortOrder>().unwrap()),
+            sort_orders
+                .iter()
+                .map(|order| order.parse::<RdfSortOrder>().unwrap())
+                .collect(),
         )
         .unwrap();
         let input =
             RdfInput::try_new(Url::parse(input_url).unwrap(), GraphName::DefaultGraph)
                 .unwrap();
-        loader.load(input, output_url.clone()).await.unwrap();
+        loader.load(input, output_url.clone()).await
     }
 
     /// Creates an [`RdfFusionContext`] for planning the load. The storage is a dummy.

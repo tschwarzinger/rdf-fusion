@@ -1,16 +1,20 @@
 use datafusion::config::TableParquetOptions;
 use datafusion::dataframe::DataFrameWriteOptions;
+use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::parquet::metadata::CachedParquetMetaData;
 use datafusion::logical_expr::SortExpr;
+use datafusion::parquet::file::metadata::ParquetMetaDataReader;
 use datafusion::physical_plan::display::DisplayableExecutionPlan;
 use datafusion::physical_plan::{ExecutionPlan, displayable};
 use datafusion::prelude::{SessionConfig, SessionContext, col};
 use insta::assert_snapshot;
 use object_store::memory::InMemory;
+use object_store::path::Path;
+use object_store::{ObjectStoreExt, PutPayload};
 use rdf_fusion_common::config::RdfFusionOptions;
 use rdf_fusion_common::{NamedNode, Quad};
-use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_encoding::string::StringQuadsBuilder;
+use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_execution::results::QueryResults;
@@ -19,7 +23,10 @@ use rdf_fusion_execution::sparql::RdfFusionQuery;
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_sparql_parser::ParserOptions;
 use rdf_fusion_storage::block_cache::BlockCache;
-use rdf_fusion_storage::parquet::ParquetQuadStorage;
+use rdf_fusion_storage::parquet::{
+    DATASET_DESCRIPTION_FILE, ParquetDatasetDescription, ParquetFileDescription,
+    ParquetQuadStorage, ParquetQuadTableDescription,
+};
 use std::sync::Arc;
 use url::Url;
 
@@ -275,19 +282,13 @@ async fn test_parquet_scan_sort_order_enables_sorted_aggregation() {
 }
 
 #[tokio::test]
-async fn test_parquet_multi_file_eagerly_loads_footers() {
+async fn test_parquet_multi_file_does_not_open_files_when_building() {
     let (rdf_context, storage) =
         prepare_multi_file_test_store(&multi_file_data(), 1).await;
 
+    // The files and their statistics are read from the dataset description.
     assert_eq!(storage.files().len(), 3);
-    assert_eq!(
-        cached_metadata(&rdf_context, &storage),
-        vec![
-            ("dataset/part-00000.parquet".to_owned(), false),
-            ("dataset/part-00001.parquet".to_owned(), false),
-            ("dataset/part-00002.parquet".to_owned(), false),
-        ]
-    );
+    assert_eq!(cached_metadata(&rdf_context, &storage), vec![]);
 }
 
 #[tokio::test]
@@ -303,14 +304,11 @@ async fn test_parquet_multi_file_loads_page_index_only_for_remaining_files() {
     )
     .await;
 
+    // The other files are pruned by their statistics in the description without opening them.
     // Only the file that survives the row group pruning has its page index loaded.
     assert_eq!(
         cached_metadata(&rdf_context, &storage),
-        vec![
-            ("dataset/part-00000.parquet".to_owned(), false),
-            ("dataset/part-00001.parquet".to_owned(), true),
-            ("dataset/part-00002.parquet".to_owned(), false),
-        ]
+        vec![("dataset/part-00001.parquet".to_owned(), true)]
     );
 }
 
@@ -357,13 +355,10 @@ async fn test_parquet_multi_file_skips_page_index_if_all_rows_match() {
     .await;
     assert_eq!(results, 2);
 
+    // Only part-00001 is opened, but its page index is not loaded.
     assert_eq!(
         cached_metadata(&rdf_context, &storage),
-        vec![
-            ("dataset/part-00000.parquet".to_owned(), false),
-            ("dataset/part-00001.parquet".to_owned(), false),
-            ("dataset/part-00002.parquet".to_owned(), false),
-        ]
+        vec![("dataset/part-00001.parquet".to_owned(), false)]
     );
 }
 
@@ -651,6 +646,50 @@ fn plan_query_from_str(context: &RdfFusionContext, query: &str) -> RdfFusionQuer
 
 /// Returns, for each file of the storage that is in the metadata cache, whether its page index is
 /// cached.
+/// Writes a `dataset.ttl` that describes the `files` in `memory:///dataset/` as a single, unsorted
+/// quad table.
+async fn write_dataset_description(context: &SessionContext, files: &[TestFile<'_>]) {
+    let store = context
+        .runtime_env()
+        .object_store(ObjectStoreUrl::parse("memory://").unwrap())
+        .unwrap();
+    let schema = QuadStorageEncoding::String.quad_schema();
+    let directory = Path::from("dataset");
+    let mut descriptions = Vec::new();
+    for (filename, _) in files {
+        let location = directory.clone().join(*filename);
+        let object_meta = store.head(&location).await.unwrap();
+        let bytes = store.get(&location).await.unwrap().bytes().await.unwrap();
+        let metadata = ParquetMetaDataReader::new()
+            .parse_and_finish(&bytes)
+            .unwrap();
+        descriptions.push(
+            ParquetFileDescription::try_new(
+                &directory,
+                &object_meta,
+                &metadata,
+                schema.inner(),
+            )
+            .unwrap(),
+        );
+    }
+    let description = ParquetDatasetDescription {
+        encoding: QuadStorageEncodingName::String,
+        quad_tables: vec![ParquetQuadTableDescription {
+            directory: ParquetQuadTableDescription::directory_for(None),
+            sort_order: None,
+            files: descriptions,
+        }],
+    };
+    store
+        .put(
+            &directory.join(DATASET_DESCRIPTION_FILE),
+            PutPayload::from(description.to_turtle(schema.inner())),
+        )
+        .await
+        .unwrap();
+}
+
 fn cached_metadata(
     rdf_context: &RdfFusionContext,
     storage: &ParquetQuadStorage,
@@ -781,7 +820,8 @@ fn multi_file_data() -> Vec<TestFile<'static>> {
     ]
 }
 
-/// Writes each file into `memory:///dataset/` and creates a storage for the entire directory.
+/// Writes each file into `memory:///dataset/`, describes them in a `dataset.ttl` (as a single,
+/// unsorted quad table), and creates a storage for the dataset.
 async fn prepare_multi_file_test_store(
     files: &[TestFile<'_>],
     target_partitions: usize,
@@ -816,6 +856,8 @@ async fn prepare_multi_file_test_store(
             .await
             .unwrap();
     }
+
+    write_dataset_description(&context, files).await;
 
     let state = context.state();
     let storage = Arc::new(

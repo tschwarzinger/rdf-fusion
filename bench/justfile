@@ -144,7 +144,7 @@ bench-bsbm-explore num_products="10000" max_query_count="" parallel_tasks="" sor
         POSTFIX=$(echo "$ORDER" | tr '[:upper:]' '[:lower:]' | sed 's/(/-/g' | sed 's/)//g')
 
         export RDF_FUSION_BENCH_RESULTS_POSTFIX="$POSTFIX"
-        export RDF_FUSION_STORAGE_PARQUET_SORT_ORDER="$ORDER"
+        export RDF_FUSION_STORAGE_PARQUET_SORT_ORDERS="$ORDER"
         cargo run --profile profiling-nonlto -- \
             execute \
             --storage-type parquet \

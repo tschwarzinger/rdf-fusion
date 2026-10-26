@@ -224,7 +224,8 @@ function makeEngineConfig(settings) {
     return new wasm.JsEngineConfig(
         settings.memoryLimitMb != null ? settings.memoryLimitMb : 1024,
         explain,
-        settings.customConfig || {}
+        settings.customConfig || {},
+        settings.metadataCacheLimitMb != null ? settings.metadataCacheLimitMb : 50
     );
 }
 `;

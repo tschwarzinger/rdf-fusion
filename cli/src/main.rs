@@ -79,7 +79,8 @@ pub async fn main() -> anyhow::Result<()> {
                     let context = create_context_for_parquet_load(&args).await?;
                     let session_context = context.session_context().clone();
                     let context_view = context.create_view();
-                    let sort_order = context.options().storage.parquet.sort_order.clone();
+                    let sort_orders =
+                        context.options().storage.parquet.sort_orders.clone();
                     let encoding =
                         QuadStorageEncodingName::from_str(&args.storage.encoding)?;
 
@@ -88,7 +89,7 @@ pub async fn main() -> anyhow::Result<()> {
                             session_context,
                             context_view,
                             encoding,
-                            sort_order,
+                            sort_orders,
                         },
                         &inputs,
                         location_url,

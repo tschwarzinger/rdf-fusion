@@ -20,11 +20,14 @@ pub struct StorageConfigArgs {
     ///
     /// The accepted values for this setting differ depending on the chosen storage type. For
     /// example, a `delta-quads` storage requires a single location to a storage prefix, while a
-    /// `parquet` storage accepts a single Parquet file or a prefix containing Parquet files.
+    /// `parquet` storage accepts a single Parquet file or the directory of a dataset (ending with
+    /// `/`) that contains a `dataset.ttl`.
     ///
-    /// When loading into a `parquet` storage, a location that ends with `/` is treated as a
-    /// directory and the data is split into multiple files (see
-    /// `DATAFUSION_EXECUTION_SOFT_MAX_ROWS_PER_OUTPUT_FILE`). Otherwise, a single file is written.
+    /// When loading into a `parquet` storage, a location that ends with `/` is treated as the
+    /// directory of a dataset: each sort order (`RDF_FUSION_STORAGE_PARQUET_SORT_ORDERS`, e.g.,
+    /// `NATIVE(GPOS);NATIVE(GSPO)`) is written as a separate quad table, split into multiple files
+    /// (see `DATAFUSION_EXECUTION_SOFT_MAX_ROWS_PER_OUTPUT_FILE`), and described in a
+    /// `dataset.ttl`. Otherwise, a single file is written.
     ///
     /// Supported locations:
     /// - in-memory database [`memory://`]

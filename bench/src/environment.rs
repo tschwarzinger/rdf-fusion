@@ -332,7 +332,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
             context.session_context().clone(),
             context.create_view(),
             QuadStorageEncodingName::String,
-            sort_order,
+            sort_order.into_iter().collect(),
         )?;
         let inputs: Vec<_> = sources
             .into_iter()

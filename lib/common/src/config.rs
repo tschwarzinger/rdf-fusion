@@ -95,8 +95,10 @@ pub struct StorageOptions {
 /// Parquet storage configuration for RDF Fusion.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParquetStorageOptions {
-    /// The sort order for the Parquet files.
-    pub sort_order: Option<RdfSortOrder>,
+    /// The sort orders of the Parquet files that are written by the loader. Each sort order is
+    /// written as a separate quad table, such that the storage can choose the best sort order for
+    /// each triple pattern. If empty, the quads are not sorted.
+    pub sort_orders: Vec<RdfSortOrder>,
     /// Whether data caching is enabled for Parquet storage.
     pub data_cache_enabled: bool,
     /// The size of the blocks used for caching object store reads in bytes.
@@ -108,7 +110,7 @@ pub struct ParquetStorageOptions {
 impl Default for ParquetStorageOptions {
     fn default() -> Self {
         Self {
-            sort_order: None,
+            sort_orders: Vec::new(),
             data_cache_enabled: false,
             data_cache_block_size: 2 * 1024 * 1024,
             data_cache_num_blocks: 1024,
@@ -280,13 +282,19 @@ impl ExtensionOptions for RdfFusionOptions {
                 })?;
                 self.storage.parquet.data_cache_num_blocks = size;
             }
-            "storage.parquet.sort_order" => {
-                let value: RdfSortOrder = value.parse().map_err(|e| {
-                    DataFusionError::Configuration(format!(
-                        "Invalid value for storage.parquet.sort_order: {e}"
-                    ))
-                })?;
-                self.storage.parquet.sort_order = Some(value);
+            "storage.parquet.sort_orders" => {
+                let value = value
+                    .split(';')
+                    .map(str::trim)
+                    .filter(|order| !order.is_empty())
+                    .map(|order| order.parse::<RdfSortOrder>())
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| {
+                        DataFusionError::Configuration(format!(
+                            "Invalid value for storage.parquet.sort_orders: {e}"
+                        ))
+                    })?;
+                self.storage.parquet.sort_orders = value;
             }
             "storage.rdf.assume_quads_unique_in_single_file" => {
                 let value: bool = value.parse().map_err(|e| {
@@ -391,15 +399,17 @@ impl ExtensionOptions for RdfFusionOptions {
                 description: "The number of blocks to cache for object store reads.",
             },
             ConfigEntry {
-                key: format!("{}.storage.parquet.sort_order", Self::PREFIX),
-                value: self
-                    .storage
-                    .parquet
-                    .sort_order
-                    .as_ref()
-                    .map(|so| so.to_string())
-                    .clone(),
-                description: "The sort order for the Parquet files.",
+                key: format!("{}.storage.parquet.sort_orders", Self::PREFIX),
+                value: (!self.storage.parquet.sort_orders.is_empty()).then(|| {
+                    self.storage
+                        .parquet
+                        .sort_orders
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(";")
+                }),
+                description: "The sort orders of the Parquet files that are written by the loader, separated by \";\" (e.g., \"NATIVE(GPOS);NATIVE(GSPO)\"). Each sort order is written as a separate quad table.",
             },
             ConfigEntry {
                 key: format!(
@@ -554,6 +564,29 @@ mod tests {
             env == "RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD"
                 && id == "execution.small_scan_buffering_threshold"
         }));
+    }
+
+    #[test]
+    fn test_set_sort_orders() {
+        let mut config = RdfFusionOptions::default();
+        config
+            .set(
+                "rdf_fusion.storage.parquet.sort_orders",
+                "NATIVE(GPOS); NATIVE(GSPO)",
+            )
+            .unwrap();
+        assert_eq!(
+            config.storage.parquet.sort_orders,
+            vec![
+                "NATIVE(GPOS)".parse::<RdfSortOrder>().unwrap(),
+                "NATIVE(GSPO)".parse::<RdfSortOrder>().unwrap()
+            ]
+        );
+        assert!(
+            config
+                .set("rdf_fusion.storage.parquet.sort_orders", "NATIVE(GPOS);X")
+                .is_err()
+        );
     }
 
     #[test]

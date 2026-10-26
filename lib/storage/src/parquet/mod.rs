@@ -1,5 +1,6 @@
 mod bytes_estimator;
 mod counting_store;
+mod dataset;
 mod loader;
 mod reader;
 mod scan;
@@ -8,6 +9,7 @@ mod snapshot;
 mod storage;
 mod writer_properties;
 
+pub use dataset::*;
 pub use loader::*;
 pub use reader::*;
 pub use scan_builder::*;

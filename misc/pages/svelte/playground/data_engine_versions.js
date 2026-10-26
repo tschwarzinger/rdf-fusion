@@ -4,7 +4,7 @@ export const OFFICIAL_VERSIONS = [
         name: "Latest Nightly",
         jsUrl: "https://rdf-fusion-public.b-cdn.net/rdf-fusion-public/wasm/latest/rdf_fusion_wasm.js",
         wasmUrl: "https://rdf-fusion-public.b-cdn.net/rdf-fusion-public/wasm/latest/rdf_fusion_wasm_bg.wasm",
-        supportedStorage: [{ type: "parquet", version: "0.1" }],
+        supportedStorage: [{ type: "parquet", version: "0.1" }, { type: "parquet", version: "0.2" }],
         capabilities: ["rdf-conversion"]
     },
     {

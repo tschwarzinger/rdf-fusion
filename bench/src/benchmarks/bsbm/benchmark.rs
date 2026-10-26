@@ -130,13 +130,17 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
                 self.prepare_delta_store(ctx, print_info).await
             }
             BenchQuadStorageTypeArg::Parquet => {
-                let rdf_fusion_options = ctx.rdf_fusion_options();
-                self.prepare_parquet_store(
-                    ctx,
-                    print_info,
-                    rdf_fusion_options.storage.parquet.sort_order.clone(),
-                )
-                .await
+                // The benchmark uses a single Parquet file, which supports one sort order.
+                let sort_orders = &ctx.rdf_fusion_options().storage.parquet.sort_orders;
+                if sort_orders.len() > 1 {
+                    anyhow::bail!(
+                        "The BSBM benchmarks support a single sort order, but got {}",
+                        sort_orders.len()
+                    );
+                }
+                let sort_order = sort_orders.first().cloned();
+                self.prepare_parquet_store(ctx, print_info, sort_order)
+                    .await
             }
         }
     }

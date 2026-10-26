@@ -2,15 +2,15 @@ use crate::block_cache::BlockCache;
 use crate::parquet::scan_builder::{ParquetQuadScanBuilder, PushdownProjection};
 #[allow(unused_imports)]
 use crate::parquet::storage::ParquetQuadStorage;
+use crate::parquet::storage::ParquetQuadTable;
+use crate::quad_tables::compute_scan_score;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::common::Result as DFResult;
 use datafusion::common::stats::Precision;
-use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::FileGroup;
 use datafusion::execution::{SessionState, TaskContext};
-use datafusion::physical_expr::LexOrdering;
 use datafusion::physical_expr::expressions::Column;
 use datafusion::physical_plan::aggregates::{
     AggregateExec, AggregateMode, PhysicalGroupBy,
@@ -22,6 +22,7 @@ use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
+use std::cmp::Reverse;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use url::Url;
@@ -32,8 +33,7 @@ pub struct ParquetQuadStorageSnapshot {
     encoding: QuadStorageEncoding,
     url: Url,
     object_store_url: ObjectStoreUrl,
-    files: Arc<Vec<PartitionedFile>>,
-    output_ordering: Option<LexOrdering>,
+    quad_tables: Arc<Vec<ParquetQuadTable>>,
     block_cache: Option<Arc<BlockCache>>,
 }
 
@@ -43,18 +43,37 @@ impl ParquetQuadStorageSnapshot {
         encoding: QuadStorageEncoding,
         url: Url,
         object_store_url: ObjectStoreUrl,
-        files: Arc<Vec<PartitionedFile>>,
-        output_ordering: Option<LexOrdering>,
+        quad_tables: Arc<Vec<ParquetQuadTable>>,
         block_cache: Option<Arc<BlockCache>>,
     ) -> Self {
         Self {
             encoding,
             url,
             object_store_url,
-            files,
-            output_ordering,
+            quad_tables,
             block_cache,
         }
+    }
+
+    /// Returns the quad table that is best suited for scanning the `pattern` (see
+    /// [`compute_scan_score`]). On ties, the first quad table is chosen.
+    fn choose_quad_table(&self, pattern: &QuadPattern) -> &ParquetQuadTable {
+        self.quad_tables
+            .iter()
+            .enumerate()
+            .max_by_key(|(idx, table)| {
+                let score = table.sort_order().map_or(0, |sort_order| {
+                    compute_scan_score(
+                        sort_order.components(),
+                        &pattern.active_graph,
+                        &pattern.triple_pattern,
+                        pattern.blank_node_mode,
+                    )
+                });
+                (score, Reverse(*idx))
+            })
+            .map(|(_, table)| table)
+            .expect("A Parquet storage has at least one quad table")
     }
 
     /// Plans a [`QuadPattern`].
@@ -64,18 +83,19 @@ impl ParquetQuadStorageSnapshot {
         projection: Option<Vec<usize>>,
         session_state: &SessionState,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let quad_table = self.choose_quad_table(pattern);
         let mut builder = ParquetQuadScanBuilder::new(
             session_state,
             self.encoding.clone(),
             self.object_store_url.clone(),
-            vec![FileGroup::new(self.files.as_ref().clone())],
+            vec![FileGroup::new(quad_table.files().as_ref().clone())],
         )
         .with_quad_pattern(pattern.clone())
         .with_block_cache(self.block_cache.clone())
         .with_eager_pruning(true)
         .with_split_file_groups(session_state.config().target_partitions())
         .with_pushdown_projection(PushdownProjection::Yes(projection));
-        if let Some(output_ordering) = &self.output_ordering {
+        if let Some(output_ordering) = quad_table.output_ordering() {
             builder = builder.with_output_ordering(vec![output_ordering.clone()]);
         }
         let plan = builder.build().await?;
@@ -88,7 +108,7 @@ impl Debug for ParquetQuadStorageSnapshot {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParquetQuadStorageSnapshot")
             .field("url", &self.url)
-            .field("num_files", &self.files.len())
+            .field("num_quad_tables", &self.quad_tables.len())
             .finish()
     }
 }

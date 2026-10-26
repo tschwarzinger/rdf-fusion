@@ -78,7 +78,7 @@ impl W3CTestUtils {
                 RdfFileScanOptions {
                     format: source.format,
                     base_iri: Some(Iri::parse(source.url.to_string())?),
-                    rename_blank_nodes: false,
+                    blank_node_renamer: None,
                     default_graph: Some(to_graph_name),
                     without_named_graphs: false,
                 },

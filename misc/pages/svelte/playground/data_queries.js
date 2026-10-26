@@ -242,7 +242,7 @@ PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?title ?text ?reviewDate ?reviewer ?reviewerName ?rating1 ?rating2 ?rating3
   ?rating4
 WHERE {
-  ?review bsbm:reviewFor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product578> .
+  ?review bsbm:reviewFor <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product579> .
   ?review dc:title ?title .
   ?review rev:text ?text .
   FILTER langMatches(lang(?text), "EN")
@@ -635,6 +635,67 @@ WHERE {
 }
 ORDER BY DESC(xsd:float(?belowAvg) / ?offerCount) ?vendor
 LIMIT 10`
+        }
+    ],
+    "dblp": [
+        {
+            name: "Facts about the DataFusion Paper",
+            query: `SELECT ?predicate ?object
+WHERE {
+  <https://dblp.org/rec/conf/sigmod/LambSHCKHS24> ?predicate ?object .
+}`
+        },
+        {
+            name: "Find an Author by Name",
+            query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
+
+SELECT ?person
+WHERE {
+  ?person dblp:creatorName "Tim Berners-Lee" .
+}`
+        },
+        {
+            name: "Publications of Tim Berners-Lee",
+            query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
+
+SELECT ?publication
+WHERE {
+  ?publication dblp:authoredBy <https://dblp.org/pid/b/TimBernersLee> .
+}`
+        },
+        {
+            name: "Theses by School",
+            query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
+
+SELECT ?school (COUNT(?thesis) AS ?theses)
+WHERE {
+  ?thesis dblp:thesisAcceptedBySchool ?school .
+}
+GROUP BY ?school
+ORDER BY DESC(?theses)
+LIMIT 10`
+        },
+        {
+            name: "Authors of the DataFusion Paper (Join, ~60 MB)",
+            query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
+
+SELECT ?author ?name
+WHERE {
+  <https://dblp.org/rec/conf/sigmod/LambSHCKHS24> dblp:authoredBy ?author .
+  ?author dblp:primaryCreatorName ?name .
+}`
+        },
+        {
+            name: "Titled Publications of Tim Berners-Lee",
+            query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
+
+SELECT ?year ?title
+WHERE {
+  ?publication dblp:authoredBy <https://dblp.org/pid/b/TimBernersLee> ;
+               dblp:title ?title ;
+               dblp:yearOfPublication ?year .
+}
+ORDER BY DESC(?year)`
         }
     ]
 };

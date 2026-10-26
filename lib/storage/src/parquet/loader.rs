@@ -1,21 +1,26 @@
 use crate::parquet::RdfParquetWriterOptions;
+use crate::parquet::dataset::{
+    DATASET_DESCRIPTION_FILE, ParquetDatasetDescription, ParquetFileDescription,
+    ParquetQuadTableDescription,
+};
 use crate::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::exec_datafusion_err;
 use datafusion::datasource::file_format::parquet::ParquetSink;
 use datafusion::datasource::listing::ListingTableUrl;
 use datafusion::datasource::physical_plan::{FileGroup, FileOutputMode, FileSinkConfig};
-use datafusion::datasource::sink::DataSinkExec;
+use datafusion::datasource::sink::{DataSink, DataSinkExec};
 use datafusion::error::DataFusionError;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::logical_expr::dml::InsertOp;
 use datafusion::parquet::errors::ParquetError;
+use datafusion::parquet::file::metadata::ParquetMetaData;
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::{ExecutionPlanProperties, collect};
 use datafusion::prelude::*;
 use futures::StreamExt;
-use object_store::ObjectStore;
 use object_store::path::Path;
+use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
 use rdf_fusion_common::{
     RdfFormat, RdfInput, RdfInputSource, RdfSortOrder, url_to_object_store_url,
 };
@@ -30,16 +35,17 @@ pub struct RdfParquetLoader {
     session_context: SessionContext,
     context_view: RdfFusionContextView,
     encoding: QuadStorageEncoding,
-    sort_order: Option<RdfSortOrder>,
+    sort_orders: Vec<RdfSortOrder>,
 }
 
 impl RdfParquetLoader {
-    /// Creates a new [`RdfParquetLoader`].
+    /// Creates a new [`RdfParquetLoader`] that writes the quads in each of the `sort_orders`. If
+    /// `sort_orders` is empty, the quads are not sorted.
     pub fn try_new(
         session_context: SessionContext,
         context_view: RdfFusionContextView,
         encoding: QuadStorageEncodingName,
-        sort_order: Option<RdfSortOrder>,
+        sort_orders: Vec<RdfSortOrder>,
     ) -> Result<Self, RdfParquetLoaderCreationError> {
         let encoding = match encoding {
             QuadStorageEncodingName::PlainTerm => QuadStorageEncoding::PlainTerm,
@@ -52,7 +58,7 @@ impl RdfParquetLoader {
             session_context,
             context_view,
             encoding,
-            sort_order,
+            sort_orders,
         })
     }
 
@@ -67,10 +73,14 @@ impl RdfParquetLoader {
 
     /// Loads the given RDF input into a Parquet database at the specified output URL.
     ///
-    /// If the URL ends with a `/`, it is treated as a directory and the quads are split into
-    /// multiple files of approximately `datafusion.execution.soft_max_rows_per_output_file` rows.
+    /// If the URL ends with a `/`, it is treated as the directory of a dataset: each sort order
+    /// is written as a separate quad table (e.g., `gpos/`), and a
+    /// [`DATASET_DESCRIPTION_FILE`] describes the quad tables, files, and their statistics. Each
+    /// quad table is split into multiple files of approximately
+    /// `datafusion.execution.soft_max_rows_per_output_file` rows.
+    ///
     /// Otherwise, a single file is written to the URL (which does not need a `.parquet`
-    /// extension, e.g., for objects in IndexedDB).
+    /// extension, e.g., for objects in IndexedDB). This requires at most one sort order.
     pub async fn load_many(
         &self,
         inputs: Vec<RdfInput>,
@@ -135,7 +145,82 @@ impl RdfParquetLoader {
         // Ensure quads are unique in the store
         df = df.distinct()?;
 
-        let df = match &self.sort_order {
+        // A URL that ends with a `/` is treated as the directory of a dataset (see
+        // `ParquetDatasetDescription`), the same convention as for reading (see
+        // `ListingTableUrl`). Otherwise, a single file is written.
+        if !ListingTableUrl::parse(output_url.as_str())?.is_collection() {
+            if self.sort_orders.len() > 1 {
+                return Err(RdfParquetLoadingError::MultipleSortOrdersForSingleFile);
+            }
+            self.write_quad_table(df, self.sort_orders.first(), &output_url, true)
+                .await?;
+            return Ok(());
+        }
+
+        let sort_orders = if self.sort_orders.is_empty() {
+            vec![None]
+        } else {
+            self.sort_orders.iter().map(Some).collect()
+        };
+        let schema = self.encoding.quad_schema();
+        // Each quad table is created from the parsed input. Sorting the quads that are read back
+        // from the first quad table exhausted the memory of the external sort on dblp.
+        let mut quad_tables = Vec::new();
+        for sort_order in sort_orders {
+            let directory = ParquetQuadTableDescription::directory_for(sort_order);
+            let table_url = output_url
+                .join(&directory)
+                .map_err(|e| DataFusionError::External(Box::new(e)))?;
+            let written = self
+                .write_quad_table(df.clone(), sort_order, &table_url, false)
+                .await?;
+
+            let mut files = Vec::new();
+            for (location, metadata) in written {
+                let object_meta = object_store.head(&location).await?;
+                files.push(ParquetFileDescription::try_new(
+                    &path,
+                    &object_meta,
+                    &metadata,
+                    schema.inner(),
+                )?);
+            }
+            quad_tables.push(ParquetQuadTableDescription {
+                directory,
+                sort_order: sort_order.cloned(),
+                files,
+            });
+        }
+
+        let description = ParquetDatasetDescription {
+            encoding: self.encoding.name(),
+            quad_tables,
+        };
+        object_store
+            .put(
+                &path.clone().join(DATASET_DESCRIPTION_FILE),
+                PutPayload::from(description.to_turtle(schema.inner())),
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    /// Writes the quads of `df` in the given `sort_order` to `url`. Returns the written files and
+    /// their metadata, ordered by their path.
+    ///
+    /// If `single_file` is false, `url` is a directory and the quads are split into multiple files
+    /// of approximately `datafusion.execution.soft_max_rows_per_output_file` rows.
+    async fn write_quad_table(
+        &self,
+        df: DataFrame,
+        sort_order: Option<&RdfSortOrder>,
+        url: &Url,
+        single_file: bool,
+    ) -> Result<Vec<(Path, ParquetMetaData)>, RdfParquetLoadingError> {
+        let object_store_url = url_to_object_store_url(url)?;
+
+        let df = match sort_order {
             None => df,
             Some(sort_order) => {
                 let (state, plan) = df.into_parts();
@@ -148,15 +233,11 @@ impl RdfParquetLoader {
             }
         };
 
-        // A URL that ends with a `/` is treated as a directory and the sink splits the quads into
-        // multiple files of approximately `datafusion.execution.soft_max_rows_per_output_file`
-        // rows (the same convention as for reading, see `ListingTableUrl`). Otherwise, a single
-        // file is written.
-        let single_file = !output_url.path().ends_with('/');
-
         let (mut state, plan) = df.into_parts();
-        if self.sort_order.is_some() {
-            // Avoid redistributes the batches round-robin across multiple files.
+        if sort_order.is_some() {
+            // Avoid redistributing the batches round-robin across multiple files. Writing one
+            // file after another keeps the files sorted and non-overlapping, which allows pruning
+            // entire files.
             state
                 .config_mut()
                 .options_mut()
@@ -172,13 +253,13 @@ impl RdfParquetLoader {
         let writer_options = RdfParquetWriterOptions::try_new_for_sort_order(
             &state.default_table_options().parquet,
             &schema,
-            self.sort_order.as_ref(),
+            sort_order,
         )?;
         let config = FileSinkConfig {
-            original_url: output_url.to_string(),
+            original_url: url.to_string(),
             object_store_url,
             file_group: FileGroup::default(),
-            table_paths: vec![ListingTableUrl::parse(output_url.as_str())?],
+            table_paths: vec![ListingTableUrl::parse(url.as_str())?],
             output_schema: Arc::clone(&schema),
             table_partition_cols: vec![],
             insert_op: InsertOp::Append,
@@ -197,10 +278,16 @@ impl RdfParquetLoader {
 
         // The sink writes the files in separate tasks, such that producing the batches (e.g.,
         // merging the sorted runs) runs in parallel to encoding the Parquet files.
-        let sink_exec = Arc::new(DataSinkExec::new(physical_plan, sink, None));
+        let sink_exec = Arc::new(DataSinkExec::new(
+            physical_plan,
+            Arc::clone(&sink) as Arc<dyn DataSink>,
+            None,
+        ));
         collect(sink_exec, state.task_ctx()).await?;
 
-        Ok(())
+        let mut written = sink.written().into_iter().collect::<Vec<_>>();
+        written.sort_by(|(a, _), (b, _)| a.cmp(b));
+        Ok(written)
     }
 }
 
@@ -213,6 +300,10 @@ pub enum RdfParquetLoadingError {
     DataFusion(#[from] DataFusionError),
     #[error(transparent)]
     Parquet(#[from] ParquetError),
+    #[error(transparent)]
+    ObjectStore(#[from] object_store::Error),
+    #[error("A single file can only be written in a single sort order.")]
+    MultipleSortOrdersForSingleFile,
 }
 
 #[derive(Debug, thiserror::Error)]

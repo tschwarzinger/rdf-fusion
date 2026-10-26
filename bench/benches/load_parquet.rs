@@ -4,7 +4,8 @@
 //! been prepared are skipped. The following environment variables configure the benchmark:
 //! - `RDF_FUSION_BENCH_DBLP_SIZES`: the dataset sizes (default: `100k,1m`).
 //! - `RDF_FUSION_BENCH_LOAD_PARTITIONS`: the numbers of target partitions (default: `1,4,8`).
-//! - `RDF_FUSION_BENCH_LOAD_SORT_ORDERS`: the sort orders, `none` for unsorted
+//! - `RDF_FUSION_BENCH_LOAD_SORT_ORDERS`: the sort orders, `none` for unsorted. An entry can
+//!   contain multiple sort orders separated by `;`, which are all written
 //!   (default: `none,NATIVE(GPOS)`).
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
@@ -29,9 +30,12 @@ fn bench_load_parquet(c: &mut Criterion) {
         .collect::<Vec<_>>();
     let sort_orders = env_list("RDF_FUSION_BENCH_LOAD_SORT_ORDERS", "none,NATIVE(GPOS)")
         .into_iter()
-        .map(|order| match order.as_str() {
-            "none" => None,
-            order => Some(RdfSortOrder::from_str(order).expect("Invalid sort order")),
+        .map(|orders| match orders.as_str() {
+            "none" => Vec::new(),
+            orders => orders
+                .split(';')
+                .map(|order| RdfSortOrder::from_str(order).expect("Invalid sort order"))
+                .collect(),
         })
         .collect::<Vec<_>>();
 
@@ -49,12 +53,18 @@ fn bench_load_parquet(c: &mut Criterion) {
 
         for &target_partitions in &partitions {
             let runtime = create_runtime(target_partitions);
-            for sort_order in &sort_orders {
-                let sort_order_name = sort_order
-                    .as_ref()
-                    .map_or_else(|| "none".to_owned(), ToString::to_string);
+            for sort_orders in &sort_orders {
+                let sort_order_name = if sort_orders.is_empty() {
+                    "none".to_owned()
+                } else {
+                    sort_orders
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(";")
+                };
                 let loader = runtime
-                    .block_on(create_loader(target_partitions, sort_order.clone()));
+                    .block_on(create_loader(target_partitions, sort_orders.clone()));
                 group.bench_function(
                     format!(
                         "dblp-{size}, partitions={target_partitions}, sort_order={sort_order_name}"
@@ -85,12 +95,13 @@ fn bench_load_parquet(c: &mut Criterion) {
     group.finish();
 }
 
-/// Creates a loader that uses `target_partitions` partitions and writes the quads in `sort_order`.
+/// Creates a loader that uses `target_partitions` partitions and writes the quads in each of the
+/// `sort_orders`.
 ///
 /// The remaining configuration is loaded from the environment.
 async fn create_loader(
     target_partitions: usize,
-    sort_order: Option<RdfSortOrder>,
+    sort_orders: Vec<RdfSortOrder>,
 ) -> RdfParquetLoader {
     let session_config = session_config_from_env_for_rdf_fusion()
         .unwrap()
@@ -106,7 +117,7 @@ async fn create_loader(
         context.session_context().clone(),
         context.create_view(),
         QuadStorageEncodingName::String,
-        sort_order,
+        sort_orders,
     )
     .unwrap()
 }

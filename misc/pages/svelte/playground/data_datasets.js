@@ -68,5 +68,26 @@ export const DATASETS = [
                 quadStorage: { type: "parquet", version: "0.1" }
             }
         ]
+    },
+    {
+        id: "dblp",
+        name: "dblp",
+        scale: "dblp dump of 2026-09-01 (~575M triples)",
+        queryGroup: "dblp",
+        description: "The dblp computer science bibliography as RDF. It describes publications, authors, venues, and their identifiers (e.g., DOIs and ORCIDs). As the dataset is large, queries should be selective (e.g., by restricting the predicate or subject).",
+        docUrl: "https://dblp.org/rdf/docu/",
+        docLabel: "dblp RDF Documentation",
+        distributions: [
+            {
+                id: "dblp-2026-09-01-parquet",
+                name: "Parquet (GPOS, GSPO, GOSP)",
+                format: "Parquet",
+                description: "A Parquet dataset that stores the quads sorted in the GPOS, GSPO, and GOSP orders. For each triple pattern, the engine scans the quad table whose sort order matches best. The dataset.ttl file describes the files and their statistics, which allows skipping files without opening them.",
+                url: "https://rdf-fusion-public.b-cdn.net/rdf-fusion-public/datasets/dblp/dblp-2026-09-01-parquet/",
+                quadStorage: { type: "parquet", version: "0.2" },
+                // The dataset consists of many files (~30 GB) and cannot be stored in IndexedDB.
+                downloadable: false
+            }
+        ]
     }
 ];

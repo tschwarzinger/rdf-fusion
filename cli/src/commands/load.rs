@@ -17,7 +17,7 @@ pub enum LoadCommandType {
         session_context: SessionContext,
         context_view: RdfFusionContextView,
         encoding: QuadStorageEncodingName,
-        sort_order: Option<RdfSortOrder>,
+        sort_orders: Vec<RdfSortOrder>,
     },
     Other(Store),
 }
@@ -39,7 +39,7 @@ pub async fn load(
             session_context,
             context_view,
             encoding,
-            sort_order,
+            sort_orders,
         } => {
             let inputs = inputs
                 .iter()
@@ -51,7 +51,7 @@ pub async fn load(
                 session_context,
                 context_view,
                 encoding,
-                sort_order,
+                sort_orders,
             )?;
             loader
                 .load_many(inputs, output)

@@ -58,12 +58,13 @@ pub struct RdfFileScanOptions {
     pub format: RdfFormat,
     /// The base IRI for the parser.
     pub base_iri: Option<Iri<String>>,
-    /// Whether to rename blank nodes.
+    /// Renames the blank nodes, if present.
     ///
-    /// The renaming is not done by the parser itself but by the [`RdfParserExec`] using a
-    /// [`BlankNodeRenamer`], such that a file that is parsed in multiple chunks is renamed
-    /// consistently.
-    pub rename_blank_nodes: bool,
+    /// The renaming is not done by the parser itself but by the [`RdfParserExec`], such that a
+    /// file that is parsed in multiple chunks is renamed consistently. The renamer (and hence its
+    /// seed) is part of the options, such that every physical plan of the same scan renames the
+    /// blank nodes consistently (e.g., when a file is loaded into multiple quad tables).
+    pub blank_node_renamer: Option<BlankNodeRenamer>,
     /// The default graph for the parser.
     pub default_graph: Option<GraphName>,
     /// Whether to allow named graphs.
@@ -86,7 +87,7 @@ impl Ord for RdfFileScanOptions {
                     .map(|i| i.as_str())
                     .cmp(&other.base_iri.as_ref().map(|i| i.as_str()))
             })
-            .then_with(|| self.rename_blank_nodes.cmp(&other.rename_blank_nodes))
+            .then_with(|| self.blank_node_renamer.cmp(&other.blank_node_renamer))
             .then_with(|| {
                 format!("{:?}", self.default_graph)
                     .cmp(&format!("{:?}", other.default_graph))
@@ -101,15 +102,16 @@ impl RdfFileScanOptions {
         Self {
             format,
             base_iri: None,
-            rename_blank_nodes: false,
+            blank_node_renamer: None,
             default_graph: None,
             without_named_graphs: false,
         }
     }
 
-    /// Sets whether blank nodes should be renamed.
+    /// Sets whether blank nodes should be renamed. If so, a [`BlankNodeRenamer`] with a random
+    /// seed is created.
     pub fn with_rename_blank_nodes(mut self, rename_blank_nodes: bool) -> Self {
-        self.rename_blank_nodes = rename_blank_nodes;
+        self.blank_node_renamer = rename_blank_nodes.then(BlankNodeRenamer::new_random);
         self
     }
 
@@ -139,7 +141,7 @@ impl RdfFileScanOptions {
 
     /// Creates a new [`TokioAsyncReaderQuadParser`] from the given `reader` and the current options.
     ///
-    /// Blank nodes are not renamed by the parser (see [`Self::rename_blank_nodes`]).
+    /// Blank nodes are not renamed by the parser (see [`Self::blank_node_renamer`]).
     pub fn create_parser<R: AsyncRead + Unpin + Send + 'static>(
         &self,
         reader: R,

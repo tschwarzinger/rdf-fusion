@@ -209,6 +209,7 @@
                 if ($wasmModule) {
                     const settings = {
                         memoryLimitMb: $engineSettings.memoryLimit,
+                        metadataCacheLimitMb: $engineSettings.dataFusion.metadataCacheLimitMb,
                         metrics: {
                             showMetrics: $engineSettings.metrics.showMetrics,
                             showStatistics: $engineSettings.metrics.showStatistics
@@ -563,6 +564,7 @@
         try {
             const settings = {
                 memoryLimitMb: $engineSettings.memoryLimit,
+                metadataCacheLimitMb: $engineSettings.dataFusion.metadataCacheLimitMb,
                 metrics: {
                     showMetrics: $engineSettings.metrics.showMetrics,
                     showStatistics: $engineSettings.metrics.showStatistics
@@ -674,7 +676,7 @@
                         <span class="text-success" title="Downloaded (Available locally)" style="font-size: 1.1rem; cursor: default;">
                             <i class="fa-solid fa-hard-drive"></i>
                         </span>
-                    {:else}
+                    {:else if draftSelectedDistribution.downloadable !== false}
                         <button class="btn btn-sm btn-outline-secondary" onclick={() => downloadDatasetUrl(draftSelectedDistribution.id, draftSelectedDistribution.id, draftSelectedDistribution.url)} title="Download for faster offline loading">
                             <i class="fa-solid fa-download me-1"></i> Download
                         </button>
@@ -885,7 +887,7 @@
                             <div class="col-12">
                                 <label for="rdfSortOrderCustom" class="form-label small fw-bold mb-1">Custom Sort Order Expression</label>
                                 <input id="rdfSortOrderCustom" type="text" class="form-control form-control-sm" bind:value={rdfSortOrderCustom} placeholder="e.g. Native(GPOS) or SPO">
-                                <div class="text-muted mt-1" style="font-size: 0.72rem;">Specify sequence of quad components (G, S, P, O) or a Native() expression.</div>
+                                <div class="text-muted mt-1" style="font-size: 0.72rem;">Specify the quad components without separators (e.g., GPOS) or a Native() expression (e.g., Native(GPOS)).</div>
                             </div>
                         {/if}
                     </div>

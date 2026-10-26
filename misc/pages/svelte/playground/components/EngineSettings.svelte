@@ -73,6 +73,14 @@
                         </div>
                         <div class="text-muted mt-1" style="font-size: 0.72rem;">datafusion.execution.target_partitions</div>
                     </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold" for="engine-metadata-cache">Metadata Cache Limit</label>
+                        <div class="input-group input-group-sm">
+                            <input id="engine-metadata-cache" type="number" class="form-control" bind:value={settings.dataFusion.metadataCacheLimitMb} min="0" step="1">
+                            <span class="input-group-text">MB</span>
+                        </div>
+                        <div class="text-muted mt-1" style="font-size: 0.72rem;">datafusion.runtime.metadata_cache_limit (e.g., Parquet footers and page indexes)</div>
+                    </div>
                 </div>
                 <div class="d-flex flex-column gap-2">
                     <div class="form-check form-switch">

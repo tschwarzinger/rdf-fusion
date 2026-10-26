@@ -1,6 +1,9 @@
 //! General-purpose types for quad tables
 
-use rdf_fusion_common::QuadComponent;
+use rdf_fusion_common::{
+    BlankNodeMatchingMode, NamedNodePattern, QuadComponent, TermPattern, TriplePattern,
+};
+use rdf_fusion_logical::ActiveGraph;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
@@ -96,6 +99,54 @@ impl QuadTableName {
 #[derive(Debug, Error)]
 #[error("Duplicate quad table component given.")]
 pub struct QuadTableNameCreationError;
+
+/// Computes how well a quad table sorted by `components` supports scanning the `pattern`. A
+/// higher score is better.
+///
+/// Each bound component of the sort order adds to the score, weighted by its position. Hence, a
+/// sort order that starts with the bound components is preferred, as the scan only covers a
+/// contiguous slice of the table.
+pub fn compute_scan_score(
+    components: &[QuadComponent],
+    active_graph: &ActiveGraph,
+    pattern: &TriplePattern,
+    blank_node_mode: BlankNodeMatchingMode,
+) -> usize {
+    let graph_bound = matches!(
+        active_graph,
+        ActiveGraph::DefaultGraph | ActiveGraph::Union(_)
+    );
+    let subject_bound = is_term_bound(&pattern.subject, blank_node_mode);
+    let predicate_bound = matches!(pattern.predicate, NamedNodePattern::NamedNode(_));
+    let object_bound = is_term_bound(&pattern.object, blank_node_mode);
+
+    let mut score = 0;
+    for (i, component) in components.iter().enumerate() {
+        let is_bound = match component {
+            QuadComponent::GraphName => graph_bound,
+            QuadComponent::Subject => subject_bound,
+            QuadComponent::Predicate => predicate_bound,
+            QuadComponent::Object => object_bound,
+        };
+
+        // We don't stop after finding a non-bound component, because components that are part of
+        // the sort order should still exhibit a better clustering, even though the scan is no
+        // longer restricted to a slice of the quad table.
+        if is_bound {
+            let position = 3usize.saturating_sub(i);
+            score += 1 << position;
+        }
+    }
+    score
+}
+
+fn is_term_bound(pattern: &TermPattern, mode: BlankNodeMatchingMode) -> bool {
+    match pattern {
+        TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
+        TermPattern::BlankNode(_) => mode == BlankNodeMatchingMode::Filter,
+        TermPattern::Variable(_) => false,
+    }
+}
 
 #[cfg(test)]
 mod tests {
