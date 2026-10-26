@@ -21,6 +21,7 @@ use datafusion::prelude::*;
 use futures::StreamExt;
 use object_store::path::Path;
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
+use rdf_fusion_common::config::RdfFusionSessionConfigExt;
 use rdf_fusion_common::{
     RdfFormat, RdfInput, RdfInputSource, RdfSortOrder, url_to_object_store_url,
 };
@@ -250,10 +251,17 @@ impl RdfParquetLoader {
         }
         let schema = physical_plan.schema();
 
+        let page_statistics_columns = state
+            .config()
+            .rdf_fusion_options_or_default()
+            .storage
+            .parquet
+            .page_statistics_columns;
         let writer_options = RdfParquetWriterOptions::try_new_for_sort_order(
             &state.default_table_options().parquet,
             &schema,
             sort_order,
+            page_statistics_columns,
         )?;
         let config = FileSinkConfig {
             original_url: url.to_string(),

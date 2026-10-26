@@ -27,6 +27,8 @@ const TERM_COLUMNS: [&str; 4] = [COL_GRAPH, COL_SUBJECT, COL_PREDICATE, COL_OBJE
 ///   GPOS order), such that the dictionary only adds overhead before falling back.
 /// - Bloom filters are disabled for the leading sort column, as the page index already allows
 ///   pruning on this column.
+/// - Optionally, only the leading clustering columns have page-level statistics (see
+///   [`Self::try_new_for_sort_order`]).
 #[derive(Debug, Clone)]
 pub struct RdfParquetWriterOptions {
     /// The DataFusion options, including the RDF-specific column options.
@@ -46,7 +48,7 @@ impl RdfParquetWriterOptions {
         schema: &Schema,
         sort_columns: &[&str],
     ) -> DFResult<Self> {
-        Self::try_new_impl(base, schema, sort_columns, sort_columns)
+        Self::try_new_impl(base, schema, sort_columns, sort_columns, usize::MAX)
     }
 
     /// Creates a new [`RdfParquetWriterOptions`] for writing quads in the given `sort_order`.
@@ -54,26 +56,43 @@ impl RdfParquetWriterOptions {
     /// Only the native order corresponds to the order of the values in the Parquet file. Hence,
     /// other sort orders are not stored in the Parquet metadata. However, the data is still
     /// clustered by their columns.
+    ///
+    /// Only `page_statistics_columns` leading clustering columns are written with page-level
+    /// statistics, while the remaining clustering columns only have chunk-level statistics. Page-level statistics allow pruning pages if all previous
+    /// clustering columns are bound. Hence, the page statistics of trailing clustering columns
+    /// rarely prune pages, but they enlarge the column index, which is loaded as a whole. The
+    /// offset index is still written for all columns, such that pages can be skipped. User-set
+    /// statistics options (global or per column) take precedence.
     pub fn try_new_for_sort_order(
         base: &TableParquetOptions,
         schema: &Schema,
         sort_order: Option<&RdfSortOrder>,
+        page_statistics_columns: usize,
     ) -> DFResult<Self> {
         let columns: Vec<_> = sort_order
             .map(|o| o.components().iter().map(|c| c.column_name()).collect())
             .unwrap_or_default();
         let is_native = matches!(sort_order, Some(RdfSortOrder::NativeOrder(_)));
         let sort_columns = if is_native { columns.as_slice() } else { &[] };
-        Self::try_new_impl(base, schema, &columns, sort_columns)
+        Self::try_new_impl(
+            base,
+            schema,
+            &columns,
+            sort_columns,
+            page_statistics_columns,
+        )
     }
 
     /// - `clustering_columns` are the columns the data is clustered by, in order.
     /// - `sort_columns` are the columns that are stored as sorting columns in the metadata.
+    /// - `page_statistics_columns` is the number of leading clustering columns with page-level
+    ///   statistics.
     fn try_new_impl(
         base: &TableParquetOptions,
         schema: &Schema,
         clustering_columns: &[&str],
         sort_columns: &[&str],
+        page_statistics_columns: usize,
     ) -> DFResult<Self> {
         let mut options = base.clone();
 
@@ -94,6 +113,9 @@ impl RdfParquetWriterOptions {
             .convert(schema)
             .map_err(|e| DataFusionError::External(Box::new(e)))?;
         let global_encoding_set = base.global.encoding.is_some();
+        // A user-set global statistics level is not overridden.
+        let global_statistics_set = options.global.statistics_enabled
+            != TableParquetOptions::default().global.statistics_enabled;
 
         for column in parquet_schema.columns() {
             let parts = column.path().parts();
@@ -127,6 +149,14 @@ impl RdfParquetWriterOptions {
                         .get_or_insert_with(|| "uncompressed".to_owned());
                 }
                 _ => {}
+            }
+
+            if !global_statistics_set
+                && clustering_position.is_some_and(|p| p >= page_statistics_columns)
+            {
+                column_options
+                    .statistics_enabled
+                    .get_or_insert_with(|| "chunk".to_owned());
             }
 
             // The page index already allows pruning on the leading sort column.
@@ -201,6 +231,7 @@ mod tests {
     use datafusion::arrow::datatypes::{DataType, Field};
     use datafusion::common::config::ParquetColumnOptions;
     use datafusion::parquet::basic::{Compression, Encoding};
+    use datafusion::parquet::file::properties::EnabledStatistics;
     use rdf_fusion_common::QuadComponent;
     use rdf_fusion_encoding::QuadStorageEncoding;
 
@@ -235,10 +266,21 @@ mod tests {
         base: &TableParquetOptions,
         sort_order: RdfSortOrder,
     ) -> (RdfParquetWriterOptions, WriterProperties) {
+        create_with_page_statistics(base, sort_order, usize::MAX)
+    }
+
+    /// Like [`create_for_sort_order`], but with page-level statistics only for the given number
+    /// of leading clustering columns.
+    fn create_with_page_statistics(
+        base: &TableParquetOptions,
+        sort_order: RdfSortOrder,
+        page_statistics_columns: usize,
+    ) -> (RdfParquetWriterOptions, WriterProperties) {
         let options = RdfParquetWriterOptions::try_new_for_sort_order(
             base,
             &string_schema(),
             Some(&sort_order),
+            page_statistics_columns,
         )
         .unwrap();
         let props = options.to_writer_properties().unwrap();
@@ -356,6 +398,91 @@ mod tests {
         assert!(props.dictionary_enabled(&COL_PREDICATE.into()));
         assert!(!props.dictionary_enabled(&COL_OBJECT.into()));
         assert!(!props.dictionary_enabled(&COL_SUBJECT.into()));
+    }
+
+    fn gpos() -> RdfSortOrder {
+        RdfSortOrder::NativeOrder(vec![
+            QuadComponent::GraphName,
+            QuadComponent::Predicate,
+            QuadComponent::Object,
+            QuadComponent::Subject,
+        ])
+    }
+
+    fn assert_statistics(
+        props: &WriterProperties,
+        expected: [(&str, EnabledStatistics); 4],
+    ) {
+        for (column, statistics) in expected {
+            assert_eq!(
+                props.statistics_enabled(&column.into()),
+                statistics,
+                "{column}"
+            );
+        }
+    }
+
+    #[test]
+    fn trailing_clustering_columns_use_chunk_statistics() {
+        let (_, props) =
+            create_with_page_statistics(&TableParquetOptions::default(), gpos(), 2);
+
+        assert_statistics(
+            &props,
+            [
+                (COL_GRAPH, EnabledStatistics::Page),
+                (COL_PREDICATE, EnabledStatistics::Page),
+                (COL_OBJECT, EnabledStatistics::Chunk),
+                (COL_SUBJECT, EnabledStatistics::Chunk),
+            ],
+        );
+        // The offset index is required for skipping pages.
+        assert!(!props.offset_index_disabled());
+    }
+
+    #[test]
+    fn page_statistics_by_default() {
+        let (_, props) = create_for_sort_order(&TableParquetOptions::default(), gpos());
+
+        for column in TERM_COLUMNS {
+            assert_eq!(
+                props.statistics_enabled(&column.into()),
+                EnabledStatistics::Page
+            );
+        }
+    }
+
+    #[test]
+    fn statistics_options_are_respected() {
+        let mut base = TableParquetOptions::default();
+        base.column_specific_options.insert(
+            COL_SUBJECT.to_owned(),
+            ParquetColumnOptions {
+                statistics_enabled: Some("page".to_owned()),
+                ..Default::default()
+            },
+        );
+        // Without the user-set option, the subject (last in GPOS) would have chunk statistics.
+        let (_, props) = create_with_page_statistics(&base, gpos(), 3);
+        assert_statistics(
+            &props,
+            [
+                (COL_GRAPH, EnabledStatistics::Page),
+                (COL_PREDICATE, EnabledStatistics::Page),
+                (COL_OBJECT, EnabledStatistics::Page),
+                (COL_SUBJECT, EnabledStatistics::Page),
+            ],
+        );
+
+        let mut base = TableParquetOptions::default();
+        base.global.statistics_enabled = Some("none".to_owned());
+        let (_, props) = create_with_page_statistics(&base, gpos(), 1);
+        for column in TERM_COLUMNS {
+            assert_eq!(
+                props.statistics_enabled(&column.into()),
+                EnabledStatistics::None
+            );
+        }
     }
 
     #[test]

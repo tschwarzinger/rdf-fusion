@@ -105,6 +105,10 @@ pub struct ParquetStorageOptions {
     pub data_cache_block_size: usize,
     /// The number of blocks to cache for object store reads.
     pub data_cache_num_blocks: usize,
+    /// The number of leading sort columns that the Parquet writers write with page-level
+    /// statistics. The remaining sort columns only have chunk-level statistics, which keeps the
+    /// page index small. By default, all columns have page-level statistics.
+    pub page_statistics_columns: usize,
 }
 
 impl Default for ParquetStorageOptions {
@@ -114,6 +118,7 @@ impl Default for ParquetStorageOptions {
             data_cache_enabled: false,
             data_cache_block_size: 2 * 1024 * 1024,
             data_cache_num_blocks: 1024,
+            page_statistics_columns: 4,
         }
     }
 }
@@ -282,6 +287,14 @@ impl ExtensionOptions for RdfFusionOptions {
                 })?;
                 self.storage.parquet.data_cache_num_blocks = size;
             }
+            "storage.parquet.page_statistics_columns" => {
+                let columns: usize = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for storage.parquet.page_statistics_columns: {e}"
+                    ))
+                })?;
+                self.storage.parquet.page_statistics_columns = columns;
+            }
             "storage.parquet.sort_orders" => {
                 let value = value
                     .split(';')
@@ -397,6 +410,11 @@ impl ExtensionOptions for RdfFusionOptions {
                 key: format!("{}.storage.parquet.data_cache_num_blocks", Self::PREFIX),
                 value: Some(self.storage.parquet.data_cache_num_blocks.to_string()),
                 description: "The number of blocks to cache for object store reads.",
+            },
+            ConfigEntry {
+                key: format!("{}.storage.parquet.page_statistics_columns", Self::PREFIX),
+                value: Some(self.storage.parquet.page_statistics_columns.to_string()),
+                description: "The number of leading sort columns that are written with page-level statistics. The remaining sort columns only have chunk-level statistics, which keeps the page index small. The default (4) writes page-level statistics for all columns.",
             },
             ConfigEntry {
                 key: format!("{}.storage.parquet.sort_orders", Self::PREFIX),
@@ -551,7 +569,7 @@ mod tests {
     #[test]
     fn test_env_mappings() {
         let mappings = RdfFusionOptions::env_mappings();
-        assert_eq!(mappings.len(), 17);
+        assert_eq!(mappings.len(), 18);
         assert!(mappings.iter().any(|(env, id)| {
             env == "RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE"
                 && id == "storage.delta.log_max_age"
@@ -590,6 +608,21 @@ mod tests {
     }
 
     #[test]
+    fn test_set_page_statistics_columns() {
+        let mut config = RdfFusionOptions::default();
+        assert_eq!(config.storage.parquet.page_statistics_columns, 4);
+        config
+            .set("rdf_fusion.storage.parquet.page_statistics_columns", "3")
+            .unwrap();
+        assert_eq!(config.storage.parquet.page_statistics_columns, 3);
+        assert!(
+            config
+                .set("rdf_fusion.storage.parquet.page_statistics_columns", "x")
+                .is_err()
+        );
+    }
+
+    #[test]
     fn test_set_planning_bloom_filters() {
         let mut config = RdfFusionOptions::default();
         assert_eq!(
@@ -623,6 +656,6 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 17);
+        assert_eq!(entries.len(), 18);
     }
 }

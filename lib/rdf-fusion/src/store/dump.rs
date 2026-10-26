@@ -5,6 +5,7 @@ use datafusion::datasource::sink::DataSink;
 use datafusion::logical_expr::col;
 use datafusion::physical_plan::execute_stream;
 use object_store::path::Path;
+use rdf_fusion_common::config::RdfFusionSessionConfigExt;
 use rdf_fusion_common::quads::{COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{
     GraphName, RdfDumpFormat, RdfSortOrder, url_to_object_store_url,
@@ -166,10 +167,17 @@ pub(crate) async fn dump_store(
     let sink_schema = physical_plan.schema();
     let sink: Arc<dyn DataSink> = match format {
         RdfDumpFormat::Parquet => {
+            let page_statistics_columns = session
+                .config()
+                .rdf_fusion_options_or_default()
+                .storage
+                .parquet
+                .page_statistics_columns;
             let writer_options = RdfParquetWriterOptions::try_new_for_sort_order(
                 &session.default_table_options().parquet,
                 &sink_schema,
                 options.sort_by.as_ref(),
+                page_statistics_columns,
             )?;
             Arc::new(RdfParquetDataSink::new(
                 Arc::clone(&object_store),
