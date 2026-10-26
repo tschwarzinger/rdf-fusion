@@ -1,4 +1,5 @@
 use crate::parquet::bytes_estimator::estimate_scan_statistics;
+use crate::parquet::counting_store::ByteCountingObjectStore;
 use crate::parquet::reader::{
     BlockCachedReaderFactory, ParquetMetadataFetcher, max_concurrent_files,
 };
@@ -40,6 +41,9 @@ use datafusion::physical_optimizer::pruning::{
 };
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_plan::filter::FilterExec;
+use datafusion::physical_plan::metrics::{
+    Count, MetricBuilder, MetricCategory, MetricType,
+};
 use datafusion::physical_plan::projection::{
     ProjectionExec, ProjectionExpr, ProjectionExprs,
 };
@@ -195,8 +199,17 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             full_filter_is_pushable,
         )?;
 
-        let (file_groups, statistics) =
-            self.apply_eager_pruning(pushed_filter.clone()).await?;
+        // Bytes read while planning (e.g., for eager pruning) are not part of the inner scan's
+        // `bytes_scanned`, so they are reported separately on the scan node.
+        let planning_metrics = ExecutionPlanMetricsSet::new();
+        let bytes_scanned_planning = MetricBuilder::new(&planning_metrics)
+            .with_type(MetricType::Summary)
+            .with_category(MetricCategory::Bytes)
+            .global_counter("bytes_scanned_planning");
+
+        let (file_groups, statistics) = self
+            .apply_eager_pruning(pushed_filter.clone(), &bytes_scanned_planning)
+            .await?;
 
         let mut file_scan_config =
             FileScanConfigBuilder::new(self.object_store_url.clone(), file_source)
@@ -211,7 +224,11 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             Arc::new(DataSourceExec::new(Arc::new(file_scan_config.build())));
 
         let pattern = self.pattern.clone().unwrap_or_else(QuadPattern::all_quads);
-        let scan = Arc::new(ParquetQuadScanExec::try_new(pattern.clone(), data_source)?);
+        let scan = Arc::new(ParquetQuadScanExec::try_new(
+            pattern.clone(),
+            data_source,
+            planning_metrics,
+        )?);
 
         if full_filter_is_pushable {
             Ok(scan)
@@ -274,19 +291,16 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             .object_store(&self.object_store_url)
     }
 
-    /// Returns the factory for the readers of the Parquet files. The metadata is served from the
-    /// session's file metadata cache and the byte reads are cached in the block cache.
-    fn reader_factory(&self) -> DFResult<BlockCachedReaderFactory> {
+    /// Returns the factory for the readers of the Parquet files that read from `store`. The
+    /// metadata is served from the session's file metadata cache and the byte reads are cached in
+    /// the block cache.
+    fn reader_factory(&self, store: Arc<dyn ObjectStore>) -> BlockCachedReaderFactory {
         let metadata_cache = self
             .session_state
             .runtime_env()
             .cache_manager
             .get_file_metadata_cache();
-        Ok(BlockCachedReaderFactory::new(
-            self.object_store()?,
-            metadata_cache,
-            self.block_cache.clone(),
-        ))
+        BlockCachedReaderFactory::new(store, metadata_cache, self.block_cache.clone())
     }
 
     /// Returns the metadata size hint from the session's Parquet options.
@@ -312,7 +326,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         let table_schema =
             TableSchemaBuilder::new(Arc::clone(base_schema.inner())).build();
 
-        let reader_factory = Arc::new(self.reader_factory()?);
+        let reader_factory = Arc::new(self.reader_factory(self.object_store()?));
 
         let mut parquet_source = ParquetSource::new(table_schema)
             .with_table_parquet_options(
@@ -367,17 +381,24 @@ impl<'a> ParquetQuadScanBuilder<'a> {
     /// Hence, the Bloom filters and the (comparatively large) page index are only loaded for files
     /// that may contain matching rows. The metadata is obtained from DataFusion's file metadata
     /// cache, while the Bloom filters are cached in the block cache.
+    ///
+    /// The bytes read from the object store (i.e., not served from a cache) are recorded in
+    /// `bytes_scanned`.
     async fn apply_eager_pruning(
         &self,
         combined_logical_filter: Option<Expr>,
+        bytes_scanned: &Count,
     ) -> DFResult<(Vec<FileGroup>, Option<Statistics>)> {
         if !self.eager_pruning {
             return Ok((self.file_groups.clone(), None));
         }
 
-        let fetcher =
-            ParquetMetadataFetcher::new(self.session_state, self.object_store()?);
-        let reader_factory = self.reader_factory()?;
+        let store: Arc<dyn ObjectStore> = Arc::new(ByteCountingObjectStore::new(
+            self.object_store()?,
+            bytes_scanned.clone(),
+        ));
+        let fetcher = ParquetMetadataFetcher::new(self.session_state, Arc::clone(&store));
+        let reader_factory = self.reader_factory(store);
         let filters = self.create_pruning_filters(combined_logical_filter)?;
         let (fetcher, reader_factory, filters) = (&fetcher, &reader_factory, &filters);
 

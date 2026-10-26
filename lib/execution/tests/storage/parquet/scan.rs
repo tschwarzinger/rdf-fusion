@@ -3,7 +3,7 @@ use datafusion::dataframe::DataFrameWriteOptions;
 use datafusion::datasource::physical_plan::parquet::metadata::CachedParquetMetaData;
 use datafusion::logical_expr::SortExpr;
 use datafusion::physical_plan::display::DisplayableExecutionPlan;
-use datafusion::physical_plan::displayable;
+use datafusion::physical_plan::{ExecutionPlan, displayable};
 use datafusion::prelude::{SessionConfig, SessionContext, col};
 use insta::assert_snapshot;
 use object_store::memory::InMemory;
@@ -315,6 +315,36 @@ async fn test_parquet_multi_file_loads_page_index_only_for_remaining_files() {
 }
 
 #[tokio::test]
+async fn test_parquet_scan_reports_bytes_scanned_during_planning() {
+    let (rdf_context, _) = prepare_multi_file_test_store(&multi_file_data(), 1).await;
+    let query = plan_query_from_str(
+        &rdf_context,
+        "SELECT ?p ?o WHERE { <http://example.org/s3> ?p ?o . }",
+    );
+
+    // The first query loads the page index during planning. Afterward, it is served from the
+    // metadata cache.
+    let mut bytes_scanned_planning = Vec::new();
+    for _ in 0..2 {
+        let (results, explanation) = rdf_context
+            .execute_query(&query, QueryOptions::default())
+            .await
+            .unwrap();
+        count_solutions(results).await;
+        bytes_scanned_planning.push(sum_metric(
+            &explanation.execution_plan,
+            "bytes_scanned_planning",
+        ));
+    }
+
+    assert!(
+        bytes_scanned_planning[0] > 0,
+        "Expected the page index to be read during planning: {bytes_scanned_planning:?}"
+    );
+    assert_eq!(bytes_scanned_planning[1], 0);
+}
+
+#[tokio::test]
 async fn test_parquet_multi_file_skips_page_index_if_all_rows_match() {
     let (rdf_context, storage) =
         prepare_multi_file_test_store(&multi_file_data(), 1).await;
@@ -622,6 +652,20 @@ fn cached_metadata(
             Some((location.to_string(), has_page_index))
         })
         .collect()
+}
+
+/// Sums the metric with the given name over all nodes of the plan.
+fn sum_metric(plan: &Arc<dyn ExecutionPlan>, name: &str) -> usize {
+    let own = plan
+        .metrics()
+        .and_then(|metrics| metrics.sum_by_name(name))
+        .map(|value| value.as_usize())
+        .unwrap_or(0);
+    own + plan
+        .children()
+        .into_iter()
+        .map(|child| sum_metric(child, name))
+        .sum::<usize>()
 }
 
 /// Executes the query and returns the physical plan as a string.

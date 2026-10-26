@@ -1,4 +1,5 @@
 mod bytes_estimator;
+mod counting_store;
 mod loader;
 mod reader;
 mod scan;

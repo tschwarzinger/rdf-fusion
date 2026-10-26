@@ -34,12 +34,13 @@
         return prefixes;
     }
 
+    // Decimal units (1 KB = 1000 B), consistent with DataFusion's metrics (e.g., bytes_scanned).
     function formatBytes(bytes) {
         const units = ['B', 'KB', 'MB', 'GB'];
         let value = bytes;
         let unit = 0;
-        while (value >= 1024 && unit < units.length - 1) {
-            value /= 1024;
+        while (value >= 1000 && unit < units.length - 1) {
+            value /= 1000;
             unit += 1;
         }
         return (unit === 0 ? value : value.toFixed(1)) + ' ' + units[unit];
@@ -264,7 +265,7 @@
                         <i class="fa-regular fa-clock"></i><strong>{$queryResults.totalSeconds}</strong>s
                     </span>
                     {#if $queryResults.network}
-                        <span class="stat" title="Bytes the engine downloaded while evaluating this query (sum of the response Content-Lengths) and the number of HTTP requests it issued (e.g. Parquet range reads). Locally stored datasets issue none.">
+                        <span class="stat" title="Bytes the engine downloaded while evaluating this query (sum of the response Content-Lengths) and the number of HTTP requests it issued (e.g. Parquet range reads). Locally stored datasets issue none. Nearby byte ranges are coalesced into a single request, so this can be larger than the sum of the bytes_scanned metrics in the execution plan.">
                             <i class="fa-solid fa-download"></i><strong>{formatBytes($queryResults.network.bytes)}</strong>({$queryResults.network.requests} {$queryResults.network.requests === 1 ? 'request' : 'requests'})
                         </span>
                     {/if}

@@ -12,7 +12,7 @@ use datafusion::physical_plan::filter_pushdown::{
     ChildPushdownResult, FilterDescription, FilterPushdownPhase,
     FilterPushdownPropagation, PushedDown,
 };
-use datafusion::physical_plan::metrics::MetricsSet;
+use datafusion::physical_plan::metrics::{ExecutionPlanMetricsSet, MetricsSet};
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::{
     ChildStats, DisplayAs, DisplayFormatType, ExecutionPlan,
@@ -29,20 +29,26 @@ use std::sync::Arc;
 ///
 /// This wraps a `DataSourceExec` and prevents pushing down expensive UDF filters into Parquet
 /// scanning while allowing cheap filters (e.g., term equality) to be pushed down.
+///
+/// In addition to the metrics of the inner scan, this reports the metrics recorded while planning
+/// the scan (e.g., `bytes_scanned_planning` for eager pruning).
 #[derive(Debug, Clone)]
 pub struct ParquetQuadScanExec {
     quad_pattern: QuadPattern,
     inner: Arc<DataSourceExec>,
+    planning_metrics: ExecutionPlanMetricsSet,
 }
 
 impl ParquetQuadScanExec {
     pub fn try_new(
         quad_pattern: QuadPattern,
         inner: Arc<DataSourceExec>,
+        planning_metrics: ExecutionPlanMetricsSet,
     ) -> DFResult<Self> {
         Ok(Self {
             quad_pattern,
             inner,
+            planning_metrics,
         })
     }
 
@@ -57,6 +63,7 @@ impl ParquetQuadScanExec {
         Some(Arc::new(Self {
             quad_pattern: self.quad_pattern.clone(),
             inner: Arc::new(downcast.clone()),
+            planning_metrics: self.planning_metrics.clone(),
         }))
     }
 }
@@ -149,7 +156,11 @@ impl ExecutionPlan for ParquetQuadScanExec {
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
-        self.inner.metrics()
+        let mut metrics = self.inner.metrics().unwrap_or_default();
+        for metric in self.planning_metrics.clone_inner().iter() {
+            metrics.push(Arc::clone(metric));
+        }
+        Some(metrics)
     }
 
     fn partition_statistics(
