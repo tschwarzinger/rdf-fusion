@@ -639,13 +639,6 @@ LIMIT 10`
     ],
     "dblp": [
         {
-            name: "Facts about the DataFusion Paper",
-            query: `SELECT ?predicate ?object
-WHERE {
-  <https://dblp.org/rec/conf/sigmod/LambSHCKHS24> ?predicate ?object .
-}`
-        },
-        {
             name: "Find an Author by Name",
             query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
 
@@ -676,22 +669,24 @@ ORDER BY DESC(?theses)
 LIMIT 10`
         },
         {
-            name: "Authors of the DataFusion Paper (Join, ~60 MB)",
+            name: "Authors of a Paper by Name",
             query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
 
 SELECT ?author ?name
 WHERE {
-  <https://dblp.org/rec/conf/sigmod/LambSHCKHS24> dblp:authoredBy ?author .
+  ?publication dblp:title "Apache Arrow DataFusion: A Fast, Embeddable, Modular Analytic Query Engine." .
+  ?publication dblp:authoredBy ?author .
   ?author dblp:primaryCreatorName ?name .
 }`
         },
         {
-            name: "Titled Publications of Tim Berners-Lee",
+            name: "Publications of an Author by Name",
             query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
 
 SELECT ?year ?title
 WHERE {
-  ?publication dblp:authoredBy <https://dblp.org/pid/b/TimBernersLee> ;
+  ?person dblp:creatorName "Tim Berners-Lee" .
+  ?publication dblp:authoredBy ?person ;
                dblp:title ?title ;
                dblp:yearOfPublication ?year .
 }
