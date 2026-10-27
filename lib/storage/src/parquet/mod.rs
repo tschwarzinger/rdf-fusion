@@ -7,6 +7,7 @@ mod scan;
 mod scan_builder;
 mod snapshot;
 mod storage;
+pub(crate) mod switch;
 mod writer_properties;
 
 pub use dataset::*;

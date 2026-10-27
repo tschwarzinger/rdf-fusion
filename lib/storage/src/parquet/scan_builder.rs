@@ -3,7 +3,8 @@ use crate::parquet::counting_store::ByteCountingObjectStore;
 use crate::parquet::reader::{
     BlockCachedReaderFactory, ParquetMetadataFetcher, max_concurrent_files,
 };
-use crate::parquet::scan::ParquetQuadScanExec;
+use crate::parquet::scan::{BYTES_SCANNED_PLANNING, ParquetQuadScanExec};
+use crate::parquet::switch::QuadTableSwitch;
 use datafusion::arrow::array::{ArrayRef, BooleanArray, UInt64Array};
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::ScalarValue;
@@ -66,6 +67,7 @@ use std::sync::Arc;
 use tracing::debug;
 
 /// Determines how the projection should be handled during the parquet scan.
+#[derive(Debug, Clone)]
 pub enum PushdownProjection {
     /// No projection pushdown. The scan returns the base schema.
     No,
@@ -85,8 +87,9 @@ pub struct ParquetQuadScanBuilder<'a> {
     block_cache: Option<Arc<BlockCache>>,
     pushdown_projection: PushdownProjection,
     eager_pruning: bool,
-    output_ordering: Option<Vec<datafusion::physical_expr::LexOrdering>>,
     split_file_groups: Option<usize>,
+    additional_filter: Option<Expr>,
+    quad_table_switch: Option<QuadTableSwitch>,
 }
 
 impl<'a> ParquetQuadScanBuilder<'a> {
@@ -105,8 +108,9 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             block_cache: None,
             pushdown_projection: PushdownProjection::No,
             eager_pruning: false,
-            output_ordering: None,
             split_file_groups: None,
+            additional_filter: None,
+            quad_table_switch: None,
         }
     }
 
@@ -132,14 +136,6 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         self
     }
 
-    pub fn with_output_ordering(
-        mut self,
-        output_ordering: Vec<datafusion::physical_expr::LexOrdering>,
-    ) -> Self {
-        self.output_ordering = Some(output_ordering);
-        self
-    }
-
     /// Defines whether to project the quad table. Optionally, some variables of the quad pattern
     /// can also be projected away.
     pub fn with_pushdown_projection(
@@ -157,16 +153,33 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         self
     }
 
+    /// Applies the `filter` (over the quad table) in addition to the filters of the quad pattern.
+    /// Like the filters of the pattern, it is used for eager pruning and pushed into the scan.
+    pub fn with_additional_filter(mut self, filter: Expr) -> Self {
+        self.additional_filter = Some(filter);
+        self
+    }
+
+    /// Allows the scan to switch to another quad table at execution time. This is ignored if the
+    /// scan cannot evaluate the entire filter of the pattern.
+    pub(crate) fn with_quad_table_switch(mut self, switch: QuadTableSwitch) -> Self {
+        self.quad_table_switch = Some(switch);
+        self
+    }
+
     /// Builds the Parquet scan.
     pub async fn build(self) -> DFResult<Arc<dyn ExecutionPlan>> {
         let base_schema = self.encoding.quad_schema();
 
         // The original, logical filter over the quad table.
-        let combined_logical_filter = if let Some(pattern) = &self.pattern {
-            conjunction(compute_quad_pattern_filters(pattern, &self.encoding).await?)
-        } else {
-            None
+        let mut filters = match &self.pattern {
+            Some(pattern) => {
+                compute_quad_pattern_filters(pattern, &self.encoding).await?
+            }
+            None => Vec::new(),
         };
+        filters.extend(self.additional_filter.clone());
+        let combined_logical_filter = conjunction(filters);
 
         // The predicate pushed into the parquet source. For PlainTerm, equalities and graph IN
         // lists are rewritten into leaf-field comparisons so the source can use them for pruning
@@ -219,7 +232,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         let bytes_scanned_planning = MetricBuilder::new(&planning_metrics)
             .with_type(MetricType::Summary)
             .with_category(MetricCategory::Bytes)
-            .global_counter("bytes_scanned_planning");
+            .global_counter(BYTES_SCANNED_PLANNING);
 
         let (file_groups, statistics) = self
             .apply_eager_pruning(pushed_filter.clone(), &bytes_scanned_planning)
@@ -231,17 +244,21 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         if let Some(stats) = statistics {
             file_scan_config = file_scan_config.with_statistics(stats);
         }
-        if let Some(ordering) = self.output_ordering {
-            file_scan_config = file_scan_config.with_output_ordering(ordering);
-        }
         let data_source =
             Arc::new(DataSourceExec::new(Arc::new(file_scan_config.build())));
 
         let pattern = self.pattern.clone().unwrap_or_else(QuadPattern::all_quads);
+        // The switch builds the alternative scan like this scan. If the filter is applied above the
+        // scan, the alternative scan would have to be wrapped as well.
+        let quad_table_switch = self
+            .quad_table_switch
+            .clone()
+            .filter(|_| full_filter_is_pushable);
         let scan = Arc::new(ParquetQuadScanExec::try_new(
             pattern.clone(),
             data_source,
             planning_metrics,
+            quad_table_switch,
         )?);
 
         if full_filter_is_pushable {
@@ -1130,8 +1147,7 @@ fn is_plain_term_column(column: &Column, schema: &DFSchema) -> bool {
 /// Splits the `files` into up to `n` groups of consecutive files.
 ///
 /// In contrast to [`FileGroup::split_files`], which sorts the files by their path, the order of
-/// the files is preserved. The storage orders the files by their statistics, such that the files
-/// of each group remain ordered.
+/// the files is preserved.
 fn split_files_in_order(files: Vec<PartitionedFile>, n: usize) -> Vec<FileGroup> {
     if files.is_empty() {
         return Vec::new();

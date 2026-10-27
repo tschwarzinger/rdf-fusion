@@ -23,7 +23,7 @@ impl ConfigExtension for RdfFusionOptions {
 }
 
 /// Execution configuration for RDF Fusion.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExecutionOptions {
     /// The size in bytes below which a scan is eagerly buffered during planning. This allows small
     /// scans to be evaluated in parallel instead of sequentially waiting on dynamic filters. A
@@ -31,6 +31,20 @@ pub struct ExecutionOptions {
     pub small_scan_buffering_threshold: usize,
     /// Whether Bloom filters are used for pruning Parquet row groups during planning.
     pub planning_bloom_filters: PlanningBloomFilters,
+    /// Whether a Parquet quad pattern scan may switch to another quad table at execution time,
+    /// once the dynamic filter of a hash join restricts a column to a few values that the other
+    /// quad table can look up efficiently.
+    pub quad_table_switching: bool,
+}
+
+impl Default for ExecutionOptions {
+    fn default() -> Self {
+        Self {
+            small_scan_buffering_threshold: 0,
+            planning_bloom_filters: PlanningBloomFilters::default(),
+            quad_table_switching: true,
+        }
+    }
 }
 
 /// Defines whether Bloom filters are used for pruning Parquet row groups during planning. Pruning
@@ -207,6 +221,13 @@ impl ExtensionOptions for RdfFusionOptions {
                     ))
                 })?;
             }
+            "execution.quad_table_switching" => {
+                self.execution.quad_table_switching = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for execution.quad_table_switching: {e}"
+                    ))
+                })?;
+            }
             "local.work_dir" => {
                 self.local.work_dir = Some(value.to_string());
             }
@@ -342,6 +363,11 @@ impl ExtensionOptions for RdfFusionOptions {
                 key: format!("{}.execution.planning_bloom_filters", Self::PREFIX),
                 value: Some(self.execution.planning_bloom_filters.to_string()),
                 description: "Whether Bloom filters are used for pruning Parquet row groups during planning (\"auto\", \"always\", or \"never\"). \"auto\" only uses them if the scan caches the data it reads.",
+            },
+            ConfigEntry {
+                key: format!("{}.execution.quad_table_switching", Self::PREFIX),
+                value: Some(self.execution.quad_table_switching.to_string()),
+                description: "Whether a Parquet quad pattern scan may switch to another quad table at execution time, once the dynamic filter of a hash join restricts a column to a few values.",
             },
             ConfigEntry {
                 key: format!("{}.local.work_dir", Self::PREFIX),
@@ -569,7 +595,7 @@ mod tests {
     #[test]
     fn test_env_mappings() {
         let mappings = RdfFusionOptions::env_mappings();
-        assert_eq!(mappings.len(), 18);
+        assert_eq!(mappings.len(), 19);
         assert!(mappings.iter().any(|(env, id)| {
             env == "RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE"
                 && id == "storage.delta.log_max_age"
@@ -653,9 +679,24 @@ mod tests {
     }
 
     #[test]
+    fn test_set_quad_table_switching() {
+        let mut config = RdfFusionOptions::default();
+        assert!(config.execution.quad_table_switching);
+        config
+            .set("rdf_fusion.execution.quad_table_switching", "false")
+            .unwrap();
+        assert!(!config.execution.quad_table_switching);
+        assert!(
+            config
+                .set("rdf_fusion.execution.quad_table_switching", "x")
+                .is_err()
+        );
+    }
+
+    #[test]
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 18);
+        assert_eq!(entries.len(), 19);
     }
 }

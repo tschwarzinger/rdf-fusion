@@ -98,8 +98,7 @@ pub struct ParquetQuadTableDescription {
     /// The order of the quads in the files. The files contain non-overlapping ranges of this
     /// order.
     pub sort_order: Option<RdfSortOrder>,
-    /// The files of the quad table, ordered by their path. The storage orders them by their
-    /// statistics.
+    /// The files of the quad table, ordered by their path.
     pub files: Vec<ParquetFileDescription>,
 }
 

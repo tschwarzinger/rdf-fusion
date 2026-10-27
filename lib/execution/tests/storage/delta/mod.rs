@@ -19,6 +19,7 @@ mod object_ids;
 mod persistence;
 mod planner;
 mod refresh;
+mod switch;
 
 fn create_test_log_store() -> Arc<dyn LogStore> {
     let object_store = Arc::new(InMemory::new());

@@ -209,76 +209,11 @@ async fn test_parquet_bloom_filter_pruning_at_execution_time_for_sorted_prefix()
 }
 
 #[tokio::test]
-async fn test_parquet_storage_derives_sort_order_from_footers() {
-    let (_, sorted_storage) = prepare_test_store_with_options(
-        &BLOOM_FILTER_TEST_QUADS,
-        false,
-        "test_sorted.parquet",
-        None,
-        0,
-        vec![
-            col("subject").sort(true, true),
-            col("object").sort(true, true),
-        ],
-    )
-    .await;
-    assert_eq!(
-        sorted_storage
-            .output_ordering()
-            .map(|ordering| ordering.to_string()),
-        Some("subject@1 ASC, object@3 ASC".to_owned())
-    );
-
-    let (_, unsorted_storage) =
-        prepare_test_store(&BLOOM_FILTER_TEST_QUADS, false, "test_unsorted.parquet")
-            .await;
-    assert!(unsorted_storage.output_ordering().is_none());
-}
-
-/// A URL that points to a single object is used, even if the object has no `.parquet` extension
-/// (e.g., objects in IndexedDB).
-#[tokio::test]
 async fn test_parquet_storage_reads_single_file_without_extension() {
     let (_, storage) =
         prepare_test_store(&BLOOM_FILTER_TEST_QUADS, false, "dataset-without-extension")
             .await;
     assert_eq!(storage.files().len(), 1);
-}
-
-#[tokio::test]
-async fn test_parquet_scan_sort_order_enables_sorted_aggregation() {
-    let query = "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o } GROUP BY ?s";
-
-    // The file is sorted by subject. Hence, the grouping can exploit the order of the scan.
-    let (rdf_context, _) = prepare_test_store_with_options(
-        &BLOOM_FILTER_TEST_QUADS,
-        false,
-        "test_sorted_aggregation.parquet",
-        None,
-        0,
-        vec![
-            col("subject").sort(true, true),
-            col("object").sort(true, true),
-        ],
-    )
-    .await;
-    let plan = plan_to_string(&rdf_context, query).await;
-    assert!(
-        plan.contains("ordering_mode=Sorted"),
-        "Expected a sorted aggregation: {plan}"
-    );
-
-    let (rdf_context, _) = prepare_test_store(
-        &BLOOM_FILTER_TEST_QUADS,
-        false,
-        "test_unsorted_aggregation.parquet",
-    )
-    .await;
-    let plan = plan_to_string(&rdf_context, query).await;
-    assert!(
-        !plan.contains("ordering_mode=Sorted"),
-        "Expected an unsorted aggregation: {plan}"
-    );
 }
 
 #[tokio::test]

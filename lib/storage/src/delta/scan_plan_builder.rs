@@ -5,12 +5,13 @@ use crate::delta::log::{
     DeltaStorageLogVersionRange,
 };
 use crate::delta::quad_table::{DeltaQuadsQuadTableSnapshot, add_to_object_meta};
+use crate::parquet::switch::{QuadTableSwitch, SwitchableQuadTables};
 use crate::parquet::{ParquetQuadScanBuilder, PushdownProjection};
 use crate::quad_tables::QuadTableName;
+use async_trait::async_trait;
 use datafusion::arrow::compute::SortOptions;
-use datafusion::arrow::datatypes::DataType;
 use datafusion::common::stats::Precision;
-use datafusion::common::{DFSchema, JoinType, NullEquality};
+use datafusion::common::{DFSchema, JoinType, NullEquality, Result as DFResult};
 use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::physical_plan::FileGroup;
 use datafusion::execution::SessionState;
@@ -27,13 +28,14 @@ use datafusion::physical_optimizer::ensure_requirements::EnsureRequirements;
 use datafusion::physical_optimizer::sanity_checker::SanityCheckPlan;
 use datafusion::physical_plan::empty::EmptyExec;
 use datafusion::physical_plan::filter::FilterExec;
-use datafusion::physical_plan::joins::{HashJoinExec, PartitionMode, SortMergeJoinExec};
+use datafusion::physical_plan::joins::{HashJoinExec, PartitionMode};
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::sorts::sort::SortExec;
 use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
 use datafusion::physical_plan::union::UnionExec;
 use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
+use rdf_fusion_common::QuadComponent;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_logical::quad_pattern::{
@@ -57,6 +59,9 @@ pub struct DeltaQuadsStorageScanPlanBuilder {
     pattern: QuadPattern,
     encoding: QuadStorageEncoding,
     quad_table: Option<DeltaQuadsQuadTableSnapshot>,
+    /// The quad tables the scan of `quad_table` may switch to at execution time (including
+    /// `quad_table`). See [`QuadTableSwitch`].
+    switchable_quad_tables: Vec<DeltaQuadsQuadTableSnapshot>,
     changeset: Option<DeltaQuadsStorageLogChangesetRef>,
     projection_indices: Option<Vec<usize>>,
     cache: Option<Arc<BlockCache>>,
@@ -73,14 +78,20 @@ impl DeltaQuadsStorageScanPlanBuilder {
             pattern,
             encoding,
             quad_table: None,
+            switchable_quad_tables: Vec::new(),
             changeset: None,
             projection_indices: None,
             cache: None,
         }
     }
 
+    /// Scans the quad table that is best suited for the pattern.
+    ///
+    /// The scan may switch to another quad table at execution time (see `QuadTableSwitch`).
+    /// Only quad tables with the same log version as the chosen one are considered, as the same
+    /// changeset is applied on top of them.
     pub fn with_best_quad_table(
-        self,
+        mut self,
         quad_tables: &[DeltaQuadsQuadTableSnapshot],
     ) -> Result<Self, DeltaQuadsStorageError> {
         let best_quad_table = quad_tables
@@ -93,14 +104,25 @@ impl DeltaQuadsStorageScanPlanBuilder {
                 )
             })
             .cloned();
-        match best_quad_table {
-            None => Ok(self),
-            Some(idx) => Ok(self.with_quad_table(idx)),
-        }
+        let Some(best_quad_table) = best_quad_table else {
+            return Ok(self);
+        };
+        let switchable_quad_tables = quad_tables
+            .iter()
+            .filter(|table| {
+                table.log_transaction_version()
+                    == best_quad_table.log_transaction_version()
+            })
+            .cloned()
+            .collect();
+        self = self.with_quad_table(best_quad_table);
+        self.switchable_quad_tables = switchable_quad_tables;
+        Ok(self)
     }
 
     pub fn with_quad_table(mut self, quad_table: DeltaQuadsQuadTableSnapshot) -> Self {
         self.quad_table = Some(quad_table);
+        self.switchable_quad_tables = Vec::new();
         self
     }
 
@@ -334,51 +356,29 @@ impl DeltaQuadsStorageScanPlanBuilder {
             let left_schema = removed_plan.schema();
             let right_schema = current_plan.schema();
             let mut join_on = Vec::new();
-            let mut sort_options = Vec::new();
-
-            let mut is_struct = false;
             for component in &components {
                 let name = component.column_name();
                 let l_idx = left_schema.index_of(name)?;
                 let r_idx = right_schema.index_of(name)?;
-
-                if matches!(left_schema.field(l_idx).data_type(), DataType::Struct(_)) {
-                    is_struct = true;
-                }
-
                 join_on.push((
                     Arc::new(PhysColumn::new(name, l_idx)) as Arc<dyn PhysicalExpr>,
                     Arc::new(PhysColumn::new(name, r_idx)) as Arc<dyn PhysicalExpr>,
                 ));
-                sort_options.push(SortOptions {
-                    descending: false,
-                    nulls_first: true,
-                });
             }
 
-            if is_struct {
-                current_plan = Arc::new(HashJoinExec::try_new(
-                    removed_plan,
-                    current_plan,
-                    join_on,
-                    None,
-                    &JoinType::RightAnti,
-                    None,
-                    PartitionMode::CollectLeft,
-                    NullEquality::NullEqualsNull,
-                    false,
-                )?);
-            } else {
-                current_plan = Arc::new(SortMergeJoinExec::try_new(
-                    removed_plan,
-                    current_plan,
-                    join_on,
-                    None,
-                    JoinType::RightAnti,
-                    sort_options,
-                    NullEquality::NullEqualsNull,
-                )?);
-            }
+            // The removed quads are the build side, such that the memory is bounded by the
+            // changeset instead of the quad table.
+            current_plan = Arc::new(HashJoinExec::try_new(
+                removed_plan,
+                current_plan,
+                join_on,
+                None,
+                &JoinType::RightAnti,
+                None,
+                PartitionMode::CollectLeft,
+                NullEquality::NullEqualsNull,
+                false,
+            )?);
         }
 
         // Handle added quads.
@@ -428,44 +428,9 @@ impl DeltaQuadsStorageScanPlanBuilder {
         quad_table: &DeltaQuadsQuadTableSnapshot,
         projection: QuadTableScanProjectionPushdown,
     ) -> Result<Option<Arc<dyn ExecutionPlan>>, DeltaQuadsStorageError> {
-        let table_uri = quad_table.log_store().config().location().clone();
-        let table_path = object_store::path::Path::from(table_uri.path());
-
         if quad_table.active_files().is_empty() {
             return Ok(None);
         }
-
-        let target_partitions = self
-            .session_state
-            .config_options()
-            .execution
-            .target_partitions;
-        let mut file_groups = vec![Vec::new(); target_partitions];
-
-        for (i, file) in quad_table.active_files().as_ref().iter().enumerate() {
-            let partitioned_file =
-                PartitionedFile::new_from_meta(add_to_object_meta(&table_path, file)?);
-            file_groups[i % target_partitions].push(partitioned_file);
-        }
-
-        file_groups.retain(|g| !g.is_empty());
-        let file_groups: Vec<FileGroup> =
-            file_groups.into_iter().map(FileGroup::new).collect();
-
-        let mut sort_exprs = Vec::new();
-        let schema = self.encoding.quad_schema();
-        for component in quad_table.components().inner() {
-            let name = component.column_name();
-            let idx = schema.inner().index_of(name)?;
-            sort_exprs.push(PhysicalSortExpr {
-                expr: Arc::new(PhysColumn::new(name, idx)) as Arc<dyn PhysicalExpr>,
-                options: SortOptions {
-                    descending: false,
-                    nulls_first: true,
-                },
-            });
-        }
-        let ordering = LexOrdering::new(sort_exprs).expect("LexOrdering should be valid");
 
         let pushdown_projection = match projection {
             QuadTableScanProjectionPushdown::No => PushdownProjection::No,
@@ -474,21 +439,36 @@ impl DeltaQuadsStorageScanPlanBuilder {
             }
         };
 
-        let plan = ParquetQuadScanBuilder::new(
+        let quad_tables = DeltaSwitchableQuadTables {
+            quad_tables: self.switchable_quad_tables.clone(),
+            encoding: self.encoding.clone(),
+            cache: self.cache.clone(),
+        };
+        let mut builder = quad_tables.scan_builder(
+            quad_table,
+            &self.pattern,
+            pushdown_projection.clone(),
             &self.session_state,
-            self.encoding.clone(),
-            table_uri.as_object_store_url(),
-            file_groups,
-        )
-        .with_output_ordering(vec![ordering])
-        .with_quad_pattern(self.pattern.clone())
-        .with_pushdown_projection(pushdown_projection)
-        .with_block_cache(self.cache.clone())
-        .with_eager_pruning(true)
-        .build()
-        .await?;
+            self.session_state
+                .config_options()
+                .execution
+                .target_partitions,
+        )?;
+        let planned_table = self
+            .switchable_quad_tables
+            .iter()
+            .position(|table| table.components() == quad_table.components());
+        if let Some(planned_table) = planned_table
+            && self.switchable_quad_tables.len() > 1
+        {
+            builder = builder.with_quad_table_switch(QuadTableSwitch::new(
+                Arc::new(quad_tables),
+                planned_table,
+                pushdown_projection,
+            ));
+        }
 
-        Ok(Some(plan))
+        Ok(Some(builder.build().await?))
     }
 
     /// Physically maps the output columns to their requested variable names
@@ -552,4 +532,83 @@ enum QuadTableScanProjectionPushdown {
     No,
     /// Pushdown the projection with optional additional projection quad_tables
     Yes(Option<Vec<usize>>),
+}
+
+/// The quad tables of a Delta storage that a scan can switch between (see [`QuadTableSwitch`]).
+///
+/// All quad tables have the same log version.
+#[derive(Debug)]
+struct DeltaSwitchableQuadTables {
+    quad_tables: Vec<DeltaQuadsQuadTableSnapshot>,
+    encoding: QuadStorageEncoding,
+    cache: Option<Arc<BlockCache>>,
+}
+
+impl DeltaSwitchableQuadTables {
+    /// Creates the builder for the scan of the `pattern` from the `quad_table`. The files are
+    /// distributed over (at most) `num_partitions` groups.
+    fn scan_builder<'a>(
+        &self,
+        quad_table: &DeltaQuadsQuadTableSnapshot,
+        pattern: &QuadPattern,
+        projection: PushdownProjection,
+        session_state: &'a SessionState,
+        num_partitions: usize,
+    ) -> Result<ParquetQuadScanBuilder<'a>, DeltaQuadsStorageError> {
+        let table_uri = quad_table.log_store().config().location().clone();
+        let table_path = object_store::path::Path::from(table_uri.path());
+
+        let mut file_groups = vec![Vec::new(); num_partitions.max(1)];
+        let num_groups = file_groups.len();
+        for (i, file) in quad_table.active_files().iter().enumerate() {
+            let partitioned_file =
+                PartitionedFile::new_from_meta(add_to_object_meta(&table_path, file)?);
+            file_groups[i % num_groups].push(partitioned_file);
+        }
+        file_groups.retain(|g| !g.is_empty());
+        let file_groups = file_groups.into_iter().map(FileGroup::new).collect();
+
+        Ok(ParquetQuadScanBuilder::new(
+            session_state,
+            self.encoding.clone(),
+            table_uri.as_object_store_url(),
+            file_groups,
+        )
+        .with_quad_pattern(pattern.clone())
+        .with_pushdown_projection(projection)
+        .with_block_cache(self.cache.clone())
+        .with_eager_pruning(true))
+    }
+}
+
+#[async_trait]
+impl SwitchableQuadTables for DeltaSwitchableQuadTables {
+    fn native_sort_orders(&self) -> Vec<Option<Vec<QuadComponent>>> {
+        self.quad_tables
+            .iter()
+            .map(|table| Some(table.components().inner().to_vec()))
+            .collect()
+    }
+
+    async fn build_scan(
+        &self,
+        idx: usize,
+        pattern: &QuadPattern,
+        projection: PushdownProjection,
+        state: &SessionState,
+        filter: Expr,
+        num_partitions: usize,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        self.scan_builder(
+            &self.quad_tables[idx],
+            pattern,
+            projection,
+            state,
+            num_partitions,
+        )
+        .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?
+        .with_additional_filter(filter)
+        .build()
+        .await
+    }
 }

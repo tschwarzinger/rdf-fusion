@@ -1,3 +1,4 @@
+use datafusion::common::ScalarValue;
 use datafusion::common::stats::Precision;
 use datafusion::datasource::physical_plan::parquet::metadata::CachedParquetMetaData;
 use datafusion::logical_expr::{Extension, LogicalPlan};
@@ -81,7 +82,7 @@ async fn test_parquet_loader_writes_and_reads_multiple_files() {
 }
 
 #[tokio::test]
-async fn test_parquet_loader_files_are_ordered_by_statistics() {
+async fn test_parquet_loader_writes_non_overlapping_files() {
     let env = TestEnv::new(10).await;
     env.put_ntriples("input.nt", 120).await;
 
@@ -93,28 +94,14 @@ async fn test_parquet_loader_files_are_ordered_by_statistics() {
     let storage = env.open_storage(output_url).await;
     assert_eq!(rows_per_file(&storage), vec![10; 12]);
     assert_files_do_not_overlap(&storage);
-    let paths = storage
-        .files()
-        .iter()
-        .map(|file| file.path().to_string())
-        .collect::<Vec<_>>();
-    assert!(
-        !paths.is_sorted(),
-        "Expected the path order to differ: {paths:?}"
-    );
 
-    // The scan of all files is ordered. Hence, the grouping can exploit the order of the scan.
     let rdf_context = env.rdf_fusion_context(storage);
-    let (count, plan) = run_query(
+    let (count, _) = run_query(
         &rdf_context,
         "SELECT (COUNT(*) AS ?c) WHERE { ?s ?p ?o } GROUP BY ?s",
     )
     .await;
     assert_eq!(count, 120);
-    assert!(
-        plan.contains("ordering_mode=Sorted"),
-        "Expected a sorted aggregation: {plan}"
-    );
 }
 
 /// A URL without a trailing `/` produces a single file, even if it has no `.parquet` extension
@@ -181,9 +168,11 @@ async fn test_parquet_loader_writes_dataset_with_multiple_sort_orders() {
     let rdf_context =
         env.rdf_fusion_context(Arc::clone(&storage) as Arc<dyn QuadStorage>);
     assert_eq!(cached_files(&rdf_context, &storage), Vec::<String>::new());
-    // The quad tables are ordered by their directory, and their files by their statistics.
-    let second_ospg_file = storage.quad_tables()[0].files()[1].path().to_string();
-    let second_spog_file = storage.quad_tables()[1].files()[1].path().to_string();
+    // The quad tables are ordered by their directory.
+    let second_ospg_file =
+        file_containing(&storage, 0, "object", "<http://example.org/o042>");
+    let second_spog_file =
+        file_containing(&storage, 1, "subject", "<http://example.org/s042>");
     assert!(second_ospg_file.starts_with("dataset/ospg/"));
     assert!(second_spog_file.starts_with("dataset/spog/"));
 
@@ -564,7 +553,7 @@ fn ntriples_with_shared_blank_nodes() -> String {
     ntriples
 }
 
-/// Asserts that the subjects of consecutive files of the storage do not overlap (except at their
+/// Asserts that the subject ranges of the files of the storage do not overlap (except at their
 /// boundaries).
 fn assert_files_do_not_overlap(storage: &ParquetQuadStorage) {
     let subject = QuadStorageEncoding::String
@@ -583,9 +572,39 @@ fn assert_files_do_not_overlap(storage: &ParquetQuadStorage) {
             )
         })
         .collect::<Vec<_>>();
+    let mut ranges = ranges;
+    ranges.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
     for window in ranges.windows(2) {
         assert!(window[0].1 <= window[1].0, "Files overlap: {ranges:?}");
     }
+}
+
+/// Returns the path of the only file of the quad table at `table` whose statistics for `column`
+/// contain `value`.
+fn file_containing(
+    storage: &ParquetQuadStorage,
+    table: usize,
+    column: &str,
+    value: &str,
+) -> String {
+    let idx = QuadStorageEncoding::String
+        .quad_schema()
+        .inner()
+        .index_of(column)
+        .unwrap();
+    let value = ScalarValue::from(value);
+    let files = storage.quad_tables()[table]
+        .files()
+        .iter()
+        .filter(|file| {
+            let stats = &file.statistics.as_ref().unwrap().column_statistics[idx];
+            stats.min_value.get_value().unwrap() <= &value
+                && &value <= stats.max_value.get_value().unwrap()
+        })
+        .map(|file| file.path().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(files.len(), 1, "Expected a single file: {files:?}");
+    files.into_iter().next().unwrap()
 }
 
 /// Returns the exact number of rows in each file of the storage.

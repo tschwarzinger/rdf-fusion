@@ -1,3 +1,4 @@
+use crate::parquet::switch::{QuadTableSwitch, SwitchDecision};
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::common::{Statistics, plan_err};
@@ -7,55 +8,84 @@ use datafusion::execution::{SendableRecordBatchStream, TaskContext};
 use datafusion::physical_expr::{
     OrderingRequirements, PhysicalSortExpr, ScalarFunctionExpr,
 };
+use datafusion::physical_plan::EmptyRecordBatchStream;
 use datafusion::physical_plan::execution_plan::{CardinalityEffect, InvariantLevel};
 use datafusion::physical_plan::filter_pushdown::{
     ChildPushdownResult, FilterDescription, FilterPushdownPhase,
     FilterPushdownPropagation, PushedDown,
 };
-use datafusion::physical_plan::metrics::{ExecutionPlanMetricsSet, MetricsSet};
+use datafusion::physical_plan::metrics::{
+    Count, ExecutionPlanMetricsSet, Metric, MetricValue, MetricsSet,
+};
 use datafusion::physical_plan::projection::ProjectionExec;
+use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::{
     ChildStats, DisplayAs, DisplayFormatType, ExecutionPlan,
     InputDistributionRequirements, PhysicalExpr, PlanProperties, SortOrderPushdownResult,
     StatisticsArgs, StatisticsContext,
 };
+use futures::TryStreamExt;
 use rdf_fusion_common::DFResult;
+use rdf_fusion_common::config::RdfFusionSessionConfigExt;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-/// A physical execution plan for scanning a Parquet database.
+/// The bytes read while planning the scan.
+pub(crate) const BYTES_SCANNED_PLANNING: &str = "bytes_scanned_planning";
+/// The bytes read while planning the alternative scan of a quad table switch.
+const SWITCH_BYTES_SCANNED_PLANNING: &str = "switch_bytes_scanned_planning";
+
+/// A physical execution plan for scanning quads in Parquet files.
 ///
 /// This wraps a `DataSourceExec` and prevents pushing down expensive UDF filters into Parquet
-/// scanning while allowing cheap filters (e.g., term equality) to be pushed down.
+/// scanning while allowing inexpensive filters (e.g., term equality) to be pushed down.
 ///
 /// In addition to the metrics of the inner scan, this reports the metrics recorded while planning
 /// the scan (e.g., `bytes_scanned_planning` for eager pruning).
+///
+/// If the storage has multiple quad tables, the scan may switch to another quad table at execution
+/// time, once the dynamic filter of a hash join restricts a column to a few values (see
+/// `QuadTableSwitch`). Then, the execution metrics of the alternative scan are reported instead
+/// of the ones of the planned scan. In addition, `switch_bytes_scanned_planning` reports the bytes
+/// read while planning the alternative scan.
 #[derive(Debug, Clone)]
 pub struct ParquetQuadScanExec {
     quad_pattern: QuadPattern,
     inner: Arc<DataSourceExec>,
     planning_metrics: ExecutionPlanMetricsSet,
+    quad_table_switch: Option<QuadTableSwitch>,
 }
 
 impl ParquetQuadScanExec {
-    pub fn try_new(
+    pub(crate) fn try_new(
         quad_pattern: QuadPattern,
         inner: Arc<DataSourceExec>,
         planning_metrics: ExecutionPlanMetricsSet,
+        quad_table_switch: Option<QuadTableSwitch>,
     ) -> DFResult<Self> {
         Ok(Self {
             quad_pattern,
             inner,
             planning_metrics,
+            quad_table_switch,
         })
     }
 
+    /// Returns the scanned quad pattern.
+    pub fn quad_pattern(&self) -> &QuadPattern {
+        &self.quad_pattern
+    }
+
     /// Provides access to the underlying execution plan that implements the actual scan.
-    #[allow(dead_code)]
     pub(crate) fn inner_scan(&self) -> &Arc<DataSourceExec> {
         &self.inner
+    }
+
+    /// Returns the decision whether the scan switched to another quad table, if it has been made.
+    pub(crate) fn switch_decision(&self) -> Option<&Arc<SwitchDecision>> {
+        self.quad_table_switch.as_ref()?.current_decision()
     }
 
     fn wrap_inner(&self, inner: Arc<dyn ExecutionPlan>) -> Option<Arc<Self>> {
@@ -64,6 +94,10 @@ impl ParquetQuadScanExec {
             quad_pattern: self.quad_pattern.clone(),
             inner: Arc::new(downcast.clone()),
             planning_metrics: self.planning_metrics.clone(),
+            quad_table_switch: self
+                .quad_table_switch
+                .as_ref()
+                .map(QuadTableSwitch::reset),
         }))
     }
 }
@@ -152,13 +186,63 @@ impl ExecutionPlan for ParquetQuadScanExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        self.inner.execute(partition, context)
+        let switching_enabled = context
+            .session_config()
+            .rdf_fusion_options_or_default()
+            .execution
+            .quad_table_switching;
+        let Some(switch) = self.quad_table_switch.clone().filter(|_| switching_enabled)
+        else {
+            return self.inner.execute(partition, context);
+        };
+
+        // The dynamic filters are only populated once the build side of the join is complete.
+        // Hence, the decision is made on the first poll of any partition, which a hash join only
+        // does after completing its filter.
+        let planned = self.clone();
+        let stream = futures::stream::once(async move {
+            let decision = switch.decision(&planned, &context).await;
+            match decision.as_ref() {
+                SwitchDecision::Switched(switched) => {
+                    let plan = switched.scan();
+                    if partition
+                        < plan.properties().output_partitioning().partition_count()
+                    {
+                        plan.execute(partition, context)
+                    } else {
+                        Ok(Box::pin(EmptyRecordBatchStream::new(planned.schema()))
+                            as SendableRecordBatchStream)
+                    }
+                }
+                _ => planned.inner.execute(partition, context),
+            }
+        })
+        .try_flatten();
+        Ok(Box::pin(RecordBatchStreamAdapter::new(
+            self.schema(),
+            stream,
+        )))
     }
 
     fn metrics(&self) -> Option<MetricsSet> {
-        let mut metrics = self.inner.metrics().unwrap_or_default();
+        let decision = self.switch_decision().map(Arc::as_ref);
+        // Only the scan that has been executed reports execution metrics.
+        let executed = match decision {
+            Some(SwitchDecision::Switched(switched)) => &switched.scan().inner,
+            _ => &self.inner,
+        };
+        let mut metrics = executed.metrics().unwrap_or_default();
         for metric in self.planning_metrics.clone_inner().iter() {
             metrics.push(Arc::clone(metric));
+        }
+
+        if let Some(alternative) = decision.and_then(SwitchDecision::alternative_scan) {
+            let bytes = alternative
+                .planning_metrics
+                .clone_inner()
+                .sum_by_name(BYTES_SCANNED_PLANNING)
+                .map_or(0, |value| value.as_usize());
+            metrics.push(count_metric(SWITCH_BYTES_SCANNED_PLANNING, bytes));
         }
         Some(metrics)
     }
@@ -334,6 +418,19 @@ impl DisplayAs for ParquetQuadScanExec {
 
         self.inner.data_source().fmt_as(t, f)?;
 
+        // By default, only a switch is shown. The verbose format also explains why a scan kept
+        // the planned quad table.
+        match (t, self.switch_decision().map(Arc::as_ref)) {
+            (_, None | Some(SwitchDecision::NoDynamicFilter)) => {}
+            (DisplayFormatType::Verbose, Some(decision)) => {
+                write!(f, ", quad_table_switch={decision}")?;
+            }
+            (_, Some(SwitchDecision::Switched(switched))) => {
+                write!(f, ", quad_table_switch={switched}")?;
+            }
+            (_, Some(SwitchDecision::Kept { .. })) => {}
+        }
+
         Ok(())
     }
 }
@@ -349,4 +446,17 @@ fn contains_udf(expr: &Arc<dyn PhysicalExpr>) -> bool {
         }
     }
     false
+}
+
+/// Creates a global count metric with the given `name` and `value`.
+fn count_metric(name: &'static str, value: usize) -> Arc<Metric> {
+    let count = Count::new();
+    count.add(value);
+    Arc::new(Metric::new(
+        MetricValue::Count {
+            name: name.into(),
+            count,
+        },
+        None,
+    ))
 }

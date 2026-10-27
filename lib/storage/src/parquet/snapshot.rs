@@ -3,6 +3,7 @@ use crate::parquet::scan_builder::{ParquetQuadScanBuilder, PushdownProjection};
 #[allow(unused_imports)]
 use crate::parquet::storage::ParquetQuadStorage;
 use crate::parquet::storage::ParquetQuadTable;
+use crate::parquet::switch::{QuadTableSwitch, SwitchableQuadTables};
 use crate::quad_tables::compute_scan_score;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::{Field, Schema};
@@ -11,14 +12,15 @@ use datafusion::common::stats::Precision;
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::FileGroup;
 use datafusion::execution::{SessionState, TaskContext};
+use datafusion::logical_expr::Expr;
 use datafusion::physical_expr::expressions::Column;
 use datafusion::physical_plan::aggregates::{
     AggregateExec, AggregateMode, PhysicalGroupBy,
 };
 use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
 use futures::StreamExt;
-use rdf_fusion_common::StorageError;
 use rdf_fusion_common::quads::COL_GRAPH;
+use rdf_fusion_common::{QuadComponent, RdfSortOrder, StorageError};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::QuadPattern;
@@ -55,9 +57,9 @@ impl ParquetQuadStorageSnapshot {
         }
     }
 
-    /// Returns the quad table that is best suited for scanning the `pattern` (see
+    /// Returns the index of the quad table that is best suited for scanning the `pattern` (see
     /// [`compute_scan_score`]). On ties, the first quad table is chosen.
-    fn choose_quad_table(&self, pattern: &QuadPattern) -> &ParquetQuadTable {
+    fn choose_quad_table(&self, pattern: &QuadPattern) -> usize {
         self.quad_tables
             .iter()
             .enumerate()
@@ -72,11 +74,14 @@ impl ParquetQuadStorageSnapshot {
                 });
                 (score, Reverse(*idx))
             })
-            .map(|(_, table)| table)
+            .map(|(idx, _)| idx)
             .expect("A Parquet storage has at least one quad table")
     }
 
     /// Plans a [`QuadPattern`].
+    ///
+    /// If the snapshot has multiple quad tables, the scan may switch to another quad table at
+    /// execution time (see `QuadTableSwitch`).
     pub async fn plan_quad_pattern(
         &self,
         pattern: &QuadPattern,
@@ -84,23 +89,75 @@ impl ParquetQuadStorageSnapshot {
         session_state: &SessionState,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
         let quad_table = self.choose_quad_table(pattern);
-        let mut builder = ParquetQuadScanBuilder::new(
+        let projection = PushdownProjection::Yes(projection);
+        let mut builder = self.scan_builder(
+            quad_table,
+            pattern,
+            projection.clone(),
+            session_state,
+            session_state.config().target_partitions(),
+        );
+        if self.quad_tables.len() > 1 {
+            builder = builder.with_quad_table_switch(QuadTableSwitch::new(
+                Arc::new(self.clone()),
+                quad_table,
+                projection,
+            ));
+        }
+        builder.build().await
+    }
+
+    /// Creates the builder for the scan of the `pattern` from the quad table at index
+    /// `quad_table`. The files are split into (at most) `num_partitions` groups.
+    fn scan_builder<'a>(
+        &self,
+        quad_table: usize,
+        pattern: &QuadPattern,
+        projection: PushdownProjection,
+        session_state: &'a SessionState,
+        num_partitions: usize,
+    ) -> ParquetQuadScanBuilder<'a> {
+        ParquetQuadScanBuilder::new(
             session_state,
             self.encoding.clone(),
             self.object_store_url.clone(),
-            vec![FileGroup::new(quad_table.files().as_ref().clone())],
+            vec![FileGroup::new(
+                self.quad_tables[quad_table].files().as_ref().clone(),
+            )],
         )
         .with_quad_pattern(pattern.clone())
         .with_block_cache(self.block_cache.clone())
         .with_eager_pruning(true)
-        .with_split_file_groups(session_state.config().target_partitions())
-        .with_pushdown_projection(PushdownProjection::Yes(projection));
-        if let Some(output_ordering) = quad_table.output_ordering() {
-            builder = builder.with_output_ordering(vec![output_ordering.clone()]);
-        }
-        let plan = builder.build().await?;
+        .with_split_file_groups(num_partitions)
+        .with_pushdown_projection(projection)
+    }
+}
 
-        Ok(plan)
+#[async_trait]
+impl SwitchableQuadTables for ParquetQuadStorageSnapshot {
+    fn native_sort_orders(&self) -> Vec<Option<Vec<QuadComponent>>> {
+        self.quad_tables
+            .iter()
+            .map(|table| match table.sort_order() {
+                Some(RdfSortOrder::NativeOrder(components)) => Some(components.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    async fn build_scan(
+        &self,
+        idx: usize,
+        pattern: &QuadPattern,
+        projection: PushdownProjection,
+        state: &SessionState,
+        filter: Expr,
+        num_partitions: usize,
+    ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        self.scan_builder(idx, pattern, projection, state, num_partitions)
+            .with_additional_filter(filter)
+            .build()
+            .await
     }
 }
 

@@ -112,22 +112,10 @@ pub fn compute_scan_score(
     pattern: &TriplePattern,
     blank_node_mode: BlankNodeMatchingMode,
 ) -> usize {
-    let graph_bound = matches!(
-        active_graph,
-        ActiveGraph::DefaultGraph | ActiveGraph::Union(_)
-    );
-    let subject_bound = is_term_bound(&pattern.subject, blank_node_mode);
-    let predicate_bound = matches!(pattern.predicate, NamedNodePattern::NamedNode(_));
-    let object_bound = is_term_bound(&pattern.object, blank_node_mode);
-
     let mut score = 0;
     for (i, component) in components.iter().enumerate() {
-        let is_bound = match component {
-            QuadComponent::GraphName => graph_bound,
-            QuadComponent::Subject => subject_bound,
-            QuadComponent::Predicate => predicate_bound,
-            QuadComponent::Object => object_bound,
-        };
+        let is_bound =
+            is_component_bound(*component, active_graph, pattern, blank_node_mode);
 
         // We don't stop after finding a non-bound component, because components that are part of
         // the sort order should still exhibit a better clustering, even though the scan is no
@@ -138,6 +126,27 @@ pub fn compute_scan_score(
         }
     }
     score
+}
+
+/// Returns whether the pattern restricts the `component` to constants (e.g., a named node or the
+/// default graph).
+pub fn is_component_bound(
+    component: QuadComponent,
+    active_graph: &ActiveGraph,
+    pattern: &TriplePattern,
+    blank_node_mode: BlankNodeMatchingMode,
+) -> bool {
+    match component {
+        QuadComponent::GraphName => matches!(
+            active_graph,
+            ActiveGraph::DefaultGraph | ActiveGraph::Union(_)
+        ),
+        QuadComponent::Subject => is_term_bound(&pattern.subject, blank_node_mode),
+        QuadComponent::Predicate => {
+            matches!(pattern.predicate, NamedNodePattern::NamedNode(_))
+        }
+        QuadComponent::Object => is_term_bound(&pattern.object, blank_node_mode),
+    }
 }
 
 fn is_term_bound(pattern: &TermPattern, mode: BlankNodeMatchingMode) -> bool {

@@ -92,6 +92,68 @@ prepare-dblp size release="2026-09-01":
     fi
     echo "Prepared $DATA_DIR/dblp.nt."
 
+# The dataset is written to `output` (a directory ending with `/`) and described by its
+# `dataset.ttl`. Upload the files and the `dataset.ttl` together, as the `dataset.ttl` records the
+# size and the modification time of each file.
+#
+# Generates the Parquet dataset of the full dblp dump that is used by the playground.
+generate-dblp-dataset output release="2026-09-01":
+    #!/usr/bin/env bash
+    set -eo pipefail
+
+    output="{{ output }}"
+    if [[ "$output" != */ ]]; then
+        echo "The output must be a directory ending with /." >&2
+        exit 1
+    fi
+    if [ -e "$output" ] && [ -n "$(ls -A "$output")" ]; then
+        echo "The output directory $output is not empty." >&2
+        exit 1
+    fi
+
+    DATA_DIR="data/dblp-full-{{ release }}"
+    input="$DATA_DIR/dblp.nt"
+    if [ ! -f "$input" ]; then
+        mkdir -p "$DATA_DIR"
+        year="{{ release }}"
+        url="https://drops.dagstuhl.de/storage/artifacts/dblp/rdf/${year%%-*}/dblp-{{ release }}.nt.gz"
+        echo "Downloading $url ..."
+        curl -fSL "$url" -o "$DATA_DIR/dblp.nt.gz"
+        gzip -dc "$DATA_DIR/dblp.nt.gz" | grep -v '^$' > "$input.tmp"
+        mv "$input.tmp" "$input"
+        rm "$DATA_DIR/dblp.nt.gz"
+    fi
+
+    # The writer settings are tuned for selective queries against the dataset over HTTP:
+    # - 25M quads per file. Each file that is not pruned via the dataset.ttl has its footer and
+    #   page index loaded, so smaller files make selective lookups cheaper.
+    # - Pages of 8192 rows keep the page index small (~30 KB per million quads instead of
+    #   ~320 KB with 1024 rows per page), as the whole page index of a file is loaded.
+    # - Only the first three sort columns have page statistics. The last sort column is only
+    #   sorted within runs of all others, so its page statistics rarely prune pages.
+    # - Row groups of 131072 rows keep the number of requests of joins low (each probed row group
+    #   requires reading its Bloom filters), while still allowing selective row group pruning.
+    # - The number of distinct values of the Bloom filters matches the row group size, as the
+    #   values of trailing sort columns are mostly distinct within a row group. Too small Bloom
+    #   filters are saturated and do not prune any row groups.
+    #
+    # Sorting the dump requires spilling to disk. The default temporary directory may be a small
+    # in-memory file system.
+    mkdir -p "$output" "$DATA_DIR/tmp"
+    export TMPDIR="$(realpath "$DATA_DIR/tmp")"
+    export DATAFUSION_RUNTIME_MEMORY_LIMIT="${DATAFUSION_RUNTIME_MEMORY_LIMIT:-8G}"
+    export DATAFUSION_EXECUTION_SPILL_COMPRESSION="${DATAFUSION_EXECUTION_SPILL_COMPRESSION:-lz4_frame}"
+    export RDF_FUSION_STORAGE_PARQUET_SORT_ORDERS="NATIVE(GPOS);NATIVE(GSPO);NATIVE(GOSP)"
+    export RDF_FUSION_STORAGE_PARQUET_PAGE_STATISTICS_COLUMNS=3
+    export DATAFUSION_EXECUTION_SOFT_MAX_ROWS_PER_OUTPUT_FILE=25000000
+    export DATAFUSION_EXECUTION_PARQUET_DATA_PAGE_ROW_COUNT_LIMIT=8192
+    export DATAFUSION_EXECUTION_PARQUET_MAX_ROW_GROUP_SIZE=131072
+    export DATAFUSION_EXECUTION_PARQUET_BLOOM_FILTER_NDV=131072
+    cargo run --profile release-nonlto -p rdf-fusion-cli -- \
+        --storage-type parquet \
+        --location "$(realpath "$output")/" \
+        load "$(realpath "$input")"
+
 # Executes the BSBM Explore benchmark against Parquet files with multiple sort orders.
 bench-bsbm-explore num_products="10000" max_query_count="" parallel_tasks="" sort_orders="Native(SPO) Native(POS) Native(OSP)":
     #!/usr/bin/env bash
