@@ -1,0 +1,46 @@
+[package]
+name = "rdf-fusion-storage-deltalake"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = """
+RDF Fusion Delta Lake Storage Layer
+"""
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+deltalake.workspace = true
+futures.workspace = true
+md-5.workspace = true
+object_store.workspace = true
+rdf-fusion-extensions.workspace = true
+rdf-fusion-common.workspace = true
+datafusion.workspace = true
+rdf-fusion-encoding.workspace = true
+rdf-fusion-logical.workspace = true
+rdf-fusion-physical.workspace = true
+rdf-fusion-storage.workspace = true
+rdf-fusion-storage-parquet.workspace = true
+quick_cache.workspace = true
+redb.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+insta.workspace = true
+rand.workspace = true
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "local_object_id_mapping"
+harness = false

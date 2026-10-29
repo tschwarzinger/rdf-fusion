@@ -11,8 +11,8 @@ use rdf_fusion_common::{
     GraphName, RdfDumpFormat, RdfSortOrder, url_to_object_store_url,
 };
 use rdf_fusion_encoding::{EncodingName, QuadStorageEncodingName};
-use rdf_fusion_storage::parquet::RdfParquetWriterOptions;
-use rdf_fusion_storage::rdf_files::{RdfFileDataSink, RdfParquetDataSink};
+use rdf_fusion_storage::rdf_files::RdfFileDataSink;
+use rdf_fusion_storage_parquet::{RdfParquetDataSink, RdfParquetWriterOptions};
 use std::sync::Arc;
 use url::Url;
 

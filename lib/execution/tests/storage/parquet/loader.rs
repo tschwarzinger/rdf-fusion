@@ -16,11 +16,11 @@ use rdf_fusion_execution::sparql::QueryOptions;
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_sparql_parser::ParserOptions;
-use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
-use rdf_fusion_storage::parquet::{
+use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
+use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
+use rdf_fusion_storage_parquet::{
     ParquetQuadStorage, RdfParquetLoader, RdfParquetLoadingError,
 };
-use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
 use std::sync::Arc;
 use url::Url;
 

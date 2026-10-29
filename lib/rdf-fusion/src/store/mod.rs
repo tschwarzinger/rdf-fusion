@@ -129,7 +129,7 @@ impl Store {
     ///
     /// For more control over the query engine and the storage backend, see [`Self::new`] and
     /// [`RdfFusionContextBuilder`](rdf_fusion_execution::RdfFusionContextBuilder) and the
-    /// implementation of the used quad storage (e.g. [`DeltaQuadsStorageBuilder`](rdf_fusion_storage::delta::DeltaQuadsStorageBuilder)).
+    /// implementation of the used quad storage (e.g. [`DeltaQuadsStorageBuilder`](rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder)).
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub async fn new_in_memory() -> Store {
         use datafusion::datasource::object_store::{
@@ -140,7 +140,7 @@ impl Store {
         use object_store::ObjectStore;
         use object_store::memory::InMemory;
         use rdf_fusion_execution::RdfFusionContextBuilder;
-        use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
+        use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
         use tokio::runtime::Handle;
         use url::Url;
 

@@ -28,12 +28,14 @@ rdf-fusion-execution.workspace = true
 rdf-fusion-sparql-parser.workspace = true
 rdf-fusion-logical.workspace = true
 rdf-fusion-storage.workspace = true
+rdf-fusion-storage-parquet.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 deltalake.workspace = true
+rdf-fusion-storage-deltalake.workspace = true
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["async_tokio"] }

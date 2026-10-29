@@ -18,7 +18,7 @@ use rdf_fusion::execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion::logical::ActiveGraph;
 use rdf_fusion::logical::quad_pattern::QuadPatternNode;
 use rdf_fusion::store::{DumpEncoding, RdfDumpOptions};
-use rdf_fusion_storage::parquet::ParquetQuadStorage;
+use rdf_fusion_storage_parquet::ParquetQuadStorage;
 use std::sync::Arc;
 use url::Url;
 

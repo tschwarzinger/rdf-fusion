@@ -11,7 +11,7 @@ use rdf_fusion::execution::RdfFusionContextBuilder;
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion::store::{DumpEncoding, RdfDumpOptions, Store};
-use rdf_fusion_storage::parquet::ParquetQuadStorage;
+use rdf_fusion_storage_parquet::ParquetQuadStorage;
 use std::sync::Arc;
 use url::Url;
 

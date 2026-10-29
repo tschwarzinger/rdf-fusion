@@ -13,6 +13,8 @@ members = [
   "lib/sparql-parser",
   "lib/physical",
   "lib/storage",
+  "lib/storage-deltalake",
+  "lib/storage-parquet",
   "lib/rdf-fusion",
   "lib/web",
   "lib/wasm",
@@ -127,6 +129,8 @@ rdf-fusion-functions = { version = "=0.3.0", path = "lib/functions" }
 rdf-fusion-logical = { version = "=0.3.0", path = "lib/logical" }
 rdf-fusion-physical = { version = "=0.3.0", path = "lib/physical" }
 rdf-fusion-storage = { version = "=0.3.0", path = "lib/storage" }
+rdf-fusion-storage-deltalake = { version = "=0.3.0", path = "lib/storage-deltalake" }
+rdf-fusion-storage-parquet = { version = "=0.3.0", path = "lib/storage-parquet" }
 rdf-fusion-sparql-parser = { version = "=0.3.0", path = "lib/sparql-parser" }
 rdf-fusion = { version = "=0.3.0", path = "lib/rdf-fusion" }
 rdf-fusion-web = { version = "=0.3.0", path = "lib/web" }

@@ -10,8 +10,8 @@ use object_store::path::Path;
 use object_store::{ObjectStoreExt, PutPayload};
 use rdf_fusion_common::{GraphName, RdfInput, RdfSortOrder};
 use rdf_fusion_encoding::QuadStorageEncodingName;
-use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
-use rdf_fusion_storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
+use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
+use rdf_fusion_storage_parquet::{ParquetQuadStorage, RdfParquetLoader};
 use std::sync::Arc;
 use url::Url;
 

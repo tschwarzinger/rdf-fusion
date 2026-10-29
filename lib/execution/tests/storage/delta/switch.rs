@@ -6,7 +6,7 @@ use crate::storage::switch::{DISABLE_SWITCHING, PREFIX, SwitchTest, quad, test_q
 use rdf_fusion_common::{GraphName, Literal, NamedNode, Quad};
 use rdf_fusion_encoding::{QuadStorageEncodingName, quads_to_plain_term_dataframe};
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::{DeltaQuadsStorage, DeltaQuadsStorageBuilder};
+use rdf_fusion_storage_deltalake::{DeltaQuadsStorage, DeltaQuadsStorageBuilder};
 use std::sync::Arc;
 use url::Url;
 

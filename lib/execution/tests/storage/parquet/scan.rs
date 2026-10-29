@@ -23,7 +23,7 @@ use rdf_fusion_execution::sparql::RdfFusionQuery;
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_sparql_parser::ParserOptions;
 use rdf_fusion_storage::block_cache::BlockCache;
-use rdf_fusion_storage::parquet::{
+use rdf_fusion_storage_parquet::{
     DATASET_DESCRIPTION_FILE, ParquetDatasetDescription, ParquetFileDescription,
     ParquetQuadStorage, ParquetQuadTableDescription,
 };

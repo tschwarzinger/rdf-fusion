@@ -366,7 +366,7 @@
 //! which also contains the implementations of the streams.
 //!
 //! One of the most important operators that integrates these components is the `QuadPattern`.
-//! Its execution plan is defined in the [rdf-fusion-storage](https://docs.rs/rdf-fusion-storage/) crate.
+//! Its execution plan is defined by the storage layer crates (e.g., [rdf-fusion-storage-parquet](https://docs.rs/rdf-fusion-storage-parquet/)).
 //! This operator is special because the storage layer implementation is responsible for planning it.
 //!
 //! Additionally, RDF Fusion uses the `ScalarFunction` and `AggregateFunction` traits to implement SPARQL functions.
@@ -389,8 +389,12 @@
 //! - [rdf-fusion-physical](https://docs.rs/rdf-fusion-physical/): The physical plan operators and
 //!   rewriting rules used by RDF Fusion.
 //! - [rdf-fusion](https://docs.rs/rdf-fusion/): This crate. The primary entry point for RDF Fusion.
-//! - [rdf-fusion-storage](https://docs.rs/rdf-fusion-storage/): The storage layer implementations
-//!   for RDF Fusion.
+//! - [rdf-fusion-storage](https://docs.rs/rdf-fusion-storage/): Shared building blocks of the
+//!   storage layer implementations (e.g., reading RDF files).
+//! - [rdf-fusion-storage-parquet](https://docs.rs/rdf-fusion-storage-parquet/): A storage layer
+//!   implementation based on Parquet files.
+//! - [rdf-fusion-storage-deltalake](https://docs.rs/rdf-fusion-storage-deltalake/): A storage layer
+//!   implementation based on Delta Lake. Builds on top of rdf-fusion-storage-parquet.
 //! - [rdf-fusion-web](https://docs.rs/rdf-fusion-web/): The web server for RDF Fusion.
 
 pub mod error;
@@ -431,6 +435,17 @@ pub mod pyhsical {
 
 pub mod storage {
     pub use rdf_fusion_storage::*;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    pub use rdf_fusion_storage_deltalake::{exec, local_object_ids};
+
+    pub mod parquet {
+        pub use rdf_fusion_storage_parquet::*;
+    }
+
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    pub mod delta {
+        pub use rdf_fusion_storage_deltalake::*;
+    }
 }
 
 pub mod sparql_parser {

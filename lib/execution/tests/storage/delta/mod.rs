@@ -10,7 +10,7 @@ use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::DeltaQuadsStorage;
+use rdf_fusion_storage_deltalake::DeltaQuadsStorage;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use url::Url;

@@ -4,7 +4,9 @@ use crate::storage::delta::{create_test_log_store, populate_storage};
 use datafusion::execution::SessionStateBuilder;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::{DeltaQuadsStorage, DeltaQuadsStorageBuilder, LoadMode};
+use rdf_fusion_storage_deltalake::{
+    DeltaQuadsStorage, DeltaQuadsStorageBuilder, LoadMode,
+};
 use std::sync::Arc;
 use std::time::Duration;
 

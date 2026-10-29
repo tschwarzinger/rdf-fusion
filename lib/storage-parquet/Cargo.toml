@@ -1,0 +1,35 @@
+[package]
+name = "rdf-fusion-storage-parquet"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = """
+RDF Fusion Parquet Storage Layer
+"""
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+futures.workspace = true
+object_store.workspace = true
+oxrdfio.workspace = true
+rdf-fusion-extensions.workspace = true
+rdf-fusion-common.workspace = true
+datafusion.workspace = true
+datafusion-datasource.workspace = true
+rdf-fusion-encoding.workspace = true
+rdf-fusion-logical.workspace = true
+rdf-fusion-storage.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true

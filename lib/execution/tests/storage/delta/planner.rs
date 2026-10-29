@@ -17,8 +17,8 @@ use rdf_fusion_execution::RdfFusionPlanner;
 use rdf_fusion_extensions::storage::{QuadStorage, QuadStorageSnapshot};
 use rdf_fusion_logical::ActiveGraph;
 use rdf_fusion_logical::quad_pattern::QuadPatternNode;
-use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::quad_tables::QuadTableName;
+use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
 use std::sync::Arc;
 
 /// Automatically applies standard filters for Parquet file names before snapshotting.

@@ -6,13 +6,8 @@
     html_logo_url = "https://codeberg.org/tschwarzinger/rdf-fusion/raw/branch/main/misc/logo/logo.png"
 )]
 
-//! Contains storage layer implementations for [RDF Fusion](https://docs.rs/rdf-fusion/).
+//! Contains shared building blocks for the storage layer implementations of [RDF Fusion](https://docs.rs/rdf-fusion/).
 
 pub mod block_cache;
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-pub mod delta;
-pub mod exec;
-pub mod local_object_ids;
-pub mod parquet;
 pub mod quad_tables;
 pub mod rdf_files;

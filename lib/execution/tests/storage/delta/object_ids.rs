@@ -1,6 +1,6 @@
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermArrayElementBuilder};
-use rdf_fusion_storage::local_object_ids::{
+use rdf_fusion_storage_deltalake::local_object_ids::{
     LocalObjectIdDictionary, RedbObjectIdDictionaryBuilder, StaticObjectIdClaimer,
 };
 use std::sync::Arc;

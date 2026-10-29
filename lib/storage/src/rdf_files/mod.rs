@@ -4,7 +4,6 @@ mod blank_nodes;
 mod exec;
 mod line_range_reader;
 mod logical_node;
-mod parquet_sink;
 mod planner;
 mod sink;
 
@@ -12,7 +11,6 @@ pub use blank_nodes::*;
 pub use exec::*;
 pub use line_range_reader::*;
 pub use logical_node::*;
-pub use parquet_sink::*;
 pub use planner::*;
 pub use sink::*;
 use std::cmp::Ordering;

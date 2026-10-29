@@ -14,9 +14,9 @@ use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_encoding::plain_term::{PlainTermArrayElementBuilder, PlainTermEncoding};
 use rdf_fusion_extensions::storage::QuadStorage;
-use rdf_fusion_storage::delta::DeltaQuadsStorage;
-use rdf_fusion_storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage::quad_tables::QuadTableName;
+use rdf_fusion_storage_deltalake::DeltaQuadsStorage;
+use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
 use std::sync::Arc;
 use url::Url;
 

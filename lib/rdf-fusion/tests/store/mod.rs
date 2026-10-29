@@ -7,7 +7,7 @@ use object_store::path::Path;
 use rdf_fusion::store::Store;
 use rdf_fusion_encoding::QuadStorageEncodingName;
 use rdf_fusion_execution::RdfFusionContextBuilder;
-use rdf_fusion_storage::parquet::ParquetQuadStorage;
+use rdf_fusion_storage_parquet::ParquetQuadStorage;
 use std::sync::Arc;
 use url::Url;
 
