@@ -54,7 +54,8 @@ pub fn serialize_solutions(
 
     let (tx, rx) = mpsc::channel(4);
 
-    SpawnedTask::spawn(async move {
+    // The task is aborted once the handle is dropped. Hence, the body stream keeps the handle.
+    let task = SpawnedTask::spawn(async move {
         // Helper macro to handle errors and send them across the channel
         macro_rules! try_or_send_err {
             ($res:expr) => {
@@ -91,7 +92,11 @@ pub fn serialize_solutions(
         }
     });
 
-    Ok(Body::from_stream(ReceiverStream::new(rx)))
+    let stream = ReceiverStream::new(rx).map(move |chunk| {
+        let _task = &task;
+        chunk
+    });
+    Ok(Body::from_stream(stream))
 }
 
 fn handle_record_batch<W: std::io::Write>(
