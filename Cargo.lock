@@ -5298,6 +5298,7 @@ dependencies = [
  "futures",
  "headers",
  "headers-accept",
+ "insta",
  "mediatype",
  "oxrdfio",
  "rdf-fusion",

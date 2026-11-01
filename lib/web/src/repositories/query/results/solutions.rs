@@ -1,3 +1,4 @@
+use crate::task_stream::TaskBoundStream;
 use axum::body::{Body, Bytes};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::runtime::SpawnedTask;
@@ -54,7 +55,6 @@ pub fn serialize_solutions(
 
     let (tx, rx) = mpsc::channel(4);
 
-    // The task is aborted once the handle is dropped. Hence, the body stream keeps the handle.
     let task = SpawnedTask::spawn(async move {
         // Helper macro to handle errors and send them across the channel
         macro_rules! try_or_send_err {
@@ -92,10 +92,8 @@ pub fn serialize_solutions(
         }
     });
 
-    let stream = ReceiverStream::new(rx).map(move |chunk| {
-        let _task = &task;
-        chunk
-    });
+    // Dropping the task handle aborts the task, so the body stream must own it.
+    let stream = TaskBoundStream::new(ReceiverStream::new(rx), task);
     Ok(Body::from_stream(stream))
 }
 

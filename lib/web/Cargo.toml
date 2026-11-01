@@ -32,6 +32,7 @@ tokio-stream = "0.1.18"
 [dev-dependencies]
 criterion.workspace = true
 axum-test.workspace = true
+insta.workspace = true
 
 [lints]
 workspace = true

@@ -25,6 +25,7 @@ mod config;
 mod error;
 mod repositories;
 mod state;
+mod task_stream;
 
 use crate::app::create_app_routes;
 use crate::repositories::create_repositories_routes;

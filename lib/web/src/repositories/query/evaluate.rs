@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use oxrdfio::RdfFormat;
 use rdf_fusion::common::{IriParseError, NamedNode};
 use rdf_fusion::execution::results::QueryResultsFormat;
-use rdf_fusion::execution::sparql::QueryOptions;
+use rdf_fusion::execution::sparql::{QueryEvaluationError, QueryOptions};
 use rdf_fusion::store::Store;
 
 /// Evaluates a SPARQL query and turns it into a result.
@@ -58,11 +58,17 @@ pub async fn evaluate_sparql_query(
         }
     }
 
-    let query_result = store
-        .query_opt(query, options)
-        .await
-        .map_err(|e| RdfFusionServerError::Internal(anyhow!(e)))?;
+    let query_result = store.query_opt(query, options).await.map_err(|e| match e {
+        QueryEvaluationError::Parsing(e) => {
+            RdfFusionServerError::BadRequest(e.to_string())
+        }
+        e => RdfFusionServerError::Internal(anyhow!(e)),
+    })?;
     serialize_query_result(query_result, rdf_format, query_format)
         .await
-        .map_err(|e| RdfFusionServerError::Internal(anyhow!(e)))
+        // Keep client errors (e.g., failed content negotiation) instead of reporting a 500.
+        .map_err(|e| {
+            e.downcast::<RdfFusionServerError>()
+                .unwrap_or_else(RdfFusionServerError::Internal)
+        })
 }

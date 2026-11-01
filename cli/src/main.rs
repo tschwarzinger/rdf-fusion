@@ -366,6 +366,9 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
             "s3a" => {
                 register_s3_store(&registry, &url)?;
             }
+            "memory" => {
+                registry.register_store(&url, Arc::new(InMemory::new()));
+            }
             _ => {
                 warn!(
                     "Unknown location type: {}. Check usage information for supported storage locations",
@@ -373,15 +376,6 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
                 )
             }
         }
-    }
-
-    // If no locations are provided, register memory store.
-    // Note: This matches the old behavior but might be redundant if datafusion already does it.
-    if locations.is_empty() {
-        registry.register_store(
-            &Url::parse("memory:///").unwrap(),
-            Arc::new(InMemory::new()),
-        );
     }
 
     builder = builder.with_object_store_registry(registry);
