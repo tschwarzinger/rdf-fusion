@@ -19,8 +19,10 @@ impl FromRequestParts<AppState> for RdfFormat {
         parts: &mut Parts,
         _state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        static MEDIA_TYPES: [MediaType<'_>; 8] = [
+        static MEDIA_TYPES: [MediaType<'_>; 10] = [
             MediaType::new(TEXT, PLAIN),
+            MediaType::new(TEXT, TURTLE),
+            MediaType::new(TEXT, N3),
             MediaType::new(APPLICATION, N_QUADS),
             MediaType::new(APPLICATION, N_TRIPLES),
             MediaType::new(APPLICATION, TRIG),
@@ -41,7 +43,7 @@ impl FromRequestParts<AppState> for RdfFormat {
             accept,
             &MEDIA_TYPES,
             &DEFAULT_MEDIA_TYPE,
-            "application/turtle",
+            "text/turtle",
         )?;
 
         RdfFormat::from_media_type(media_type.to_string().as_str()).ok_or(
@@ -77,7 +79,7 @@ impl FromRequestParts<AppState> for QueryResultsFormat {
                 Some(Name::new_unchecked("xml")),
                 &[],
             ),
-            MediaType::new(APPLICATION, Name::new_unchecked("tab-separated-values")),
+            MediaType::new(TEXT, Name::new_unchecked("tab-separated-values")),
             MediaType::new(APPLICATION, XML),
         ];
         static DEFAULT_MEDIA_TYPE: MediaType<'_> = MediaType::new(APPLICATION, JSON);

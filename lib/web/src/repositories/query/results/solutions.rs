@@ -1,3 +1,4 @@
+use crate::task_stream::TaskBoundStream;
 use axum::body::{Body, Bytes};
 use datafusion::arrow::array::RecordBatch;
 use datafusion::common::runtime::SpawnedTask;
@@ -54,7 +55,7 @@ pub fn serialize_solutions(
 
     let (tx, rx) = mpsc::channel(4);
 
-    SpawnedTask::spawn(async move {
+    let task = SpawnedTask::spawn(async move {
         // Helper macro to handle errors and send them across the channel
         macro_rules! try_or_send_err {
             ($res:expr) => {
@@ -91,7 +92,9 @@ pub fn serialize_solutions(
         }
     });
 
-    Ok(Body::from_stream(ReceiverStream::new(rx)))
+    // Dropping the task handle aborts the task, so the body stream must own it.
+    let stream = TaskBoundStream::new(ReceiverStream::new(rx), task);
+    Ok(Body::from_stream(stream))
 }
 
 fn handle_record_batch<W: std::io::Write>(
