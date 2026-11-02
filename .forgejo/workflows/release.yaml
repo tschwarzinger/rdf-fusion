@@ -25,6 +25,7 @@ jobs:
       - name: Setup Rust Environment
         uses: ./.forgejo/actions/setup-rust
         with:
+          extra-system-packages: 'python3'
           tools: 'just taplo-cli'
 
       - name: Run Tests
@@ -32,6 +33,8 @@ jobs:
           just lint
           just bench::prepare-benches-tests
           just test
+          # Uses the binary that `just test` built for the CLI tests.
+          python3 cli/tests/integration.py --bin target/debug/rdf-fusion
           just test-examples rustdoc
 
       - name: Check Version
@@ -91,10 +94,15 @@ jobs:
           system-deps: 'true'
           cache: false
           targets: ${{ matrix.target }}
+          extra-system-packages: 'python3'
           tools: 'just taplo-cli'
 
       - name: Build Binary
         run: bash misc/ci/build-binary.sh ${{ matrix.target }}
+
+      # Tests the exact binary that is released.
+      - name: Integration Tests
+        run: python3 cli/tests/integration.py --bin target/${{ matrix.target }}/release/rdf-fusion
 
       - name: Upload Artifact
         uses: https://data.forgejo.org/forgejo/upload-artifact@v4

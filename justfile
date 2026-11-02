@@ -34,6 +34,12 @@ lint-web:
 test profile="test":
     cargo test --workspace --exclude rdf-fusion-examples --exclude rdf-fusion-wasm --profile {{ profile }}
 
+# Builds the `rdf-fusion` binary and runs the integration tests (`cli/tests/integration.py`) that use
+# every command on the demo data, including smoke tests of the SPARQL endpoint.
+test-integration profile="dev":
+    cargo build --package rdf-fusion-cli --bin rdf-fusion --profile {{ profile }}
+    python3 cli/tests/integration.py --bin target/{{ if profile =~ '^(dev|test)$' { "debug" } else { profile } }}/rdf-fusion
+
 # Run the Playwright webdriver tests for the playground / Wasm bindings.
 test-web:
     wasm-pack build --target web --dev lib/wasm

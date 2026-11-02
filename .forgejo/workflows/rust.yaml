@@ -25,6 +25,7 @@ jobs:
         uses: ./.forgejo/actions/setup-rust
         with:
           system-deps: 'true'
+          extra-system-packages: 'python3'
           tools: 'just taplo-cli'
 
       - name: Prepare Benches for Tests
@@ -32,6 +33,11 @@ jobs:
 
       - name: Tests
         run: just test ci
+
+      # `just test ci` already builds `target/ci/rdf-fusion` for the CLI tests, so this step does not
+      # build anything.
+      - name: Integration Tests
+        run: python3 cli/tests/integration.py --bin target/ci/rdf-fusion
 
       - name: Test Examples
         run: just test-examples

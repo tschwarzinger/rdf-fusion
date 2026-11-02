@@ -18,13 +18,14 @@ Everything goes through the [`justfile`](./justfile) (plus `bench/justfile` for 
 | `just test` | Run the suite: `cargo test --workspace --exclude rdf-fusion-examples --exclude rdf-fusion-wasm --profile test`. Excludes examples and wasm by design. |
 | `just bench prepare-benches-tests` | **Must run before `just test`** (network download to `bench/data/bsbm-1000`). CI does this first. |
 | `just lint` | `cargo fmt --all -- --check` + `taplo fmt **.toml --check` + `cargo clippy --workspace --all-targets --profile dev -- -D warnings -D clippy::all`. Pass a profile arg (`ci`) to mirror CI. |
+| `just test-integration` | Build the `rdf-fusion` binary and run `cli/tests/integration.py` (Python, stdlib only): every CLI command plus SPARQL endpoint smoke tests against `examples/data`. Not part of `just test`. Run the script with `--bin <path>` to test another binary (e.g., a release). |
 | `just test-examples` | Run the `examples/` examples (excluded from `just test`). |
 | `just rustdoc` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items`. |
 | `just fmt` | Formats Rust, TOML, and web css/html (prettier). |
 | `just serve` | Run the CLI query server on `0.0.0.0:7878` (`--profile profiling-nonlto`). |
 | `just lint-wasm` / `just lint-web` / `just test-web` | WAsm/web targets; see "Web / Wasm" below. |
 
-The canonical check order is `lint` then `test` (as in CI).
+The canonical check order is `lint` then `test` (as in CI). CI runs `cli/tests/integration.py` in the test job against the binary that `just test ci` builds for the CLI tests.
 
 ## Workspace layout
 
