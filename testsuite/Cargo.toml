@@ -4,9 +4,7 @@ publish = false
 version = "0.0.0"
 authors.workspace = true
 license.workspace = true
-description = """
-Implementation of testsuites for RdfFusion
-"""
+description = "Test suites for RDF Fusion"
 edition.workspace = true
 rust-version.workspace = true
 

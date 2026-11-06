@@ -29,6 +29,7 @@ license = "Apache-2.0"
 edition = "2024"
 rust-version = "1.94"                                                # Minimum Supported Rust Version (Adopt from DataFusion)
 repository = "https://codeberg.org/tschwarzinger/rdf-fusion"
+homepage = "https://rdf-fusion.org"
 
 [workspace.dependencies]
 anyhow = "1.0"

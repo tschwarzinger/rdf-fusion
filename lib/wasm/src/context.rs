@@ -199,8 +199,8 @@ pub async fn create_parquet_context_from_indexeddb(
 
     registry.register_store(&Url::parse("indexeddb://").unwrap(), idb_store);
     let key_trimmed = key.trim_start_matches('/');
-    let url = Url::parse(&format!("indexeddb:///{}", key_trimmed))
-        .map_err(|e| e.to_string())?;
+    let url =
+        Url::parse(&format!("indexeddb:///{key_trimmed}")).map_err(|e| e.to_string())?;
 
     create_parquet_context(url, encoding, settings, registry).await
 }
@@ -341,13 +341,13 @@ pub async fn convert_rdf_to_parquet_stream(
 
     let in_key_trimmed = input_key.trim_start_matches('/');
     let input = RdfInput::try_new(
-        Url::parse(&format!("indexeddb:///{}", in_key_trimmed)).unwrap(),
+        Url::parse(&format!("indexeddb:///{in_key_trimmed}")).unwrap(),
         GraphName::DefaultGraph,
     )
     .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let out_key_trimmed = output_key.trim_start_matches('/');
-    let output_url = Url::parse(&format!("indexeddb:///{}", out_key_trimmed)).unwrap();
+    let output_url = Url::parse(&format!("indexeddb:///{out_key_trimmed}")).unwrap();
 
     crate::runtime::run(async move {
         loader

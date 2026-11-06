@@ -3,12 +3,12 @@ name = "rdf-fusion-extensions"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 readme = "README.md"
-description = """
-RDF Fusion Extensions API
-"""
+description = "Traits and core data structures for extending RDF Fusion"
 
 [dependencies]
 async-trait.workspace = true

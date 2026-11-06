@@ -3,11 +3,11 @@ name = "rdf-fusion-encoding"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = """
-RDF Fusion Term Encodings
-"""
+description = "Arrow encodings of RDF terms for RDF Fusion"
 
 [dependencies]
 async-trait.workspace = true

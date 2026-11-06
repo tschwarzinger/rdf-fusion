@@ -3,14 +3,13 @@ name = "rdf-fusion"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["database-implementations"]
-repository = "https://codeberg.org/tschwarzinger/rdf-fusion"
+repository.workspace = true
 documentation = "https://docs.rs/rdf-fusion"
-description = """
-a SPARQL database and RDF toolkit
-"""
+description = "An embeddable SPARQL engine built on Apache DataFusion"
 edition.workspace = true
 rust-version.workspace = true
 

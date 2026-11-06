@@ -3,11 +3,11 @@ name = "rdf-fusion-physical"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = """
-RDF Fusion Physical Operators and Rewriting Rules
-"""
+description = "Physical plan operators and rewriting rules for RDF Fusion"
 
 [dependencies]
 async-trait.workspace = true

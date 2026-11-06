@@ -2,7 +2,7 @@
 # Build the frontend assets and start a local static server for Playwright E2E.
 #
 # The playground is served at http://127.0.0.1:${E2E_PORT}/playground/ with the
-# Hugo baseURL overridden to this server's origin (no /rdf-fusion sub-path).
+# Hugo baseURL overridden to this server's origin (no sub-path).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

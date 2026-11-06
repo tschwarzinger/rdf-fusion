@@ -3,11 +3,11 @@ name = "rdf-fusion-compute"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = """
-RDF Fusion Compute
-"""
+description = "Computations on RDF terms for RDF Fusion"
 
 [dependencies]
 rdf-fusion-encoding.workspace = true

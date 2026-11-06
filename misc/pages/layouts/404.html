@@ -1,0 +1,11 @@
+{{ define "title" }}Page Not Found | RDF Fusion{{ end }} {{ define "main" }}
+<div class="container py-5 text-center">
+  <h1 class="display-4 fw-bold text-brown mb-3">404</h1>
+  <p class="fs-5 text-muted mb-4">
+    The page you are looking for does not exist or has been moved.
+  </p>
+  <a href='{{ "/" | relURL }}' class="btn btn-primary"
+    >Back to the start page</a
+  >
+</div>
+{{ end }}

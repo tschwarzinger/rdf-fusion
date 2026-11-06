@@ -3,6 +3,8 @@ name = "rdf-fusion-wasm"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "JavaScript and WebAssembly bindings for RDF Fusion"
@@ -53,6 +55,9 @@ getrandom_0_3 = { package = "getrandom", version = "0.3", features = [
   "wasm_js",
 ] }
 getrandom_0_2 = { package = "getrandom", version = "0.2", features = ["js"] }
+
+[lints]
+workspace = true
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

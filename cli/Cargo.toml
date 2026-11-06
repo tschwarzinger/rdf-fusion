@@ -3,13 +3,12 @@ name = "rdf-fusion-cli"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
 readme = "README.md"
 keywords = ["RDF", "SPARQL", "graph-database", "database"]
 categories = ["command-line-utilities", "database"]
 repository.workspace = true
-description = """
-RDF Fusion CLI tool and SPARQL HTTP server
-"""
+description = "RDF Fusion CLI tool and SPARQL HTTP server"
 edition.workspace = true
 rust-version.workspace = true
 

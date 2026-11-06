@@ -1,4 +1,4 @@
-name: Deploy to Pages
+name: Deploy Website
 
 on:
   push:
@@ -38,9 +38,30 @@ jobs:
         run: hugo --minify
         working-directory: misc/pages
 
-      - name: Deploy to Codeberg Pages
-        uses: https://codeberg.org/git-pages/action@v2
-        with:
-          site: https://tschwarzinger.codeberg.page/rdf-fusion/
-          token: ${{ forge.token }}
-          source: misc/pages/public/
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          ./aws/install
+
+      # The website has its own storage zone (separate from `rdf-fusion-public`) because `--delete`
+      # removes everything in the bucket that is not part of the freshly built site.
+      - name: Upload to Bunny Storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.RDF_FUSION_WEB_S3_ACCESS_TOKEN }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RDF_FUSION_WEB_S3_SECRET_ACCESS_TOKEN }}
+          AWS_DEFAULT_REGION: de
+        run: |
+          BUCKET_NAME="rdf-fusion-web"
+          ENDPOINT_URL="https://de-s3.storage.bunnycdn.com"
+
+          aws s3 sync misc/pages/public/ s3://$BUCKET_NAME/ --delete --endpoint-url $ENDPOINT_URL
+
+      - name: Purge CDN Cache
+        env:
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_PULL_ZONE_ID: ${{ secrets.BUNNY_WEB_PULL_ZONE_ID }}
+        run: |
+          curl --fail-with-body -sS -X POST \
+            -H "AccessKey: $BUNNY_API_KEY" \
+            "https://api.bunny.net/pullzone/$BUNNY_PULL_ZONE_ID/purgeCache"

@@ -3,11 +3,11 @@ name = "rdf-fusion-web"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = """
-RDF Fusion Web
-"""
+description = "SPARQL HTTP service of RDF Fusion"
 
 [dependencies]
 axum.workspace = true

@@ -211,7 +211,7 @@ impl ObjectStore for IndexedDbObjectStore {
                     Some(r) => r.as_range(blob_metadata.size).map_err(|e| {
                         object_store::Error::Generic {
                             store: "IndexedDB",
-                            source: Box::new(std::io::Error::other(format!("{:?}", e))),
+                            source: Box::new(std::io::Error::other(format!("{e:?}"))),
                         }
                     })?,
                     None => 0..blob_metadata.size,
@@ -398,7 +398,7 @@ fn idb_request_to_future(req: IdbRequest) -> JsFuture {
 }
 
 fn map_js_err(e: impl std::fmt::Debug) -> object_store::Error {
-    generic_error(format!("{:?}", e))
+    generic_error(format!("{e:?}"))
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
