@@ -13,6 +13,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::Request;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Redirect, Response};
+use axum::serve::ListenerExt;
 use axum::{Router, middleware, routing::get};
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -61,7 +62,14 @@ pub async fn serve(
 
     println!("Listening on {addr}");
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    // Results are streamed in several writes. With Nagle's algorithm, a write that follows a
+    // not-yet-acknowledged write is delayed until the client's (delayed) ACK arrives, which stalls
+    // responses on keep-alive connections by up to 40 ms on Linux.
+    let listener = tokio::net::TcpListener::bind(addr).await?.tap_io(|tcp| {
+        if let Err(err) = tcp.set_nodelay(true) {
+            error!("Failed to set TCP_NODELAY on incoming connection: {err}");
+        }
+    });
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown)
         .await?;
