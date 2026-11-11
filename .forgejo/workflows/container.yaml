@@ -1,0 +1,43 @@
+name: Publish Container Image
+
+# Publishes the container image for an existing release from its binary on the release page.
+# Releases do this automatically (see release.yaml); use this to (re-)publish older releases.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., release/0.3.1)'
+        required: true
+
+jobs:
+  publish-container:
+    name: Publish Container Image
+    runs-on: tuw-runner
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |
+          apt-get update
+          apt-get install -y podman
+
+      - name: Download Release Binary
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          VERSION="${TAG#release/}"
+          TARBALL="rdf-fusion-$VERSION-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p artifacts
+          curl -sSfL -o "artifacts/$TARBALL" \
+            "https://codeberg.org/${{ github.repository }}/releases/download/${TAG//\//%2F}/$TARBALL"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TARBALL=artifacts/$TARBALL" >> "$GITHUB_ENV"
+
+      - name: Build and Push
+        run: bash misc/ci/build-container.sh "$TARBALL" "$VERSION"
+        env:
+          # `vfs` storage and `chroot` isolation work inside unprivileged job containers.
+          STORAGE_DRIVER: vfs
+          BUILDAH_ISOLATION: chroot
+          CODEBERG_PACKAGES_TOKEN: ${{ secrets.CODEBERG_PACKAGES_TOKEN }}

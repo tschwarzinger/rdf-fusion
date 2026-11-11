@@ -89,6 +89,42 @@ Dumps the current snapshot of a database to an RDF serialization format, such as
 rdf-fusion --storage-type delta-quads --location file:///tmp/my-db dump ./dump.nq --format nq --sort-by GSPO
 ```
 
+### Using the Container Image
+
+Each release is published as a container image (`linux/amd64`) to `codeberg.org/tschwarzinger/rdf-fusion`.
+By default, the image serves a read-write `delta-quads` database stored in `/data` on port 7878.
+
+```bash
+podman run --rm -p 7878:7878 -v rdf-fusion-data:/data codeberg.org/tschwarzinger/rdf-fusion:latest
+```
+
+The examples use Podman, but `docker` accepts the same arguments.
+The image runs as the unprivileged user `65532`.
+Named volumes (as above) work out of the box, while a bind-mounted host directory must be writable by that user
+(e.g., use `-v ./my-db:/data:U` with Podman or `--user "$(id -u)"` with Docker).
+Pass your own arguments to run other commands, for example:
+
+```bash
+podman run --rm -v "$PWD/examples/data:/input:ro" -v rdf-fusion-data:/data \
+  codeberg.org/tschwarzinger/rdf-fusion:latest \
+  --storage-type delta-quads --location file:///data/ load /input/spiderman.ttl
+```
+
+**Using S3 storage:**
+
+The database can also live in an S3 bucket.
+Credentials and other settings are passed as `AWS_*` environment variables.
+
+```bash
+podman run --rm -p 7878:7878 \
+  -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION=eu-central-1 \
+  codeberg.org/tschwarzinger/rdf-fusion:latest \
+  --storage-type delta-quads --location s3a://my-bucket/my-db/ serve
+```
+
+For other S3-compatible stores, put the endpoint into the location (`s3a://my-bucket.s3.example.com/my-db/`, uses HTTPS)
+or set `AWS_ENDPOINT_URL` (add `AWS_ALLOW_HTTP=true` for plain HTTP endpoints).
+
 ### Using RDF Fusion in your Project
 
 Documentation for using RDF Fusion from another Rust project can be found in the main

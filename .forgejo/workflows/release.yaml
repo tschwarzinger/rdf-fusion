@@ -170,3 +170,30 @@ jobs:
           title: RDF Fusion ${{ github.ref_name }}
           tag: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-container:
+    name: Publish Container Image
+    needs: create-release
+    runs-on: tuw-runner
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |
+          apt-get update
+          apt-get install -y podman
+
+      - name: Download Binaries
+        uses: https://data.forgejo.org/forgejo/download-artifact@v4
+        with:
+          name: rdf-fusion-x86_64-unknown-linux-gnu
+          path: artifacts
+
+      - name: Build and Push
+        run: bash misc/ci/build-container.sh artifacts/rdf-fusion-*-x86_64-unknown-linux-gnu.tar.gz "${GITHUB_REF_NAME#release/}"
+        env:
+          # `vfs` storage and `chroot` isolation work inside unprivileged job containers.
+          STORAGE_DRIVER: vfs
+          BUILDAH_ISOLATION: chroot
+          CODEBERG_PACKAGES_TOKEN: ${{ secrets.CODEBERG_PACKAGES_TOKEN }}
