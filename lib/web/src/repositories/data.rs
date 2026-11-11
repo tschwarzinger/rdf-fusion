@@ -44,9 +44,9 @@ pub async fn handle_data_post(
             LoaderError::Parsing(err) => RdfFusionServerError::BadRequest(format!(
                 "Error parsing {format} RDF file: {err}",
             )),
-            LoaderError::Storage(_) => {
-                RdfFusionServerError::Internal(anyhow!("Error with storage layer."))
-            }
+            LoaderError::Storage(err) => RdfFusionServerError::Internal(
+                anyhow!(err).context("Error with storage layer"),
+            ),
             LoaderError::InvalidBaseIri { .. } => {
                 RdfFusionServerError::BadRequest("Invalid base IRI.".to_owned())
             }
@@ -57,7 +57,7 @@ pub async fn handle_data_post(
 
     state.store.optimize().await.map_err(|error| {
         RdfFusionServerError::Internal(
-            anyhow!(error).context("Could not optimize the store."),
+            anyhow!(error).context("Could not optimize the store"),
         )
     })?;
 

@@ -94,12 +94,52 @@ pub struct RedbObjectIdDictionarySnapshot {
     cache: Option<RedbObjectIdCache>,
 }
 
+impl RedbObjectIdDictionarySnapshot {
+    /// Resolves the `ids` only from the cache. Returns [`None`] if an id is not cached.
+    ///
+    /// This runs on the calling (async) thread. Handing lookups that are answered by the cache to
+    /// the blocking thread pool costs far more than the lookups themselves: a blocking thread
+    /// must be woken up, and the async worker parks until the result is ready.
+    fn try_resolve_from_cache(&self, ids: &Int64Array) -> Option<ArrayRef> {
+        let cache = self.cache.as_ref()?;
+        let mut builder = PlainTermArrayElementBuilder::with_capacity(ids.len());
+        let mut last: Option<(i64, Arc<LocalDictionaryTerm>)> = None;
+
+        for id in ids.iter() {
+            let Some(id) = id else {
+                builder.append_null();
+                continue;
+            };
+
+            let term = match &last {
+                Some((last_id, term)) if *last_id == id => Arc::clone(term),
+                _ => cache.get_by_id(id)?,
+            };
+            let redb_term = RedbTerm::from(term.as_ref());
+            builder.append_raw(
+                redb_term.term_type,
+                redb_term.value,
+                redb_term.data_type,
+                redb_term.language,
+            );
+            last = Some((id, term));
+        }
+
+        Some(builder.finish().into_array_ref())
+    }
+}
+
 #[async_trait]
 impl LocalObjectIdDictionarySnapshot for RedbObjectIdDictionarySnapshot {
     async fn resolve_plain_terms(
         &self,
         ids: &Int64Array,
     ) -> redb::Result<ArrayRef, LocalObjectIdError> {
+        if let Some(terms) = self.try_resolve_from_cache(ids) {
+            return Ok(terms);
+        }
+
+        // At least one id must be read from the database, which may block.
         let this = self.clone();
         let ids = ids.clone();
         SpawnedTask::spawn_blocking(move || {

@@ -145,7 +145,9 @@ pub async fn main() -> anyhow::Result<()> {
 
 /// Creates a [`Store`] instance from the given arguments.
 async fn create_store(args: &Args) -> anyhow::Result<Store> {
-    let session_config = create_cli_session_config()?;
+    let location = Url::parse(&resolve_location(&args.storage.location)?)
+        .context("Invalid object store URL")?;
+    let session_config = create_cli_session_config(&location)?;
     let rdf_fusion_options = session_config
         .rdf_fusion_options()
         .expect("RDF fusion options must be set")
@@ -154,8 +156,6 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
     let runtime_env = build_runtime_env(args)?;
 
     let encoding = QuadStorageEncodingName::from_str(&args.storage.encoding)?;
-    let location = Url::parse(&resolve_location(&args.storage.location)?)
-        .context("Invalid object store URL")?;
 
     let storage: Arc<dyn QuadStorage> = match args.storage.storage_type {
         cli::QuadStorageType::DeltaQuads => {
@@ -198,11 +198,14 @@ async fn create_store(args: &Args) -> anyhow::Result<Store> {
     Ok(Store::new(context))
 }
 
-fn create_cli_session_config() -> anyhow::Result<SessionConfig> {
+/// Creates the session config of the CLI for a store at `location`.
+fn create_cli_session_config(location: &Url) -> anyhow::Result<SessionConfig> {
     let mut config = session_config_from_env_for_rdf_fusion()?;
 
     // CLI-specific overrides
-    if env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD").is_err() {
+    if env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD").is_err()
+        && is_remote_location(location)
+    {
         config = config.set_str(
             "rdf_fusion.execution.small_scan_buffering_threshold",
             "512K",
@@ -291,6 +294,11 @@ async fn create_context_for_parquet_load(
         .context("Failed to create RDF Fusion Context")?;
 
     Ok(context)
+}
+
+/// Returns whether the store at `location` is accessed over the network (e.g., `s3a://`).
+fn is_remote_location(location: &Url) -> bool {
+    !matches!(location.scheme(), "file" | "memory")
 }
 
 /// Resolves a location string to a uniform absolute URL string.
@@ -447,5 +455,16 @@ mod tests {
             resolve_location("s3a://bucket/dataset/").unwrap(),
             "s3a://bucket/dataset/"
         );
+    }
+
+    #[test]
+    fn only_object_stores_accessed_over_the_network_are_remote() {
+        let is_remote = |location: &str| {
+            is_remote_location(&Url::parse(&resolve_location(location).unwrap()).unwrap())
+        };
+        assert!(!is_remote("/tmp/dataset/"));
+        assert!(!is_remote("file:///tmp/dataset/"));
+        assert!(!is_remote("memory:///"));
+        assert!(is_remote("s3a://bucket.endpoint/dataset/"));
     }
 }

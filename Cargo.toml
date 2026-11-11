@@ -195,12 +195,21 @@ inherits = "release"
 debug = true
 strip = false
 
+# snmalloc-sys builds its C++ code as a CMake "Debug" build (assertions on, no NDEBUG) whenever
+# debug info is enabled for it. This inflates allocation costs in profiles, so the allocator is
+# always built without debug info.
+[profile.profiling.package.snmalloc-sys]
+debug = false
+
 # release-non-lto inherited profile keeping debug information and symbols for mem/cpu profiling. "Full" release builds
 # tend to violate the resource constraints of the GitHub runners.
 [profile.profiling-nonlto]
 inherits = "release-nonlto"
 debug = true
 strip = false
+
+[profile.profiling-nonlto.package.snmalloc-sys]
+debug = false
 
 [workspace.lints.clippy]
 # Detects large stack-allocated futures that may cause stack overflow crashes (see threshold in clippy.toml)
