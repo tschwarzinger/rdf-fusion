@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Limit: skip=1, fetch=2
+  Sort: AS_SORTABLE_BYTES(ENC_TF(s)) ASC NULLS FIRST, AS_SORTABLE_BYTES(ENC_TF(o)) ASC NULLS FIRST
+    QuadPattern: triple_pattern=[?s <http://example.com/p> ?o], active_graph: Any Named Graph

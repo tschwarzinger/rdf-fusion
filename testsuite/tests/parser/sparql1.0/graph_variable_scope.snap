@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Extend: variable=?g, expression=Struct({term_type:,value:,data_type:,language_tag:})
+  Filter: EBV(BOUND(Struct({term_type:,value:,data_type:,language_tag:})))
+    EmptyRelation: rows=1

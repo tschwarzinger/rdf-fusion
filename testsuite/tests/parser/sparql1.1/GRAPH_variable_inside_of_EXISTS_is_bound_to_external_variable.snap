@@ -1,0 +1,12 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s
+  Filter: EBV(BOOLEAN_AS_TERM(EXISTS (<subquery>)))
+    Subquery:
+      Filter: IS_COMPATIBLE(outer_ref(g), __inner__g)
+        Projection: g AS __inner__g, s2 AS __inner__s2, o2 AS __inner__o2
+          QuadPattern: graph_variable=?g triple_pattern=[?s2 <http://www.example.org/p> ?o2], active_graph: Any Named Graph 
+    QuadPattern: triple_pattern=[?s <http://www.example.org/p> ?g]

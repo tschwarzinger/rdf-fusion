@@ -58,7 +58,6 @@ impl W3CSparqlEvaluationTest {
         let dataset = query_dataset(&ast_query, &parser_config)?;
 
         let mut default_graphs = Vec::new();
-        let mut seen_graphs = HashSet::new();
         if let Some(data) = &self.test_data.data {
             default_graphs.push((
                 GraphName::DefaultGraph,
@@ -67,7 +66,6 @@ impl W3CSparqlEvaluationTest {
                     format: guess_rdf_format(data)?,
                 },
             ));
-            seen_graphs.insert((GraphName::DefaultGraph, data.clone()));
         }
 
         let mut named_graphs = Vec::new();
@@ -90,15 +88,22 @@ impl W3CSparqlEvaluationTest {
                     bail!("Invalid FROM in query {}", pretty_printable(&ast_query));
                 };
                 let url = graph_node.as_str().to_string();
-                if !seen_graphs.contains(&(graph_name.clone(), url.clone())) {
-                    default_graphs.push((
-                        graph_name.clone(),
+                // IRIs without a known RDF file extension are graph names that are provided by
+                // the test data (e.g., a TriG file) and not files that should be loaded.
+                let Ok(format) = guess_rdf_format(&url) else {
+                    continue;
+                };
+                // FROM graphs are loaded as named graphs. The query's dataset then merges them
+                // into its default graph.
+                if !seen_named_graphs.contains(&(graph_node.clone(), url.clone())) {
+                    named_graphs.push((
+                        graph_node.clone(),
                         RdfFileSourceConfig {
                             url: url::Url::parse(&url)?,
-                            format: guess_rdf_format(&url)?,
+                            format,
                         },
                     ));
-                    seen_graphs.insert((graph_name.clone(), url));
+                    seen_named_graphs.insert((graph_node.clone(), url));
                 }
             }
             for graph_name in dataset.available_named_graphs().unwrap_or(&[]) {
@@ -109,12 +114,16 @@ impl W3CSparqlEvaluationTest {
                     );
                 };
                 let url = graph_node.as_str().to_string();
+                // See FROM above.
+                let Ok(format) = guess_rdf_format(&url) else {
+                    continue;
+                };
                 if !seen_named_graphs.contains(&(graph_node.clone(), url.clone())) {
                     named_graphs.push((
                         graph_node.clone(),
                         RdfFileSourceConfig {
                             url: url::Url::parse(&url)?,
-                            format: guess_rdf_format(&url)?,
+                            format,
                         },
                     ));
                     seen_named_graphs.insert((graph_node.clone(), url));

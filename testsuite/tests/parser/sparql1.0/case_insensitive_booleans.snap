@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Extend: variable=?f, expression=Struct({term_type:2,value:false,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:})
+  Extend: variable=?t, expression=Struct({term_type:2,value:true,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:})
+    EmptyRelation: rows=1

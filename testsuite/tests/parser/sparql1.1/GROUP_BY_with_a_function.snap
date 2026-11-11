@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Aggregate: groupBy=[[ENC_PT(i) AS i]], aggr=[[]]
+  Extend: variable=?i, expression=xsd:integer(ENC_TF(o))
+    QuadPattern: triple_pattern=[?s ?p ?o]

@@ -51,7 +51,7 @@ The canonical check order is `lint` then `test` (as in CI). CI runs `cli/tests/i
 
 ## Testing quirks
 
-- W3C conformance/parser tests (`testsuite/tests/*.rs`, `testsuite/src/w3c/*`) fetch manifests/data **over the network** (`https://w3c.github.io/rdf-tests/...`, `codeberg.org`, `www.w3.org`) via `TEST_RUNTIME_ENV`, not from the local submodule. They need network access and can be slow.
+- W3C conformance/parser tests (`testsuite/tests/*.rs`, `testsuite/src/w3c/*`) reference manifests by their public URLs (`https://w3c.github.io/rdf-tests/...`, `codeberg.org`, `www.w3.org`), but `TEST_RUNTIME_ENV` (`testsuite/src/w3c/files.rs`) maps these onto the local `testsuite/suites/` checkout (the `rdf-tests` submodule and `rdf-fusion-tests`). No network access is needed; the submodule must be initialized. They can be slow.
 - Parser/conformance assertions use **insta snapshots** (`testsuite/tests/parser/**/*.snap`). Update with `INSTA_UPDATE=always cargo test -p rdf-fusion-testsuite ...` (or `cargo insta`); do not hand-edit snapshots.
 - Repo-local SPARQL tests (new `.rq`/`.ttl`/`.srx` + `manifest.ttl`) live under `testsuite/suites/rdf-fusion-tests/sparql/`, referenced by a manifest URL.
 - Benchmarks (criterion, `harness = false`) require prepared BSBM data in `bench/data/`.

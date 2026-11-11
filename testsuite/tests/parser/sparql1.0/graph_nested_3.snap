@@ -1,0 +1,7 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Extend: variable=?g, expression=Struct({term_type:,value:,data_type:,language_tag:})
+  QuadPattern: triple_pattern=[?s <http://example.com/p> ?o], active_graph: <https://w3c.github.io/rdf-tests/sparql/sparql10/graph/data-nested-g1.ttl>

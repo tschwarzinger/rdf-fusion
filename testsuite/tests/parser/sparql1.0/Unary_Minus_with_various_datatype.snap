@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: v AS v, ENC_PT(result) AS result
+  Projection: v, result
+    Extend: variable=?result, expression=MINUS(ENC_TF(v))
+      QuadPattern: triple_pattern=[_:l <http://example.org/p> ?v]

@@ -1,0 +1,10 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, ENC_PT(c) AS c
+  Aggregate: groupBy=[[s AS s]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS c]]
+    SparqlJoin: Inner 
+      QuadPattern: triple_pattern=[?s ?p ?o]
+      Values: (Struct({term_type:0,value:http://example.org/a,data_type:,language_tag:})), (Struct({term_type:0,value:http://example.org/d,data_type:,language_tag:}))

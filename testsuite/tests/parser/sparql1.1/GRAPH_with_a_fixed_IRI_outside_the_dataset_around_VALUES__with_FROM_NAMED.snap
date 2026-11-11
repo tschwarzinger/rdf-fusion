@@ -1,0 +1,14 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Union
+  Projection: x
+    Union
+      Projection: x
+        Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))
+      Projection: x
+        Values: (Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))
+  Projection: x
+    Values: (Struct({term_type:2,value:3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))

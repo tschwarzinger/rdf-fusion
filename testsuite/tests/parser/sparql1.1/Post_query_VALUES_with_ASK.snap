@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Ask
+SparqlJoin: Inner 
+  QuadPattern: triple_pattern=[?s <http://example.org/p> ?o]
+  Values: (Struct({term_type:2,value:42,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))

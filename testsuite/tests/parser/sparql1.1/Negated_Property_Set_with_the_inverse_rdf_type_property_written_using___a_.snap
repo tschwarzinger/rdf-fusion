@@ -1,0 +1,6 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+PropertyPath: ?s ^(!(<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>)) ?o

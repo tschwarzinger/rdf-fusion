@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: left AS left, right AS right, ENC_PT(result) AS result
+  Projection: left, right, result
+    Extend: variable=?result, expression=DIV(ENC_TF(left), ENC_TF(right))
+      BasicGraphPattern: 
+        QuadPattern: triple_pattern=[_:l <http://example.org/p> ?left]
+        QuadPattern: triple_pattern=[_:r <http://example.org/p> ?right]

@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, ENC_PT(avg) AS avg
+  Aggregate: groupBy=[[s AS s]], aggr=[[AVG(DISTINCT ENC_TF(o)) AS avg]]
+    QuadPattern: triple_pattern=[?s ?p ?o]

@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: error_string
+---
+error: Variable ?c is already in-scope and cannot be reassigned
+  ┌─ :6:24
+  │
+6 │ SELECT ?s (COUNT(*) AS ?c) WHERE {
+  │                        ^^ Variable ?c is already in-scope and cannot be reassigned

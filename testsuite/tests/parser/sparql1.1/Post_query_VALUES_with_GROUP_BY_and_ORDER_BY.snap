@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Error: error at 105..110: Variable ?name in ORDER BY is not grouped or aggregated

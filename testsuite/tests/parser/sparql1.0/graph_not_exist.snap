@@ -1,0 +1,6 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+EmptyRelation: rows=1

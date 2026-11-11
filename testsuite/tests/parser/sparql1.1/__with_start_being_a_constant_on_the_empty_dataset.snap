@@ -1,0 +1,6 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+PropertyPath: ?s (<http://example/p>)? <http://example/o>

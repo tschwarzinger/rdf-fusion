@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: s, ENC_PT(sum) AS sum
+  Aggregate: groupBy=[[s AS s]], aggr=[[SUM(DISTINCT ENC_TF(o)) AS sum]]
+    QuadPattern: triple_pattern=[?s ?p ?o]

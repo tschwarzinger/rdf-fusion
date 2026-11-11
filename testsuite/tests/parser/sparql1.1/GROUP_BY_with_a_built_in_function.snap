@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: d, ENC_PT(c) AS c
+  Aggregate: groupBy=[[d AS d]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS c]]
+    Extend: variable=?d, expression=DATATYPE(o)
+      QuadPattern: triple_pattern=[?s ?p ?o]

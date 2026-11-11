@@ -1,0 +1,5 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Error: error at 47..49: Variable ?v is projected but not grouped or aggregated

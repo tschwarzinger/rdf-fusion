@@ -1,0 +1,8 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Limit: skip=1, fetch=1
+  Sort: AS_SORTABLE_BYTES(ENC_TF(x)) ASC NULLS FIRST
+    Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})), (Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})), (Struct({term_type:2,value:3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))

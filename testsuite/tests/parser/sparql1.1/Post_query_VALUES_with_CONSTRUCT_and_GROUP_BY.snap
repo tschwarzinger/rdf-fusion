@@ -1,0 +1,11 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Construct
+Template:
+  ?s <http://example.org/rank> ?rank
+Aggregate: groupBy=[[s AS s]], aggr=[[]]
+  SparqlJoin: Inner 
+    QuadPattern: triple_pattern=[?s ?p ?o]
+    Values: (Struct({term_type:0,value:http://example.org/a,data_type:,language_tag:}), Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})), (Struct({term_type:0,value:http://example.org/b,data_type:,language_tag:}), Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})), (Struct({term_type:0,value:http://example.org/d,data_type:,language_tag:}), Struct({term_type:2,value:4,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))

@@ -1,0 +1,9 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: ENC_PT(res0) AS res0, ENC_PT(res1) AS res1
+  Extend: variable=?res1, expression=EQ(STRLANG(ENC_TF(Struct({term_type:2,value:abc,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:EN,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))), ENC_TF(Struct({term_type:2,value:abc,data_type:http://www.w3.org/1999/02/22-rdf-syntax-ns#langString,language_tag:en})))
+    Extend: variable=?res0, expression=EQ(STRLANG(ENC_TF(Struct({term_type:2,value:abc,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:en,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))), STRLANG(ENC_TF(Struct({term_type:2,value:abc,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:EN,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))
+      EmptyRelation: rows=1

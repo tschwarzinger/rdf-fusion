@@ -1,0 +1,18 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+SparqlJoin: Left 
+  SparqlJoin: Left 
+    SparqlJoin: Left 
+      SparqlJoin: Left 
+        SparqlJoin: Left 
+          SparqlJoin: Left 
+            EmptyRelation: rows=1
+            QuadPattern: triple_pattern=[<http://example.com/xxx/abc> <http://example.org/ns#p> ?res0]
+          QuadPattern: triple_pattern=[<http://example.com/xxx/def> <http://example.org/ns#p> ?res1]
+        QuadPattern: triple_pattern=[<http://example.com/xxx/abc#ghi> <http://example.org/ns#p> ?res2]
+      QuadPattern: triple_pattern=[<http://example.com/xxx/jkl> <http://example.org/ns#p> ?res3]
+    QuadPattern: triple_pattern=[<http://example.com/mno> <http://example.org/ns#p> ?res4]
+  QuadPattern: triple_pattern=[<http://example.com/pqr> <http://example.org/ns#p> ?res5]
