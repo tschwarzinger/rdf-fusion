@@ -263,6 +263,11 @@ fn pushdown_projection(plan: &LogicalPlan) -> DFResult<Option<LogicalPlan>> {
             bgp.projection.clone(),
             new_columns_to_decode,
         )?;
+        // `BgpNode::try_new` decodes the columns of the filters again. Reporting an unchanged node
+        // as transformed would make the optimizer run another pass over the entire plan.
+        if !patterns_changed && new_bgp.columns_to_decode == bgp.columns_to_decode {
+            return Ok(None);
+        }
         return Ok(Some(LogicalPlan::Projection(
             datafusion::logical_expr::Projection::try_new(
                 projection.expr.clone(),
