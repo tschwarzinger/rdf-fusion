@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -49,6 +50,8 @@ SELECT_NAMES = (
 
 COMMAND_TIMEOUT_S = 120
 SERVER_STARTUP_TIMEOUT_S = 60
+# Without a signal handler, a server running as PID 1 in a container ignores SIGTERM.
+SERVER_SHUTDOWN_TIMEOUT_S = 2
 
 # Ignore proxy settings of the environment, as the server runs locally.
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -293,6 +296,20 @@ class ServeTests(TempDirTestCase):
     def test_serve_parquet(self):
         with Server(Storage.parquet(demo_data("spiderman.parquet"))) as server:
             self.smoke_test_endpoint(server)
+
+    @unittest.skipUnless(hasattr(signal, "SIGTERM") and os.name == "posix", "requires POSIX signals")
+    def test_serve_stops_on_sigterm(self):
+        with Server(Storage.parquet(demo_data("spiderman.parquet"))) as server:
+            server.process.send_signal(signal.SIGTERM)
+            try:
+                returncode = server.process.wait(timeout=SERVER_SHUTDOWN_TIMEOUT_S)
+            except subprocess.TimeoutExpired:
+                self.fail(
+                    f"`rdf-fusion serve` did not stop within {SERVER_SHUTDOWN_TIMEOUT_S}s "
+                    f"after SIGTERM\n{server.log()}"
+                )
+            self.assertEqual(returncode, 0, server.log())
+            self.assertIn("Shutting down", server.log())
 
     def test_serve_memory_with_data_upload(self):
         with Server(Storage("delta-quads", "memory:///")) as server:

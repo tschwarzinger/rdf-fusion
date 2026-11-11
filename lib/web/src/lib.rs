@@ -32,9 +32,17 @@ use crate::repositories::create_repositories_routes;
 pub use config::ServerConfig;
 pub use state::AppState;
 
+/// Serves the Web API until `shutdown` resolves.
+///
+/// Once `shutdown` resolves, the server stops accepting new connections, closes idle keep-alive
+/// connections, and waits for in-flight requests to finish. Bounding how long this may take is
+/// the responsibility of the caller.
 // TODO: proper logging
 #[allow(clippy::print_stdout)]
-pub async fn serve(config: ServerConfig) -> anyhow::Result<()> {
+pub async fn serve(
+    config: ServerConfig,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> anyhow::Result<()> {
     let addr = SocketAddr::from_str(&config.bind)?;
 
     let app_state = AppState {
@@ -54,7 +62,10 @@ pub async fn serve(config: ServerConfig) -> anyhow::Result<()> {
     println!("Listening on {addr}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    Ok(axum::serve(listener, app).await?)
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await?;
+    Ok(())
 }
 
 pub fn create_router(app_state: AppState) -> Router {

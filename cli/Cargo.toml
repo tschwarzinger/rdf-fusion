@@ -32,7 +32,9 @@ tokio = { workspace = true, features = [
   "parking_lot",
   "rt",
   "rt-multi-thread",
+  "signal",
   "sync",
+  "time",
 ] }
 console-subscriber = { workspace = true, optional = true }
 tokio-util.workspace = true
