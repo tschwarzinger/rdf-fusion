@@ -212,6 +212,14 @@ fn create_cli_session_config(location: &Url) -> anyhow::Result<SessionConfig> {
         )
     }
 
+    // Switching quad tables plans an alternative scan at execution time. For local stores, this
+    // costs more than reading the planned quad table.
+    if env::var("RDF_FUSION_EXECUTION_QUAD_TABLE_SWITCHING").is_err()
+        && !is_remote_location(location)
+    {
+        config = config.set_bool("rdf_fusion.execution.quad_table_switching", false)
+    }
+
     // Bloom filters of Parquet storages are only cached in the data cache.
     if env::var("RDF_FUSION_STORAGE_PARQUET_DATA_CACHE_ENABLED").is_err() {
         config = config.set_str("rdf_fusion.storage.parquet.data_cache_enabled", "true")
