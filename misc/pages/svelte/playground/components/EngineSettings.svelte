@@ -126,11 +126,11 @@
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label small fw-bold" for="rf-small-scan-threshold">
-                            Small Scan Buffering Threshold
-                            <span class="text-muted fw-normal d-block" style="font-size: 0.75rem;">rdf_fusion.execution.small_scan_buffering_threshold</span>
+                            Small Scan Threshold
+                            <span class="text-muted fw-normal d-block" style="font-size: 0.75rem;">rdf_fusion.execution.small_scan_threshold</span>
                         </label>
                         <div class="input-group input-group-sm">
-                            <input id="rf-small-scan-threshold" type="number" class="form-control" bind:value={settings.rdfFusion.smallScanBufferingThresholdKb} min="0">
+                            <input id="rf-small-scan-threshold" type="number" class="form-control" bind:value={settings.rdfFusion.smallScanThresholdKb} min="0">
                             <span class="input-group-text">KB</span>
                         </div>
                     </div>

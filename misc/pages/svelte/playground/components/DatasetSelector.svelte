@@ -541,8 +541,14 @@
         };
 
         if ($engineSettings.rdfFusion) {
-            const smallScanThresholdKb = $engineSettings.rdfFusion.smallScanBufferingThresholdKb || 0;
-            dfConfigObj["rdf_fusion.execution.small_scan_buffering_threshold"] = String(smallScanThresholdKb) + "K";
+            const smallScanThresholdKb = $engineSettings.rdfFusion.smallScanThresholdKb || 0;
+            // Older engine versions reject unknown options and only know the previous name.
+            const caps = $activeVersionMetadata?.capabilities || [];
+            if (caps.includes('small-scan-threshold')) {
+                dfConfigObj["rdf_fusion.execution.small_scan_threshold"] = String(smallScanThresholdKb) + "K";
+            } else {
+                dfConfigObj["rdf_fusion.execution.small_scan_buffering_threshold"] = String(smallScanThresholdKb) + "K";
+            }
 
             const isCacheEnabled = $engineSettings.rdfFusion.enableDataCache ? "true" : "false";
             const blockSizeBytes = String($engineSettings.rdfFusion.dataCacheBlockSizeKb || 2048) + "K";

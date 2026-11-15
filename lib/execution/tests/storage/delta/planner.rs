@@ -212,7 +212,7 @@ async fn test_planner_with_additions_multiple_partitions() {
 }
 
 #[tokio::test]
-async fn test_generic_planner_installed_by_default_and_buffers_small_scans() {
+async fn test_generic_planner_installed_by_default_and_materializes_small_scans() {
     let ctx = PlannerTestContext::new(
         QuadStorageEncodingName::String,
         vec![QuadTableName::GSPO],
@@ -233,21 +233,18 @@ async fn test_generic_planner_installed_by_default_and_buffers_small_scans() {
         @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/part-<file>.parquet]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.com/s>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.com/s> AND <https://my.com/s> <= subject_max@2, required_guarantees=[subject in (<https://my.com/s>)]"
     );
 
-    // With an eager buffering threshold the small matching scan gets buffered.
+    // With a threshold, the small matching scan is executed during planning.
     ctx.session
         .state_ref()
         .write()
         .config_mut()
         .options_mut()
-        .set("rdf_fusion.execution.small_scan_buffering_threshold", "10K")
+        .set("rdf_fusion.execution.small_scan_threshold", "10K")
         .unwrap();
     let plan = ctx.get_plan_string().await;
     assert_plan_snapshot!(
         plan,
-        @"
-    BufferExec: capacity=10240
-      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/part-<file>.parquet]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.com/s>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.com/s> AND <https://my.com/s> <= subject_max@2, required_guarantees=[subject in (<https://my.com/s>)]
-    "
+        @"MaterializedQuadPatternExec: rows=1, source=[ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[<https://my.com/s> ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[quad-tables/GSPO/part-<file>.parquet]]}, projection=[predicate@2 as p, object@3 as o], file_type=parquet, predicate=graph@0 IS NULL AND subject@1 = <https://my.com/s>, pruning_predicate=graph_null_count@0 > 0 AND subject_null_count@3 != row_count@4 AND subject_min@1 <= <https://my.com/s> AND <https://my.com/s> <= subject_max@2, required_guarantees=[subject in (<https://my.com/s>)]]"
     );
 }
 

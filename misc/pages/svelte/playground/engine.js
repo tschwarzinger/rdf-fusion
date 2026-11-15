@@ -159,7 +159,7 @@ export async function activateVersion(versionId, {localVersion = null, localVers
             isCustom: true,
             size,
             supportedStorage: [],
-            capabilities: customVer?.capabilities || ['rdf-conversion']
+            capabilities: customVer?.capabilities || ['rdf-conversion', 'small-scan-threshold']
         };
     }
     activeVersionMetadata.set(metadata);

@@ -59,7 +59,7 @@ const defaultEngineSettings = {
         enableDataCache: false,
         dataCacheBlockSizeKb: 2048,
         dataCacheNumBlocks: 1024,
-        smallScanBufferingThresholdKb: 1024
+        smallScanThresholdKb: 128
     },
     customConfig: [] // Array of { key: "", value: "" }
 };

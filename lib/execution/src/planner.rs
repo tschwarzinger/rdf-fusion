@@ -93,8 +93,13 @@ async fn build_extension_planners(
     snapshot: &Arc<dyn QuadStorageSnapshot>,
     context: &RdfFusionContextView,
 ) -> Vec<Arc<dyn ExtensionPlanner + Send + Sync>> {
+    let mut quad_pattern_planners = snapshot.planners(context).await;
+    quad_pattern_planners.push(Arc::new(QuadPatternPlanner::new(Arc::clone(snapshot))));
+
+    let bgp_planner = BgpPlanner::new(decoding_udf.clone())
+        .with_quad_pattern_planners(quad_pattern_planners.clone());
     let mut planners: Vec<Arc<dyn ExtensionPlanner + Send + Sync>> = vec![
-        Arc::new(BgpPlanner::new(decoding_udf.clone())),
+        Arc::new(bgp_planner),
         Arc::new(KleenePlusPathPlanner),
         Arc::new(RdfFilePlanner),
     ];
@@ -103,8 +108,7 @@ async fn build_extension_planners(
         planners.push(Arc::new(DecodeObjectIdsPlanner::new(decoding_udf)))
     }
 
-    planners.extend(snapshot.planners(context).await);
-    planners.push(Arc::new(QuadPatternPlanner::new(Arc::clone(snapshot))));
+    planners.extend(quad_pattern_planners);
 
     planners
 }

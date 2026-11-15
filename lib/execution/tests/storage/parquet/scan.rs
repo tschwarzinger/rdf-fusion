@@ -430,7 +430,7 @@ async fn test_parquet_scan_with_caching() {
 }
 
 #[tokio::test]
-async fn test_parquet_scan_small_scan_buffering() {
+async fn test_parquet_scan_small_scan_materialization() {
     let (rdf_context, _storage) = prepare_test_store_with_options(
         &[
             (
@@ -464,8 +464,8 @@ async fn test_parquet_scan_small_scan_buffering() {
     assert_snapshot!(
         plan,
         @"
-    BufferExec: capacity=1048576
-      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[buffered_test.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet
+    ProjectionExec: expr=[ENC_PT(s@0) as s, ENC_PT(o@2) as o]
+      MaterializedQuadPatternExec: rows=2, source=[ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={1 group: [[buffered_test.parquet]]}, projection=[subject@1 as s, predicate@2 as p, object@3 as o], file_type=parquet]
     "
     );
 }
@@ -492,7 +492,7 @@ async fn prepare_test_store_with_options(
     enable_bloom: bool,
     filename: &str,
     cache: Option<Arc<BlockCache>>,
-    small_scan_buffering_threshold: usize,
+    small_scan_threshold: usize,
     sort_by: Vec<SortExpr>,
 ) -> (RdfFusionContext, Arc<ParquetQuadStorage>) {
     let session_config = SessionConfig::default();
@@ -550,10 +550,9 @@ async fn prepare_test_store_with_options(
         .execution
         .parquet
         .pushdown_filters = true;
-    if small_scan_buffering_threshold > 0 {
+    if small_scan_threshold > 0 {
         let mut rdf_options = RdfFusionOptions::default();
-        rdf_options.execution.small_scan_buffering_threshold =
-            small_scan_buffering_threshold;
+        rdf_options.execution.small_scan_threshold = small_scan_threshold;
         rdf_session_config
             .options_mut()
             .extensions

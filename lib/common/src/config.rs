@@ -25,10 +25,11 @@ impl ConfigExtension for RdfFusionOptions {
 /// Execution configuration for RDF Fusion.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExecutionOptions {
-    /// The size in bytes below which a scan is eagerly buffered during planning. This allows small
-    /// scans to be evaluated in parallel instead of sequentially waiting on dynamic filters. A
-    /// value of `0` disables this optimization.
-    pub small_scan_buffering_threshold: usize,
+    /// The estimated size in bytes below which a scan is executed eagerly during planning. Small
+    /// scans are thereby evaluated concurrently instead of sequentially waiting on dynamic
+    /// filters, and their exact statistics are available for planning the remaining query (e.g.,
+    /// the join order). A value of `0` disables this optimization.
+    pub small_scan_threshold: usize,
     /// Whether Bloom filters are used for pruning Parquet row groups during planning.
     pub planning_bloom_filters: PlanningBloomFilters,
     /// Whether a Parquet quad pattern scan may switch to another quad table at execution time,
@@ -40,7 +41,7 @@ pub struct ExecutionOptions {
 impl Default for ExecutionOptions {
     fn default() -> Self {
         Self {
-            small_scan_buffering_threshold: 0,
+            small_scan_threshold: 0,
             planning_bloom_filters: PlanningBloomFilters::default(),
             quad_table_switching: true,
         }
@@ -210,8 +211,8 @@ impl ExtensionOptions for RdfFusionOptions {
             .strip_prefix(&format!("{}.", Self::PREFIX))
             .unwrap_or(key);
         match key {
-            "execution.small_scan_buffering_threshold" => {
-                self.execution.small_scan_buffering_threshold =
+            "execution.small_scan_threshold" => {
+                self.execution.small_scan_threshold =
                     SessionContext::parse_capacity_limit(key, value)?;
             }
             "execution.planning_bloom_filters" => {
@@ -355,8 +356,8 @@ impl ExtensionOptions for RdfFusionOptions {
     fn entries(&self) -> Vec<ConfigEntry> {
         vec![
             ConfigEntry {
-                key: format!("{}.execution.small_scan_buffering_threshold", Self::PREFIX),
-                value: Some(self.execution.small_scan_buffering_threshold.to_string()),
+                key: format!("{}.execution.small_scan_threshold", Self::PREFIX),
+                value: Some(self.execution.small_scan_threshold.to_string()),
                 description: "The size in bytes below which a quad pattern scan is eagerly buffered during planning to allow parallel execution (e.g. \"1K\", \"1M\", \"1G\"; 0 disables).",
             },
             ConfigEntry {
@@ -605,8 +606,8 @@ mod tests {
                 && id == "storage.parquet.data_cache_enabled"
         }));
         assert!(mappings.iter().any(|(env, id)| {
-            env == "RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD"
-                && id == "execution.small_scan_buffering_threshold"
+            env == "RDF_FUSION_EXECUTION_SMALL_SCAN_THRESHOLD"
+                && id == "execution.small_scan_threshold"
         }));
     }
 

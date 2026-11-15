@@ -1,10 +1,10 @@
+use crate::quad_pattern::MaterializedQuadPatternExec;
 use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::common::DataFusionError;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::{LogicalPlan, UserDefinedLogicalNode};
-use datafusion::physical_plan::buffer::BufferExec;
 use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use rdf_fusion_common::config::RdfFusionSessionConfigExt;
@@ -18,9 +18,11 @@ use std::sync::Arc;
 /// [`QuadStorageSnapshot::scan_quad_pattern`] implementation. This guarantees that all quad
 /// patterns of a query are matched against the same snapshot of the storage layer.
 ///
-/// In addition, scans that are estimated to be small (below the configured buffering threshold) are
-/// eagerly buffered so that they can be evaluated in parallel instead of sequentially waiting on
-/// dynamic filters.
+/// In addition, scans that are estimated to be small (below the configured threshold) are executed
+/// eagerly during planning (see [`MaterializedQuadPatternExec`]). As DataFusion plans the leaves of
+/// a plan concurrently, the small scans of a query are executed concurrently. Their results
+/// provide exact statistics to the planning of the parent operators (e.g., the join order of a
+/// basic graph pattern).
 pub struct QuadPatternPlanner {
     snapshot: Arc<dyn QuadStorageSnapshot>,
 }
@@ -62,30 +64,29 @@ impl ExtensionPlanner for QuadPatternPlanner {
             .await
             .map_err(|err| DataFusionError::External(Box::new(err)))?;
 
-        let buffering_threshold = session
+        let threshold = session
             .config()
             .rdf_fusion_options_or_default()
             .execution
-            .small_scan_buffering_threshold;
+            .small_scan_threshold;
+        if threshold == 0 {
+            return Ok(Some(scan));
+        }
 
-        let exec = if buffering_threshold > 0 {
-            let stats = StatisticsContext::new()
-                .compute(scan.as_ref(), &StatisticsArgs::new())?;
-            let bytes = stats
-                .total_byte_size
-                .get_value()
-                .cloned()
-                .unwrap_or(usize::MAX);
+        let stats =
+            StatisticsContext::new().compute(scan.as_ref(), &StatisticsArgs::new())?;
+        let bytes = stats
+            .total_byte_size
+            .get_value()
+            .copied()
+            .unwrap_or(usize::MAX);
+        if bytes >= threshold {
+            return Ok(Some(scan));
+        }
 
-            if bytes < buffering_threshold {
-                Arc::new(BufferExec::new(scan, buffering_threshold))
-            } else {
-                scan
-            }
-        } else {
-            scan
-        };
-
-        Ok(Some(exec))
+        let materialized =
+            MaterializedQuadPatternExec::materialize(scan, session_state.task_ctx())
+                .await?;
+        Ok(Some(Arc::new(materialized)))
     }
 }

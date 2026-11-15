@@ -203,13 +203,14 @@ fn create_cli_session_config(location: &Url) -> anyhow::Result<SessionConfig> {
     let mut config = session_config_from_env_for_rdf_fusion()?;
 
     // CLI-specific overrides
-    if env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_BUFFERING_THRESHOLD").is_err()
+    //
+    // Executing small scans during planning overlaps their latency, which only pays off for
+    // remote stores. Larger thresholds also execute broad patterns (e.g., all labels) that dynamic
+    // filters would prune during execution.
+    if env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_THRESHOLD").is_err()
         && is_remote_location(location)
     {
-        config = config.set_str(
-            "rdf_fusion.execution.small_scan_buffering_threshold",
-            "512K",
-        )
+        config = config.set_str("rdf_fusion.execution.small_scan_threshold", "128K")
     }
 
     // Switching quad tables plans an alternative scan at execution time. For local stores, this

@@ -5,6 +5,14 @@ export const OFFICIAL_VERSIONS = [
         jsUrl: "https://rdf-fusion-public.b-cdn.net/rdf-fusion-public/wasm/latest/rdf_fusion_wasm.js",
         wasmUrl: "https://rdf-fusion-public.b-cdn.net/rdf-fusion-public/wasm/latest/rdf_fusion_wasm_bg.wasm",
         supportedStorage: [{ type: "parquet", version: "0.1" }, { type: "parquet", version: "0.2" }],
+        capabilities: ["rdf-conversion", "small-scan-threshold"]
+    },
+    {
+        id: "0.3.1",
+        name: "RDF Fusion 0.3.1",
+        jsUrl: "https://rdf-fusion-public.b-cdn.net/rdf-fusion-public/wasm/0.3.1/rdf_fusion_wasm.js",
+        wasmUrl: "https://rdf-fusion-public.b-cdn.net/rdf-fusion-public/wasm/0.3.1/rdf_fusion_wasm_bg.wasm",
+        supportedStorage: [{ type: "parquet", version: "0.1" }],
         capabilities: ["rdf-conversion"]
     },
     {

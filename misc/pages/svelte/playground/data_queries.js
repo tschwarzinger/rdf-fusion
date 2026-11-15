@@ -691,6 +691,20 @@ WHERE {
                dblp:yearOfPublication ?year .
 }
 ORDER BY DESC(?year)`
+        },
+        {
+            name: "Joint Publications of Two Authors by Name",
+            query: `PREFIX dblp: <https://dblp.org/rdf/schema#>
+
+SELECT ?year ?title
+WHERE {
+  ?person1 dblp:creatorName "Tobias Schwarzinger" .
+  ?person2 dblp:creatorName "Wolfgang Kastner" .
+  ?publication dblp:authoredBy ?person1 , ?person2 ;
+               dblp:title ?title ;
+               dblp:yearOfPublication ?year .
+}
+ORDER BY DESC(?year)`
         }
     ]
 };
