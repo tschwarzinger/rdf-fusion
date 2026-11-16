@@ -210,7 +210,7 @@ fn create_cli_session_config(location: &Url) -> anyhow::Result<SessionConfig> {
     if env::var("RDF_FUSION_EXECUTION_SMALL_SCAN_THRESHOLD").is_err()
         && is_remote_location(location)
     {
-        config = config.set_str("rdf_fusion.execution.small_scan_threshold", "128K")
+        config = config.set_str("rdf_fusion.execution.small_scan_threshold", "256K")
     }
 
     // Switching quad tables plans an alternative scan at execution time. For local stores, this
