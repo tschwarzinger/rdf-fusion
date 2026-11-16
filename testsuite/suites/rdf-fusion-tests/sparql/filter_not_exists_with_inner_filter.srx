@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head>
+    <variable name="id"/>
+    <variable name="nodeType"/>
+    <variable name="target"/>
+  </head>
+  <results>
+    <result>
+      <binding name="id"><uri>http://example.com/A</uri></binding>
+      <binding name="nodeType"><uri>http://www.w3.org/2002/07/owl#complementOf</uri></binding>
+      <binding name="target"><uri>http://example.com/B</uri></binding>
+    </result>
+    <result>
+      <binding name="id"><uri>http://example.com/E</uri></binding>
+      <binding name="nodeType"><uri>http://www.w3.org/2002/07/owl#complementOf</uri></binding>
+      <binding name="target"><uri>http://example.com/F</uri></binding>
+    </result>
+  </results>
+</sparql>

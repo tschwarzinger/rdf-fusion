@@ -588,7 +588,11 @@ impl RdfFusionLogicalPlanBuilder {
         // Collect referenced columns from the given expressions.
         let mut referenced_columns = BTreeSet::new();
         for expr in exprs {
-            collect_referenced_columns(expr, &mut referenced_columns)?;
+            collect_referenced_columns(
+                expr,
+                encoding.data_type(),
+                &mut referenced_columns,
+            )?;
         }
 
         // Determine which of those columns are ObjectId typed.
@@ -724,8 +728,14 @@ fn create_decoded_schema(
     }
 }
 
+/// Collects the columns referenced in `expr`.
+///
+/// Columns that are only referenced within an `EXISTS` subquery are only collected if the subquery
+/// expects them to be decoded (i.e., the outer reference is not of the `object_id_type`). This
+/// allows evaluating `EXISTS` subqueries directly on object ids.
 fn collect_referenced_columns(
     expr: &Expr,
+    object_id_type: &DataType,
     columns: &mut BTreeSet<Column>,
 ) -> DFResult<()> {
     expr.apply(|e| {
@@ -736,11 +746,19 @@ fn collect_referenced_columns(
             Expr::OuterReferenceColumn(_, c) => {
                 columns.insert(c.clone());
             }
-            Expr::Exists(_) => {}
+            Expr::Exists(exists) => {
+                for outer_ref in &exists.subquery.outer_ref_columns {
+                    if let Expr::OuterReferenceColumn(field, c) = outer_ref
+                        && field.data_type() != object_id_type
+                    {
+                        columns.insert(c.clone());
+                    }
+                }
+            }
             Expr::InSubquery(datafusion::logical_expr::expr::InSubquery {
                 expr, ..
             }) => {
-                collect_referenced_columns(expr, columns)?;
+                collect_referenced_columns(expr, object_id_type, columns)?;
             }
             Expr::ScalarSubquery(_) => {}
             _ => {}

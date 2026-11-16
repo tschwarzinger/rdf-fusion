@@ -1,0 +1,14 @@
+@prefix ex: <http://example.com/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# IRI without sub classes: kept
+ex:A owl:complementOf ex:B .
+
+# Blank node with a sub class: removed by the NOT EXISTS
+_:c owl:complementOf ex:C .
+ex:D rdfs:subClassOf _:c .
+
+# IRI with a sub class: kept, as the inner filter rejects IRIs
+ex:E owl:complementOf ex:F .
+ex:G rdfs:subClassOf ex:E .

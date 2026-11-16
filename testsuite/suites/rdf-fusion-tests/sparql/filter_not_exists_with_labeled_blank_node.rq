@@ -1,0 +1,7 @@
+PREFIX ex: <http://example.com/>
+
+SELECT ?s
+WHERE {
+    ?s ex:p ex:o .
+    FILTER NOT EXISTS { ?s ex:q _:b }
+}

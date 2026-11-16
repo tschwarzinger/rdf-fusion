@@ -11,6 +11,8 @@
     (
         :complex_expression_in_order_by
         :order_by_aggregate_alias
+        :filter_not_exists_with_inner_filter
+        :filter_not_exists_with_labeled_blank_node
     ) .
 
 :complex_expression_in_order_by rdf:type mf:QueryEvaluationTest ;
@@ -26,3 +28,17 @@
          [ qt:query  <order_by_aggregate_alias.rq> ;
            qt:data   <order_by_aggregate_alias.ttl> ] ;
     mf:result  <order_by_aggregate_alias.srx> .
+
+:filter_not_exists_with_inner_filter rdf:type mf:QueryEvaluationTest ;
+    mf:name "A SPARQL query with a FILTER NOT EXISTS that contains a FILTER on a correlated variable" ;
+    mf:action
+         [ qt:query  <filter_not_exists_with_inner_filter.rq> ;
+           qt:data   <filter_not_exists_with_inner_filter.ttl> ] ;
+    mf:result  <filter_not_exists_with_inner_filter.srx> .
+
+:filter_not_exists_with_labeled_blank_node rdf:type mf:QueryEvaluationTest ;
+    mf:name "A SPARQL query with a FILTER NOT EXISTS that contains a labeled blank node" ;
+    mf:action
+         [ qt:query  <filter_not_exists_with_labeled_blank_node.rq> ;
+           qt:data   <filter_not_exists_with_labeled_blank_node.ttl> ] ;
+    mf:result  <filter_not_exists_with_labeled_blank_node.srx> .

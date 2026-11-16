@@ -109,34 +109,32 @@ impl GraphPatternRewriter {
     ) -> Result<RdfFusionLogicalPlanBuilder, SparqlParseError> {
         let (plan, deferred_filters) = self.rewrite_pattern_internal(pattern)?;
 
-        // Decode all columns referenced in the filter, leaving columns that are not referenced
-        // untouched.
-        let decoded_expr_builder_ctx = self
-            .builder_context
-            .expr_builder_context_with_schema(plan.decoded_schema());
-        let decoded_expr_builder =
-            ExpressionRewriter::new(self, decoded_expr_builder_ctx);
-        let decoded_filters = deferred_filters
-            .iter()
-            .map(|exp| decoded_expr_builder.rewrite_scalar_expr_to_boolean(exp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let filter = conjunction(decoded_filters);
-        let plan = if let Some(filter) = filter {
-            plan.decode_for_exprs(std::slice::from_ref(&filter))?
-        } else {
-            plan
+        // Decode all columns referenced in the filters, leaving columns that are not referenced
+        // untouched. Variables that are only referenced within `EXISTS` patterns are not decoded,
+        // allowing `EXISTS` queries to be evaluated on object ids. If an `EXISTS` pattern requires
+        // a decoded column, the filter will decode it (see `exists` in the expression builder).
+        let mut filter_variables = HashSet::new();
+        let mut collector = FilterVariableCollection {
+            set: &mut filter_variables,
         };
+        for filter in &deferred_filters {
+            collector.visit_expression(filter);
+        }
+        let mut filter_variables = filter_variables.into_iter().collect::<Vec<_>>();
+        filter_variables.sort_unstable(); // Stable output
+        let filter_columns = filter_variables
+            .into_iter()
+            .map(|v| Expr::Column(Column::new_unqualified(v)))
+            .collect::<Vec<_>>();
+        let plan = plan.decode_for_exprs(&filter_columns)?;
 
-        // Build the actual expression using the schema that may still contain object id
-        // columns, thus allowing evaluating `EXISTS` queries without forced decoding.
-        let real_schema_expr_builder_ctx = self
+        let expr_builder_ctx = self
             .builder_context
             .expr_builder_context_with_schema(plan.schema());
-        let real_schema_expr_builder =
-            ExpressionRewriter::new(self, real_schema_expr_builder_ctx);
+        let expr_rewriter = ExpressionRewriter::new(self, expr_builder_ctx);
         let actual_filters = deferred_filters
             .iter()
-            .map(|exp| real_schema_expr_builder.rewrite_scalar_expr_to_boolean(exp))
+            .map(|exp| expr_rewriter.rewrite_scalar_expr_to_boolean(exp))
             .collect::<Result<Vec<_>, _>>()?;
         if let Some(filter) = conjunction(actual_filters) {
             Ok(plan.filter(filter)?)
@@ -2053,6 +2051,25 @@ struct VariableCollection<'a, 'm> {
 impl<'a, 'm> GraphPatternVisitor<'a> for VariableCollection<'a, 'm> {
     fn visit_var(&mut self, var: &'a ast::Var<'a>) {
         self.map.entry(var.value).or_insert(var.span);
+    }
+}
+
+/// Collects the variables referenced in filter expressions, excluding the variables that are only
+/// referenced within the graph patterns of `EXISTS` and `NOT EXISTS` expressions.
+struct FilterVariableCollection<'a, 'm> {
+    set: &'m mut HashSet<&'a str>,
+}
+
+impl<'a, 'm> GraphPatternVisitor<'a> for FilterVariableCollection<'a, 'm> {
+    fn visit_expression(&mut self, expr: &'a ast::Expression<'a>) {
+        match expr {
+            ast::Expression::Exists(_) | ast::Expression::NotExists(_) => {}
+            _ => walk_expression(self, expr),
+        }
+    }
+
+    fn visit_var(&mut self, var: &'a ast::Var<'a>) {
+        self.set.insert(var.value);
     }
 }
 

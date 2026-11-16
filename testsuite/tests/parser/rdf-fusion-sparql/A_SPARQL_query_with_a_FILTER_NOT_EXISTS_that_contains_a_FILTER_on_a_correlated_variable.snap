@@ -1,0 +1,14 @@
+---
+source: testsuite/tests/parser/mod.rs
+expression: snapshot
+---
+Variant: Select
+Projection: id, nodeType, target
+  Filter: EBV(BOOLEAN_AS_TERM(NOT EXISTS (<subquery>)))
+    Subquery:
+      Filter: outer_ref(id) = __inner__id
+        Projection: named AS __inner__named, id AS __inner__id
+          Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(isIRI(ENC_TF(id)))))
+            QuadPattern: triple_pattern=[?named <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?id]
+    Extend: variable=?nodeType, expression=Struct({term_type:0,value:http://www.w3.org/2002/07/owl#complementOf,data_type:,language_tag:})
+      QuadPattern: triple_pattern=[?id <http://www.w3.org/2002/07/owl#complementOf> ?target]

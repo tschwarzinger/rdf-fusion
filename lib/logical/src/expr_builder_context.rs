@@ -16,9 +16,10 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::{TermRef, ThinError, VariableRef};
+use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::plain_term::encoders::DefaultPlainTermEncoder;
 use rdf_fusion_encoding::{
-    EncodingName, EncodingScalar, RdfFusionEncodings, TermEncoder,
+    EncodingName, EncodingScalar, RdfFusionEncodings, TermEncoder, TermEncoding,
 };
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::functions::{
@@ -359,25 +360,42 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
         })?;
         let inner_column = Column::new_unqualified(format!("__inner__{k}"));
 
+        let inner_field = expr_builder_ctx
+            .schema()
+            .field_with_name(None, inner_column.name())?;
+
+        let encodings = expr_builder_ctx.rdf_fusion_context.encodings();
+        let get_encoding = |data_type: &DataType| {
+            encodings.try_get_encoding_name(data_type).ok_or_else(|| {
+                plan_datafusion_err!("Field '{k}' in exists filter is not an RDF term.")
+            })
+        };
+        let outer_encoding = get_encoding(outer_field.data_type())?;
+        let inner_encoding = get_encoding(inner_field.data_type())?;
+
+        // Object IDs cannot be decoded within an expression. If the inner column is no longer an
+        // object id (e.g., it has been decoded for evaluating a filter), the outer reference
+        // expects the decoded column. The outer plan must then decode this column, which is done
+        // when building the filter (see `RdfFusionLogicalPlanBuilder::decode_for_exprs`).
+        let (outer_field, encoding) = if outer_encoding == EncodingName::ObjectId
+            && inner_encoding != EncodingName::ObjectId
+        {
+            let decoded_field = outer_field
+                .as_ref()
+                .clone()
+                .with_data_type(PLAIN_TERM_ENCODING.data_type().clone());
+            (Arc::new(decoded_field), EncodingName::PlainTerm)
+        } else {
+            (Arc::clone(outer_field), outer_encoding)
+        };
+
         // If both fields are not nullable, we can use an equality.
         let outer_nullability = outer_field.is_nullable();
-        let inner_nullability = expr_builder_ctx
-            .schema()
-            .field_with_name(None, inner_column.name())?
-            .is_nullable();
+        let inner_nullability = inner_field.is_nullable();
 
-        let outer_ref_column =
-            expr_builder_ctx.try_create_builder(Expr::OuterReferenceColumn(
-                Arc::clone(outer_field),
-                Column::new_unqualified(k),
-            ))?;
-        let encoding = expr_builder_ctx
-            .rdf_fusion_context
-            .encodings()
-            .try_get_encoding_name(outer_field.data_type())
-            .ok_or_else(|| {
-                plan_datafusion_err!("Field '' in filter expression is not an RDF term.")
-            })?;
+        let outer_ref_column = expr_builder_ctx.try_create_builder(
+            Expr::OuterReferenceColumn(outer_field, Column::new_unqualified(k)),
+        )?;
         let inner_expr = expr_builder_ctx
             .try_create_builder(Expr::Column(Column::new_unqualified(format!(
                 "__inner__{k}"
