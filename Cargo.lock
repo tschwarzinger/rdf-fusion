@@ -4977,6 +4977,7 @@ dependencies = [
  "rdf-fusion-extensions",
  "rdf-fusion-web",
  "snmalloc-rs",
+ "sysinfo",
  "tempfile",
  "tokio",
  "tokio-util",

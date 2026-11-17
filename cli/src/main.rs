@@ -204,6 +204,13 @@ fn create_cli_session_config(location: &Url) -> anyhow::Result<SessionConfig> {
 
     // CLI-specific overrides
     //
+    // A single partition avoids the repartitioning overhead, which dominates for the selective
+    // queries that are typical for SPARQL workloads.
+    if env::var("DATAFUSION_EXECUTION_TARGET_PARTITIONS").is_err() {
+        config = config.with_target_partitions(1);
+    }
+
+    //
     // Executing small scans during planning overlaps their latency, which only pays off for
     // remote stores. Larger thresholds also execute broad patterns (e.g., all labels) that dynamic
     // filters would prune during execution.
@@ -336,6 +343,38 @@ fn resolve_location(location: &str) -> anyhow::Result<String> {
     }
 }
 
+/// The fraction of the system memory that is used as the default memory limit.
+///
+/// The memory pool only tracks large allocations of operators (e.g., hash tables, sort buffers).
+/// The remaining memory is left for untracked allocations (e.g., caches, record batches in flight)
+/// and other processes.
+const DEFAULT_MEMORY_LIMIT_FRACTION: f64 = 0.7;
+
+/// Returns the default memory limit, a fraction of the total memory of the system.
+///
+/// If the process runs in a cgroup with a memory limit (e.g., a container), the limit of the
+/// cgroup is used instead of the system's memory. Returns [`None`] if the memory cannot be
+/// determined.
+fn default_memory_limit() -> Option<usize> {
+    let mut system = sysinfo::System::new();
+    system.refresh_memory();
+
+    let system_memory = system.total_memory();
+    let total_memory = system
+        .cgroup_limits()
+        .map(|limits| limits.total_memory)
+        .filter(|&memory| memory > 0)
+        .map_or(system_memory, |memory| memory.min(system_memory));
+    if total_memory == 0 {
+        warn!("Could not determine the system memory. Running without a memory limit.");
+        return None;
+    }
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let limit = (total_memory as f64 * DEFAULT_MEMORY_LIMIT_FRACTION) as usize;
+    Some(limit)
+}
+
 /// Builds the runtime environment from the given arguments.
 fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
     let cache_config = CacheManagerConfig::default();
@@ -343,11 +382,14 @@ fn build_runtime_env(args: &Args) -> anyhow::Result<Arc<RuntimeEnv>> {
         .with_disk_manager_builder(DiskManagerBuilder::default())
         .with_cache_manager(cache_config);
 
-    if let Ok(limit_str) = env::var("DATAFUSION_RUNTIME_MEMORY_LIMIT") {
-        let memory_limit = SessionContext::parse_capacity_limit(
+    let memory_limit = match env::var("DATAFUSION_RUNTIME_MEMORY_LIMIT") {
+        Ok(limit_str) => Some(SessionContext::parse_capacity_limit(
             "DATAFUSION_RUNTIME_MEMORY_LIMIT",
             &limit_str,
-        )?;
+        )?),
+        Err(_) => default_memory_limit(),
+    };
+    if let Some(memory_limit) = memory_limit {
         builder = builder.with_memory_pool(Arc::new(TrackConsumersPool::new(
             FairSpillPool::new(memory_limit),
             NonZeroUsize::new(5).unwrap(),
