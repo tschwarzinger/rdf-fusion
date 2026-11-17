@@ -34,10 +34,8 @@ insta.workspace = true
 rdf-fusion-sparql-parser.workspace = true
 rdf-fusion-storage-parquet.workspace = true
 
-[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
-deltalake.workspace = true
-
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies]
+deltalake.workspace = true
 rdf-fusion-storage-deltalake.workspace = true
 
 [lints]

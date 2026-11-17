@@ -4,7 +4,7 @@ use rdf_fusion::store::{RdfDumpOptions, Store, TripleFallbackStrategy};
 
 #[tokio::test]
 async fn test_dump_turtle_error_on_named_graph() {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let ex = NamedNode::new("http://example.com/s").unwrap();
     let g = NamedNode::new("http://example.com/g").unwrap();
     store.insert(QuadRef::new(&ex, &ex, &ex, &g)).await.unwrap();
@@ -22,7 +22,7 @@ async fn test_dump_turtle_error_on_named_graph() {
 
 #[tokio::test]
 async fn test_dump_request_default_graph() {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let ex = NamedNode::new("http://example.com/s").unwrap();
     let g = NamedNode::new("http://example.com/g").unwrap();
 
@@ -50,7 +50,7 @@ async fn test_dump_request_default_graph() {
 
 #[tokio::test]
 async fn test_dump_turtle_ignore_named_graph() {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let ex = NamedNode::new("http://example.com/s").unwrap();
     let g1 = NamedNode::new("http://example.com/g1").unwrap();
     let g2 = NamedNode::new("http://example.com/g2").unwrap();
@@ -82,7 +82,7 @@ async fn test_dump_turtle_ignore_named_graph() {
 
 #[tokio::test]
 async fn test_dump_turtle_default_graph_success() {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let ex = NamedNode::new("http://example.com/s").unwrap();
 
     // Insert into default graph

@@ -1,8 +1,10 @@
 use datafusion::execution::runtime_env::RuntimeEnvBuilder;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
+use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::memory::InMemory;
 use rdf_fusion::common::{GraphNameRef, NamedNode, Quad, RdfFormat};
+use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::execution::sparql::{QueryExplanation, QueryOptions};
 use rdf_fusion::store::Store;
 use rdf_fusion_encoding::QuadStorageEncodingName;
@@ -17,6 +19,7 @@ use url::Url;
 
 mod bgp;
 mod exists;
+mod memory;
 
 /// Encapsulates all setup and data manipulation via the public `Store` API.
 pub struct StoreTestContext {
@@ -60,7 +63,23 @@ impl StoreTestContext {
         }
     }
 
-    /// Inserts a slice of quads into the store.
+    /// Bootstraps a fresh, empty Store with the simple in-memory storage.
+    pub fn new_in_memory() -> Self {
+        Self {
+            store: Store::new_in_memory(),
+        }
+    }
+
+    /// Inserts a slice of quads into the store in a single transaction.
+    pub async fn extend(&self, quads: &[Quad]) -> &Self {
+        self.store
+            .extend(quads.iter().map(Quad::as_ref))
+            .await
+            .unwrap();
+        self
+    }
+
+    /// Inserts a slice of quads into the store, one transaction per quad.
     pub async fn insert(&self, quads: &[Quad]) -> &Self {
         for quad in quads {
             self.store.insert(quad.as_ref()).await.unwrap();
@@ -116,6 +135,20 @@ impl StoreTestContext {
             .await
             .unwrap();
         explanation
+    }
+
+    /// Returns the number of solutions of the SELECT `query`.
+    pub async fn count_solutions(&self, query: &str) -> usize {
+        let QueryResults::Solutions(solutions) = self.store.query(query).await.unwrap()
+        else {
+            panic!("Expected solutions for {query}");
+        };
+        solutions
+            .into_record_batch_stream()
+            .unwrap()
+            .map(|batch| batch.unwrap().num_rows())
+            .fold(0, |acc, rows| async move { acc + rows })
+            .await
     }
 
     // ------------------------------------------------------------------------

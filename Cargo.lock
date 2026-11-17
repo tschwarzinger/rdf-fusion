@@ -4241,12 +4241,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "oneshot"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfe21416a02c693fb9f980befcb230ecc70b0b3d1cc4abf88b9675c4c1457f0c"
-
-[[package]]
 name = "oorandom"
 version = "11.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5161,6 +5155,7 @@ dependencies = [
 name = "rdf-fusion-storage"
 version = "0.3.0"
 dependencies = [
+ "async-stream",
  "async-trait",
  "bytes",
  "datafusion",
@@ -5171,6 +5166,7 @@ dependencies = [
  "quick_cache",
  "rdf-fusion-common",
  "rdf-fusion-encoding",
+ "rdf-fusion-extensions",
  "rdf-fusion-logical",
  "thiserror 2.0.20",
  "tokio",
@@ -5274,7 +5270,6 @@ dependencies = [
  "getrandom 0.4.3",
  "js-sys",
  "object_store",
- "oneshot",
  "rdf-fusion",
  "rdf-fusion-encoding",
  "thiserror 2.0.20",

@@ -62,8 +62,6 @@ url = "2.5"
 uuid = "1.24"
 quick_cache = "0.7"
 redb = "4.2.0"
-redb-derive = "0.1.0"
-oneshot = "0.2"
 
 # DataFusion and Related Dependencies (we try to keep them in-sync with DataFusion)
 foldhash = "0.2"
@@ -72,7 +70,6 @@ datafusion = "55.0"
 datafusion-common = "55.0"
 datafusion-expr = "55.0"
 datafusion-datasource = "55.0"
-datafusion-session = "55.0"
 deltalake = { version = "1.1", features = ["datafusion", "datafusion-ext"] }
 reqwest = { version = "0.12", features = ["stream"] }
 tokio = { version = "1.52", features = ["rt", "sync", "macros"] }
@@ -232,3 +229,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   "cfg(tarpaulin_include)",
 ] }
 unused_qualifications = "deny"
+
+[workspace.lints.cargo]
+unused_dependencies = "deny"
+unused_workspace_dependencies = "deny"

@@ -9,5 +9,6 @@
 //! Contains shared building blocks for the storage layer implementations of [RDF Fusion](https://docs.rs/rdf-fusion/).
 
 pub mod block_cache;
+pub mod memory;
 pub mod quad_tables;
 pub mod rdf_files;

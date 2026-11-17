@@ -10,7 +10,7 @@
 //! use futures::StreamExt;
 //!
 //! # tokio_test::block_on(async {
-//! let store = Store::new_in_memory().await;
+//! let store = Store::new_in_memory();
 //!
 //! // insertion
 //! let ex = NamedNode::new("http://example.com")?;
@@ -65,7 +65,7 @@ use rdf_fusion_execution::results::{QuadStream, QueryResults, QuerySolutionStrea
 use rdf_fusion_execution::sparql::QueryEvaluationError;
 use rdf_fusion_execution::sparql::{QueryExplanation, QueryOptions, UpdateOptions};
 use rdf_fusion_extensions::storage::{
-    QuadStorageGraphTarget, graph_target_to_plain_term_dataframe,
+    QuadStorage, QuadStorageGraphTarget, graph_target_to_plain_term_dataframe,
 };
 use rdf_fusion_sparql_parser::{parse_query, parse_update};
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
@@ -94,7 +94,7 @@ static QUAD_VARIABLES: LazyLock<Arc<[Variable]>> = LazyLock::new(|| {
 ///
 /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
 /// # runtime.block_on(async {
-/// let store = Store::new_in_memory().await;
+/// let store = Store::new_in_memory();
 ///
 /// // insertion
 /// let ex = NamedNode::new("http://example.com")?;
@@ -125,58 +125,30 @@ impl Store {
         Self { context }
     }
 
-    /// Creates a [`Store`] with an in-memory storage.
+    /// Creates a [`Store`] with the given `storage` and the default configuration.
     ///
-    /// For more control over the query engine and the storage backend, see [`Self::new`] and
-    /// [`RdfFusionContextBuilder`](rdf_fusion_execution::RdfFusionContextBuilder) and the
-    /// implementation of the used quad storage (e.g. [`DeltaQuadsStorageBuilder`](rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder)).
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-    pub async fn new_in_memory() -> Store {
-        use datafusion::datasource::object_store::{
-            DefaultObjectStoreRegistry, ObjectStoreRegistry,
-        };
-        use datafusion::execution::runtime_env::RuntimeEnvBuilder;
-        use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
-        use object_store::ObjectStore;
-        use object_store::memory::InMemory;
-        use rdf_fusion_execution::RdfFusionContextBuilder;
-        use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
-        use tokio::runtime::Handle;
-        use url::Url;
-
-        let memory_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
-        let registry = DefaultObjectStoreRegistry::new();
-        registry.register_store(
-            &Url::parse("memory:///").expect("valid object store url"),
-            Arc::clone(&memory_store),
-        );
-
-        let runtime_env = RuntimeEnvBuilder::default()
-            .with_object_store_registry(Arc::new(registry))
-            .build_arc()
-            .expect("Valid configuration");
-
-        let url = Url::parse("memory:///delta/").unwrap();
-
-        let log_store = logstore_with(
-            memory_store,
-            &url,
-            StorageConfig::default().with_io_runtime(IORuntime::RT(Handle::current())),
-        )
-        .expect("Valid log store");
-
-        let delta_storage = DeltaQuadsStorageBuilder::new()
-            .with_log_store(log_store)
-            .build()
-            .await
-            .expect("Default in-memory works");
-
-        let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
+    /// For more control over the query engine, use [`Self::new`] and
+    /// [`RdfFusionContextBuilder`](rdf_fusion_execution::RdfFusionContextBuilder).
+    pub fn with_storage(storage: Arc<dyn QuadStorage>) -> Store {
+        let context = rdf_fusion_execution::RdfFusionContextBuilder::new(storage)
             .with_single_partition_session_config()
-            .with_runtime_env(Some(runtime_env))
             .build()
-            .expect("Default in-memory works. Session config is set.");
+            .expect("The default configuration is valid");
         Self::new(context)
+    }
+
+    /// Creates a [`Store`] with a simple in-memory storage for small datasets (e.g., in tests).
+    ///
+    /// The storage keeps all quads in an indexed in-memory dataset. It is not designed for large
+    /// datasets. See [`MemoryQuadStorage`](rdf_fusion_storage::memory::MemoryQuadStorage) for
+    /// details.
+    ///
+    /// For larger datasets, use [`Self::with_storage`] with a scalable storage (e.g., the Delta
+    /// Lake storage).
+    pub fn new_in_memory() -> Store {
+        Self::with_storage(Arc::new(
+            rdf_fusion_storage::memory::MemoryQuadStorage::new(),
+        ))
     }
 
     /// Returns a reference to the underlying [RdfFusionContext].
@@ -195,7 +167,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     ///
     /// // insertions
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -227,7 +199,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// if let QueryResults::Solutions(mut solutions) = store.query_opt(
     ///     "SELECT (STR(1) AS ?nt) WHERE {}",
     ///     QueryOptions::default(),
@@ -262,7 +234,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// if let (QueryResults::Solutions(mut solutions), _explanation) = store.explain_query_opt(
     ///     "SELECT ?s WHERE { VALUES ?s { 1 2 3 } }",
     ///     QueryOptions::default(),
@@ -297,7 +269,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     ///
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
@@ -345,7 +317,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     ///
     /// // insertion
     /// let ex = NamedNode::new("http://example.com")?;
@@ -374,7 +346,7 @@ impl Store {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, ex);
     ///
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// assert!(!store.contains(quad).await?);
     ///
     /// store.insert(quad).await?;
@@ -405,7 +377,7 @@ impl Store {
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert(QuadRef::new(ex, ex, ex, ex)).await?;
     /// store.insert(QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph)).await?;
     /// assert_eq!(2, store.len().await?);
@@ -425,7 +397,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// assert!(store.is_empty().await?);
     ///
     /// let ex = NamedNodeRef::new("http://example.com")?;
@@ -447,7 +419,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store
     ///    .update("INSERT DATA { <http://example.com> <http://example.com> <http://example.com> }").await?;
     ///
@@ -469,7 +441,7 @@ impl Store {
     ///
     /// let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.update_opt(
     ///   "INSERT { ?s <http://example.com/name2> ?n } WHERE { ?s <http://example.com/name1> ?n }",
     ///   UpdateOptions::default()
@@ -500,7 +472,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     ///
     /// // insert a dataset file (former load_dataset method)
     /// let file = b"<http://example.com> <http://example.com> <http://example.com> <http://example.com/g> .";
@@ -568,7 +540,7 @@ impl Store {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert(quad).await?;
     /// store.insert(quad).await?; // Inserting a quad twice handles deduplication.
     ///
@@ -632,7 +604,7 @@ impl Store {
     /// let ex = NamedNodeRef::new("http://example.com")?;
     /// let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
     ///
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert(quad).await?;
     /// store.remove(quad).await?;
     /// store.remove(quad).await?; // Removing a quad that does not exist does nothing.
@@ -677,7 +649,7 @@ impl Store {
     ///
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.load_from_reader(file.as_ref(), RdfFileScanOptions::with_format(RdfFormat::NTriples)).await?;
     ///
     /// store.dump("memory:///my-target.ttl".to_owned(), RdfFormat::Turtle, RdfDumpOptions::default()).await?;
@@ -703,7 +675,7 @@ impl Store {
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex)).await?;
     /// store.insert(QuadRef::new(&ex, &ex, &ex, GraphNameRef::DefaultGraph)).await?;
     /// assert_eq!(
@@ -783,7 +755,7 @@ impl Store {
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert(QuadRef::new(&ex, &ex, &ex, &ex)).await?;
     /// assert!(store.contains_named_graph(&ex).await?);
     /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
@@ -836,7 +808,7 @@ impl Store {
     /// # let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).build().unwrap();
     /// # runtime.block_on(async {
     /// let ex = NamedNodeRef::new("http://example.com")?;
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert_named_graph(ex).await?;
     ///
     /// assert_eq!(
@@ -893,7 +865,7 @@ impl Store {
     /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = QuadRef::new(ex.as_ref(), ex.as_ref(), ex.as_ref(), ex.as_ref());
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert(quad).await?;
     /// assert_eq!(1, store.len().await?);
     ///
@@ -941,7 +913,7 @@ impl Store {
     /// # runtime.block_on(async {
     /// let ex = NamedNode::new("http://example.com")?;
     /// let quad = QuadRef::new(ex.as_ref(), ex.as_ref(), ex.as_ref(), ex.as_ref());
-    /// let store = Store::new_in_memory().await;
+    /// let store = Store::new_in_memory();
     /// store.insert(quad).await?;
     /// assert_eq!(1, store.len().await?);
     ///
@@ -1013,7 +985,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_default_graph_quads() -> Result<(), QueryEvaluationError> {
-        let store = Store::new_in_memory().await;
+        let store = Store::new_in_memory();
         let ex = NamedNodeRef::new("http://example.com")
             .map_err(|e| QueryEvaluationError::InternalError(e.to_string()))?;
         let quad = QuadRef::new(ex, ex, ex, GraphNameRef::DefaultGraph);
@@ -1028,7 +1000,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_named_graph_quads() -> Result<(), QueryEvaluationError> {
-        let store = Store::new_in_memory().await;
+        let store = Store::new_in_memory();
         let ex = NamedNodeRef::new("http://example.com")
             .map_err(|e| QueryEvaluationError::InternalError(e.to_string()))?;
         let graph = GraphName::BlankNode(BlankNode::default());
@@ -1044,7 +1016,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_respects_now() -> Result<(), QueryEvaluationError> {
-        let store = Store::new_in_memory().await;
+        let store = Store::new_in_memory();
         let now = DateTime::from_unix_millis(0).expect("valid datetime");
         let options = QueryOptions {
             now: Some(now),
@@ -1117,7 +1089,7 @@ mod tests {
             ),
         ];
 
-        let store = Store::new_in_memory().await;
+        let store = Store::new_in_memory();
         for t in &default_quads {
             assert!(store.insert(t).await?.unwrap_or(true));
         }

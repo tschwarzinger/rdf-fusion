@@ -1,16 +1,11 @@
 #![cfg(test)]
 
 use anyhow::Result;
-use rdf_fusion::common::RdfInput;
 use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
-use rdf_fusion::storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
-use rdf_fusion::store::Store;
-use rdf_fusion_testsuite::w3c::files::W3CTestRuntime;
-use rdf_fusion_testsuite::w3c::utils::W3CTestUtils;
-use rdf_fusion_testsuite::w3c::{StoreFactory, W3CSparqlTestSuiteBuilder};
-use std::sync::Arc;
+use rdf_fusion_testsuite::store_factories::{
+    delta_quads_store_factory, memory_store_factory, parquet_store_factory,
+};
+use rdf_fusion_testsuite::w3c::W3CSparqlTestSuiteBuilder;
 
 #[tokio::test]
 async fn sparql10_w3c_query_syntax_testsuite() -> Result<()> {
@@ -64,7 +59,9 @@ async fn w3c_sparql10_query_evaluation_delta_plain_term() -> Result<()> {
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
-    .with_store_factory(plain_term_store_factory())
+    .with_store_factory(delta_quads_store_factory(
+        QuadStorageEncodingName::PlainTerm,
+    ))
     .build()
     .await?
     .run()
@@ -80,6 +77,24 @@ async fn w3c_sparql10_query_evaluation_delta_object_id() -> Result<()> {
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
     )
     .await?
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::ObjectId))
+    .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
+    .build()
+    .await?
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn w3c_sparql10_query_evaluation_memory() -> Result<()> {
+    W3CSparqlTestSuiteBuilder::load_manifest(
+        "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
+    )
+    .await?
+    .with_store_factory(memory_store_factory())
     .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
     .build()
     .await?
@@ -97,7 +112,9 @@ async fn w3c_sparql10_query_evaluation_delta_plain_term_with_optimize() -> Resul
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
-    .with_store_factory(plain_term_store_factory())
+    .with_store_factory(delta_quads_store_factory(
+        QuadStorageEncodingName::PlainTerm,
+    ))
     .with_optimize_after_load(true)
     .build()
     .await?
@@ -114,6 +131,7 @@ async fn w3c_sparql10_query_evaluation_delta_object_id_with_optimize() -> Result
         "https://w3c.github.io/rdf-tests/sparql/sparql10/manifest-evaluation.ttl",
     )
     .await?
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::ObjectId))
     .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
     .with_optimize_after_load(true)
     .build()
@@ -132,7 +150,7 @@ async fn w3c_sparql10_query_evaluation_delta_string() -> Result<()> {
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
-    .with_store_factory(string_store_factory())
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::String))
     .build()
     .await?
     .run()
@@ -149,7 +167,7 @@ async fn w3c_sparql10_query_evaluation_delta_string_with_optimize() -> Result<()
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL10_TESTS)
-    .with_store_factory(string_store_factory())
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::String))
     .with_optimize_after_load(true)
     .build()
     .await?
@@ -239,7 +257,9 @@ async fn w3c_sparql11_query_evaluation_delta_plain_term() -> Result<()> {
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL11_TESTS)
-    .with_store_factory(plain_term_store_factory())
+    .with_store_factory(delta_quads_store_factory(
+        QuadStorageEncodingName::PlainTerm,
+    ))
     .build()
     .await?
     .run()
@@ -256,7 +276,9 @@ async fn w3c_sparql11_query_evaluation_delta_plain_term_with_optimize() -> Resul
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL11_TESTS)
-    .with_store_factory(plain_term_store_factory())
+    .with_store_factory(delta_quads_store_factory(
+        QuadStorageEncodingName::PlainTerm,
+    ))
     .with_optimize_after_load(true)
     .build()
     .await?
@@ -273,6 +295,24 @@ async fn w3c_sparql11_query_evaluation_delta_object_id() -> Result<()> {
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
     )
     .await?
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::ObjectId))
+    .ignore_tests(UNSUPPORTED_SPARQL11_TESTS)
+    .build()
+    .await?
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn w3c_sparql11_query_evaluation_memory() -> Result<()> {
+    W3CSparqlTestSuiteBuilder::load_manifest(
+        "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
+    )
+    .await?
+    .with_store_factory(memory_store_factory())
     .ignore_tests(UNSUPPORTED_SPARQL11_TESTS)
     .build()
     .await?
@@ -289,6 +329,7 @@ async fn w3c_sparql11_query_evaluation_delta_object_id_with_optimize() -> Result
         "https://w3c.github.io/rdf-tests/sparql/sparql11/manifest-sparql11-query.ttl",
     )
     .await?
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::ObjectId))
     .ignore_tests(UNSUPPORTED_SPARQL11_TESTS)
     .with_optimize_after_load(true)
     .build()
@@ -307,7 +348,7 @@ async fn w3c_sparql11_query_evaluation_delta_string() -> Result<()> {
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL11_TESTS)
-    .with_store_factory(string_store_factory())
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::String))
     .build()
     .await?
     .run()
@@ -324,7 +365,7 @@ async fn w3c_sparql11_query_evaluation_delta_string_with_optimize() -> Result<()
     )
     .await?
     .ignore_tests(UNSUPPORTED_SPARQL11_TESTS)
-    .with_store_factory(string_store_factory())
+    .with_store_factory(delta_quads_store_factory(QuadStorageEncodingName::String))
     .with_optimize_after_load(true)
     .build()
     .await?
@@ -404,155 +445,4 @@ async fn w3c_sparql11_tsv_evaluation() -> Result<()> {
         .assert_success();
 
     Ok(())
-}
-
-/// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
-/// tests.
-fn plain_term_store_factory() -> StoreFactory {
-    Arc::new(|config| {
-        Box::pin(async move {
-            let memory_store = Arc::new(object_store::memory::InMemory::new());
-            config.runtime_env.register_object_store(
-                &url::Url::parse("memory://").unwrap(),
-                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
-            );
-
-            let log_store = deltalake::logstore::logstore_with(
-                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
-                &url::Url::parse("memory:///").unwrap(),
-                deltalake::logstore::StorageConfig::default().with_io_runtime(
-                    deltalake::logstore::IORuntime::RT(tokio::runtime::Handle::current()),
-                ),
-            )
-            .unwrap();
-
-            let delta_storage = DeltaQuadsStorageBuilder::new()
-                .with_encoding(QuadStorageEncodingName::PlainTerm)
-                .with_log_store(log_store)
-                .build()
-                .await
-                .unwrap();
-
-            let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
-                .with_single_partition_session_config()
-                .build()
-                .unwrap();
-            let store = Store::new(context);
-
-            let utils = W3CTestUtils::new(W3CTestRuntime::new(config.runtime_env));
-            for (name, source) in config.default_graphs {
-                utils
-                    .load_to_store_from_source(&source, &store, name)
-                    .await?;
-            }
-            for (name, source) in config.named_graphs {
-                utils
-                    .load_to_store_from_source(&source, &store, name)
-                    .await?;
-            }
-
-            Ok(store)
-        })
-    })
-}
-
-/// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
-/// tests.
-fn string_store_factory() -> StoreFactory {
-    Arc::new(|config| {
-        Box::pin(async move {
-            let memory_store = Arc::new(object_store::memory::InMemory::new());
-            config.runtime_env.register_object_store(
-                &url::Url::parse("memory://").unwrap(),
-                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
-            );
-
-            let log_store = deltalake::logstore::logstore_with(
-                Arc::clone(&memory_store) as Arc<dyn object_store::ObjectStore>,
-                &url::Url::parse("memory:///").unwrap(),
-                deltalake::logstore::StorageConfig::default().with_io_runtime(
-                    deltalake::logstore::IORuntime::RT(tokio::runtime::Handle::current()),
-                ),
-            )
-            .unwrap();
-
-            let delta_storage = DeltaQuadsStorageBuilder::new()
-                .with_encoding(QuadStorageEncodingName::String)
-                .with_log_store(log_store)
-                .build()
-                .await
-                .unwrap();
-
-            let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
-                .with_single_partition_session_config()
-                .build()
-                .unwrap();
-            let store = Store::new(context);
-
-            let utils = W3CTestUtils::new(W3CTestRuntime::new(config.runtime_env));
-            for (name, source) in config.default_graphs {
-                utils
-                    .load_to_store_from_source(&source, &store, name)
-                    .await?;
-            }
-            for (name, source) in config.named_graphs {
-                utils
-                    .load_to_store_from_source(&source, &store, name)
-                    .await?;
-            }
-
-            Ok(store)
-        })
-    })
-}
-
-/// Creates the [`Store`] using the data dump storage.
-fn parquet_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory {
-    Arc::new(move |config| {
-        Box::pin(async move {
-            let output_url = url::Url::parse("memory:///dataset.parquet").unwrap();
-
-            let delta_storage =
-                Arc::new(DeltaQuadsStorageBuilder::new().build().await.unwrap());
-            let context = RdfFusionContextBuilder::new(delta_storage)
-                .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
-                .with_single_partition_session_config()
-                .build()
-                .unwrap();
-
-            let loader = RdfParquetLoader::try_new(
-                context.session_context().clone(),
-                context.create_view(),
-                encoding,
-                Vec::new(),
-            )
-            .unwrap();
-            let mut inputs = Vec::new();
-            for (name, source) in config.default_graphs {
-                inputs.push(RdfInput::new_with_format(source.url, name, source.format));
-            }
-            for (name, source) in config.named_graphs {
-                inputs.push(RdfInput::new_with_format(source.url, name, source.format));
-            }
-
-            loader.load_many(inputs, output_url.clone()).await.unwrap();
-
-            let state = context.session_context().state();
-            let storage = ParquetQuadStorage::builder(output_url)
-                .with_encoding(encoding)
-                .build(&state)
-                .await
-                .unwrap();
-
-            let context = RdfFusionContextBuilder::new(Arc::new(storage))
-                .with_runtime_env(Some(config.runtime_env))
-                .with_single_partition_session_config()
-                .build()
-                .unwrap();
-
-            Ok(Store::new(context))
-        })
-    })
 }

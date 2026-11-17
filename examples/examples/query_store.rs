@@ -8,7 +8,7 @@ use rdf_fusion::store::Store;
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
     // Load data from a file.
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let file = tokio::fs::File::open("./examples/data/spiderman.ttl")
         .await
         .context("Could not find spiderman.ttl")?;

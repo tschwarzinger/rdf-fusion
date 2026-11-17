@@ -79,7 +79,7 @@ async fn setup_test_store() -> Store {
 
 async fn assert_count(path: &Path, format: RdfFormat) {
     let file = File::open(&path).await.unwrap();
-    let result_store = Store::new_in_memory().await;
+    let result_store = Store::new_in_memory();
     result_store
         .load_from_reader(file, RdfFileScanOptions::with_format(format))
         .await

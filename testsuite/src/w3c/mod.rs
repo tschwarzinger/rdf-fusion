@@ -15,15 +15,9 @@ use crate::w3c::syntax::W3CSparqlSyntaxTest;
 use crate::w3c::update::W3CSparqlUpdateEvaluationTest;
 use anyhow::{Context, Result, bail};
 use datafusion::execution::runtime_env::RuntimeEnv;
-use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use futures::future::BoxFuture;
 use manifest::TestManifests;
-use object_store::ObjectStore;
-use object_store::memory::InMemory;
 use rdf_fusion::common::{GraphName, NamedNode};
-use rdf_fusion::encoding::QuadStorageEncodingName;
-use rdf_fusion::execution::RdfFusionContextBuilder;
-use rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
 use rdf_fusion::storage::rdf_files::RdfFileSourceConfig;
 use rdf_fusion::store::Store;
 use std::sync::Arc;
@@ -132,6 +126,8 @@ impl W3CSparqlTestSuiteBuilder {
         self
     }
 
+    /// Sets the factory for the stores of the tests. Defaults to
+    /// [`memory_store_factory`](crate::store_factories::memory_store_factory).
     pub fn with_store_factory(mut self, factory: StoreFactory) -> Self {
         self.store_factory = Some(factory);
         self
@@ -161,55 +157,9 @@ impl W3CSparqlTestSuiteBuilder {
             bail!("Only test {id} not found in manifest");
         }
 
-        let store_factory = self.store_factory.unwrap_or_else(|| {
-            Arc::new(move |config| {
-                Box::pin(async move {
-                    let memory_store = Arc::new(InMemory::new());
-                    config.runtime_env.register_object_store(
-                        &url::Url::parse("memory://").unwrap(),
-                        Arc::clone(&memory_store) as Arc<dyn ObjectStore>,
-                    );
-
-                    let log_store = logstore_with(
-                        Arc::clone(&memory_store) as Arc<dyn ObjectStore>,
-                        &url::Url::parse("memory:///").unwrap(),
-                        StorageConfig::default().with_io_runtime(IORuntime::RT(
-                            tokio::runtime::Handle::current(),
-                        )),
-                    )
-                    .unwrap();
-
-                    let delta_storage = DeltaQuadsStorageBuilder::new()
-                        .with_encoding(QuadStorageEncodingName::ObjectId)
-                        .with_log_store(log_store)
-                        .build()
-                        .await
-                        .unwrap();
-
-                    let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                        .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
-                        .with_single_partition_session_config()
-                        .build()
-                        .unwrap();
-                    let store = Store::new(context);
-
-                    let utils =
-                        utils::W3CTestUtils::new(W3CTestRuntime::new(config.runtime_env));
-                    for (name, source) in config.default_graphs {
-                        utils
-                            .load_to_store_from_source(&source, &store, name)
-                            .await?;
-                    }
-                    for (name, source) in config.named_graphs {
-                        utils
-                            .load_to_store_from_source(&source, &store, name)
-                            .await?;
-                    }
-
-                    Ok(store)
-                })
-            })
-        });
+        let store_factory = self
+            .store_factory
+            .unwrap_or_else(crate::store_factories::memory_store_factory);
 
         for test in self.manifest_tests {
             if let Some(test_factory) = &self.test_factory {

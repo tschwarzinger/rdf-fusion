@@ -8,6 +8,7 @@ use insta::assert_snapshot;
 use rdf_fusion::common::vocab::{rdf, xsd};
 use rdf_fusion::common::{GraphNameRef, LiteralRef, NamedNodeRef, QuadRef};
 use rdf_fusion::execution::results::QueryResults;
+use rdf_fusion::storage::delta::DeltaQuadsStorage;
 use rdf_fusion::store::{RdfDumpOptions, Store};
 use rdf_fusion_common::{
     BlankNode, GraphName, NamedNode, Quad, RdfDumpFormat, RdfFormat,
@@ -16,6 +17,7 @@ use rdf_fusion_encoding::{EncodingName, QuadStorageEncodingName};
 use rdf_fusion_execution::sparql::QueryOptions;
 use rdf_fusion_storage::rdf_files::RdfFileScanOptions;
 use std::error::Error;
+use std::sync::Arc;
 use tokio::fs::File;
 
 const NUMBER_OF_TRIPLES: usize = 8;
@@ -78,7 +80,7 @@ fn quads(graph_name: impl Into<GraphNameRef<'static>>) -> Vec<QuadRef<'static>> 
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_graph() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     store
         .load_from_reader(
             File::open("../../examples/data/paris.ttl").await.unwrap(),
@@ -94,7 +96,7 @@ async fn test_load_graph() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     store
         .load_from_reader(
             File::open("../../examples/data/paris-graph.trig")
@@ -114,7 +116,7 @@ async fn test_load_dataset() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     for _ in 0..2 {
         store
             .load_from_reader(
@@ -129,7 +131,7 @@ async fn test_load_graph_generates_new_blank_nodes() -> Result<(), Box<dyn Error
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_dump_graph_and_then_query_dump() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     for q in quads(GraphNameRef::DefaultGraph) {
         store.insert(q).await?;
     }
@@ -155,7 +157,7 @@ async fn test_dump_graph_and_then_query_dump() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_dump_named_graph() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     for q in quads(NamedNodeRef::new_unchecked("http://example.com/g1")) {
         store.insert(q).await?;
     }
@@ -183,7 +185,7 @@ async fn test_dump_named_graph() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_dump_graph_with_no_quad_in_graph() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     for q in quads(NamedNodeRef::new_unchecked("http://example.com/g1")) {
         store.insert(q).await?;
         store.insert(q).await?;
@@ -210,7 +212,7 @@ async fn test_dump_graph_with_no_quad_in_graph() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_query_empty_store() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let QueryResults::Solutions(result) =
         store.query("SELECT ?s WHERE { ?s ?p ?o }").await?
     else {
@@ -226,7 +228,7 @@ async fn test_query_empty_store() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_construct_with_duplicate_triples() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
 
     let quads = (0..5000).map(|_| {
         Quad::new(
@@ -265,7 +267,7 @@ async fn test_construct_with_duplicate_triples() -> Result<(), Box<dyn Error>> {
 
 #[tokio::test]
 async fn query_with_string_encoding_option() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let ex = NamedNode::new_unchecked("http://example.com");
     let quad = Quad::new(ex.clone(), ex.clone(), ex.clone(), GraphName::DefaultGraph);
     store.insert(&quad).await?;
@@ -301,7 +303,10 @@ async fn query_with_string_encoding_option() -> Result<(), Box<dyn Error>> {
 /// predicates, so limiting the inputs before joining them would produce no solution.
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn test_limit_is_not_pushed_into_join_inputs() -> Result<(), Box<dyn Error>> {
-    let store = Store::new_in_memory().await;
+    // Uses the Delta Lake storage so that a limit pushed into its scans is detected as well.
+    let storage =
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::ObjectId, vec![]).await;
+    let store = Store::with_storage(Arc::new(storage));
     let p1 = NamedNode::new_unchecked("http://example.com/p1");
     let p2 = NamedNode::new_unchecked("http://example.com/p2");
     let o = NamedNode::new_unchecked("http://example.com/o");

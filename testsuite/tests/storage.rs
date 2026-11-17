@@ -3,9 +3,23 @@ use datafusion::prelude::SessionConfig;
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::extensions::storage::QuadStorage;
 use rdf_fusion::storage::delta::DeltaQuadsStorage;
+use rdf_fusion::storage::memory::MemoryQuadStorage;
 use rdf_fusion::storage::quad_tables::QuadTableName;
 use rdf_fusion_testsuite::storage::StorageTestSuiteBuilder;
 use std::sync::Arc;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn memory_storage_testsuite() -> Result<()> {
+    StorageTestSuiteBuilder::new(|| async {
+        Ok(Arc::new(MemoryQuadStorage::new()) as Arc<dyn QuadStorage>)
+    })
+    .build()
+    .run()
+    .await
+    .assert_success();
+
+    Ok(())
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn delta_storage_testsuite_without_quad_table() -> Result<()> {

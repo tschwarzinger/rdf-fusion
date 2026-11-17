@@ -40,7 +40,7 @@ impl RdfFusionLogicalPlanBuilderContext {
         Self { rdf_fusion_context }
     }
 
-    /// Returns a reference to the [RdfFusionFunctionRegistry](rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry)
+    /// Returns a reference to the [RdfFusionFunctionRegistry](rdf_fusion_extensions::functions::RdfFusionFunctionRegistry)
     /// of the builder.
     pub fn registry(&self) -> &RdfFusionFunctionRegistryRef {
         self.rdf_fusion_context.functions()

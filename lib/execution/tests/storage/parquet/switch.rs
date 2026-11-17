@@ -10,7 +10,7 @@ use object_store::path::Path;
 use object_store::{ObjectStoreExt, PutPayload};
 use rdf_fusion_common::{GraphName, RdfInput, RdfSortOrder};
 use rdf_fusion_encoding::QuadStorageEncodingName;
-use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
+use rdf_fusion_storage::memory::MemoryQuadStorage;
 use rdf_fusion_storage_parquet::{ParquetQuadStorage, RdfParquetLoader};
 use std::sync::Arc;
 use url::Url;
@@ -185,7 +185,7 @@ async fn create_switch_test() -> SwitchTest {
         .await
         .unwrap();
 
-    let dummy_storage = Arc::new(DeltaQuadsStorageBuilder::new().build().await.unwrap());
+    let dummy_storage = Arc::new(MemoryQuadStorage::new());
     let loading_context = rdf_fusion_context(&context, dummy_storage, &[]);
     let output_url = Url::parse("memory:///dataset/").unwrap();
     let loader = RdfParquetLoader::try_new(

@@ -17,9 +17,8 @@ async-stream.workspace = true
 rdf-fusion.workspace = true
 datafusion.workspace = true
 url.workspace = true
-console_error_panic_hook = "0.1"
+console_error_panic_hook.workspace = true
 object_store = { workspace = true, features = ["http"] }
-oneshot.workspace = true
 bytes = { workspace = true }
 async-trait.workspace = true
 futures.workspace = true

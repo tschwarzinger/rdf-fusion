@@ -11,7 +11,7 @@ use rdf_fusion::store::Store;
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
     // Create a new in-memory instance
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let engine = store.context().clone();
 
     // Load data file into storage

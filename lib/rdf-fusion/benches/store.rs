@@ -5,9 +5,12 @@ use futures::StreamExt;
 use rand::SeedableRng;
 use rand::prelude::{SliceRandom, SmallRng};
 use rdf_fusion::common::{NamedOrBlankNode, Term};
+use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::storage::delta::DeltaQuadsStorage;
 use rdf_fusion::store::Store;
 use rdf_fusion_common::{GraphName, NamedNode, Quad};
 use rdf_fusion_execution::results::QueryResults;
+use std::sync::Arc;
 use tokio::runtime::Builder;
 
 /// This benchmark measures transactionally inserting synthetic quads into the store.
@@ -19,7 +22,7 @@ fn store_load(c: &mut Criterion) {
         .unwrap();
 
     c.bench_function("Store::extend", |b| {
-        let store = runtime.block_on(Store::new_in_memory());
+        let store = runtime.block_on(new_delta_store());
         let quads = generate_quads(10_000).collect::<Vec<_>>();
         b.to_async(&runtime).iter(|| async {
             store
@@ -30,7 +33,7 @@ fn store_load(c: &mut Criterion) {
     });
 
     c.bench_function("Store::insert (ascending)", |b| {
-        let store = runtime.block_on(Store::new_in_memory());
+        let store = runtime.block_on(new_delta_store());
         let quads = generate_quads(500).collect::<Vec<_>>();
         b.to_async(&runtime).iter(|| async {
             store
@@ -41,7 +44,7 @@ fn store_load(c: &mut Criterion) {
     });
 
     c.bench_function("Store::insert (random)", |b| {
-        let store = runtime.block_on(Store::new_in_memory());
+        let store = runtime.block_on(new_delta_store());
         let mut quads = generate_quads(500).collect::<Vec<_>>();
         let mut rng = SmallRng::seed_from_u64(123);
         quads.as_mut_slice().shuffle(&mut rng);
@@ -145,7 +148,7 @@ criterion_group!(
 criterion_main!(store_write, store_query);
 
 async fn prepare_store_with_generated_triples(n: usize) -> Store {
-    let store = Store::new_in_memory().await;
+    let store = new_delta_store().await;
     let quads = generate_quads(n).collect::<Vec<_>>();
     store.extend(quads.iter().map(Quad::as_ref)).await.unwrap();
     store
@@ -182,4 +185,11 @@ async fn assert_number_of_results(result: QueryResults, n: usize) {
         }
         _ => panic!("Unexpected QueryResults"),
     }
+}
+
+/// Creates a [`Store`] with an in-memory Delta Lake storage (the benchmarks measure a scalable storage).
+async fn new_delta_store() -> Store {
+    let storage =
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::ObjectId, vec![]).await;
+    Store::with_storage(Arc::new(storage))
 }

@@ -1,9 +1,10 @@
-use crate::w3c::StoreFactory;
 use crate::w3c::files::W3CTestRuntime;
 use crate::w3c::utils::W3CTestUtils;
+use crate::w3c::{StoreConfig, StoreFactory};
 use ::rdf_fusion::encoding::QuadStorageEncodingName;
 use ::rdf_fusion::execution::RdfFusionContextBuilder;
 use ::rdf_fusion::storage::delta::DeltaQuadsStorageBuilder;
+use ::rdf_fusion::storage::memory::MemoryQuadStorage;
 use ::rdf_fusion::storage::parquet::{ParquetQuadStorage, RdfParquetLoader};
 use ::rdf_fusion::store::Store;
 use datafusion::execution::runtime_env::RuntimeEnv;
@@ -31,8 +32,8 @@ fn in_memory_delta_log_store(runtime_env: &RuntimeEnv) -> anyhow::Result<LogStor
     Ok(log_store)
 }
 
-/// Creates the [`Store`] using the plain term encoding that is used for the plain term encoding
-/// tests.
+/// Creates the [`Store`] using an in-memory [`DeltaQuadsStorage`](::rdf_fusion::storage::delta::DeltaQuadsStorage)
+/// with the given `encoding`.
 pub fn delta_quads_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory {
     Arc::new(move |store_config| {
         Box::pin(async move {
@@ -45,28 +46,48 @@ pub fn delta_quads_store_factory(encoding: QuadStorageEncodingName) -> StoreFact
                 .await?;
 
             let context = RdfFusionContextBuilder::new(Arc::new(delta_storage))
-                .with_runtime_env(Some(store_config.runtime_env))
+                .with_runtime_env(Some(Arc::clone(&store_config.runtime_env)))
                 .with_single_partition_session_config()
                 .build()?;
             let store = Store::new(context);
-
-            let utils = W3CTestUtils::new(W3CTestRuntime::new(
-                store.context().session_context().runtime_env(),
-            ));
-            for (name, source) in store_config.default_graphs {
-                utils
-                    .load_to_store_from_source(&source, &store, name)
-                    .await?;
-            }
-            for (name, source) in store_config.named_graphs {
-                utils
-                    .load_to_store_from_source(&source, &store, name)
-                    .await?;
-            }
+            load_test_graphs(&store, store_config).await?;
 
             Ok(store)
         })
     })
+}
+
+/// Creates the [`Store`] using the [`MemoryQuadStorage`].
+pub fn memory_store_factory() -> StoreFactory {
+    Arc::new(|store_config| {
+        Box::pin(async move {
+            let context =
+                RdfFusionContextBuilder::new(Arc::new(MemoryQuadStorage::new()))
+                    .with_runtime_env(Some(Arc::clone(&store_config.runtime_env)))
+                    .with_single_partition_session_config()
+                    .build()?;
+            let store = Store::new(context);
+            load_test_graphs(&store, store_config).await?;
+
+            Ok(store)
+        })
+    })
+}
+
+/// Loads the default and named graphs of `config` into `store`.
+async fn load_test_graphs(store: &Store, config: StoreConfig) -> anyhow::Result<()> {
+    let utils = W3CTestUtils::new(W3CTestRuntime::new(config.runtime_env));
+    for (name, source) in config.default_graphs {
+        utils
+            .load_to_store_from_source(&source, store, name)
+            .await?;
+    }
+    for (name, source) in config.named_graphs {
+        utils
+            .load_to_store_from_source(&source, store, name)
+            .await?;
+    }
+    Ok(())
 }
 
 /// Creates the [`Store`] using the data dump storage.
@@ -75,9 +96,8 @@ pub fn parquet_store_factory(encoding: QuadStorageEncodingName) -> StoreFactory 
         Box::pin(async move {
             let output_url = url::Url::parse("memory:///dataset.parquet").unwrap();
 
-            let delta_storage =
-                Arc::new(DeltaQuadsStorageBuilder::new().build().await.unwrap());
-            let context = RdfFusionContextBuilder::new(delta_storage)
+            let loading_storage = Arc::new(MemoryQuadStorage::new());
+            let context = RdfFusionContextBuilder::new(loading_storage)
                 .with_runtime_env(Some(Arc::clone(&config.runtime_env)))
                 .with_single_partition_session_config()
                 .build()

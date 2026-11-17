@@ -1,6 +1,8 @@
 use axum_test::TestServer;
 use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion::common::{GraphName, NamedNode, NamedOrBlankNode, Quad, Term};
+use rdf_fusion::encoding::QuadStorageEncodingName;
+use rdf_fusion::storage::delta::DeltaQuadsStorage;
 use rdf_fusion::store::Store;
 use rdf_fusion_web::{AppState, create_router};
 use std::sync::Arc;
@@ -9,7 +11,7 @@ use tokio::runtime::Builder;
 fn encode_solution(criterion: &mut Criterion) {
     let runtime = Builder::new_current_thread().enable_all().build().unwrap();
 
-    let store = runtime.block_on(Store::new_in_memory());
+    let store = runtime.block_on(new_delta_store());
     let quads = generate_quads(8192).collect::<Vec<_>>();
     runtime.block_on(async {
         store.extend(quads.iter().map(Quad::as_ref)).await.unwrap();
@@ -53,3 +55,10 @@ fn generate_quads(count: usize) -> impl Iterator<Item = Quad> {
 
 criterion_group!(encode_results, encode_solution);
 criterion_main!(encode_results);
+
+/// Creates a [`Store`] with an in-memory Delta Lake storage.
+async fn new_delta_store() -> Store {
+    let storage =
+        DeltaQuadsStorage::new_in_memory(QuadStorageEncodingName::ObjectId, vec![]).await;
+    Store::with_storage(Arc::new(storage))
+}

@@ -18,7 +18,7 @@ const SELECT_NAMES: &str = "SELECT ?name WHERE { \
 } ORDER BY ?name";
 
 async fn spiderman_server() -> TestServer {
-    let store = Store::new_in_memory().await;
+    let store = Store::new_in_memory();
     let file = tokio::fs::File::open("../../examples/data/spiderman.ttl")
         .await
         .expect("spiderman.ttl should exist");

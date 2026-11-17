@@ -16,8 +16,8 @@ use rdf_fusion_execution::sparql::QueryOptions;
 use rdf_fusion_execution::{RdfFusionContext, RdfFusionContextBuilder};
 use rdf_fusion_extensions::storage::QuadStorage;
 use rdf_fusion_sparql_parser::ParserOptions;
+use rdf_fusion_storage::memory::MemoryQuadStorage;
 use rdf_fusion_storage::rdf_files::{ParseRdfFileNode, RdfFileScanOptions};
-use rdf_fusion_storage_deltalake::DeltaQuadsStorageBuilder;
 use rdf_fusion_storage_parquet::{
     ParquetQuadStorage, RdfParquetLoader, RdfParquetLoadingError,
 };
@@ -434,8 +434,7 @@ impl TestEnv {
 
     /// Creates an [`RdfFusionContext`] for planning the load. The storage is a dummy.
     async fn loading_context(&self) -> RdfFusionContext {
-        let dummy_storage =
-            Arc::new(DeltaQuadsStorageBuilder::new().build().await.unwrap());
+        let dummy_storage = Arc::new(MemoryQuadStorage::new());
         self.rdf_fusion_context(dummy_storage)
     }
 
