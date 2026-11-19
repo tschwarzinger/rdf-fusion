@@ -23,7 +23,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0-dev"
 authors = ["Tobias Schwarzinger <tobias.schwarzinger@tuwien.ac.at>"]
 license = "Apache-2.0"
 edition = "2024"
@@ -119,20 +119,20 @@ oxrdfio = { version = "0.2", features = ["async-tokio"] }
 sparesults = { version = "0.3", features = ["async-tokio"] }
 
 # Internal dependencies
-rdf-fusion-compute = { version = "=0.3.0", path = "lib/compute" }
-rdf-fusion-extensions = { version = "=0.3.0", path = "lib/extensions" }
-rdf-fusion-common = { version = "=0.3.0", path = "lib/common" }
-rdf-fusion-encoding = { version = "=0.3.0", path = "lib/encoding" }
-rdf-fusion-execution = { version = "=0.3.0", path = "lib/execution" }
-rdf-fusion-functions = { version = "=0.3.0", path = "lib/functions" }
-rdf-fusion-logical = { version = "=0.3.0", path = "lib/logical" }
-rdf-fusion-physical = { version = "=0.3.0", path = "lib/physical" }
-rdf-fusion-storage = { version = "=0.3.0", path = "lib/storage" }
-rdf-fusion-storage-deltalake = { version = "=0.3.0", path = "lib/storage-deltalake" }
-rdf-fusion-storage-parquet = { version = "=0.3.0", path = "lib/storage-parquet" }
-rdf-fusion-sparql-parser = { version = "=0.3.0", path = "lib/sparql-parser" }
-rdf-fusion = { version = "=0.3.0", path = "lib/rdf-fusion" }
-rdf-fusion-web = { version = "=0.3.0", path = "lib/web" }
+rdf-fusion-compute = { version = "=0.4.0-dev", path = "lib/compute" }
+rdf-fusion-extensions = { version = "=0.4.0-dev", path = "lib/extensions" }
+rdf-fusion-common = { version = "=0.4.0-dev", path = "lib/common" }
+rdf-fusion-encoding = { version = "=0.4.0-dev", path = "lib/encoding" }
+rdf-fusion-execution = { version = "=0.4.0-dev", path = "lib/execution" }
+rdf-fusion-functions = { version = "=0.4.0-dev", path = "lib/functions" }
+rdf-fusion-logical = { version = "=0.4.0-dev", path = "lib/logical" }
+rdf-fusion-physical = { version = "=0.4.0-dev", path = "lib/physical" }
+rdf-fusion-storage = { version = "=0.4.0-dev", path = "lib/storage" }
+rdf-fusion-storage-deltalake = { version = "=0.4.0-dev", path = "lib/storage-deltalake" }
+rdf-fusion-storage-parquet = { version = "=0.4.0-dev", path = "lib/storage-parquet" }
+rdf-fusion-sparql-parser = { version = "=0.4.0-dev", path = "lib/sparql-parser" }
+rdf-fusion = { version = "=0.4.0-dev", path = "lib/rdf-fusion" }
+rdf-fusion-web = { version = "=0.4.0-dev", path = "lib/web" }
 
 [profile.dev]
 # TODO: Remove once DF join estimation does not overflow

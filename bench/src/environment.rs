@@ -138,6 +138,9 @@ impl RdfFusionBenchContext {
             .expect("Could not create session config");
         config.options_mut().execution.target_partitions = target_partitions;
         config.options_mut().execution.parquet.pushdown_filters = true;
+        // A fixed writer identifier keeps the size of the Parquet files (and, hence, the
+        // snapshots) independent of the crate version.
+        config.options_mut().execution.parquet.created_by = "rdf-fusion test".to_owned();
 
         let mut options = RdfFusionOptions::from_env().expect("Could not create options");
         options.storage.delta.assume_single_node = true;
