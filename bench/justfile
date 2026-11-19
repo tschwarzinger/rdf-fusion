@@ -4,7 +4,7 @@ set unstable := true
 prepare-benches-tests: (prepare-bsbm "1000")
     @echo "BSBM use cases share the data"
 
-prepare-benches: (prepare-bsbm "10000") (prepare-dblp "100k") (prepare-dblp "1m")
+prepare-benches: (prepare-bsbm "1000") (prepare-bsbm "10000") (prepare-dblp "100k") (prepare-dblp "1m")
     @echo "BSBM use cases share the data"
 
 # Prepares the BSBM Explore benchmarks

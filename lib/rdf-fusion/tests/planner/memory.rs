@@ -1,40 +1,45 @@
 use super::StoreTestContext;
 use rdf_fusion::common::{GraphName, NamedNode, Quad};
 
-const SMALL: &str = "http://example.org/small";
-const LARGE_1: &str = "http://example.org/large1";
-const LARGE_2: &str = "http://example.org/large2";
+const P1: &str = "http://example.org/p1";
+const P2: &str = "http://example.org/p2";
+const P3: &str = "http://example.org/p3";
 
-/// Large scans report no statistics. Hence, they are joined after the small scans, in the order in
-/// which they appear in the query.
+/// The in-memory storage reports static statistics that only depend on the bound components of a
+/// pattern. Patterns with the same estimate are joined in the order in which they appear in the
+/// query, regardless of the number of matching quads.
 #[tokio::test]
-async fn test_memory_large_scans_are_joined_last_in_query_order() {
-    let ctx = store_with_small_and_large_predicates().await;
+async fn test_memory_patterns_with_equal_estimates_are_joined_in_query_order() {
+    let ctx = store_with_predicates().await;
 
-    let query = format!(
-        "SELECT * WHERE {{ ?s <{LARGE_2}> ?a . ?s <{LARGE_1}> ?b . ?s <{SMALL}> ?c }}"
-    );
-    assert_join_order(&ctx, &query, &[SMALL, LARGE_2, LARGE_1]).await;
-
-    let query = format!(
-        "SELECT * WHERE {{ ?s <{LARGE_1}> ?a . ?s <{SMALL}> ?c . ?s <{LARGE_2}> ?b }}"
-    );
-    assert_join_order(&ctx, &query, &[SMALL, LARGE_1, LARGE_2]).await;
+    let query =
+        format!("SELECT * WHERE {{ ?s <{P3}> ?a . ?s <{P2}> ?b . ?s <{P1}> ?c }}");
+    assert_join_order(&ctx, &query, &[P3, P2, P1]).await;
     assert_eq!(ctx.count_solutions(&query).await, 2);
 }
 
-/// Creates an in-memory store in which the patterns with the predicates [`LARGE_1`] and [`LARGE_2`]
-/// are too large to report statistics, while the pattern with [`SMALL`] is small. [`LARGE_2`] has
-/// more matches than [`LARGE_1`], so ordering by size would join [`LARGE_1`] first.
-async fn store_with_small_and_large_predicates() -> StoreTestContext {
-    let quads = (0..15_000)
+/// Patterns with more bound components are joined first.
+#[tokio::test]
+async fn test_memory_patterns_with_bound_object_are_joined_first() {
+    let ctx = store_with_predicates().await;
+
+    let object = quad(0, P3).object.to_string();
+    let query =
+        format!("SELECT * WHERE {{ ?s <{P1}> ?a . ?s <{P3}> {object} . ?s <{P2}> ?b }}");
+    assert_join_order(&ctx, &query, &[P3, P1, P2]).await;
+    assert_eq!(ctx.count_solutions(&query).await, 1);
+}
+
+/// Creates an in-memory store in which [`P1`] has the fewest and [`P3`] the most matches.
+async fn store_with_predicates() -> StoreTestContext {
+    let quads = (0..100)
         .flat_map(|i| {
-            let mut predicates = vec![LARGE_2];
-            if i < 10_000 {
-                predicates.push(LARGE_1);
+            let mut predicates = vec![P3];
+            if i < 50 {
+                predicates.push(P2);
             }
             if i < 2 {
-                predicates.push(SMALL);
+                predicates.push(P1);
             }
             predicates
                 .into_iter()
@@ -47,12 +52,10 @@ async fn store_with_small_and_large_predicates() -> StoreTestContext {
     ctx
 }
 
-/// Returns `<subject/i> <predicate> <object/i>`. The subjects are long to make the quads large.
+/// Returns `<subject/i> <predicate> <object/i>`.
 fn quad(i: usize, predicate: &str) -> Quad {
     Quad::new(
-        NamedNode::new_unchecked(format!(
-            "http://example.org/a-long-subject-iri-to-make-the-quads-large/{i}"
-        )),
+        NamedNode::new_unchecked(format!("http://example.org/subject/{i}")),
         NamedNode::new_unchecked(predicate),
         NamedNode::new_unchecked(format!("http://example.org/object/{i}")),
         GraphName::DefaultGraph,

@@ -1,12 +1,11 @@
 use crate::memory::MemoryState;
 use crate::memory::changes::Changes;
-use crate::memory::scan::{MemoryQuadTable, PatternConstants};
+use crate::memory::scan::{PatternConstants, plan_quad_pattern_scan};
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
-use datafusion::datasource::{DefaultTableSource, MemTable, TableProvider};
+use datafusion::datasource::{MemTable, TableProvider};
 use datafusion::execution::SessionState;
-use datafusion::logical_expr::LogicalPlanBuilder;
 use datafusion::physical_plan::ExecutionPlan;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_common::{
@@ -15,9 +14,8 @@ use rdf_fusion_common::{
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
-use rdf_fusion_encoding::{EncodingArray, QuadStorageEncoding, TermEncoding};
+use rdf_fusion_encoding::{EncodingArray, TermEncoding};
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
-use rdf_fusion_logical::quad_pattern::compute_quad_pattern_filters;
 use std::sync::{Arc, LazyLock};
 
 /// The schema of the named graphs (using the plain term encoding).
@@ -56,43 +54,12 @@ impl QuadStorageSnapshot for MemoryQuadStorageSnapshot {
         projection: Option<Vec<usize>>,
         session_state: &SessionState,
     ) -> Result<Arc<dyn ExecutionPlan>, StorageError> {
-        // Scan the quads that match the constants of the pattern, filter them by the remaining
-        // parts of the pattern (e.g., repeated variables), and project them to the pattern's
-        // columns. The quads are only looked up and converted to Arrow during execution.
-        let table = Arc::new(MemoryQuadTable::new(
+        Ok(plan_quad_pattern_scan(
             self.clone(),
-            PatternConstants::try_new(pattern),
-        ));
-        let mut builder = LogicalPlanBuilder::scan(
-            "quads",
-            Arc::new(DefaultTableSource::new(table)),
-            None,
-        )?;
-
-        let filter =
-            compute_quad_pattern_filters(pattern, &QuadStorageEncoding::PlainTerm)
-                .await?
-                .into_iter()
-                .reduce(|acc, expr| acc.and(expr));
-        if let Some(filter) = filter {
-            builder = builder.filter(filter)?;
-        }
-
-        let columns = pattern
-            .compute_projection()
-            .into_iter()
-            .map(|(expr, name)| expr.alias(name))
-            .collect::<Vec<_>>();
-        let columns = match projection {
-            Some(projection) => projection
-                .into_iter()
-                .map(|idx| columns[idx].clone())
-                .collect::<Vec<_>>(),
-            None => columns,
-        };
-        let plan = builder.project(columns)?.build()?;
-
-        Ok(session_state.create_physical_plan(&plan).await?)
+            pattern,
+            projection,
+            session_state.config().batch_size(),
+        )?)
     }
 
     async fn named_graphs(

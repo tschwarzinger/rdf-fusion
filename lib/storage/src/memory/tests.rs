@@ -1,20 +1,28 @@
 use crate::memory::MemoryQuadStorage;
 use datafusion::arrow::array::RecordBatch;
+use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::Statistics;
+use datafusion::common::stats::Precision;
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
+use datafusion::logical_expr::Expr;
 use datafusion::physical_plan::{
     ExecutionPlan, StatisticsArgs, StatisticsContext, collect,
 };
 use datafusion::prelude::{SessionConfig, SessionContext};
 use rdf_fusion_common::{
-    ActiveGraph, BlankNodeMatchingMode, GraphName, NamedNode, NamedNodePattern,
-    NamedNodeRef, Quad, QuadPattern, TermPattern, TriplePattern, Variable,
+    ActiveGraph, BlankNode, BlankNodeMatchingMode, GraphName, Literal, NamedNode,
+    NamedNodePattern, NamedNodeRef, Quad, QuadPattern, Term, TermPattern, TriplePattern,
+    Variable,
 };
+use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
+use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
+use rdf_fusion_encoding::{QuadStorageEncoding, TermDecoder, TermEncoding};
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
+use rdf_fusion_logical::quad_pattern::compute_quad_pattern_filters;
 use std::sync::Arc;
 
 const EX: NamedNodeRef<'static> = NamedNodeRef::new_unchecked("http://example.com/ex");
@@ -110,7 +118,7 @@ async fn snapshot_of_transaction_is_unaffected_by_later_changes() {
 }
 
 #[tokio::test]
-async fn scan_streams_batches_and_estimates_rows() {
+async fn scan_streams_batches() {
     let fixture = Fixture::with_batch_size(2);
     let mut quads = default_graph_quads(["a", "b", "c", "d", "e"]);
     quads.push(quad_in("a", G)); // Not in the default graph, hence not matched.
@@ -118,8 +126,7 @@ async fn scan_streams_batches_and_estimates_rows() {
 
     let plan = fixture.scan_predicate_ex().await;
 
-    assert_eq!(leaf_scan(&plan).name(), "MemoryQuadScanExec");
-    assert_eq!(scan_statistics(&plan).num_rows.get_value(), Some(&5));
+    assert_eq!(plan.name(), "MemoryQuadScanExec");
     let batches = fixture.execute(plan).await;
     assert_eq!(batches.len(), 3);
     assert_eq!(count_rows(&batches), 5);
@@ -141,17 +148,243 @@ async fn planned_scan_is_unaffected_by_later_commits() {
 }
 
 #[tokio::test]
-async fn large_scan_reports_no_statistics() {
-    // Roughly 2 MiB in the plain term encoding, which exceeds the statistics limit.
-    let objects = (0..20_000)
-        .map(|i| format!("a-long-object-iri-to-make-the-quads-large/{i}"))
-        .collect::<Vec<_>>();
-    let fixture = Fixture::with_committed(&default_graph_quads(&objects)).await;
+async fn scan_reports_static_statistics() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+    let ex = NamedNodePattern::NamedNode(EX.into_owned());
+    let num_rows = async |subject, object| {
+        let pattern =
+            quad_pattern(ActiveGraph::AllGraphs, None, subject, ex.clone(), object);
+        let statistics = scan_statistics(&fixture.scan(&pattern, None).await);
+        assert!(!statistics.num_rows.is_exact().unwrap());
+        *statistics.num_rows.get_value().unwrap()
+    };
 
-    let statistics = scan_statistics(&fixture.scan_predicate_ex().await);
+    let ex_term = TermPattern::NamedNode(EX.into_owned());
+    // The estimates do not depend on the quads, only on the bound components.
+    assert_eq!(num_rows(var("s"), var("o")).await, 1_000_000);
+    assert_eq!(num_rows(ex_term.clone(), var("o")).await, 10);
+    assert_eq!(num_rows(ex_term.clone(), ex_term).await, 1);
+}
 
-    assert_eq!(statistics.num_rows.get_value(), None);
-    assert_eq!(statistics.total_byte_size.get_value(), None);
+#[tokio::test]
+async fn scan_without_match_reports_exact_empty_statistics() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+    let pattern = quad_pattern(
+        ActiveGraph::Union(vec![]),
+        None,
+        var("s"),
+        NamedNodePattern::NamedNode(EX.into_owned()),
+        var("o"),
+    );
+
+    let statistics = scan_statistics(&fixture.scan(&pattern, None).await);
+    assert_eq!(statistics.num_rows, Precision::Exact(0));
+}
+
+#[tokio::test]
+async fn scan_checks_repeated_variables() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+
+    // `?x <ex> ?x` only matches quads whose subject equals their object.
+    let pattern = quad_pattern(
+        ActiveGraph::AllGraphs,
+        None,
+        var("x"),
+        NamedNodePattern::NamedNode(EX.into_owned()),
+        var("x"),
+    );
+    assert_eq!(
+        fixture.scan_rows(&pattern, None).await,
+        vec![
+            vec!["<http://example.com/a>"],
+            vec!["<http://example.com/a>"],
+            vec!["<http://example.com/ex>"],
+            vec!["_:x"],
+        ]
+    );
+
+    // `GRAPH ?g { ?g ?p ?o }` only matches quads whose graph equals their subject.
+    let pattern = quad_pattern(
+        ActiveGraph::AllGraphs,
+        Some("g"),
+        var("g"),
+        NamedNodePattern::Variable(Variable::new_unchecked("p")),
+        var("o"),
+    );
+    assert_eq!(
+        fixture.scan_rows(&pattern, None).await,
+        vec![vec![
+            "<http://example.com/g>",
+            "<http://example.com/ex>",
+            "<http://example.com/b>"
+        ]]
+    );
+}
+
+#[tokio::test]
+async fn scan_respects_active_graph() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+    let h = GraphName::from(example_iri("h"));
+    let count = async |active_graph| {
+        let pattern = quad_pattern(
+            active_graph,
+            None,
+            var("s"),
+            NamedNodePattern::Variable(Variable::new_unchecked("p")),
+            var("o"),
+        );
+        fixture.scan_rows(&pattern, None).await.len()
+    };
+
+    assert_eq!(count(ActiveGraph::DefaultGraph).await, 4);
+    assert_eq!(count(ActiveGraph::AllGraphs).await, 7);
+    assert_eq!(count(ActiveGraph::AnyNamedGraph).await, 3);
+    assert_eq!(count(ActiveGraph::Union(vec![])).await, 0);
+    assert_eq!(count(ActiveGraph::Union(vec![G.into()])).await, 2);
+    // Duplicate graphs are only scanned once.
+    let union = vec![G.into(), h.clone(), G.into(), GraphName::DefaultGraph, h];
+    assert_eq!(count(ActiveGraph::Union(union)).await, 7);
+}
+
+#[tokio::test]
+async fn scan_respects_blank_node_mode() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+    let blank_node_pattern = |mode| {
+        let mut pattern = quad_pattern(
+            ActiveGraph::AllGraphs,
+            None,
+            TermPattern::BlankNode(BlankNode::new_unchecked("x")),
+            NamedNodePattern::NamedNode(EX.into_owned()),
+            var("o"),
+        );
+        pattern.blank_node_mode = mode;
+        pattern
+    };
+
+    // As a variable, the blank node matches any subject and is projected.
+    let rows = fixture
+        .scan_rows(&blank_node_pattern(BlankNodeMatchingMode::Variable), None)
+        .await;
+    assert_eq!(rows.len(), 6);
+    assert_eq!(rows[0].len(), 2);
+
+    // As a filter, the blank node only matches itself and is not projected.
+    let rows = fixture
+        .scan_rows(&blank_node_pattern(BlankNodeMatchingMode::Filter), None)
+        .await;
+    assert_eq!(rows, vec![vec!["_:x"]]);
+}
+
+#[tokio::test]
+async fn scan_applies_projection_in_order() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+    let pattern = quad_pattern(
+        ActiveGraph::Union(vec![G.into()]),
+        Some("g"),
+        var("s"),
+        NamedNodePattern::NamedNode(EX.into_owned()),
+        var("o"),
+    );
+
+    let plan = fixture.scan(&pattern, Some(vec![2, 0])).await;
+    assert_eq!(column_names(&plan.schema()), ["o", "g"]);
+    assert_eq!(
+        rows(&fixture.execute(plan).await),
+        vec![
+            vec!["<http://example.com/a>", "<http://example.com/g>"],
+            vec!["<http://example.com/b>", "<http://example.com/g>"],
+        ]
+    );
+
+    let plan = fixture.scan(&pattern, Some(vec![])).await;
+    assert!(plan.schema().fields().is_empty());
+    assert_eq!(count_rows(&fixture.execute(plan).await), 2);
+}
+
+#[tokio::test]
+async fn scan_filters_repeated_variables_in_datafusion() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+    let pattern = quad_pattern(
+        ActiveGraph::AllGraphs,
+        None,
+        var("x"),
+        NamedNodePattern::NamedNode(EX.into_owned()),
+        var("x"),
+    );
+
+    let plan = fixture.scan(&pattern, None).await;
+    assert_eq!(plan.name(), "ProjectionExec");
+    assert_eq!(plan.children()[0].name(), "FilterExec");
+    assert_eq!(leaf_scan(&plan).name(), "MemoryQuadScanExec");
+    assert_eq!(column_names(&plan.schema()), ["x"]);
+}
+
+/// Compares the scan with filtering and projecting all quads in DataFusion, which is how the
+/// other storages scan a pattern.
+#[tokio::test]
+async fn scan_matches_generic_filter_and_projection() {
+    let quads = pattern_test_quads();
+    let fixture = Fixture::with_committed(&quads).await;
+    let h = GraphName::from(example_iri("h"));
+
+    let active_graphs = [
+        ActiveGraph::DefaultGraph,
+        ActiveGraph::AllGraphs,
+        ActiveGraph::AnyNamedGraph,
+        ActiveGraph::Union(vec![]),
+        ActiveGraph::Union(vec![G.into()]),
+        ActiveGraph::Union(vec![h.clone(), G.into(), h.clone()]),
+        ActiveGraph::Union(vec![GraphName::DefaultGraph, h]),
+    ];
+    let p = NamedNodePattern::Variable(Variable::new_unchecked("p"));
+    let ex = NamedNodePattern::NamedNode(EX.into_owned());
+    let blank_x = TermPattern::BlankNode(BlankNode::new_unchecked("x"));
+    let literal = TermPattern::Literal(Literal::new_simple_literal("lit"));
+    let triple_patterns = [
+        (var("s"), p.clone(), var("o")),
+        (var("x"), ex.clone(), var("x")),
+        (var("g"), p.clone(), var("o")),
+        (
+            var("x"),
+            NamedNodePattern::Variable(Variable::new_unchecked("x")),
+            var("x"),
+        ),
+        (blank_x.clone(), ex.clone(), var("o")),
+        (blank_x.clone(), ex.clone(), blank_x),
+        (
+            TermPattern::NamedNode(EX.into_owned()),
+            p.clone(),
+            literal.clone(),
+        ),
+        (literal, p, var("o")),
+    ];
+
+    for active_graph in &active_graphs {
+        for graph_variable in [None, Some("g")] {
+            for (subject, predicate, object) in &triple_patterns {
+                for mode in [
+                    BlankNodeMatchingMode::Variable,
+                    BlankNodeMatchingMode::Filter,
+                ] {
+                    let mut pattern = quad_pattern(
+                        active_graph.clone(),
+                        graph_variable,
+                        subject.clone(),
+                        predicate.clone(),
+                        object.clone(),
+                    );
+                    pattern.blank_node_mode = mode;
+
+                    let plan = fixture.scan(&pattern, None).await;
+                    let (expected_schema, expected_rows) =
+                        fixture.filter_and_project(&quads, &pattern).await;
+                    assert_eq!(plan.schema(), expected_schema, "{pattern:?}");
+                    let actual_rows = rows(&fixture.execute(plan).await);
+                    assert_eq!(actual_rows, expected_rows, "{pattern:?}");
+                }
+            }
+        }
+    }
 }
 
 /// A [`MemoryQuadStorage`] with a session to access it.
@@ -225,21 +458,61 @@ impl Fixture {
 
     /// Plans a scan of `?s <ex> ?o` in the default graph on the committed state.
     async fn scan_predicate_ex(&self) -> Arc<dyn ExecutionPlan> {
-        let pattern = QuadPattern::new(
+        let pattern = quad_pattern(
             ActiveGraph::DefaultGraph,
             None,
-            TriplePattern {
-                subject: TermPattern::Variable(Variable::new_unchecked("s")),
-                predicate: NamedNodePattern::NamedNode(EX.into_owned()),
-                object: TermPattern::Variable(Variable::new_unchecked("o")),
-            },
-            BlankNodeMatchingMode::Variable,
+            var("s"),
+            NamedNodePattern::NamedNode(EX.into_owned()),
+            var("o"),
         );
+        self.scan(&pattern, None).await
+    }
+
+    /// Plans a scan of `pattern` on the committed state.
+    async fn scan(
+        &self,
+        pattern: &QuadPattern,
+        projection: Option<Vec<usize>>,
+    ) -> Arc<dyn ExecutionPlan> {
         self.snapshot()
             .await
-            .scan_quad_pattern(&pattern, None, &self.state())
+            .scan_quad_pattern(pattern, projection, &self.state())
             .await
             .unwrap()
+    }
+
+    /// Returns the sorted rows of a scan of `pattern` on the committed state.
+    async fn scan_rows(
+        &self,
+        pattern: &QuadPattern,
+        projection: Option<Vec<usize>>,
+    ) -> Vec<Vec<String>> {
+        let plan = self.scan(pattern, projection).await;
+        rows(&self.execute(plan).await)
+    }
+
+    /// Matches `pattern` against `quads` by filtering and projecting them in DataFusion. Returns
+    /// the schema and the sorted rows.
+    async fn filter_and_project(
+        &self,
+        quads: &[Quad],
+        pattern: &QuadPattern,
+    ) -> (SchemaRef, Vec<Vec<String>>) {
+        let mut data_frame = self.data_frame(quads);
+        let filters =
+            compute_quad_pattern_filters(pattern, &QuadStorageEncoding::PlainTerm)
+                .await
+                .unwrap();
+        if let Some(filter) = filters.into_iter().reduce(Expr::and) {
+            data_frame = data_frame.filter(filter).unwrap();
+        }
+        let columns = pattern
+            .compute_projection()
+            .into_iter()
+            .map(|(expr, name)| expr.alias(name));
+        let data_frame = data_frame.select(columns).unwrap();
+        let schema = Arc::new(data_frame.schema().as_arrow().clone());
+        (schema, rows(&data_frame.collect().await.unwrap()))
     }
 
     async fn execute(&self, plan: Arc<dyn ExecutionPlan>) -> Vec<RecordBatch> {
@@ -301,6 +574,83 @@ fn quad_in(object: &str, graph: NamedNodeRef<'_>) -> Quad {
 
 fn default_graph_quads(objects: impl IntoIterator<Item = impl AsRef<str>>) -> Vec<Quad> {
     objects.into_iter().map(|o| quad(o.as_ref())).collect()
+}
+
+/// Returns quads with repeated terms, blank nodes, and literals in several graphs.
+fn pattern_test_quads() -> Vec<Quad> {
+    let a = example_iri("a");
+    let g = example_iri("g");
+    let h = example_iri("h");
+    let x = BlankNode::new_unchecked("x");
+    let y = BlankNode::new_unchecked("y");
+    vec![
+        // The default graph.
+        Quad::new(EX, EX, EX, GraphName::DefaultGraph),
+        Quad::new(a.clone(), EX, a.clone(), GraphName::DefaultGraph),
+        Quad::new(x.clone(), EX, x.clone(), GraphName::DefaultGraph),
+        Quad::new(y, EX, x, GraphName::DefaultGraph),
+        // The graph `G`.
+        Quad::new(a.clone(), EX, a, G),
+        Quad::new(g, EX, example_iri("b"), G),
+        // The graph `h`.
+        Quad::new(EX, h.clone(), Literal::new_simple_literal("lit"), h),
+    ]
+}
+
+/// Returns a pattern in the [`BlankNodeMatchingMode::Variable`] mode.
+fn quad_pattern(
+    active_graph: ActiveGraph,
+    graph_variable: Option<&str>,
+    subject: TermPattern,
+    predicate: NamedNodePattern,
+    object: TermPattern,
+) -> QuadPattern {
+    QuadPattern::new(
+        active_graph,
+        graph_variable.map(Variable::new_unchecked),
+        TriplePattern {
+            subject,
+            predicate,
+            object,
+        },
+        BlankNodeMatchingMode::Variable,
+    )
+}
+
+fn var(name: &str) -> TermPattern {
+    TermPattern::Variable(Variable::new_unchecked(name))
+}
+
+fn column_names(schema: &SchemaRef) -> Vec<&str> {
+    schema.fields().iter().map(|f| f.name().as_str()).collect()
+}
+
+/// Returns the sorted rows of `batches`, with the terms formatted as strings. Nulls (i.e., the
+/// default graph) are formatted as `DEFAULT`.
+fn rows(batches: &[RecordBatch]) -> Vec<Vec<String>> {
+    let mut rows = Vec::new();
+    for batch in batches {
+        let columns = batch
+            .columns()
+            .iter()
+            .map(|column| {
+                let array = PLAIN_TERM_ENCODING
+                    .try_new_array(Arc::clone(column))
+                    .unwrap();
+                DefaultPlainTermDecoder::decode_terms(&array)
+                    .map(|term| match term {
+                        Ok(term) => Term::from(term).to_string(),
+                        Err(_) => "DEFAULT".to_owned(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        for row in 0..batch.num_rows() {
+            rows.push(columns.iter().map(|column| column[row].clone()).collect());
+        }
+    }
+    rows.sort();
+    rows
 }
 
 fn example_iri(name: &str) -> NamedNode {
