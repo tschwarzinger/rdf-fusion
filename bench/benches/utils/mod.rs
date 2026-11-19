@@ -67,8 +67,12 @@ pub fn benchmark_configs() -> Vec<BenchmarkConfig> {
     ]
 }
 
+/// Drains `result` and returns the number of results. Solutions are only drained as record
+/// batches (i.e., not materialized as individual solutions). A boolean result counts as one
+/// result.
 pub async fn consume_results(result: QueryResults) -> anyhow::Result<usize> {
     match result {
+        QueryResults::Boolean(_) => Ok(1),
         QueryResults::Solutions(solutions) => {
             let mut inner = solutions
                 .into_record_batch_stream()
@@ -88,7 +92,6 @@ pub async fn consume_results(result: QueryResults) -> anyhow::Result<usize> {
             }
             Ok(count)
         }
-        _ => panic!("Unexpected QueryResults"),
     }
 }
 

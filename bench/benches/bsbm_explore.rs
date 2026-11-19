@@ -1,7 +1,8 @@
 //! Runs certain queries from the BSBM benchmark suite as part of the regular benchmark suite.
 //!
-//! The particular instance of a query (they are generated randomly) is picked arbitrarily. If we
-//! ever decide that queries in this file are not representative, we can easily change the query.
+//! The query instances (they are generated randomly) are selected by [`BsbmUseCase::queries`].
+//!
+//! [`BsbmUseCase::queries`]: rdf_fusion_bench::benchmarks::bsbm::BsbmUseCase::queries
 //!
 //! The tests assume the presence of the benchmark data.
 
@@ -13,10 +14,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
-use rdf_fusion_bench::benchmarks::bsbm::{
-    BsbmBenchmark, BsbmExploreQueryName, ExploreUseCase, NumProducts,
-};
-use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
+use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
+use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
 fn bench_planning(c: &mut Criterion) {
@@ -35,7 +34,7 @@ fn bench_planning(c: &mut Criterion) {
 
     let (runtime, benchmark_context, store) =
         setup_benchmark_env(&benchmarking_context, &benchmark);
-    let queries = get_queries(&benchmark, &benchmark_context);
+    let queries = benchmark.queries(&benchmark_context).unwrap();
     let verbose = is_verbose();
 
     for (query_name, query_text) in queries {
@@ -76,7 +75,7 @@ fn bench_full_execution(c: &mut Criterion) {
 
         let (runtime, benchmark_context, store) =
             setup_benchmark_env(&benchmarking_context, &benchmark);
-        let queries = get_queries(&benchmark, &benchmark_context);
+        let queries = benchmark.queries(&benchmark_context).unwrap();
 
         for (query_name, query_text) in queries {
             let benchmark_name =
@@ -100,21 +99,3 @@ criterion_group!(
     targets = bench_planning, bench_full_execution
 );
 criterion_main!(bsbm_explore);
-
-fn get_queries(
-    benchmark: &BsbmBenchmark<ExploreUseCase>,
-    benchmark_context: &BenchmarkContext,
-) -> Vec<(String, String)> {
-    BsbmExploreQueryName::list_queries()
-        .into_iter()
-        .map(|query_name| {
-            let op = benchmark
-                .list_operations(benchmark_context)
-                .unwrap()
-                .into_iter()
-                .find(|op| op.name() == query_name.to_string())
-                .unwrap();
-            (query_name.to_string(), op.text().to_string())
-        })
-        .collect()
-}

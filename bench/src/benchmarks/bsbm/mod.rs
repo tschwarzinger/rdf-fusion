@@ -10,7 +10,7 @@ mod use_case;
 pub use benchmark::BsbmBenchmark;
 pub use business_intelligence::*;
 pub use explore::*;
-pub use use_case::BsbmUseCase;
+pub use use_case::{BsbmQuerySelection, BsbmUseCase, EmptyQueryKind};
 
 /// Indicates the size of the dataset.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, ValueEnum)]

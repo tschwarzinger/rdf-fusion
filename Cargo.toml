@@ -117,6 +117,8 @@ oxiri = "0.2"
 oxrdf = "0.3"
 oxrdfio = { version = "0.2", features = ["async-tokio"] }
 sparesults = { version = "0.3", features = ["async-tokio"] }
+spareval = "0.2"
+spargebra = "0.4"
 
 # Internal dependencies
 rdf-fusion-compute = { version = "=0.4.0-dev", path = "lib/compute" }

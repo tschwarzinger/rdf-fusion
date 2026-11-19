@@ -1,7 +1,8 @@
 //! Runs certain queries from the BSBM benchmark suite as part of the regular benchmark suite.
 //!
-//! The particular instance of a query (they are generated randomly) is picked arbitrarily. If we
-//! ever decide that queries in this file are not representative, we can easily change the query.
+//! The query instances (they are generated randomly) are selected by [`BsbmUseCase::queries`].
+//!
+//! [`BsbmUseCase::queries`]: rdf_fusion_bench::benchmarks::bsbm::BsbmUseCase::queries
 //!
 //! The tests assume the presence of the benchmark data.
 
@@ -14,8 +15,7 @@ use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
 use rdf_fusion_bench::benchmarks::bsbm::{
-    BsbmBenchmark, BsbmBusinessIntelligenceQueryName, BusinessIntelligenceUseCase,
-    NumProducts,
+    BsbmBenchmark, BusinessIntelligenceUseCase, NumProducts,
 };
 use rdf_fusion_bench::environment::{BenchmarkContext, RdfFusionBenchContext};
 use std::path::PathBuf;
@@ -108,19 +108,10 @@ fn get_queries(
     benchmark: &BsbmBenchmark<BusinessIntelligenceUseCase>,
     benchmark_context: &BenchmarkContext,
 ) -> Vec<(String, String)> {
-    let operations = benchmark.list_operations(benchmark_context).unwrap();
-    let mut queries = BsbmBusinessIntelligenceQueryName::list_queries()
-        .into_iter()
-        .map(|query_name| {
-            let op = operations
-                .iter()
-                .find(|op| op.name() == query_name.to_string())
-                .unwrap();
-            (query_name.to_string(), op.text().to_string())
-        })
-        .collect::<Vec<_>>();
+    let mut queries = benchmark.queries(benchmark_context).unwrap();
 
     // Query 64 is work-intensive
+    let operations = benchmark.list_operations(benchmark_context).unwrap();
     if let Some(op64) = operations.get(64) {
         queries.push(("Query 64".to_string(), op64.text().to_string()));
     }

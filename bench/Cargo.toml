@@ -49,6 +49,9 @@ insta.workspace = true
 tempfile.workspace = true
 rdf-fusion-storage.workspace = true
 rdf-fusion-storage-parquet.workspace = true
+oxrdf.workspace = true
+spareval.workspace = true
+spargebra.workspace = true
 
 [lints]
 workspace = true
@@ -75,4 +78,8 @@ harness = false
 
 [[bench]]
 name = "bulk_insert"
+harness = false
+
+[[bench]]
+name = "engine_overhead"
 harness = false

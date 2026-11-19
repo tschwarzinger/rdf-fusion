@@ -2,7 +2,7 @@ use crate::BenchQuadStorageTypeArg;
 use crate::benchmarks::bsbm::operation::list_operations;
 use crate::benchmarks::bsbm::report::{BsbmReport, ExploreReportBuilder, QueryDetails};
 
-use crate::benchmarks::bsbm::use_case::BsbmUseCase;
+use crate::benchmarks::bsbm::use_case::{BsbmQuerySelection, BsbmUseCase};
 use crate::benchmarks::bsbm::{BusinessIntelligenceUseCase, ExploreUseCase, NumProducts};
 use crate::benchmarks::{Benchmark, BenchmarkName};
 use crate::environment::BenchmarkContext;
@@ -43,6 +43,8 @@ struct BsbmFilePaths {
 pub struct BsbmBenchmark<TUseCase: BsbmUseCase> {
     /// The name of the benchmark.
     name: BenchmarkName,
+    /// The number of products in the dataset.
+    num_products: NumProducts,
     /// How many queries to execute at most.
     max_query_count: Option<u64>,
     /// Path file.
@@ -77,6 +79,7 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
 
         Ok(Self {
             name: TUseCase::name().into_benchmark_name(num_products, max_query_count),
+            num_products,
             max_query_count,
             paths,
             phantom_data: PhantomData,
@@ -103,6 +106,50 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
 
         println!("Queries loaded.");
         Ok(result)
+    }
+
+    /// Returns one instance of each query as `(name, text)` pairs (see [BsbmUseCase::queries]).
+    pub fn queries(
+        &self,
+        ctx: &BenchmarkContext,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        self.resolve(ctx, TUseCase::queries(self.num_products))
+    }
+
+    /// Returns instances with an empty result as `(name, text)` pairs (see
+    /// [BsbmUseCase::empty_queries]).
+    pub fn empty_queries(
+        &self,
+        ctx: &BenchmarkContext,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        self.resolve(ctx, TUseCase::empty_queries(self.num_products)?)
+    }
+
+    /// Looks up the text of the selected query instances.
+    fn resolve(
+        &self,
+        ctx: &BenchmarkContext,
+        selections: Vec<BsbmQuerySelection>,
+    ) -> anyhow::Result<Vec<(String, String)>> {
+        let operations = self.list_operations(ctx)?;
+        selections
+            .into_iter()
+            .map(|selection| {
+                let operation = match selection.line {
+                    // Line 1 is the header of the CSV file.
+                    Some(line) => line.checked_sub(2).and_then(|idx| operations.get(idx)),
+                    None => operations.iter().find(|op| op.name() == selection.query),
+                }
+                .with_context(|| format!("No instance for {selection:?}"))?;
+                anyhow::ensure!(
+                    operation.name() == selection.query,
+                    "Expected an instance of {} for {selection:?} but got {}",
+                    selection.query,
+                    operation.name()
+                );
+                Ok((selection.name, operation.text().to_owned()))
+            })
+            .collect()
     }
 }
 
