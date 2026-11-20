@@ -3,18 +3,25 @@
 use crate::memory::MemoryQuadStorageSnapshot;
 use datafusion::arrow::array::{ArrayRef, RecordBatch, RecordBatchOptions};
 use datafusion::arrow::datatypes::{Schema, SchemaRef};
+use datafusion::common::ScalarValue;
+use datafusion::common::config::ConfigOptions;
 use datafusion::common::stats::Precision;
 use datafusion::common::tree_node::TreeNodeRecursion;
 use datafusion::common::{Result as DFResult, Statistics};
 use datafusion::execution::TaskContext;
 use datafusion::logical_expr::Operator;
-use datafusion::physical_expr::expressions::{BinaryExpr, Column};
+use datafusion::physical_expr::expressions::{
+    BinaryExpr, Column, DynamicFilterPhysicalExpr, InListExpr, Literal,
+};
 use datafusion::physical_expr::{EquivalenceProperties, Partitioning, PhysicalExpr};
 use datafusion::physical_plan::coop::make_cooperative;
 use datafusion::physical_plan::execution_plan::{
     Boundedness, EmissionType, SchedulingType,
 };
 use datafusion::physical_plan::filter::FilterExec;
+use datafusion::physical_plan::filter_pushdown::{
+    ChildPushdownResult, FilterPushdownPhase, FilterPushdownPropagation, PushedDown,
+};
 use datafusion::physical_plan::projection::{ProjectionExec, ProjectionExpr};
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::{
@@ -25,8 +32,13 @@ use rdf_fusion_common::{
     ActiveGraph, BlankNodeMatchingMode, GraphName, NamedNode, NamedNodePattern,
     NamedOrBlankNode, QuadComponent, QuadPattern, QuadRef, Term, TermPattern,
 };
-use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
-use rdf_fusion_encoding::{EncodingArray, QuadStorageEncoding};
+use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
+use rdf_fusion_encoding::plain_term::{
+    PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
+};
+use rdf_fusion_encoding::{
+    EncodingArray, QuadStorageEncoding, TermDecoder, TermEncoding,
+};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -297,6 +309,8 @@ fn matching_quads<'a>(
 pub(super) struct MemoryQuadScanExec {
     snapshot: MemoryQuadStorageSnapshot,
     scan: MemoryQuadScan,
+    /// The dynamic filters of joins above the scan (see [`MemoryQuadScan::apply_dynamic_filters`]).
+    dynamic_filters: Vec<Arc<DynamicFilterPhysicalExpr>>,
     batch_size: usize,
     schema: SchemaRef,
     statistics: Arc<Statistics>,
@@ -321,6 +335,7 @@ impl MemoryQuadScanExec {
         Self {
             snapshot,
             scan,
+            dynamic_filters: Vec::new(),
             batch_size: batch_size.max(1),
             schema,
             statistics,
@@ -333,7 +348,16 @@ impl DisplayAs for MemoryQuadScanExec {
     fn fmt_as(&self, t: DisplayFormatType, f: &mut Formatter<'_>) -> std::fmt::Result {
         match t {
             DisplayFormatType::Default | DisplayFormatType::Verbose => {
-                write!(f, "MemoryQuadScanExec: {}", self.scan)
+                write!(f, "MemoryQuadScanExec: {}", self.scan)?;
+                if !self.dynamic_filters.is_empty() {
+                    let filters = self
+                        .dynamic_filters
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>();
+                    write!(f, ", dynamic_filters=[{}]", filters.join(", "))?;
+                }
+                Ok(())
             }
             DisplayFormatType::TreeRender => writeln!(f, "{}", self.scan),
         }
@@ -355,9 +379,54 @@ impl ExecutionPlan for MemoryQuadScanExec {
 
     fn apply_expressions(
         &self,
-        _f: &mut dyn FnMut(&Arc<dyn PhysicalExpr>) -> DFResult<TreeNodeRecursion>,
+        f: &mut dyn FnMut(&Arc<dyn PhysicalExpr>) -> DFResult<TreeNodeRecursion>,
     ) -> DFResult<TreeNodeRecursion> {
+        for filter in &self.dynamic_filters {
+            let filter = Arc::clone(filter) as Arc<dyn PhysicalExpr>;
+            if f(&filter)? == TreeNodeRecursion::Stop {
+                return Ok(TreeNodeRecursion::Stop);
+            }
+        }
         Ok(TreeNodeRecursion::Continue)
+    }
+
+    /// Keeps the dynamic filters of joins above the scan, which restrict the index lookups during
+    /// execution (see [`MemoryQuadScan::apply_dynamic_filters`]).
+    ///
+    /// The filters are only used to skip quads that cannot match. Hence, all filters are reported
+    /// as not pushed down, and the join still checks every row.
+    fn handle_child_pushdown_result(
+        &self,
+        phase: FilterPushdownPhase,
+        child_pushdown_result: ChildPushdownResult,
+        _config: &ConfigOptions,
+    ) -> DFResult<FilterPushdownPropagation<Arc<dyn ExecutionPlan>>> {
+        let filters = child_pushdown_result
+            .parent_filters
+            .into_iter()
+            .map(|result| result.filter)
+            .collect::<Vec<_>>();
+        let pushed_down = vec![PushedDown::No; filters.len()];
+
+        let dynamic_filters = filters
+            .into_iter()
+            .filter_map(|filter| Arc::downcast::<DynamicFilterPhysicalExpr>(filter).ok())
+            .collect::<Vec<_>>();
+        let propagation =
+            FilterPushdownPropagation::with_parent_pushdown_result(pushed_down);
+        if phase != FilterPushdownPhase::Post || dynamic_filters.is_empty() {
+            return Ok(propagation);
+        }
+
+        let mut exec =
+            Self::new(self.snapshot.clone(), self.scan.clone(), self.batch_size);
+        exec.dynamic_filters = self
+            .dynamic_filters
+            .iter()
+            .cloned()
+            .chain(dynamic_filters)
+            .collect();
+        Ok(propagation.with_updated_node(Arc::new(exec)))
     }
 
     fn with_new_children(
@@ -373,12 +442,16 @@ impl ExecutionPlan for MemoryQuadScanExec {
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         let snapshot = self.snapshot.clone();
-        let scan = self.scan.clone();
+        let mut scan = self.scan.clone();
+        let dynamic_filters = self.dynamic_filters.clone();
         let batch_size = self.batch_size;
         let schema = Arc::clone(&self.schema);
 
         // The stream owns the snapshot, so the index lookup can borrow it across batches.
         let stream = async_stream::stream! {
+            // The stream is polled after the build sides of the joins above have been collected.
+            // Hence, the dynamic filters are complete at this point.
+            scan.apply_dynamic_filters(&dynamic_filters);
             let components = scan
                 .columns
                 .iter()
@@ -411,26 +484,41 @@ impl ExecutionPlan for MemoryQuadScanExec {
 }
 
 /// Builds record batches with the given quad components as columns.
+///
+/// The builders start small and grow up to the batch size. Hence, small scans produce small
+/// arrays, which, for example, allows hash joins to push their (small) build side as an `IN` list
+/// into the probe side (see [`MemoryQuadScan::apply_dynamic_filters`]).
 struct ProjectedQuadsBuilder<'p> {
     components: &'p [QuadComponent],
     builders: Vec<PlainTermArrayElementBuilder>,
     len: usize,
-    capacity: usize,
+    batch_size: usize,
     schema: SchemaRef,
 }
 
+/// The initial capacity (in rows) of the builders of a batch.
+const INITIAL_BUILDER_CAPACITY: usize = 64;
+
 impl<'p> ProjectedQuadsBuilder<'p> {
-    fn new(components: &'p [QuadComponent], capacity: usize, schema: SchemaRef) -> Self {
+    fn new(
+        components: &'p [QuadComponent],
+        batch_size: usize,
+        schema: SchemaRef,
+    ) -> Self {
         Self {
             components,
-            builders: Self::new_builders(components.len(), capacity),
+            builders: Self::new_builders(components.len(), batch_size),
             len: 0,
-            capacity,
+            batch_size,
             schema,
         }
     }
 
-    fn new_builders(count: usize, capacity: usize) -> Vec<PlainTermArrayElementBuilder> {
+    fn new_builders(
+        count: usize,
+        batch_size: usize,
+    ) -> Vec<PlainTermArrayElementBuilder> {
+        let capacity = batch_size.min(INITIAL_BUILDER_CAPACITY);
         (0..count)
             .map(|_| PlainTermArrayElementBuilder::with_capacity(capacity))
             .collect()
@@ -441,7 +529,7 @@ impl<'p> ProjectedQuadsBuilder<'p> {
     }
 
     fn is_full(&self) -> bool {
-        self.len == self.capacity
+        self.len == self.batch_size
     }
 
     fn append(&mut self, quad: QuadRef<'_>) {
@@ -462,7 +550,7 @@ impl<'p> ProjectedQuadsBuilder<'p> {
     fn finish(&mut self) -> DFResult<RecordBatch> {
         let builders = std::mem::replace(
             &mut self.builders,
-            Self::new_builders(self.components.len(), self.capacity),
+            Self::new_builders(self.components.len(), self.batch_size),
         );
         let columns = builders
             .into_iter()
@@ -482,6 +570,127 @@ impl<'p> ProjectedQuadsBuilder<'p> {
 /// The schema of the quads (graph, subject, predicate, object) in the plain term encoding.
 fn quad_schema() -> SchemaRef {
     Arc::clone(QuadStorageEncoding::PlainTerm.quad_schema().inner())
+}
+
+impl MemoryQuadScan {
+    /// Restricts the lookups to the join keys of the build sides of the joins above the scan.
+    ///
+    /// A hash join pushes a dynamic filter `column IN (values)` into its probe side if the build
+    /// side is small. For such a filter on a produced column, each lookup is replaced by one lookup
+    /// per value. Other filters are ignored, which is correct as the joins check every row.
+    fn apply_dynamic_filters(&mut self, filters: &[Arc<DynamicFilterPhysicalExpr>]) {
+        for filter in filters {
+            let Ok(filter) = filter.current() else {
+                continue;
+            };
+            for (column, terms) in in_list_terms(&filter) {
+                let Some((component, _)) = self.columns.get(column) else {
+                    continue;
+                };
+                self.lookups = std::mem::take(&mut self.lookups)
+                    .into_iter()
+                    .flat_map(|constants| constants.restrict(*component, &terms))
+                    .collect();
+            }
+        }
+    }
+}
+
+impl PatternConstants {
+    /// Returns the lookups that find the quads of `self` whose `component` is one of `terms`.
+    fn restrict(self, component: QuadComponent, terms: &[Term]) -> Vec<Self> {
+        let is_constant = match component {
+            QuadComponent::GraphName => self.graph.is_some(),
+            QuadComponent::Subject => self.subject.is_some(),
+            QuadComponent::Predicate => self.predicate.is_some(),
+            QuadComponent::Object => self.object.is_some(),
+        };
+        if is_constant {
+            // The scan already only finds a single term for this component.
+            return vec![self];
+        }
+
+        terms
+            .iter()
+            .filter_map(|term| {
+                let mut constants = self.clone();
+                match (component, term.clone()) {
+                    (QuadComponent::GraphName, Term::NamedNode(node)) => {
+                        constants.graph = Some(node.into());
+                    }
+                    (QuadComponent::GraphName, Term::BlankNode(node)) => {
+                        constants.graph = Some(node.into());
+                    }
+                    (QuadComponent::Subject, Term::NamedNode(node)) => {
+                        constants.subject = Some(node.into());
+                    }
+                    (QuadComponent::Subject, Term::BlankNode(node)) => {
+                        constants.subject = Some(node.into());
+                    }
+                    (QuadComponent::Predicate, Term::NamedNode(node)) => {
+                        constants.predicate = Some(node);
+                    }
+                    (QuadComponent::Object, term) => constants.object = Some(term),
+                    // The term can never be this component (e.g., a literal subject).
+                    _ => return None,
+                }
+                Some(constants)
+            })
+            .collect()
+    }
+}
+
+/// Returns the columns and their (distinct) terms of the `column IN (terms)` conjuncts of `expr`.
+fn in_list_terms(expr: &Arc<dyn PhysicalExpr>) -> Vec<(usize, Vec<Term>)> {
+    if let Some(binary) = expr.downcast_ref::<BinaryExpr>() {
+        if *binary.op() != Operator::And {
+            return Vec::new();
+        }
+        let mut result = in_list_terms(binary.left());
+        result.extend(in_list_terms(binary.right()));
+        return result;
+    }
+
+    let Some(in_list) = expr.downcast_ref::<InListExpr>() else {
+        return Vec::new();
+    };
+    let Some(column) = in_list.expr().downcast_ref::<Column>() else {
+        return Vec::new();
+    };
+    if in_list.negated() {
+        return Vec::new();
+    }
+    let values = in_list
+        .list()
+        .iter()
+        .map(|value| {
+            value
+                .downcast_ref::<Literal>()
+                .map(|literal| literal.value().clone())
+        })
+        .collect::<Option<Vec<_>>>();
+    let Some(terms) = values.and_then(decode_terms) else {
+        return Vec::new();
+    };
+    vec![(column.index(), terms)]
+}
+
+/// Decodes the distinct (non-null) terms of plain term `values`.
+fn decode_terms(values: Vec<ScalarValue>) -> Option<Vec<Term>> {
+    if values.is_empty() {
+        return Some(Vec::new());
+    }
+    let array = ScalarValue::iter_to_array(values).ok()?;
+    let array = PLAIN_TERM_ENCODING.try_new_array(array).ok()?;
+    let mut terms: Vec<Term> = Vec::new();
+    for term in DefaultPlainTermDecoder::decode_terms(&array).flatten() {
+        let term = Term::from(term);
+        // Duplicate lookups would produce duplicate quads.
+        if !terms.contains(&term) {
+            terms.push(term);
+        }
+    }
+    Some(terms)
 }
 
 /// The estimated size of a term in the plain term encoding.

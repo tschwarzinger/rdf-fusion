@@ -88,9 +88,9 @@ impl<'a> MinusLowering<'a> {
                 )
             })
             .reduce(Expr::or)
-            .ok_or(plan_datafusion_err!(
-                "There must be at least one overlapping key"
-            ))?;
+            .ok_or_else(|| {
+                plan_datafusion_err!("There must be at least one overlapping key")
+            })?;
         join_filters.push(any_both_not_null);
 
         let filter_expr = join_filters.into_iter().reduce(Expr::and);

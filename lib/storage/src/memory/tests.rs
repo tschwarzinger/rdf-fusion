@@ -2,10 +2,18 @@ use crate::memory::MemoryQuadStorage;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::Statistics;
+use datafusion::common::config::ConfigOptions;
 use datafusion::common::stats::Precision;
 use datafusion::dataframe::DataFrame;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::Expr;
+use datafusion::logical_expr::Operator;
+use datafusion::physical_expr::expressions::{
+    BinaryExpr, Column, DynamicFilterPhysicalExpr, InListExpr, lit,
+};
+use datafusion::physical_plan::filter_pushdown::{
+    ChildFilterPushdownResult, ChildPushdownResult, FilterPushdownPhase, PushedDown,
+};
 use datafusion::physical_plan::{
     ExecutionPlan, StatisticsArgs, StatisticsContext, collect,
 };
@@ -15,7 +23,9 @@ use rdf_fusion_common::{
     NamedNodePattern, NamedNodeRef, Quad, QuadPattern, Term, TermPattern, TriplePattern,
     Variable,
 };
+use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::plain_term::PlainTermArrayElementBuilder;
 use rdf_fusion_encoding::plain_term::PlainTermQuadsBuilder;
 use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
 use rdf_fusion_encoding::{QuadStorageEncoding, TermDecoder, TermEncoding};
@@ -317,6 +327,87 @@ async fn scan_filters_repeated_variables_in_datafusion() {
     assert_eq!(plan.children()[0].name(), "FilterExec");
     assert_eq!(leaf_scan(&plan).name(), "MemoryQuadScanExec");
     assert_eq!(column_names(&plan.schema()), ["x"]);
+}
+
+#[tokio::test]
+async fn scan_restricts_lookups_with_dynamic_in_list_filter() {
+    let fixture = Fixture::with_committed(&pattern_test_quads()).await;
+    // `?s ?p ?o` produces the columns `s`, `p`, and `o`.
+    let pattern = quad_pattern(
+        ActiveGraph::AllGraphs,
+        None,
+        var("s"),
+        NamedNodePattern::Variable(Variable::new_unchecked("p")),
+        var("o"),
+    );
+    let plan = fixture.scan(&pattern, None).await;
+    let object = Column::new("o", 2);
+
+    let filter = Arc::new(DynamicFilterPhysicalExpr::new(
+        vec![Arc::new(object.clone())],
+        lit(true),
+    ));
+    let result = plan
+        .handle_child_pushdown_result(
+            FilterPushdownPhase::Post,
+            ChildPushdownResult {
+                parent_filters: vec![ChildFilterPushdownResult {
+                    filter: Arc::clone(&filter) as _,
+                    child_results: vec![],
+                }],
+                self_filters: vec![],
+            },
+            &ConfigOptions::default(),
+        )
+        .unwrap();
+    assert!(matches!(result.filters[..], [PushedDown::No]));
+    let plan = result.updated_node.unwrap();
+
+    // Before the filter is updated (e.g., the build side is not collected), all quads are scanned.
+    assert_eq!(count_rows(&fixture.execute(Arc::clone(&plan)).await), 7);
+
+    // The duplicate and the literal (which is never a subject) must not cause duplicate rows.
+    let objects = [
+        Term::from(example_iri("a")),
+        Term::from(example_iri("a")),
+        Term::from(BlankNode::new_unchecked("x")),
+    ];
+    let mut builder = PlainTermArrayElementBuilder::with_capacity(objects.len());
+    for object in &objects {
+        builder.append_term(object.as_ref());
+    }
+    let in_list = InListExpr::try_new_from_array(
+        Arc::new(object),
+        builder.finish().into_array_ref(),
+        false,
+        plan.schema().as_ref(),
+    )
+    .unwrap();
+    filter
+        .update(Arc::new(BinaryExpr::new(
+            Arc::new(in_list),
+            Operator::And,
+            lit(true),
+        )))
+        .unwrap();
+
+    assert_eq!(
+        rows(&fixture.execute(plan).await),
+        vec![
+            vec![
+                "<http://example.com/a>",
+                "<http://example.com/ex>",
+                "<http://example.com/a>"
+            ],
+            vec![
+                "<http://example.com/a>",
+                "<http://example.com/ex>",
+                "<http://example.com/a>"
+            ],
+            vec!["_:x", "<http://example.com/ex>", "_:x"],
+            vec!["_:y", "<http://example.com/ex>", "_:x"],
+        ]
+    );
 }
 
 /// Compares the scan with filtering and projecting all quads in DataFusion, which is how the

@@ -304,10 +304,7 @@ pub fn compute_sparql_join_columns(
             .expect("Field name stems from the set of fields.");
         encodings
             .try_get_encoding_name(field.data_type())
-            .ok_or(plan_datafusion_err!(
-                "Field '{}' must be an RDF Term.",
-                name
-            ))
+            .ok_or_else(|| plan_datafusion_err!("Field '{}' must be an RDF Term.", name))
     }
 
     let lhs_fields = lhs

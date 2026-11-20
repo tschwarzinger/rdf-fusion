@@ -624,10 +624,12 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
                 field.and_then(|field| {
                     self.encodings()
                         .try_get_encoding_name(field.data_type())
-                        .ok_or(exec_datafusion_err!(
-                            "Data type is not an RDF term '{}'",
-                            field
-                        ))
+                        .ok_or_else(|| {
+                            exec_datafusion_err!(
+                                "Data type is not an RDF term '{}'",
+                                field
+                            )
+                        })
                 })
             })
             .collect::<DFResult<Vec<_>>>()

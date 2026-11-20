@@ -130,12 +130,9 @@ impl<'a> PropertyPathLowering<'a> {
             })
             .collect::<DFResult<Vec<Expr>>>()?;
         let test_expression =
-            test_expressions
-                .into_iter()
-                .reduce(or)
-                .ok_or(plan_datafusion_err!(
-                    "The negated property set must not be empty"
-                ))?;
+            test_expressions.into_iter().reduce(or).ok_or_else(|| {
+                plan_datafusion_err!("The negated property set must not be empty")
+            })?;
 
         self.scan_quads(&inf.active_graph, Some(not(test_expression)))?
             .distinct()

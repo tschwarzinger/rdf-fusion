@@ -821,13 +821,17 @@ impl<'root> RdfFusionExprBuilder<'root> {
 
     /// Tries to obtain the encoding from a given expression.
     fn encoding(&self) -> DFResult<EncodingName> {
-        let field = self.expr.to_field(self.context.schema())?.1;
-
-        self.context.encodings().try_get_encoding_name(field.data_type()).ok_or(plan_datafusion_err!(
-            "Expression does not have a valid RDF term encoding. Data Type: {}, Expression: {}.",
-            field.data_type(),
-            &self.expr
-        ))
+        let data_type = self.expr.get_type(self.context.schema())?;
+        self.context
+            .encodings()
+            .try_get_encoding_name(&data_type)
+            .ok_or_else(|| {
+                plan_datafusion_err!(
+                    "Expression does not have a valid RDF term encoding. Data Type: {}, Expression: {}.",
+                    data_type,
+                    &self.expr
+                )
+            })
     }
 
     /// Equivalent to calling [Self::with_any_encoding] with a `&[target_encoding]`.
