@@ -1,13 +1,17 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::FieldRef;
+use datafusion::common::internal_err;
 use datafusion::common::{ScalarValue, exec_err};
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature,
     TypeSignature, Volatility,
 };
 use rdf_fusion_common::DFResult;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::any::TypeId;
@@ -60,7 +64,15 @@ impl ScalarUDFImpl for WithTypedFamilyEncoding {
     }
 
     fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
-        Ok(self.encodings.typed_family().data_type().clone())
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, _args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        Ok(rdf_term_field_ref(
+            self.name(),
+            self.encodings.typed_family().as_ref(),
+            true,
+        ))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {

@@ -3,16 +3,20 @@ use crate::scalar::error::SparqlUDFCreationError;
 use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::Array;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::exec_err;
+use datafusion::common::internal_err;
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, StringFamily, TypedFamily,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::fmt::{Debug, Formatter};
@@ -95,10 +99,15 @@ impl ScalarUDFImpl for StringCaseSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let arg_fields = args.arg_fields;
         let encoding_name = self
             .encodings
-            .try_get_encoding_name(&arg_types[0])
+            .try_get_encoding_name(&arg_fields[0])
             .ok_or_else(|| {
                 datafusion::error::DataFusionError::Plan(
                     "Unsupported input encoding".to_string(),
@@ -107,7 +116,11 @@ impl ScalarUDFImpl for StringCaseSparqlUDF {
 
         match encoding_name {
             EncodingName::TypedFamily | EncodingName::PlainTerm => {
-                Ok(self.encodings.typed_family().data_type().clone())
+                Ok(rdf_term_field_ref(
+                    self.name(),
+                    self.encodings.typed_family().as_ref(),
+                    true,
+                ))
             }
             _ => exec_err!("Unsupported encoding for LCASE/UCASE"),
         }

@@ -5,12 +5,15 @@
 //! whose arity matches how the corresponding tests invoke it, so that planning
 //! (not just tokenizing/parsing) succeeds.
 
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::logical_expr::{
-    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+    Signature, Volatility,
 };
 use rdf_fusion::encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermArray};
-use rdf_fusion::encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
+use rdf_fusion::encoding::{
+    EncodingArray, RdfFusionEncodings, TermEncoding, rdf_term_field_ref,
+};
 use rdf_fusion::extensions::RdfFusionContextView;
 use rdf_fusion::functions::scalar::SparqlUDFTypeSignatureBuilder;
 use rdf_fusion::functions::scalar::signature::SparqlUDFArity;
@@ -64,6 +67,14 @@ impl ScalarUDFImpl for TestCustomFunction {
 
     fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
         Ok(PLAIN_TERM_ENCODING.data_type().clone())
+    }
+
+    fn return_field_from_args(&self, _args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        Ok(rdf_term_field_ref(
+            self.name(),
+            PLAIN_TERM_ENCODING.as_ref(),
+            true,
+        ))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {

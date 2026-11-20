@@ -35,8 +35,10 @@ mod test_utils {
         ArrayRef, Decimal128Array, Float32Array, Float64Array, Int16Array, Int32Array,
         Int64Array, RecordBatch, StringArray, StructArray, UInt8Array,
     };
+    use datafusion::arrow::datatypes::{Field, Schema};
     use datafusion::logical_expr::{Expr, ScalarUDF, col};
     use datafusion::prelude::DataFrame;
+    use datafusion::prelude::SessionContext;
     use rdf_fusion_common::Decimal;
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
@@ -186,6 +188,33 @@ mod test_utils {
             .into_array_ref()
     }
 
+    /// Creates a [`DataFrame`] from the given columns. Columns that hold RDF terms in one of the
+    /// default encodings are annotated with the corresponding extension type.
+    pub(crate) fn annotated_df_from_columns(
+        columns: Vec<(&str, ArrayRef)>,
+    ) -> datafusion::common::Result<DataFrame> {
+        let encodings = create_default_encodings();
+        let fields = columns
+            .iter()
+            .map(|(name, array)| {
+                match encodings
+                    .encodings_with_data_type(array.data_type())
+                    .first()
+                {
+                    Some(encoding) => encodings
+                        .field(*encoding, *name, true)
+                        .expect("Encoding exists"),
+                    None => Field::new(*name, array.data_type().clone(), true),
+                }
+            })
+            .collect::<Vec<_>>();
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(fields)),
+            columns.into_iter().map(|(_, array)| array).collect(),
+        )?;
+        SessionContext::new().read_batch(batch)
+    }
+
     /// Creates an instance of the given builtin UDF.
     pub(crate) fn evaluate_function_for_test(
         test_vector: ArrayRef,
@@ -200,7 +229,7 @@ mod test_utils {
         udf: Arc<ScalarUDF>,
         args: Vec<Expr>,
     ) -> DataFrame {
-        let input = DataFrame::from_columns(vec![("input", test_vector)]).unwrap();
+        let input = annotated_df_from_columns(vec![("input", test_vector)]).unwrap();
         input.select([col("input"), udf.call(args)]).unwrap()
     }
 
@@ -211,7 +240,7 @@ mod test_utils {
         udf: Arc<ScalarUDF>,
     ) -> DataFrame {
         let input =
-            DataFrame::from_columns(vec![("left", left), ("right", right)]).unwrap();
+            annotated_df_from_columns(vec![("left", left), ("right", right)]).unwrap();
         input
             .select([
                 col("left"),
@@ -236,7 +265,7 @@ mod test_utils {
         udf: Arc<datafusion::logical_expr::AggregateUDF>,
         args: Vec<Expr>,
     ) -> DataFrame {
-        let df = DataFrame::from_columns(vec![("a", input)]).unwrap();
+        let df = annotated_df_from_columns(vec![("a", input)]).unwrap();
         df.aggregate(vec![], vec![udf.call(args)]).unwrap()
     }
 
@@ -254,7 +283,7 @@ mod test_utils {
             .zip(input.columns().iter().cloned())
             .collect::<Vec<_>>();
 
-        let input = DataFrame::from_columns(columns).unwrap();
+        let input = annotated_df_from_columns(columns).unwrap();
         let mut select_expr = schema
             .fields()
             .iter()

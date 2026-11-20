@@ -1,6 +1,6 @@
 use crate::storage::QuadStorageSnapshot;
 use datafusion::arrow::array::RecordBatch;
-use datafusion::arrow::datatypes::{Field, Schema};
+use datafusion::arrow::datatypes::Schema;
 use datafusion::dataframe::DataFrame;
 use datafusion::prelude::SessionContext;
 use futures::StreamExt;
@@ -10,6 +10,7 @@ use rdf_fusion_common::sparql::GraphTarget;
 use rdf_fusion_common::{BlankNode, NamedNode};
 use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::rdf_term_field;
 use rdf_fusion_encoding::{EncodingScalar, QuadStorageEncoding, TermEncoding};
 use std::sync::Arc;
 
@@ -51,9 +52,9 @@ pub async fn graph_target_to_plain_term_dataframe(
                 .encode_term(Ok(graph_name.as_ref().into()))
                 .expect("Valid term")
                 .into_scalar_value();
-            let schema = Arc::new(Schema::new(vec![Field::new(
+            let schema = Arc::new(Schema::new(vec![rdf_term_field(
                 COL_GRAPH,
-                scalar_value.data_type().clone(),
+                PLAIN_TERM_ENCODING.as_ref(),
                 true,
             )]));
             let batch = RecordBatch::try_new(
@@ -70,9 +71,9 @@ pub async fn graph_target_to_plain_term_dataframe(
                 .encode_term(Ok(graph_name.as_ref().into()))
                 .expect("Valid term")
                 .into_scalar_value();
-            let schema = Arc::new(Schema::new(vec![Field::new(
+            let schema = Arc::new(Schema::new(vec![rdf_term_field(
                 COL_GRAPH,
-                scalar_value.data_type().clone(),
+                PLAIN_TERM_ENCODING.as_ref(),
                 true,
             )]));
             let batch = RecordBatch::try_new(
@@ -85,9 +86,9 @@ pub async fn graph_target_to_plain_term_dataframe(
                 .map_err(|e| StorageError::Other(Box::new(e)))
         }
         QuadStorageGraphTarget::DefaultGraph => {
-            let schema = Arc::new(Schema::new(vec![Field::new(
+            let schema = Arc::new(Schema::new(vec![rdf_term_field(
                 COL_GRAPH,
-                PLAIN_TERM_ENCODING.data_type().clone(),
+                PLAIN_TERM_ENCODING.as_ref(),
                 true,
             )]));
             let batch = RecordBatch::try_new(
@@ -108,9 +109,9 @@ pub async fn graph_target_to_plain_term_dataframe(
             .map_err(|e| StorageError::Other(Box::new(e)))?;
 
             let mut plain_term_batches = Vec::new();
-            let pt_schema = Arc::new(Schema::new(vec![Field::new(
+            let pt_schema = Arc::new(Schema::new(vec![rdf_term_field(
                 COL_GRAPH,
-                PLAIN_TERM_ENCODING.data_type().clone(),
+                PLAIN_TERM_ENCODING.as_ref(),
                 true,
             )]));
 

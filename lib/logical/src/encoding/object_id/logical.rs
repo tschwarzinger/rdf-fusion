@@ -4,10 +4,11 @@ use datafusion::error::DataFusionError;
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use itertools::Itertools;
 use rdf_fusion_common::DFResult;
+use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_encoding::object_id::ObjectIdDataType;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
-use rdf_fusion_encoding::string::STRING_ENCODING;
+use rdf_fusion_encoding::with_rdf_term_extension_type;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::Hash;
@@ -35,8 +36,10 @@ impl EncodeAsObjectIdNode {
         object_id_type: ObjectIdDataType,
     ) -> DFResult<Self> {
         let any_unexpected_data_type = input.schema().fields().iter().any(|f| {
-            f.data_type() != PLAIN_TERM_ENCODING.data_type()
-                && f.data_type() != STRING_ENCODING.data_type()
+            !matches!(
+                EncodingName::try_from_field(f),
+                Some(EncodingName::PlainTerm | EncodingName::String)
+            )
         });
         if any_unexpected_data_type {
             return plan_err!(
@@ -51,7 +54,10 @@ impl EncodeAsObjectIdNode {
             .map(|(t, f)| {
                 (
                     t.cloned(),
-                    Arc::new(f.as_ref().clone().with_data_type(encoded_type.clone())),
+                    Arc::new(with_rdf_term_extension_type(
+                        f.as_ref().clone().with_data_type(encoded_type.clone()),
+                        EncodingName::ObjectId,
+                    )),
                 )
             })
             .collect::<Vec<_>>();
@@ -126,10 +132,13 @@ impl DecodeObjectIdsNode {
             .map(|(idx, column)| {
                 let input_field = Arc::clone(input.schema().field(idx));
                 let output_field = if columns_to_decode.contains(&column) {
-                    let field = input_field
-                        .as_ref()
-                        .clone()
-                        .with_data_type(PLAIN_TERM_ENCODING.data_type().clone());
+                    let field = with_rdf_term_extension_type(
+                        input_field
+                            .as_ref()
+                            .clone()
+                            .with_data_type(PLAIN_TERM_ENCODING.data_type().clone()),
+                        EncodingName::PlainTerm,
+                    );
                     Arc::new(field)
                 } else {
                     input_field

@@ -19,6 +19,7 @@ use rdf_fusion_common::{DFResult, TermPattern};
 use rdf_fusion_common::{RdfSortOrder, Variable};
 use rdf_fusion_encoding::object_id::ObjectIdEncoding;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::with_rdf_term_extension_type;
 use rdf_fusion_encoding::{EncodingName, TermEncoding};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
@@ -600,7 +601,7 @@ impl RdfFusionLogicalPlanBuilder {
         let mut columns_to_decode = Vec::new();
         for col in referenced_columns {
             if let Ok(field) = schema.field_from_column(&col)
-                && field.data_type() == encoding.data_type()
+                && EncodingName::try_from_field(field) == Some(EncodingName::ObjectId)
             {
                 columns_to_decode.push(col);
             }
@@ -699,18 +700,21 @@ fn create_decoded_schema(
     schema: &DFSchemaRef,
     object_id_encoding: Option<&ObjectIdEncoding>,
 ) -> DFSchemaRef {
-    let Some(encoding) = object_id_encoding else {
+    if object_id_encoding.is_none() {
         return Arc::clone(schema);
-    };
+    }
 
     let mut fields = Vec::new();
     let mut modified = false;
     for (qualifier, field) in schema.iter() {
-        if field.data_type() == encoding.data_type() {
+        if EncodingName::try_from_field(field) == Some(EncodingName::ObjectId) {
             let decoded_type = PLAIN_TERM_ENCODING.data_type();
             fields.push((
                 qualifier.cloned(),
-                Arc::new(field.as_ref().clone().with_data_type(decoded_type.clone())),
+                Arc::new(with_rdf_term_extension_type(
+                    field.as_ref().clone().with_data_type(decoded_type.clone()),
+                    EncodingName::PlainTerm,
+                )),
             ));
             modified = true;
         } else {

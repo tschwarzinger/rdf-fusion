@@ -10,6 +10,7 @@
 
 pub mod bgp;
 pub mod distinct;
+pub mod extension_type;
 pub mod object_id;
 pub mod paths;
 pub mod quad_pattern;

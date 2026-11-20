@@ -6,9 +6,10 @@ use datafusion::prelude::DataFrame;
 use futures::{Stream, StreamExt};
 use rdf_fusion_common::Variable;
 use rdf_fusion_common::{DFResult, Term};
+use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
 use rdf_fusion_encoding::plain_term::{PLAIN_TERM_ENCODING, PlainTermEncoding};
-use rdf_fusion_encoding::string::{STRING_ENCODING, StringEncoding};
+use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{TermDecoder, TermEncoding};
 pub use sparesults::QuerySolution;
 use std::pin::Pin;
@@ -38,9 +39,10 @@ impl QuerySolutionStream {
         inner: SendableRecordBatchStream,
     ) -> DFResult<Self> {
         for field in inner.schema().fields() {
-            let is_supported_datatype = &PlainTermEncoding::data_type()
-                == field.data_type()
-                || &StringEncoding::data_type() == field.data_type();
+            let is_supported_datatype = matches!(
+                EncodingName::try_from_field(field),
+                Some(EncodingName::PlainTerm | EncodingName::String)
+            );
             if !is_supported_datatype {
                 return exec_err!(
                     "Field '{}' has unsupported type '{}' for query solution.",

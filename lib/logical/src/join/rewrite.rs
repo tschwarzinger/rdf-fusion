@@ -360,7 +360,7 @@ fn get_join_keys(node: &SparqlJoinNode) -> (HashSet<String>, HashSet<String>) {
 mod tests {
     use super::*;
     use crate::{RdfFusionLogicalPlanBuilder, RdfFusionLogicalPlanBuilderContext};
-    use datafusion::arrow::datatypes::Field;
+
     use datafusion::common::DFSchema;
     use datafusion::logical_expr::EmptyRelation;
     use datafusion::logical_expr::Extension;
@@ -368,7 +368,7 @@ mod tests {
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
-    use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings, TermEncoding};
+    use rdf_fusion_encoding::{QuadStorageEncoding, RdfFusionEncodings, rdf_term_field};
     use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
     use std::sync::Arc;
 
@@ -433,11 +433,7 @@ mod tests {
         let schema = DFSchema::new_with_metadata(
             vec![(
                 None,
-                Arc::new(Field::new(
-                    name,
-                    PLAIN_TERM_ENCODING.data_type().clone(),
-                    false,
-                )),
+                Arc::new(rdf_term_field(name, PLAIN_TERM_ENCODING.as_ref(), false)),
             )],
             Default::default(),
         )

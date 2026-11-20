@@ -2,12 +2,13 @@ use crate::RdfFusionExprBuilderContext;
 use crate::expr_builder_context::decide_input_encoding;
 use datafusion::common::{ScalarValue, plan_datafusion_err, plan_err};
 use datafusion::functions_aggregate::first_last::first_value;
-use datafusion::logical_expr::{Expr, ExprSchemable, lit};
+use datafusion::logical_expr::{Expr, ExprSchemable};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::{Iri, LiteralRef, TermRef, ThinError};
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
+use rdf_fusion_encoding::rdf_term_lit;
 use rdf_fusion_encoding::{EncodingArray, EncodingName, EncodingScalar};
 use rdf_fusion_extensions::functions::{BuiltinName, FunctionName};
 use std::ops::Not;
@@ -177,7 +178,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
         let tf_array = typed_family_encoding.cast_from_plain_term_array(&pt_array)?;
         let arg = tf_array.try_as_scalar(0)?;
 
-        self.apply_builtin_with_args(BuiltinName::Iri, vec![lit(arg.into_scalar_value())])
+        self.apply_builtin_with_args(BuiltinName::Iri, vec![arg.into_lit()])
     }
 
     /// Creates an expression that constructs a blank node from a string.
@@ -810,7 +811,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
 
         self.context.apply_udaf(
             FunctionName::Builtin(BuiltinName::GroupConcat),
-            vec![self.expr, lit(arg.into_scalar_value())],
+            vec![self.expr, arg.into_lit()],
             distinct,
         )
     }
@@ -823,7 +824,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
     fn encoding(&self) -> DFResult<EncodingName> {
         let field = self.expr.to_field(self.context.schema())?.1;
 
-        self.context.encodings().try_get_encoding_name(field.data_type()).ok_or(plan_datafusion_err!(
+        self.context.encodings().try_get_encoding_name(&field).ok_or(plan_datafusion_err!(
             "Expression does not have a valid RDF term encoding. Data Type: {}, Expression: {}.",
             field.data_type(),
             &self.expr
@@ -1043,7 +1044,7 @@ impl<'root> RdfFusionExprBuilder<'root> {
                 ScalarValue::Utf8(Some(turtle))
             }
         };
-        self.build_same_term(lit(literal))
+        self.build_same_term(rdf_term_lit(encoding_name, literal))
     }
 
     /// Builds an expression that returns a byte array that can be used to sort on the inner

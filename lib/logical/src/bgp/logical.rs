@@ -8,8 +8,10 @@ use datafusion::error::DataFusionError;
 use datafusion::logical_expr::{Expr, LogicalPlan, UserDefinedLogicalNodeCore};
 use itertools::Itertools;
 use rdf_fusion_common::DFResult;
+use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::TermEncoding;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::with_rdf_term_extension_type;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt;
@@ -218,10 +220,13 @@ fn compute_schema(
                 continue; // Could be projected away
             };
 
-            let new_field = fields[idx]
-                .as_ref()
-                .clone()
-                .with_data_type(PLAIN_TERM_ENCODING.data_type().clone());
+            let new_field = with_rdf_term_extension_type(
+                fields[idx]
+                    .as_ref()
+                    .clone()
+                    .with_data_type(PLAIN_TERM_ENCODING.data_type().clone()),
+                EncodingName::PlainTerm,
+            );
             fields[idx] = Arc::new(new_field);
         }
         let qualified = projected

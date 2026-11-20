@@ -2,7 +2,7 @@ use datafusion::logical_expr::ScalarFunctionArgs;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingDatum, EncodingName, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_types,
+    detect_encoding_from_fields,
 };
 use std::sync::Arc;
 
@@ -71,10 +71,5 @@ pub fn detect_encoding(
     encodings: &RdfFusionEncodings,
     args: &ScalarFunctionArgs,
 ) -> DFResult<Option<EncodingName>> {
-    let types = args
-        .arg_fields
-        .iter()
-        .map(|f| f.data_type().clone())
-        .collect::<Vec<_>>();
-    detect_encoding_from_types(encodings, &types)
+    detect_encoding_from_fields(encodings, &args.arg_fields)
 }

@@ -2,17 +2,22 @@ use crate::scalar::error::SparqlUDFCreationError;
 use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, StringArray};
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::internal_err;
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use itertools::repeat_n;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::vocab::xsd;
+use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::plain_term::PlainTermArray;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::StringFamilyArray;
 use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
 use rdf_fusion_extensions::functions::BuiltinName;
+use std::sync::Arc;
 
 /// Implementation of the SPARQL `STR` function.
 ///
@@ -56,22 +61,33 @@ impl ScalarUDFImpl for StrSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        if arg_types.is_empty() {
-            return Ok(self.encodings.typed_family().data_type().clone());
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let arg_fields = args.arg_fields;
+        if arg_fields.is_empty() {
+            return Ok(rdf_term_field_ref(
+                self.name(),
+                self.encodings.typed_family().as_ref(),
+                true,
+            ));
         }
-        Ok(arg_types[0].clone())
+        Ok(Arc::new(
+            arg_fields[0].as_ref().clone().with_name(self.name()),
+        ))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
         let input = args.args[0].to_array(args.number_rows)?;
-        let data_type = input.data_type();
+        let encoding = self.encodings.try_get_encoding_name(&args.arg_fields[0]);
 
-        if data_type == self.encodings.plain_term().data_type() {
+        if encoding == Some(EncodingName::PlainTerm) {
             let array = self.encodings.plain_term().try_new_array(input)?;
             let result = impl_str_plain_term(&array);
             Ok(ColumnarValue::Array(result.into_array_ref()))
-        } else if data_type == self.encodings.typed_family().data_type() {
+        } else if encoding == Some(EncodingName::TypedFamily) {
             let tf_encoding = self.encodings.typed_family();
             let tf_array = tf_encoding.try_new_array(input)?;
             let printed = tf_array.pretty_print()?;
@@ -79,7 +95,7 @@ impl ScalarUDFImpl for StrSparqlUDF {
                 .create_array_from_family(StringFamilyArray::new_simple(printed))?;
             Ok(ColumnarValue::Array(result.into_array_ref()))
         } else {
-            internal_err!("Unsupported data type for STR: {:?}", data_type)
+            internal_err!("Unsupported encoding for STR: {:?}", encoding)
         }
     }
 }

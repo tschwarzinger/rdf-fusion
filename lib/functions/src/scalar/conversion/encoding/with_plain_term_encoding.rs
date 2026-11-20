@@ -1,5 +1,5 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::common::{ScalarValue, exec_err};
 use datafusion::logical_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
@@ -7,8 +7,9 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::any::TypeId;
@@ -65,11 +66,11 @@ impl ScalarUDFImpl for WithPlainTermEncoding {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        Ok(Arc::new(Field::new(
+        Ok(rdf_term_field_ref(
             "output",
-            PLAIN_TERM_ENCODING.data_type().clone(),
+            PLAIN_TERM_ENCODING.as_ref(),
             args.arg_fields[0].is_nullable(),
-        )))
+        ))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {

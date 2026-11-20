@@ -9,7 +9,7 @@ use datafusion::logical_expr::{
     Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
-use rdf_fusion_encoding::{RdfFusionEncodings, detect_encoding_from_types};
+use rdf_fusion_encoding::{RdfFusionEncodings, detect_encoding_from_fields};
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
@@ -65,20 +65,13 @@ impl ScalarUDFImpl for IsCompatibleSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        let _ = detect_encoding_from_types(&self.encodings, arg_types)?;
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
         Ok(DataType::Boolean)
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let data_types = args
-            .arg_fields
-            .iter()
-            .map(|f| f.data_type())
-            .cloned()
-            .collect::<Vec<_>>();
-        let return_type = self.return_type(&data_types)?;
-        Ok(Arc::new(Field::new(self.name(), return_type, false)))
+        let _ = detect_encoding_from_fields(&self.encodings, args.arg_fields)?;
+        Ok(Arc::new(Field::new(self.name(), DataType::Boolean, false)))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
@@ -107,7 +100,7 @@ impl ScalarUDFImpl for IsCompatibleSparqlUDF {
 mod tests {
     use super::*;
     use crate::test_utils::create_default_encodings;
-    use datafusion::dataframe::DataFrame;
+
     use datafusion::logical_expr::col;
     use insta::assert_snapshot;
     use rdf_fusion_common::NamedNodeRef;
@@ -143,7 +136,7 @@ mod tests {
         let rhs = rhs_builder.finish();
         let udf = Arc::new(is_compatible_udf(encodings).unwrap());
 
-        let df = DataFrame::from_columns(vec![
+        let df = crate::test_utils::annotated_df_from_columns(vec![
             ("lhs", lhs.into_array_ref()),
             ("rhs", rhs.into_array_ref()),
         ])

@@ -1,7 +1,7 @@
 use anyhow::Context;
 use datafusion::arrow::array::{ArrayRef, Int32Array};
 use datafusion::arrow::compute;
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::common::{downcast_value, exec_datafusion_err, exec_err};
 use datafusion::error::Result;
 use datafusion::logical_expr::function::AccumulatorArgs;
@@ -15,7 +15,7 @@ use rdf_fusion::encoding::typed_family::{
 };
 use rdf_fusion::encoding::{
     EncodingName, EncodingScalar, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_types,
+    detect_encoding_from_fields, rdf_term_field_ref,
 };
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::extensions::functions::FunctionName;
@@ -114,12 +114,21 @@ impl AggregateUDFImpl for CountSpiderUDAF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        match detect_encoding_from_types(&self.encodings, arg_types)? {
-            Some(EncodingName::TypedFamily) => {
-                Ok(self.encodings.typed_family().data_type().clone())
-            }
-            _ => exec_err!("containsSpiderman only supports the TypedFamily encoding"),
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(self.encodings.typed_family().data_type().clone())
+    }
+
+    /// RDF terms are marked with Arrow extension types. Therefore, the encoding of the arguments
+    /// is obtained from the fields (and not the data types) and the returned field must be
+    /// annotated with the extension type of the result's encoding.
+    fn return_field(&self, arg_fields: &[FieldRef]) -> Result<FieldRef> {
+        match detect_encoding_from_fields(&self.encodings, arg_fields)? {
+            Some(EncodingName::TypedFamily) => Ok(rdf_term_field_ref(
+                self.name(),
+                self.encodings.typed_family().as_ref(),
+                true,
+            )),
+            _ => exec_err!("countSpider only supports the TypedFamily encoding"),
         }
     }
 

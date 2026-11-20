@@ -3,13 +3,12 @@ use crate::bgp::BgpNode;
 use crate::paths::PropertyPathNode;
 use crate::quad_pattern::QuadPatternNode;
 use crate::{RdfFusionExprBuilderContext, RdfFusionLogicalPlanBuilder};
-use datafusion::arrow::datatypes::{Field, Fields};
+use datafusion::arrow::datatypes::Fields;
 use datafusion::common::{DFSchema, DataFusionError};
 use datafusion::logical_expr::builder::project;
 use datafusion::logical_expr::select_expr::SelectExpr;
 use datafusion::logical_expr::{
-    Expr, Extension, LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode, Values,
-    col, lit,
+    Expr, Extension, LogicalPlan, LogicalPlanBuilder, UserDefinedLogicalNode, Values, col,
 };
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{DFResult, NamedOrBlankNode};
@@ -19,8 +18,9 @@ use rdf_fusion_common::{
 };
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::plain_term::encoders::DefaultPlainTermEncoder;
+use rdf_fusion_encoding::rdf_term_field;
 use rdf_fusion_encoding::{
-    EncodingScalar, QuadStorageEncoding, RdfFusionEncodings, TermEncoder, TermEncoding,
+    EncodingScalar, QuadStorageEncoding, RdfFusionEncodings, TermEncoder,
 };
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_extensions::functions::RdfFusionFunctionRegistryRef;
@@ -176,9 +176,7 @@ impl RdfFusionLogicalPlanBuilderContext {
     ) -> DFResult<RdfFusionLogicalPlanBuilder> {
         let fields = variables
             .iter()
-            .map(|v| {
-                Field::new(v.as_str(), PLAIN_TERM_ENCODING.data_type().clone(), true)
-            })
+            .map(|v| rdf_term_field(v.as_str(), PLAIN_TERM_ENCODING.as_ref(), true))
             .collect::<Fields>();
         let schema = DFSchema::from_unqualified_fields(fields, HashMap::new())?;
 
@@ -206,8 +204,8 @@ impl RdfFusionLogicalPlanBuilderContext {
                             GroundTerm::Literal(lit) => TermRef::Literal(lit.as_ref()),
                         }),
                     })?
-                    .into_scalar_value();
-                row.push(lit(literal));
+                    .into_lit();
+                row.push(literal);
             }
             rows.push(row);
         }
@@ -318,10 +316,10 @@ fn column_or_literal(term: Option<impl Into<Term>>, col_name: &str) -> DFResult<
     Ok(term
         .map(|s| {
             Ok::<Expr, DataFusionError>(
-                lit(PLAIN_TERM_ENCODING
+                PLAIN_TERM_ENCODING
                     .encode_term(Ok(s.into().as_ref()))?
-                    .into_scalar_value())
-                .alias(col_name),
+                    .into_lit()
+                    .alias(col_name),
             )
         })
         .transpose()?

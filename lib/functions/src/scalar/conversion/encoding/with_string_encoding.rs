@@ -1,5 +1,5 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::common::{ScalarValue, exec_err};
 use datafusion::logical_expr::{
     ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
@@ -7,14 +7,13 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::compute::with_string_encoding_from_plain_term;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{
     DowncastEncodingArgs, EncodingArray, EncodingDatum, EncodingName, RdfFusionEncodings,
-    TermEncoding,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::hash::Hash;
-use std::sync::Arc;
 
 /// A function that encodes the given values with the String term encoding.
 pub fn with_string_encoding(encodings: RdfFusionEncodings) -> ScalarUDF {
@@ -63,11 +62,11 @@ impl ScalarUDFImpl for WithStringEncoding {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        Ok(Arc::new(Field::new(
+        Ok(rdf_term_field_ref(
             "",
-            STRING_ENCODING.data_type().clone(),
+            STRING_ENCODING.as_ref(),
             args.arg_fields[0].is_nullable(),
-        )))
+        ))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {

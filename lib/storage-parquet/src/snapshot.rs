@@ -4,7 +4,7 @@ use crate::storage::ParquetQuadStorage;
 use crate::storage::ParquetQuadTable;
 use crate::switch::{QuadTableSwitch, SwitchableQuadTables};
 use async_trait::async_trait;
-use datafusion::arrow::datatypes::{Field, Schema};
+use datafusion::arrow::datatypes::Schema;
 use datafusion::common::Result as DFResult;
 use datafusion::common::stats::Precision;
 use datafusion::datasource::object_store::ObjectStoreUrl;
@@ -202,11 +202,7 @@ impl QuadStorageSnapshot for ParquetQuadStorageSnapshot {
         let group_by =
             PhysicalGroupBy::new_single(vec![(graph_col, COL_GRAPH.to_string())]);
 
-        let fields = vec![Field::new(
-            COL_GRAPH,
-            self.encoding.term_type().clone(),
-            true,
-        )];
+        let fields = vec![self.encoding.term_field(COL_GRAPH, true)];
         let output_schema = Arc::new(Schema::new(fields));
 
         let distinct_plan = Arc::new(

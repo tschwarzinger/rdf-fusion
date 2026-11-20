@@ -2,20 +2,24 @@ use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
 use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::{Array, AsArray, StringBuilder};
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::arrow::datatypes::{DataType, Int64Type};
 use datafusion::common::exec_err;
+use datafusion::common::internal_err;
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::{AResult, DFResult};
 use rdf_fusion_compute::numeric::cast_numeric;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, NumericFamilyArray, StringFamily, StringFamilyArray,
     TypedFamily, TypedFamilyArray, TypedFamilyEncodingRef,
 };
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
+    detect_encoding_from_fields,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::fmt::{Debug, Formatter};
@@ -71,11 +75,18 @@ impl ScalarUDFImpl for SubStrSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        match detect_encoding_from_types(&self.encodings, arg_types)? {
-            Some(EncodingName::TypedFamily) => {
-                Ok(self.encodings.typed_family().data_type().clone())
-            }
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let arg_fields = args.arg_fields;
+        match detect_encoding_from_fields(&self.encodings, arg_fields)? {
+            Some(EncodingName::TypedFamily) => Ok(rdf_term_field_ref(
+                self.name(),
+                self.encodings.typed_family().as_ref(),
+                true,
+            )),
             _ => exec_err!("Unsupported encoding for SUBSTR return type"),
         }
     }
@@ -187,7 +198,7 @@ mod tests {
     use super::*;
     use crate::test_utils::create_default_encodings;
     use datafusion::arrow::array::{ArrayRef, Int64Array, StringArray};
-    use datafusion::dataframe::DataFrame;
+
     use datafusion::logical_expr::col;
     use insta::assert_snapshot;
     use rdf_fusion_encoding::typed_family::{NumericFamilyArray, StringFamilyArray};
@@ -225,7 +236,7 @@ mod tests {
 
         let udf = Arc::new(sub_str_udf(encodings).unwrap());
 
-        let input = DataFrame::from_columns(vec![
+        let input = crate::test_utils::annotated_df_from_columns(vec![
             ("source", source),
             ("start", start),
             ("length", length),
@@ -283,7 +294,7 @@ mod tests {
 
         let udf = Arc::new(sub_str_udf(encodings).unwrap());
 
-        let input = DataFrame::from_columns(vec![
+        let input = crate::test_utils::annotated_df_from_columns(vec![
             ("source", source),
             ("start", start),
             ("length", length),

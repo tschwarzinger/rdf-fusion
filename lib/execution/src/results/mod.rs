@@ -1,11 +1,12 @@
 use datafusion::arrow::array::{RecordBatch, RecordBatchOptions};
-use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
+use datafusion::arrow::datatypes::{Schema, SchemaRef};
 use datafusion::arrow::error::ArrowError;
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::memory::MemoryStream;
 use futures::StreamExt;
 use oxrdfio::RdfSerializer;
 use rdf_fusion_common::{RdfFormat, Variable, VariableRef};
+use rdf_fusion_encoding::rdf_term_field;
 use std::error::Error;
 use std::io::Write;
 use std::sync::Arc;
@@ -19,10 +20,10 @@ use crate::sparql::QueryEvaluationError;
 pub use graph_name::GraphNameStream;
 pub use quads::QuadStream;
 pub use query_solution::QuerySolutionStream;
+use rdf_fusion_encoding::EncodingArray;
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
-use rdf_fusion_encoding::{EncodingArray, TermEncoding};
 use sparesults::TokioAsyncReaderQueryResultsParserOutput;
 pub use sparesults::{
     QueryResultsFormat, QueryResultsParseError, QueryResultsParser,
@@ -194,7 +195,7 @@ pub fn query_result_for_iterator(
 
     let fields = variables
         .iter()
-        .map(|v| Field::new(v.as_str(), PLAIN_TERM_ENCODING.data_type().clone(), true))
+        .map(|v| rdf_term_field(v.as_str(), PLAIN_TERM_ENCODING.as_ref(), true))
         .collect::<Vec<_>>();
     let columns = builders
         .into_iter()

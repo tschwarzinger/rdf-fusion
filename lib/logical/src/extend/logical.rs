@@ -1,4 +1,4 @@
-use datafusion::arrow::datatypes::{Field, Fields};
+use datafusion::arrow::datatypes::Fields;
 use datafusion::common::{Column, DFSchema, DFSchemaRef, plan_err};
 use datafusion::logical_expr::{
     Expr, ExprSchemable, LogicalPlan, UserDefinedLogicalNodeCore,
@@ -134,11 +134,7 @@ fn compute_schema(
         .iter()
         .map(|f| f.as_ref().clone())
         .collect::<Vec<_>>();
-    fields.push(Field::new(
-        column.name,
-        field.data_type().clone(),
-        field.is_nullable(),
-    ));
+    fields.push(field.as_ref().clone().with_name(column.name));
 
     let fields = fields.into_iter().collect::<Fields>();
     let schema = DFSchema::from_unqualified_fields(fields, HashMap::new())?;

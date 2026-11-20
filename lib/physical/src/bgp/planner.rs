@@ -29,7 +29,7 @@ use datafusion::physical_plan::{
 use datafusion::physical_planner::{ExtensionPlanner, PhysicalPlanner};
 use futures::future::try_join_all;
 use rdf_fusion_common::Term;
-use rdf_fusion_encoding::object_id::is_object_id_data_type;
+use rdf_fusion_encoding::EncodingName;
 use rdf_fusion_encoding::plain_term::PlainTermArray;
 use rdf_fusion_encoding::plain_term::decoders::DefaultPlainTermDecoder;
 use rdf_fusion_encoding::string::StringTermArray;
@@ -829,7 +829,7 @@ impl BgpPlanner {
 
             if columns_to_decode.contains(field_name)
                 && filter_needs.contains(field_name)
-                && is_object_id_data_type(field.data_type())
+                && EncodingName::try_from_field(field) == Some(EncodingName::ObjectId)
             {
                 if projected_names.insert(field_name.to_string()) {
                     projections.push(ObjectIdDecodingExecProjection::Decode {
@@ -894,7 +894,7 @@ impl BgpPlanner {
             let field_name = field.name();
 
             if columns_to_decode.contains(field_name)
-                && is_object_id_data_type(field.data_type())
+                && EncodingName::try_from_field(field) == Some(EncodingName::ObjectId)
             {
                 projections.push(ObjectIdDecodingExecProjection::Decode {
                     source_column: field_name.to_string(),

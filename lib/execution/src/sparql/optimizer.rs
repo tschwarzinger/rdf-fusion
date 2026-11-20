@@ -9,6 +9,7 @@ use datafusion::physical_optimizer::optimizer::PhysicalOptimizer;
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::bgp::BgpPushdownRule;
 use rdf_fusion_logical::expr::SimplifySparqlExpressionsRule;
+use rdf_fusion_logical::extension_type::PreserveRdfTermExtensionTypes;
 use rdf_fusion_logical::lowering::RdfFusionLoweringRule;
 use std::sync::Arc;
 
@@ -57,7 +58,14 @@ pub fn create_optimizer_rules(
                 Arc::clone(context.functions()),
             )));
 
-            rules.extend(Optimizer::default().rules);
+            // DataFusion's rules may drop the RDF term extension types (e.g., when replacing
+            // an empty relation with NULL literals). Restore them after each rewrite.
+            rules.extend(
+                Optimizer::default()
+                    .rules
+                    .into_iter()
+                    .map(preserve_rdf_term_extension_types),
+            );
 
             rules.push(Arc::new(SimplifySparqlExpressionsRule::new(
                 context.encodings().clone(),
@@ -69,12 +77,23 @@ pub fn create_optimizer_rules(
 }
 
 fn create_essential_datafusion_optimizers() -> Vec<Arc<dyn OptimizerRule + Send + Sync>> {
-    vec![
+    let rules: Vec<Arc<dyn OptimizerRule + Send + Sync>> = vec![
         Arc::new(ReplaceDistinctWithAggregate::new()),
         Arc::new(DecorrelatePredicateSubquery::new()),
         Arc::new(EliminateLimit::new()),
         Arc::new(ScalarSubqueryToJoin::new()),
-    ]
+    ];
+    rules
+        .into_iter()
+        .map(preserve_rdf_term_extension_types)
+        .collect()
+}
+
+/// Wraps a DataFusion optimizer rule such that it does not drop RDF term extension types.
+fn preserve_rdf_term_extension_types(
+    rule: Arc<dyn OptimizerRule + Send + Sync>,
+) -> Arc<dyn OptimizerRule + Send + Sync> {
+    Arc::new(PreserveRdfTermExtensionTypes::new(rule))
 }
 
 /// Creates a list of optimizer rules based on the given `optimization_level`.

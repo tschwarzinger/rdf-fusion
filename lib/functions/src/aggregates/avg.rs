@@ -1,5 +1,6 @@
 use crate::aggregates::{sparql_count, sparql_sum};
 use datafusion::arrow::array::{ArrayRef, BooleanArray};
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::arrow::datatypes::{DataType, Field};
 use datafusion::common::DataFusionError;
 use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
@@ -10,6 +11,7 @@ use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_compute::numeric::{NumericBinaryOp, apply_typed_family_binary};
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::{
     NumericFamily, NumericFamilyArray, TypedFamilyArgs, TypedFamilyEncodingRef,
 };
@@ -64,6 +66,14 @@ impl AggregateUDFImpl for SparqlAvgUDAF {
 
     fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
         Ok(self.data_type.clone())
+    }
+
+    fn return_field(&self, _arg_fields: &[FieldRef]) -> DFResult<FieldRef> {
+        Ok(rdf_term_field_ref(
+            self.name(),
+            self.encoding.as_ref(),
+            self.is_nullable(),
+        ))
     }
 
     fn accumulator(&self, acc_args: AccumulatorArgs) -> DFResult<Box<dyn Accumulator>> {

@@ -1,15 +1,16 @@
 use anyhow::Context;
 use datafusion::arrow::array::{Array, BooleanArray};
-use datafusion::arrow::datatypes::DataType;
-use datafusion::common::exec_err;
+use datafusion::arrow::datatypes::{DataType, FieldRef};
+use datafusion::common::{exec_err, internal_err};
 use datafusion::logical_expr::{
-    ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
+    ColumnarValue, ReturnFieldArgs, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl,
+    Signature, Volatility,
 };
 use rdf_fusion::common::{DFResult, NamedNode, RdfFormat};
 use rdf_fusion::encoding::typed_family::{BooleanFamilyArray, DowncastTypedFamilyArray};
 use rdf_fusion::encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
+    detect_encoding_from_fields, rdf_term_field_ref,
 };
 use rdf_fusion::execution::results::QueryResultsFormat;
 use rdf_fusion::extensions::functions::FunctionName;
@@ -114,11 +115,20 @@ impl ScalarUDFImpl for ContainsSpiderUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        match detect_encoding_from_types(&self.encodings, arg_types)? {
-            Some(EncodingName::TypedFamily) => {
-                Ok(self.encodings.typed_family().data_type().clone())
-            }
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    /// RDF terms are marked with Arrow extension types. Therefore, the encoding of the arguments
+    /// is obtained from the fields (and not the data types) and the returned field must be
+    /// annotated with the extension type of the result's encoding.
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        match detect_encoding_from_fields(&self.encodings, args.arg_fields)? {
+            Some(EncodingName::TypedFamily) => Ok(rdf_term_field_ref(
+                self.name(),
+                self.encodings.typed_family().as_ref(),
+                true,
+            )),
             _ => exec_err!("containsSpiderman only supports the TypedFamily encoding"),
         }
     }

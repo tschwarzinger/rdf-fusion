@@ -12,11 +12,15 @@ use datafusion::execution::SessionStateBuilder;
 use datafusion::execution::runtime_env::RuntimeEnv;
 use datafusion::functions_aggregate::first_last::FirstValue;
 use datafusion::logical_expr::AggregateUDF;
+use datafusion::logical_expr::registry::{
+    ExtensionTypeRegistry, MemoryExtensionTypeRegistry,
+};
 use datafusion::prelude::{SessionConfig, SessionContext};
 use rdf_fusion_common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
 use rdf_fusion_common::{DFResult, NamedOrBlankNodeRef};
 use rdf_fusion_common::{GraphName, GraphNameRef, NamedNodeRef, QuadRef, TermRef};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::rdf_term_extension_types;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::typed_family::TypedFamilyEncodingRef;
 use rdf_fusion_encoding::{EncodingName, RdfFusionEncodings};
@@ -80,7 +84,16 @@ impl RdfFusionContext {
         let physical_optimizer_rules =
             create_pyhsical_optimizer_rules(OptimizationLevel::Full);
 
+        // Register the extension types of the RDF term encodings. This, for example, customizes how
+        // RDF terms are pretty-printed.
+        let extension_types =
+            MemoryExtensionTypeRegistry::new_with_canonical_extension_types();
+        extension_types
+            .extend(&rdf_term_extension_types())
+            .expect("MemoryExtensionTypeRegistry is not read-only.");
+
         let state = SessionStateBuilder::new()
+            .with_extension_type_registry(Arc::new(extension_types))
             .with_query_planner(Arc::new(RdfFusionPlanner::new(
                 context_view,
                 Arc::clone(&storage),

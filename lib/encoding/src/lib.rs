@@ -35,6 +35,7 @@ pub mod compute;
 mod encoding;
 mod encoding_name;
 mod encodings;
+mod extension_type;
 pub mod object_id;
 pub mod plain_term;
 mod quad_storage_encoding;
@@ -47,7 +48,7 @@ use crate::plain_term::{PlainTermArgs, PlainTermQuadsBuilder};
 use crate::string::StringArgs;
 use crate::typed_family::TypedFamilyArgs;
 use datafusion::arrow::array::RecordBatch;
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::Field;
 use datafusion::common::{plan_datafusion_err, plan_err};
 use datafusion::dataframe::DataFrame;
 use datafusion::logical_expr::{ColumnarValue, ScalarFunctionArgs};
@@ -55,6 +56,7 @@ use datafusion::prelude::{SessionContext, col};
 pub use encoding::*;
 pub use encoding_name::*;
 pub use encodings::*;
+pub use extension_type::*;
 pub use quad_storage_encoding::*;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
 use rdf_fusion_common::{DFResult, Quad};
@@ -79,12 +81,9 @@ impl DowncastEncodingArgs {
         encodings: &RdfFusionEncodings,
         args: &ScalarFunctionArgs,
     ) -> DFResult<Option<DowncastEncodingArgs>> {
-        let types = args
-            .arg_fields
-            .iter()
-            .map(|a| a.data_type().clone())
-            .collect::<Vec<_>>();
-        let Some(encoding_name) = detect_encoding_from_types(encodings, &types)? else {
+        let Some(encoding_name) =
+            detect_encoding_from_fields(encodings, &args.arg_fields)?
+        else {
             return Ok(None);
         };
 
@@ -145,32 +144,38 @@ impl DowncastEncodingArgs {
     }
 }
 
-/// Detects the encoding of the given argument types.
+/// Detects the encoding of the given argument fields.
 ///
-/// This function verifies that all argument types have the same encoding and returns the name
-/// of the encoding.
-pub fn detect_encoding_from_types(
+/// The encoding is obtained from the extension type of each field (see
+/// [RdfFusionEncodings::try_get_encoding_name]). This function verifies that all arguments have the
+/// same encoding and returns the name of the encoding. Returns `Ok(None)` if there are no
+/// arguments.
+pub fn detect_encoding_from_fields(
     encodings: &RdfFusionEncodings,
-    arg_types: &[DataType],
+    arg_fields: &[impl AsRef<Field>],
 ) -> DFResult<Option<EncodingName>> {
-    if arg_types.is_empty() {
+    let Some(first_field) = arg_fields.first() else {
         return Ok(None);
-    }
+    };
 
-    let first_arg_type = &arg_types[0];
+    let first_field = first_field.as_ref();
     let encoding_name =
         encodings
-            .try_get_encoding_name(first_arg_type)
+            .try_get_encoding_name(first_field)
             .ok_or_else(|| {
-                plan_datafusion_err!("Cannot extract RDF term encoding from argument.")
+                plan_datafusion_err!(
+                    "Cannot extract RDF term encoding from argument '{}' ({}).",
+                    first_field.name(),
+                    first_field.data_type()
+                )
             })?;
 
     // Verify that all arguments have the same encoding
-    for (i, arg_type) in arg_types.iter().enumerate().skip(1) {
-        let other_encoding = encodings.try_get_encoding_name(arg_type);
+    for (i, arg_field) in arg_fields.iter().enumerate().skip(1) {
+        let other_encoding = encodings.try_get_encoding_name(arg_field.as_ref());
         if other_encoding != Some(encoding_name) {
             return plan_err!(
-                "Arguments have different encodings at quad_table 0 and {i}: {encoding_name:?} and {other_encoding:?}"
+                "Arguments have different encodings at index 0 and {i}: {encoding_name:?} and {other_encoding:?}"
             );
         }
     }

@@ -1,8 +1,9 @@
 use crate::EncodingName;
 use datafusion::arrow::array::{Array, ArrayRef};
 use datafusion::arrow::datatypes::DataType;
+use datafusion::common::metadata::FieldMetadata;
 use datafusion::common::{ScalarValue, exec_err};
-use datafusion::logical_expr::ColumnarValue;
+use datafusion::logical_expr::{ColumnarValue, Expr, lit_with_metadata};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::ThinResult;
 use std::fmt::Debug;
@@ -54,6 +55,16 @@ pub trait EncodingScalar: Clone {
     /// Consumes `self` and returns the inner scalar value.
     fn into_scalar_value(self) -> ScalarValue;
 
+    /// Consumes `self` and returns a literal [Expr] that is
+    /// annotated with the extension type of the encoding.
+    ///
+    /// Always prefer this over `lit(scalar.into_scalar_value())`, as the latter loses the
+    /// information that the literal is an RDF term.
+    fn into_lit(self) -> Expr {
+        let encoding = self.encoding().name();
+        rdf_term_lit(encoding, self.into_scalar_value())
+    }
+
     /// Produces a new array with `number_of_rows`.
     fn to_array(
         &self,
@@ -62,6 +73,15 @@ pub trait EncodingScalar: Clone {
         let array = self.scalar_value().to_array_of_size(number_of_rows)?;
         self.encoding().try_new_array(array)
     }
+}
+
+/// Creates a literal [Expr] for a `value` in the given `encoding`.
+///
+/// The literal is annotated with the extension type of the encoding. The caller is responsible for
+/// ensuring that `value` is valid for `encoding`.
+pub fn rdf_term_lit(encoding: EncodingName, value: ScalarValue) -> Expr {
+    let metadata = FieldMetadata::from(encoding.field_metadata());
+    lit_with_metadata(value, Some(metadata))
 }
 
 /// A term encoding defines how RDF terms are represented in Arrow arrays.

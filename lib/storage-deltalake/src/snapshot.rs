@@ -12,7 +12,7 @@ use datafusion::execution::{SessionState, TaskContext};
 use datafusion::physical_plan::empty::EmptyExec;
 use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext};
 use datafusion::physical_planner::ExtensionPlanner;
-use deltalake::arrow::datatypes::{Field, Schema};
+use deltalake::arrow::datatypes::Schema;
 use futures::StreamExt;
 use rdf_fusion_common::StorageError;
 use rdf_fusion_common::config::DeltaStorageOptions;
@@ -171,11 +171,7 @@ impl QuadStorageSnapshot for DeltaQuadsStorageSnapshot {
             .added_named_graphs(&crate::log::ChangesetContext::default(), state)
             .await?
         else {
-            let fields = vec![Field::new(
-                COL_GRAPH,
-                self.encoding.term_type().clone(),
-                true,
-            )];
+            let fields = vec![self.encoding.term_field(COL_GRAPH, true)];
             return Ok(Arc::new(EmptyExec::new(Arc::new(Schema::new(fields)))));
         };
 

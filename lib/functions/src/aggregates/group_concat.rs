@@ -11,6 +11,7 @@ use datafusion::logical_expr::{
 use datafusion::scalar::ScalarValue;
 use datafusion::{error::Result, physical_plan::Accumulator};
 use rdf_fusion_common::DFResult;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::{
     DowncastTypedFamilyArray, StringFamily, StringFamilyArray, TypedFamilyEncodingRef,
     TypedFamilyScalar,
@@ -62,6 +63,14 @@ impl AggregateUDFImpl for SparqlGroupConcat {
 
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(self.encoding.data_type().clone())
+    }
+
+    fn return_field(&self, _arg_fields: &[FieldRef]) -> DFResult<FieldRef> {
+        Ok(rdf_term_field_ref(
+            self.name(),
+            self.encoding.as_ref(),
+            self.is_nullable(),
+        ))
     }
 
     fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
@@ -145,6 +154,14 @@ impl AggregateUDFImpl for SparqlGroupConcatWithSeparator {
 
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
         Ok(self.encoding.data_type().clone())
+    }
+
+    fn return_field(&self, _arg_fields: &[FieldRef]) -> DFResult<FieldRef> {
+        Ok(rdf_term_field_ref(
+            self.name(),
+            self.encoding.as_ref(),
+            self.is_nullable(),
+        ))
     }
 
     fn accumulator(&self, _acc_args: AccumulatorArgs) -> Result<Box<dyn Accumulator>> {
@@ -317,7 +334,7 @@ mod tests {
     use super::*;
     use crate::test_utils::evaluate_aggregate_with_args_for_test;
     use datafusion::arrow::array::{BooleanArray, StringArray};
-    use datafusion::logical_expr::{col, lit};
+    use datafusion::logical_expr::col;
     use insta::assert_snapshot;
     use rdf_fusion_encoding::EncodingArray;
     use rdf_fusion_encoding::typed_family::{
@@ -467,7 +484,7 @@ mod tests {
                 ScalarValue::try_from_array(&struct_arr, 0).unwrap(),
             )
             .unwrap();
-        lit(separator_scalar.into_scalar_value())
+        separator_scalar.into_lit()
     }
 
     /// Executes a test and returns the pretty-printed result.

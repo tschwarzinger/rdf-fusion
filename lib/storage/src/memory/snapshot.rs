@@ -3,7 +3,7 @@ use crate::memory::changes::Changes;
 use crate::memory::scan::{MemoryQuadTable, PatternConstants};
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
-use datafusion::arrow::datatypes::{Field, Schema, SchemaRef};
+use datafusion::arrow::datatypes::{Schema, SchemaRef};
 use datafusion::datasource::{DefaultTableSource, MemTable, TableProvider};
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::LogicalPlanBuilder;
@@ -15,16 +15,17 @@ use rdf_fusion_common::{
 use rdf_fusion_encoding::plain_term::{
     PLAIN_TERM_ENCODING, PlainTermArrayElementBuilder,
 };
-use rdf_fusion_encoding::{EncodingArray, QuadStorageEncoding, TermEncoding};
+use rdf_fusion_encoding::rdf_term_field;
+use rdf_fusion_encoding::{EncodingArray, QuadStorageEncoding};
 use rdf_fusion_extensions::storage::QuadStorageSnapshot;
 use rdf_fusion_logical::quad_pattern::compute_quad_pattern_filters;
 use std::sync::{Arc, LazyLock};
 
 /// The schema of the named graphs (using the plain term encoding).
 static GRAPH_SCHEMA: LazyLock<SchemaRef> = LazyLock::new(|| {
-    Arc::new(Schema::new(vec![Field::new(
+    Arc::new(Schema::new(vec![rdf_term_field(
         COL_GRAPH,
-        PLAIN_TERM_ENCODING.data_type().clone(),
+        PLAIN_TERM_ENCODING.as_ref(),
         true,
     )]))
 });

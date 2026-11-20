@@ -14,8 +14,9 @@ pub fn try_extract_scalar_term(
     expr: &Expr,
 ) -> Option<Term> {
     match unwrap_encoding_changes(expr) {
-        Expr::Literal(sv, _) => {
-            let encoding = encodings.try_get_encoding_name(&sv.data_type())?;
+        Expr::Literal(sv, metadata) => {
+            let encoding =
+                encodings.try_get_literal_encoding_name(sv, metadata.as_ref())?;
             match encoding {
                 EncodingName::ObjectId => {
                     // Currently, object IDs are not supported from this function.
@@ -128,7 +129,7 @@ mod tests {
         let enc = encodings();
         let term = Term::from(NamedNode::new(s).unwrap());
         let sv = enc.plain_term().encode_term(Ok(term.as_ref())).unwrap();
-        Expr::Literal(sv.into_scalar_value(), None)
+        sv.into_lit()
     }
 
     fn iri_literal_tf(s: &str) -> Expr {
@@ -141,7 +142,7 @@ mod tests {
             .cast_from_plain_term_array(&pt_array)
             .unwrap();
         let tf_scalar = ScalarValue::try_from_array(tf_array.inner(), 0).unwrap();
-        Expr::Literal(tf_scalar, None)
+        rdf_fusion_encoding::rdf_term_lit(EncodingName::TypedFamily, tf_scalar)
     }
 
     fn wrap_encoding(

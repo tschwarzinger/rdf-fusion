@@ -28,6 +28,7 @@ use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::string::STRING_ENCODING;
 use rdf_fusion_encoding::{QuadStorageEncoding, TermEncoding};
+use rdf_fusion_extensions::storage::ensure_rdf_term_extension_types;
 use rdf_fusion_extensions::storage::{
     QuadStorage, QuadStorageSnapshot, QuadStorageTransaction,
 };
@@ -348,6 +349,7 @@ impl DeltaQuadsStorageTransaction {
     }
 
     fn encode_dataframe(&self, df: DataFrame) -> Result<DataFrame, StorageError> {
+        let df = ensure_rdf_term_extension_types(df)?;
         let df_schema = df.schema();
         let target_encoding = self.storage.encoding();
 

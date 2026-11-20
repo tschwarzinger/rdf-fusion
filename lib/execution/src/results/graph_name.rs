@@ -6,8 +6,7 @@ use futures::{Stream, StreamExt};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_common::{NamedOrBlankNode, Term, Variable};
-use rdf_fusion_encoding::TermEncoding;
-use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::EncodingName;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
@@ -29,7 +28,9 @@ impl GraphNameStream {
             return exec_err!("Unexpected number of columns in the result");
         }
 
-        if stream.schema().field(0).data_type() != PLAIN_TERM_ENCODING.data_type() {
+        if EncodingName::try_from_field(stream.schema().field(0))
+            != Some(EncodingName::PlainTerm)
+        {
             return exec_err!("Unexpected data type in the result");
         }
 

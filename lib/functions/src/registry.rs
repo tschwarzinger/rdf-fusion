@@ -2,7 +2,6 @@ use crate::aggregates::{
     group_concat_typed_family, max_typed_family, min_typed_family, sparql_avg,
     sparql_count, sparql_sum,
 };
-use crate::scalar::RenamedScalarUdfImpl;
 use crate::scalar::as_sortable_bytes_udf;
 use crate::scalar::comparison::{
     equal_udf, greater_or_equal_udf, greater_than_udf, is_compatible_udf,
@@ -24,7 +23,7 @@ use crate::scalar::dates_and_times::{
     year_udf,
 };
 use crate::scalar::error::SparqlUDFCreationError;
-use crate::scalar::functional_form::{bound_udf, sparql_if_udf};
+use crate::scalar::functional_form::{bound_udf, coalesce_udf, sparql_if_udf};
 use crate::scalar::numeric::{
     abs_udf, add_udf, ceil_udf, div_udf, floor_udf, mul_udf, rand_udf, round_udf,
     sub_udf, unary_minus_udf, unary_plus_udf,
@@ -39,15 +38,10 @@ use crate::scalar::terms::{
     is_numeric_udf, lang_udf, str_udf, strdt_udf, strlang_udf, struuid_udf, uuid_udf,
 };
 use datafusion::common::plan_datafusion_err;
-use datafusion::functions::core::coalesce::CoalesceFunc;
-use datafusion::logical_expr::{
-    AggregateUDF, ScalarUDF, ScalarUDFImpl, Signature, TypeSignature, Volatility,
-};
+use datafusion::logical_expr::{AggregateUDF, ScalarUDF, TypeSignature};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{EncodingName, RdfFusionEncodings};
-use rdf_fusion_extensions::functions::{
-    BuiltinName, FunctionName, RdfFusionFunctionRegistry,
-};
+use rdf_fusion_extensions::functions::{FunctionName, RdfFusionFunctionRegistry};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;
 use std::iter::once;
@@ -251,11 +245,11 @@ fn supported_encodings(
     match signature {
         TypeSignature::Variadic(data_type) => data_type
             .iter()
-            .flat_map(|dt| encodings.try_get_encoding_name(dt))
+            .flat_map(|dt| encodings.encodings_with_data_type(dt))
             .collect(),
         TypeSignature::Uniform(_, data_type) => data_type
             .iter()
-            .flat_map(|dt| encodings.try_get_encoding_name(dt))
+            .flat_map(|dt| encodings.encodings_with_data_type(dt))
             .collect(),
         TypeSignature::OneOf(inner) => inner
             .iter()
@@ -263,22 +257,6 @@ fn supported_encodings(
             .collect(),
         _ => BTreeSet::new(), // Unsupported type signature.
     }
-}
-
-fn renamed<TSparqlUDF>(
-    name: &FunctionName,
-    udf_impl: TSparqlUDF,
-    signature_override: Option<Signature>,
-) -> ScalarUDF
-where
-    TSparqlUDF: ScalarUDFImpl + 'static,
-{
-    let renamed = RenamedScalarUdfImpl::new(name.to_string(), udf_impl);
-    let renamed = match signature_override {
-        None => renamed,
-        Some(signature_override) => renamed.with_signature(signature_override),
-    };
-    ScalarUDF::new_from_impl(renamed)
 }
 
 fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResult<()> {
@@ -329,19 +307,7 @@ fn register_functions(registry: &mut DefaultRdfFusionFunctionRegistry) -> DFResu
         regex_udf(registry.encodings.clone())?,
         bound_udf(registry.encodings.clone())?,
         as_sortable_bytes_udf(registry.encodings.clone()),
-        renamed(
-            &FunctionName::Builtin(BuiltinName::Coalesce),
-            CoalesceFunc::new(),
-            Some(Signature::variadic(
-                registry.encodings.get_data_types(&[
-                    EncodingName::PlainTerm,
-                    EncodingName::ObjectId,
-                    EncodingName::TypedFamily,
-                    EncodingName::String,
-                ]),
-                Volatility::Immutable,
-            )),
-        ),
+        coalesce_udf(registry.encodings.clone()),
         sparql_if_udf(registry.encodings.clone())?,
         equal_udf(registry.encodings.clone())?,
         greater_than_udf(registry.encodings.clone())?,

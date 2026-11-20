@@ -1,8 +1,8 @@
-use crate::TermEncoding;
 use crate::encoding::EncodingScalar;
 use crate::object_id::{ObjectIdEncoding, ObjectIdEncodingRef};
 use crate::plain_term::{PLAIN_TERM_ENCODING, PlainTermEncoding};
 use crate::string::STRING_ENCODING;
+use crate::{EncodingName, TermEncoding, rdf_term_field};
 use datafusion::arrow::datatypes::{DataType, Field, Fields, Schema, SchemaRef};
 use datafusion::common::{DFSchema, DFSchemaRef, ScalarValue};
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -86,10 +86,10 @@ impl FromStr for QuadStorageEncodingName {
 
 static PLAIN_TERM_QUAD_SCHEMA: LazyLock<SchemaRef> = LazyLock::new(|| {
     SchemaRef::new(Schema::new(vec![
-        Field::new(COL_GRAPH, PlainTermEncoding::data_type(), true),
-        Field::new(COL_SUBJECT, PlainTermEncoding::data_type(), false),
-        Field::new(COL_PREDICATE, PlainTermEncoding::data_type(), false),
-        Field::new(COL_OBJECT, PlainTermEncoding::data_type(), false),
+        rdf_term_field(COL_GRAPH, &PlainTermEncoding, true),
+        rdf_term_field(COL_SUBJECT, &PlainTermEncoding, false),
+        rdf_term_field(COL_PREDICATE, &PlainTermEncoding, false),
+        rdf_term_field(COL_OBJECT, &PlainTermEncoding, false),
     ]))
 });
 
@@ -99,10 +99,10 @@ static PLAIN_TERM_QUAD_DFSCHEMA: LazyLock<DFSchemaRef> = LazyLock::new(|| {
 
 static STRING_QUAD_SCHEMA: LazyLock<SchemaRef> = LazyLock::new(|| {
     SchemaRef::new(Schema::new(vec![
-        Field::new(COL_GRAPH, STRING_ENCODING.data_type().clone(), true),
-        Field::new(COL_SUBJECT, STRING_ENCODING.data_type().clone(), false),
-        Field::new(COL_PREDICATE, STRING_ENCODING.data_type().clone(), false),
-        Field::new(COL_OBJECT, STRING_ENCODING.data_type().clone(), false),
+        rdf_term_field(COL_GRAPH, STRING_ENCODING.as_ref(), true),
+        rdf_term_field(COL_SUBJECT, STRING_ENCODING.as_ref(), false),
+        rdf_term_field(COL_PREDICATE, STRING_ENCODING.as_ref(), false),
+        rdf_term_field(COL_OBJECT, STRING_ENCODING.as_ref(), false),
     ]))
 });
 
@@ -164,6 +164,32 @@ impl QuadStorageEncoding {
         }
     }
 
+    /// Returns the [EncodingName] of the term columns.
+    pub fn encoding_name(&self) -> EncodingName {
+        match self {
+            QuadStorageEncoding::PlainTerm => EncodingName::PlainTerm,
+            QuadStorageEncoding::ObjectId(_) => EncodingName::ObjectId,
+            QuadStorageEncoding::String => EncodingName::String,
+        }
+    }
+
+    /// Returns the [Field] of a single term column called `name`, given the current encoding.
+    ///
+    /// The field is annotated with the extension type of the encoding.
+    pub fn term_field(&self, name: impl Into<String>, nullable: bool) -> Field {
+        match self {
+            QuadStorageEncoding::PlainTerm => {
+                rdf_term_field(name, PLAIN_TERM_ENCODING.as_ref(), nullable)
+            }
+            QuadStorageEncoding::ObjectId(enc) => {
+                rdf_term_field(name, enc.as_ref(), nullable)
+            }
+            QuadStorageEncoding::String => {
+                rdf_term_field(name, STRING_ENCODING.as_ref(), nullable)
+            }
+        }
+    }
+
     /// Creates a null scalar for the given storage encoding.
     pub fn create_null_scalar(&self) -> DFResult<ScalarValue> {
         ScalarValue::try_new_null(self.term_type())
@@ -186,14 +212,13 @@ impl Display for QuadStorageEncoding {
 
 /// Computes the quad schema based on the given [ObjectIdEncoding].
 fn object_id_quad_schema(encoding: &ObjectIdEncoding) -> DFSchemaRef {
-    let data_type = encoding.data_type();
     Arc::new(
         DFSchema::from_unqualified_fields(
             Fields::from(vec![
-                Field::new(COL_GRAPH, data_type.clone(), true),
-                Field::new(COL_SUBJECT, data_type.clone(), false),
-                Field::new(COL_PREDICATE, data_type.clone(), false),
-                Field::new(COL_OBJECT, data_type.clone(), false),
+                rdf_term_field(COL_GRAPH, encoding, true),
+                rdf_term_field(COL_SUBJECT, encoding, false),
+                rdf_term_field(COL_PREDICATE, encoding, false),
+                rdf_term_field(COL_OBJECT, encoding, false),
             ]),
             HashMap::new(),
         )

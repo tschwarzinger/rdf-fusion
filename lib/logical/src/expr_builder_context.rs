@@ -3,6 +3,7 @@ use crate::RdfFusionLogicalPlanBuilderContext;
 use crate::join::compute_sparql_join_columns;
 use crate::logical_plan_builder::build_projections_for_encoding_alignment;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::Field;
 use datafusion::common::ExprSchema;
 use datafusion::common::{
     Column, DFSchema, Spans, exec_datafusion_err, plan_datafusion_err, plan_err,
@@ -18,6 +19,7 @@ use rdf_fusion_common::DFResult;
 use rdf_fusion_common::{TermRef, ThinError, VariableRef};
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
 use rdf_fusion_encoding::plain_term::encoders::DefaultPlainTermEncoder;
+use rdf_fusion_encoding::with_rdf_term_extension_type;
 use rdf_fusion_encoding::{
     EncodingName, EncodingScalar, RdfFusionEncodings, TermEncoder, TermEncoding,
 };
@@ -173,7 +175,7 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
             Expr::from(column)
         } else {
             let null = DefaultPlainTermEncoder.encode_term(ThinError::expected())?;
-            lit(null.into_scalar_value())
+            null.into_lit()
         };
 
         self.try_create_builder(expr)
@@ -187,7 +189,7 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
         term: impl Into<TermRef<'lit>>,
     ) -> DFResult<RdfFusionExprBuilder<'context>> {
         let scalar = DefaultPlainTermEncoder.encode_term(Ok(term.into()))?;
-        self.try_create_builder(lit(scalar.into_scalar_value()))
+        self.try_create_builder(scalar.into_lit())
     }
 
     /// Creates a null literal expression.
@@ -195,7 +197,7 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
     /// This is used to represent unbound variables or errors.
     pub fn null_literal(&'context self) -> DFResult<RdfFusionExprBuilder<'context>> {
         let scalar = DefaultPlainTermEncoder.encode_term(ThinError::expected())?;
-        self.try_create_builder(lit(scalar.into_scalar_value()))
+        self.try_create_builder(scalar.into_lit())
     }
 
     /// Creates a new exists filter operator. This operator takes another graph pattern (as a
@@ -365,13 +367,13 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
             .field_with_name(None, inner_column.name())?;
 
         let encodings = expr_builder_ctx.rdf_fusion_context.encodings();
-        let get_encoding = |data_type: &DataType| {
-            encodings.try_get_encoding_name(data_type).ok_or_else(|| {
+        let get_encoding = |field: &Field| {
+            encodings.try_get_encoding_name(field).ok_or_else(|| {
                 plan_datafusion_err!("Field '{k}' in exists filter is not an RDF term.")
             })
         };
-        let outer_encoding = get_encoding(outer_field.data_type())?;
-        let inner_encoding = get_encoding(inner_field.data_type())?;
+        let outer_encoding = get_encoding(outer_field)?;
+        let inner_encoding = get_encoding(inner_field)?;
 
         // Object IDs cannot be decoded within an expression. If the inner column is no longer an
         // object id (e.g., it has been decoded for evaluating a filter), the outer reference
@@ -380,10 +382,13 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
         let (outer_field, encoding) = if outer_encoding == EncodingName::ObjectId
             && inner_encoding != EncodingName::ObjectId
         {
-            let decoded_field = outer_field
-                .as_ref()
-                .clone()
-                .with_data_type(PLAIN_TERM_ENCODING.data_type().clone());
+            let decoded_field = with_rdf_term_extension_type(
+                outer_field
+                    .as_ref()
+                    .clone()
+                    .with_data_type(PLAIN_TERM_ENCODING.data_type().clone()),
+                EncodingName::PlainTerm,
+            );
             (Arc::new(decoded_field), EncodingName::PlainTerm)
         } else {
             (Arc::clone(outer_field), outer_encoding)
@@ -622,12 +627,9 @@ impl<'context> RdfFusionExprBuilderContext<'context> {
             .map(|expr| Ok(expr.to_field(self.schema)?.1))
             .map(|field| {
                 field.and_then(|field| {
-                    self.encodings()
-                        .try_get_encoding_name(field.data_type())
-                        .ok_or(exec_datafusion_err!(
-                            "Data type is not an RDF term '{}'",
-                            field
-                        ))
+                    self.encodings().try_get_encoding_name(&field).ok_or(
+                        exec_datafusion_err!("Data type is not an RDF term '{}'", field),
+                    )
                 })
             })
             .collect::<DFResult<Vec<_>>>()

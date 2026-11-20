@@ -1,5 +1,6 @@
 use crate::aggregates::numeric_state::NumericState;
 use datafusion::arrow::array::{Array, ArrayRef, AsArray, BooleanArray};
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::arrow::datatypes::{DataType, Field};
 use datafusion::common::{DataFusionError, exec_err};
 use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
@@ -11,6 +12,7 @@ use datafusion::scalar::ScalarValue;
 use datafusion::{error::Result, physical_plan::Accumulator};
 use rdf_fusion_common::Decimal;
 use rdf_fusion_common::{DFResult, Numeric};
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::{
     FamilyArray, NumericFamily, NumericFamilyArray, NumericFamilyArrayElementBuilder,
     NumericFamilyArrayParts, TypedFamilyEncodingRef, TypedFamilyId, TypedFamilyScalar,
@@ -58,6 +60,14 @@ impl AggregateUDFImpl for SumSparqlUDAF {
 
     fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType, DataFusionError> {
         Ok(self.data_type.clone())
+    }
+
+    fn return_field(&self, _arg_fields: &[FieldRef]) -> DFResult<FieldRef> {
+        Ok(rdf_term_field_ref(
+            self.name(),
+            self.encoding.as_ref(),
+            self.is_nullable(),
+        ))
     }
 
     fn accumulator(

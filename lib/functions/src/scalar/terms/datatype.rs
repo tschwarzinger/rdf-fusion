@@ -2,15 +2,19 @@ use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
 use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::exec_err;
+use datafusion::common::internal_err;
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::IriFamily;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
+    detect_encoding_from_fields,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::fmt::{Debug, Formatter};
@@ -65,14 +69,23 @@ impl ScalarUDFImpl for DatatypeSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        match detect_encoding_from_types(&self.encodings, arg_types)? {
-            Some(EncodingName::TypedFamily) => {
-                Ok(self.encodings.typed_family().data_type().clone())
-            }
-            Some(EncodingName::PlainTerm) => {
-                Ok(self.encodings.plain_term().data_type().clone())
-            }
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let arg_fields = args.arg_fields;
+        match detect_encoding_from_fields(&self.encodings, arg_fields)? {
+            Some(EncodingName::TypedFamily) => Ok(rdf_term_field_ref(
+                self.name(),
+                self.encodings.typed_family().as_ref(),
+                true,
+            )),
+            Some(EncodingName::PlainTerm) => Ok(rdf_term_field_ref(
+                self.name(),
+                self.encodings.plain_term().as_ref(),
+                true,
+            )),
             _ => datafusion::common::exec_err!(
                 "DATATYPE is only supported for TypedFamily and PlainTerm encoding"
             ),

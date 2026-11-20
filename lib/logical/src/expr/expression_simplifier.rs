@@ -4,10 +4,11 @@ use datafusion::common::tree_node::{Transformed, TreeNode};
 use datafusion::common::{DFSchema, DFSchemaRef, plan_datafusion_err};
 use datafusion::logical_expr::expr::ScalarFunction;
 use datafusion::logical_expr::utils::merge_schema;
-use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan, lit};
+use datafusion::logical_expr::{Expr, ExprSchemable, LogicalPlan};
 use datafusion::optimizer::utils::NamePreserver;
 use datafusion::optimizer::{ApplyOrder, OptimizerConfig, OptimizerRule};
 use rdf_fusion_common::{DFResult, Term};
+use rdf_fusion_encoding::rdf_term_lit;
 use rdf_fusion_encoding::{EncodingName, EncodingScalar, RdfFusionEncodings};
 use rdf_fusion_extensions::functions::{
     BuiltinName, FunctionName, RdfFusionFunctionRegistry,
@@ -190,7 +191,7 @@ fn try_replace_equality_with_same_term(
     let other_expression = unwrap_encoding_changes(other_expression);
     let field = other_expression.to_field(schema)?.1;
     let encoding = encodings
-        .try_get_encoding_name(field.data_type())
+        .try_get_encoding_name(&field)
         .ok_or_else(|| plan_datafusion_err!("Expected comparison with RDF terms"))?;
 
     if encoding == EncodingName::TypedFamily || encoding == EncodingName::ObjectId {
@@ -211,7 +212,7 @@ fn replace_equality_with_same_term(
     other_expression: &Expr,
 ) -> DFResult<Transformed<Expr>> {
     let encoding_name = encodings
-        .try_get_encoding_name(other_expression.to_field(schema)?.1.data_type())
+        .try_get_encoding_name(&other_expression.to_field(schema)?.1)
         .unwrap();
     let scalar = match encoding_name {
         EncodingName::PlainTerm => encodings
@@ -230,9 +231,9 @@ fn replace_equality_with_same_term(
     let boolean_as_term =
         registry.udf(&FunctionName::Builtin(BuiltinName::NativeBooleanAsTerm))?;
 
-    Ok(Transformed::yes(
-        boolean_as_term.call(vec![lit(scalar).eq(other_expression.clone())]),
-    ))
+    Ok(Transformed::yes(boolean_as_term.call(vec![
+        rdf_term_lit(encoding_name, scalar).eq(other_expression.clone()),
+    ])))
 }
 
 /// Tries to replace EBV(BOOLEAN_AS_TERM(X)) with X. This can be a crucial optimization in query

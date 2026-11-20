@@ -303,7 +303,7 @@ pub fn compute_sparql_join_columns(
             .field_with_unqualified_name(name)
             .expect("Field name stems from the set of fields.");
         encodings
-            .try_get_encoding_name(field.data_type())
+            .try_get_encoding_name(field)
             .ok_or(plan_datafusion_err!(
                 "Field '{}' must be an RDF Term.",
                 name

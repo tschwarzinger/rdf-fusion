@@ -1,14 +1,18 @@
 use crate::scalar::error::SparqlUDFCreationError;
 use datafusion::arrow::array::Float64Array;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::exec_err;
+use datafusion::common::internal_err;
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rand::RngExt;
 use rdf_fusion_common::DFResult;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::typed_family::NumericFamilyArray;
-use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings, TermEncoding};
+use rdf_fusion_encoding::{EncodingArray, RdfFusionEncodings};
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::fmt::{Debug, Formatter};
 
@@ -57,11 +61,20 @@ impl ScalarUDFImpl for RandSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        if !arg_types.is_empty() {
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let arg_fields = args.arg_fields;
+        if !arg_fields.is_empty() {
             return exec_err!("RAND does not accept arguments");
         }
-        Ok(self.encodings.typed_family().data_type().clone())
+        Ok(rdf_term_field_ref(
+            self.name(),
+            self.encodings.typed_family().as_ref(),
+            true,
+        ))
     }
 
     fn invoke_with_args(&self, args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {

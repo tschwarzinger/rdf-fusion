@@ -9,6 +9,7 @@ use datafusion::logical_expr::{Expr, col, lit};
 use rdf_fusion_common::quads::COL_GRAPH;
 use rdf_fusion_common::{BlankNodeMatchingMode, DFResult, GraphNameRef, TermPattern};
 use rdf_fusion_encoding::QuadStorageEncoding;
+use rdf_fusion_encoding::rdf_term_lit;
 
 /// Computes the DataFusion schema for a [`QuadPattern`].
 pub fn compute_quad_pattern_schema(
@@ -78,13 +79,19 @@ async fn filter_active_graph(
                     GraphNameRef::NamedNode(nn) => {
                         let term = storage_encoding.try_encode_term(nn.into()).await?;
                         if let Some(term) = term {
-                            literals.push(lit(term))
+                            literals.push(rdf_term_lit(
+                                storage_encoding.encoding_name(),
+                                term,
+                            ))
                         };
                     }
                     GraphNameRef::BlankNode(bn) => {
                         let term = storage_encoding.try_encode_term(bn.into()).await?;
                         if let Some(term) = term {
-                            literals.push(lit(term))
+                            literals.push(rdf_term_lit(
+                                storage_encoding.encoding_name(),
+                                term,
+                            ))
                         };
                     }
                     GraphNameRef::DefaultGraph => include_default = true,
@@ -136,7 +143,8 @@ async fn filter_by_terms(
             if let Some(term) = term {
                 let term = storage_encoding.try_encode_term(term).await?;
                 let expr = if let Some(term) = term {
-                    col(*col_name).eq(lit(term))
+                    col(*col_name)
+                        .eq(rdf_term_lit(storage_encoding.encoding_name(), term))
                 } else {
                     lit(false)
                 };

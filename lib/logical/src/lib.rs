@@ -21,6 +21,7 @@ pub mod expr;
 mod expr_builder;
 mod expr_builder_context;
 pub mod extend;
+pub mod extension_type;
 pub mod join;
 mod logical_plan_builder;
 mod logical_plan_builder_context;

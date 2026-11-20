@@ -1,6 +1,8 @@
 use datafusion::arrow::array::{Array, ArrayRef, AsArray};
-use datafusion::arrow::datatypes::DataType;
-use datafusion::logical_expr::{AggregateUDF, Volatility, create_udaf};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::logical_expr::function::{AccumulatorArgs, StateFieldsArgs};
+use datafusion::logical_expr::utils::format_state_name;
+use datafusion::logical_expr::{AggregateUDF, AggregateUDFImpl, Signature, Volatility};
 use datafusion::physical_plan::Accumulator;
 use datafusion::scalar::ScalarValue;
 use rdf_fusion_common::DFResult;
@@ -8,7 +10,9 @@ use rdf_fusion_encoding::typed_family::{
     FamilyComparator, TypedFamilyArray, TypedFamilyEncodingRef, TypedFamilyId,
     TypedFamilyScalar,
 };
-use rdf_fusion_encoding::{EncodingArray, EncodingScalar, TermEncoding};
+use rdf_fusion_encoding::{
+    EncodingArray, EncodingScalar, TermEncoding, rdf_term_field_ref,
+};
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -25,20 +29,67 @@ fn create_min_max_udf(
     name: &str,
     operator: MinMaxOperator,
 ) -> AggregateUDF {
-    let data_type = encoding.data_type().clone();
-    create_udaf(
-        name,
-        vec![data_type.clone()],
-        Arc::new(data_type.clone()),
-        Volatility::Immutable,
-        Arc::new(move |_| {
-            Ok(Box::new(SparqlMinMaxAccumulator::new(
-                Arc::clone(&encoding),
-                operator,
-            )))
-        }),
-        Arc::new(vec![DataType::Boolean, data_type]),
-    )
+    let signature =
+        Signature::exact(vec![encoding.data_type().clone()], Volatility::Immutable);
+    AggregateUDF::new_from_impl(SparqlMinMax {
+        encoding,
+        name: name.to_owned(),
+        signature,
+        operator,
+    })
+}
+
+/// The aggregate UDF for MIN and MAX.
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SparqlMinMax {
+    encoding: TypedFamilyEncodingRef,
+    name: String,
+    signature: Signature,
+    operator: MinMaxOperator,
+}
+
+impl AggregateUDFImpl for SparqlMinMax {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        Ok(self.encoding.data_type().clone())
+    }
+
+    fn return_field(&self, _arg_fields: &[FieldRef]) -> DFResult<FieldRef> {
+        Ok(rdf_term_field_ref(
+            self.name(),
+            self.encoding.as_ref(),
+            self.is_nullable(),
+        ))
+    }
+
+    fn accumulator(&self, _acc_args: AccumulatorArgs) -> DFResult<Box<dyn Accumulator>> {
+        Ok(Box::new(SparqlMinMaxAccumulator::new(
+            Arc::clone(&self.encoding),
+            self.operator,
+        )))
+    }
+
+    fn state_fields(&self, args: StateFieldsArgs) -> DFResult<Vec<FieldRef>> {
+        Ok(vec![
+            Arc::new(Field::new(
+                format_state_name(args.name, "has_value"),
+                DataType::Boolean,
+                true,
+            )),
+            Arc::new(Field::new(
+                format_state_name(args.name, "value"),
+                self.encoding.data_type().clone(),
+                true,
+            )),
+        ])
+    }
 }
 
 /// Defines the operator of [`SparqlMinMaxAccumulator`].

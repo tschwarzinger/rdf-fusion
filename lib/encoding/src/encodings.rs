@@ -1,9 +1,11 @@
 use crate::object_id::ObjectIdEncodingRef;
-use crate::plain_term::{PlainTermEncoding, PlainTermEncodingRef};
-use crate::string::{StringEncoding, StringEncodingRef};
+use crate::plain_term::PlainTermEncodingRef;
+use crate::string::StringEncodingRef;
 use crate::typed_family::TypedFamilyEncodingRef;
 use crate::{EncodingName, TermEncoding};
-use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{DataType, Field};
+use datafusion::common::ScalarValue;
+use datafusion::common::metadata::FieldMetadata;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -92,30 +94,73 @@ impl RdfFusionEncodings {
         result
     }
 
-    /// Tries to obtain an [EncodingName] from a [DataType]. As we currently only support built-in
-    /// encodings this mapping is unique.
+    /// Returns the [DataType] of the encoding called `name`.
     ///
-    /// In the future we might use a field here such that we can access metadata information.
-    pub fn try_get_encoding_name(&self, data_type: &DataType) -> Option<EncodingName> {
-        if data_type == PlainTermEncoding.data_type() {
-            return Some(EncodingName::PlainTerm);
+    /// Returns `None` if the encoding is not configured in this RDF Fusion instance (e.g., no
+    /// object ID encoding).
+    pub fn data_type(&self, name: EncodingName) -> Option<&DataType> {
+        match name {
+            EncodingName::ObjectId => self.object_id.as_ref().map(|oid| oid.data_type()),
+            EncodingName::PlainTerm => Some(self.plain_term.data_type()),
+            EncodingName::TypedFamily => Some(self.typed_family.data_type()),
+            EncodingName::String => Some(self.string_encoding.data_type()),
         }
+    }
 
-        if data_type == self.typed_family.data_type() {
-            return Some(EncodingName::TypedFamily);
-        }
+    /// Creates a [Field] called `field_name` that holds RDF terms of the encoding `name`.
+    ///
+    /// The field is annotated with the extension type of the encoding. Returns `None` if the
+    /// encoding is not configured in this RDF Fusion instance.
+    pub fn field(
+        &self,
+        name: EncodingName,
+        field_name: impl Into<String>,
+        nullable: bool,
+    ) -> Option<Field> {
+        let data_type = self.data_type(name)?;
+        Some(
+            Field::new(field_name, data_type.clone(), nullable)
+                .with_metadata(name.field_metadata()),
+        )
+    }
 
-        if let Some(object_id) = self.object_id.as_ref()
-            && data_type == object_id.data_type()
-        {
-            return Some(EncodingName::ObjectId);
-        }
+    /// Tries to obtain the [EncodingName] of a [Field].
+    ///
+    /// The encoding is determined by the extension type of the field (see
+    /// [EncodingName::extension_type_name]). Returns `None` if the field is not annotated with an
+    /// RDF Fusion extension type, if the encoding is not configured in this instance, or if the
+    /// data type of the field does not match the data type of the configured encoding.
+    pub fn try_get_encoding_name(&self, field: &Field) -> Option<EncodingName> {
+        let name = EncodingName::try_from_field(field)?;
+        (self.data_type(name)? == field.data_type()).then_some(name)
+    }
 
-        if data_type == StringEncoding.data_type() {
-            return Some(EncodingName::String);
-        }
+    /// Tries to obtain the [EncodingName] of a literal `value` with the given `metadata` (e.g., from
+    /// an `Expr::Literal`).
+    ///
+    /// See [Self::try_get_encoding_name].
+    pub fn try_get_literal_encoding_name(
+        &self,
+        value: &ScalarValue,
+        metadata: Option<&FieldMetadata>,
+    ) -> Option<EncodingName> {
+        let field = Field::new("", value.data_type(), true);
+        let field = match metadata {
+            None => field,
+            Some(metadata) => metadata.add_to_field(field),
+        };
+        self.try_get_encoding_name(&field)
+    }
 
-        None
+    /// Returns the encodings (configured in this instance) whose data type is `data_type`.
+    ///
+    /// This should only be used in places where no [Field] is available (e.g., DataFusion type
+    /// signatures). Prefer [Self::try_get_encoding_name] whenever possible.
+    pub fn encodings_with_data_type(&self, data_type: &DataType) -> Vec<EncodingName> {
+        EncodingName::ALL
+            .into_iter()
+            .filter(|name| self.data_type(*name) == Some(data_type))
+            .collect()
     }
 }
 

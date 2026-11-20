@@ -2,13 +2,16 @@ use crate::scalar::args::ScalarSparqlFunctionArgs;
 use crate::scalar::error::SparqlUDFCreationError;
 use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::{Field, FieldRef};
 use datafusion::common::exec_err;
+use datafusion::common::internal_err;
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingName, RdfFusionEncodings, detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingName, RdfFusionEncodings, detect_encoding_from_fields,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::fmt::{Debug, Formatter};
@@ -65,11 +68,18 @@ impl ScalarUDFImpl for EffectiveBooleanValueSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        let encoding_name = detect_encoding_from_types(&self.encodings, arg_types)?;
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let encoding_name =
+            detect_encoding_from_fields(&self.encodings, args.arg_fields)?;
 
         match encoding_name {
-            Some(EncodingName::TypedFamily) => Ok(DataType::Boolean),
+            Some(EncodingName::TypedFamily) => {
+                Ok(Arc::new(Field::new(self.name(), DataType::Boolean, true)))
+            }
             _ => {
                 exec_err!("Unsupported encoding for EBV return type")
             }
@@ -98,7 +108,7 @@ mod tests {
     use crate::test_utils::{
         create_default_encodings, create_standard_test_vector, evaluate_function_for_test,
     };
-    use datafusion::dataframe::DataFrame;
+
     use datafusion::logical_expr::col;
     use insta::assert_snapshot;
     use rdf_fusion_common::LiteralRef;
@@ -149,9 +159,11 @@ mod tests {
         let with_encoding_udf = Arc::new(with_typed_family_encoding(encodings.clone()));
         let ebv_udf = Arc::new(effective_boolean_value_udf(encodings).unwrap());
 
-        let input =
-            DataFrame::from_columns(vec![("input", plain_terms.into_array_ref())])
-                .unwrap();
+        let input = crate::test_utils::annotated_df_from_columns(vec![(
+            "input",
+            plain_terms.into_array_ref(),
+        )])
+        .unwrap();
         let result = input
             .select([
                 col("input"),

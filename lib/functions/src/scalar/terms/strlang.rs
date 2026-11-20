@@ -4,7 +4,10 @@ use crate::scalar::signature::SparqlUDFTypeSignatureBuilder;
 use datafusion::arrow::array::StringArray;
 use datafusion::arrow::buffer::NullBuffer;
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::FieldRef;
 use datafusion::common::exec_err;
+use datafusion::common::internal_err;
+use datafusion::logical_expr::ReturnFieldArgs;
 use datafusion::logical_expr::{
     ColumnarValue, ScalarFunctionArgs, ScalarUDF, ScalarUDFImpl, Signature, Volatility,
 };
@@ -12,9 +15,10 @@ use rdf_fusion_common::DFResult;
 use rdf_fusion_common::vocab::rdf::LANG_STRING;
 use rdf_fusion_common::vocab::xsd;
 use rdf_fusion_encoding::plain_term::{PlainTermArray, PlainTermType};
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_types,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
+    detect_encoding_from_fields,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::fmt::{Debug, Formatter};
@@ -68,11 +72,18 @@ impl ScalarUDFImpl for StrLangSparqlUDF {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> DFResult<DataType> {
-        match detect_encoding_from_types(&self.encodings, arg_types)? {
-            Some(EncodingName::TypedFamily) => {
-                Ok(self.encodings.typed_family().data_type().clone())
-            }
+    fn return_type(&self, _arg_types: &[DataType]) -> DFResult<DataType> {
+        internal_err!("return_field_from_args should be called instead")
+    }
+
+    fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
+        let arg_fields = args.arg_fields;
+        match detect_encoding_from_fields(&self.encodings, arg_fields)? {
+            Some(EncodingName::TypedFamily) => Ok(rdf_term_field_ref(
+                self.name(),
+                self.encodings.typed_family().as_ref(),
+                true,
+            )),
             _ => exec_err!("STRLANG only supports the TypedFamily encoding"),
         }
     }
@@ -171,7 +182,7 @@ mod tests {
     use crate::test_utils::{
         create_default_encodings, evaluate_function_with_args_for_test,
     };
-    use datafusion::logical_expr::{col, lit};
+    use datafusion::logical_expr::col;
     use insta::assert_snapshot;
     use rdf_fusion_encoding::typed_family::{
         FamilyArray, StringFamily, StringFamilyArray, TypedFamilyArrayBuilder,
@@ -218,7 +229,7 @@ mod tests {
         let result = evaluate_function_with_args_for_test(
             test_vector,
             udf,
-            vec![col("input"), lit(lang_scalar.into_scalar_value())],
+            vec![col("input"), lang_scalar.into_lit()],
         );
         assert_snapshot!(
             result.to_string().await.unwrap(),

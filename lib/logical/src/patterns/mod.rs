@@ -96,9 +96,7 @@ pub fn compute_schema_for_pattern(
 
     let fields = fields
         .into_iter()
-        .map(|(name, field)| {
-            Field::new(name, field.data_type().clone(), field.is_nullable())
-        })
+        .map(|(name, field)| field.as_ref().clone().with_name(name))
         .collect::<Fields>();
     Arc::new(
         DFSchema::from_unqualified_fields(fields, HashMap::new())

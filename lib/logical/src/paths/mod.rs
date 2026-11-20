@@ -1,7 +1,7 @@
 mod kleene_plus;
 mod path_node;
 
-use datafusion::arrow::datatypes::{Field, Fields, SchemaRef};
+use datafusion::arrow::datatypes::{Fields, SchemaRef};
 use datafusion::common::{DFSchema, DFSchemaRef};
 pub use kleene_plus::*;
 pub use path_node::*;
@@ -26,13 +26,12 @@ pub static PATH_TABLE_DFSCHEMA: LazyLock<DFSchemaRef> =
 
 #[allow(clippy::expect_used)]
 fn create_path_table_schema(storage_encoding: &QuadStorageEncoding) -> DFSchemaRef {
-    let term_type = storage_encoding.term_type();
     Arc::new(
         DFSchema::from_unqualified_fields(
             Fields::from(vec![
-                Field::new(COL_PATH_GRAPH, term_type.clone(), true),
-                Field::new(COL_PATH_SOURCE, term_type.clone(), false),
-                Field::new(COL_PATH_TARGET, term_type.clone(), false),
+                storage_encoding.term_field(COL_PATH_GRAPH, true),
+                storage_encoding.term_field(COL_PATH_SOURCE, false),
+                storage_encoding.term_field(COL_PATH_TARGET, false),
             ]),
             HashMap::new(),
         )

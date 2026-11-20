@@ -1,5 +1,5 @@
 use crate::scalar::args::ScalarSparqlFunctionArgs;
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::arrow::datatypes::{DataType, FieldRef};
 use datafusion::common::{ScalarValue, exec_err};
 use datafusion::logical_expr::async_udf::{AsyncScalarUDF, AsyncScalarUDFImpl};
 use datafusion::logical_expr::{
@@ -8,10 +8,10 @@ use datafusion::logical_expr::{
 };
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::object_id::ObjectIdDictionary;
-use rdf_fusion_encoding::object_id::is_object_id_data_type;
 use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
+use rdf_fusion_encoding::rdf_term_field_ref;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings, TermEncoding,
+    DowncastEncodingArgs, EncodingArray, EncodingName, RdfFusionEncodings,
 };
 use rdf_fusion_extensions::functions::BuiltinName;
 use std::any::TypeId;
@@ -74,18 +74,18 @@ impl ScalarUDFImpl for DecodeTermUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let input_type = args.arg_fields[0].data_type();
-        if !is_object_id_data_type(input_type) {
+        let input_field = args.arg_fields[0].as_ref();
+        if EncodingName::try_from_field(input_field) != Some(EncodingName::ObjectId) {
             return exec_err!(
-                "DecodeTermUDF requires an ObjectId encoded argument (Int64, UInt64, FixedSizeBinary), but got: {:?}",
-                input_type
+                "DecodeTermUDF requires an ObjectId encoded argument, but got: {:?}",
+                input_field
             );
         }
-        Ok(Arc::new(Field::new(
+        Ok(rdf_term_field_ref(
             "output",
-            PLAIN_TERM_ENCODING.data_type().clone(),
-            args.arg_fields[0].is_nullable(),
-        )))
+            PLAIN_TERM_ENCODING.as_ref(),
+            input_field.is_nullable(),
+        ))
     }
 
     fn invoke_with_args(&self, _args: ScalarFunctionArgs) -> DFResult<ColumnarValue> {
