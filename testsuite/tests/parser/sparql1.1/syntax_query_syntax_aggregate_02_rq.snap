@@ -4,5 +4,5 @@ expression: snapshot
 ---
 Variant: Select
 Projection: ENC_PT(count) AS count
-  Aggregate: groupBy=[[]], aggr=[[COUNT(DISTINCT Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS count]]
+  Aggregate: groupBy=[[]], aggr=[[COUNT(DISTINCT Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }) AS count]]
     EmptyRelation: rows=1

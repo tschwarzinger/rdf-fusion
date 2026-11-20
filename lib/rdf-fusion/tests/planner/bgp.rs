@@ -21,13 +21,13 @@ async fn test_bgp_planner_filter() {
     let query = "SELECT ?s WHERE { ?s <http://example.org/p1> ?o . FILTER(STR(?o) = \"target\") }";
 
     let (logical, physical) = ctx.get_query_plans(query).await;
-    assert_plan_snapshot!(logical, @"
+    assert_plan_snapshot!(logical, @r#"
     DecodeObjectIds: columns=[s]
       Projection: s
-        Filter: EBV(EQ(ENC_TF(STR(o)), Union 3:{value:target,language:}))
+        Filter: EBV(EQ(ENC_TF(STR(o)), Union 3:{value:target,language:} FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.typed-family"} }))
           DecodeObjectIds: columns=[o]
             QuadPattern: triple_pattern=[?s <http://example.org/p1> ?o]
-    ");
+    "#);
     assert_plan_snapshot!(physical, @"
     DecodeObjectIdsExec: projections=[decode(s) as s]
       FilterExec: EBV(EQ(ENC_TF(STR(o@1)), 3:{value:target,language:})), projection=[s@0]
@@ -91,13 +91,13 @@ async fn test_bgp_planner_complex_filter() {
     "#;
 
     let (logical, physical) = ctx.get_query_plans(query).await;
-    assert_plan_snapshot!(logical, @"
-    BasicGraphPattern: projection=[city, name], columns_to_decode=[city, code, name, pop], filters=[EBV(GT(ENC_TF(pop), Union 5:4:1000000)) AND EBV(EQ(ENC_TF(STR(code)), Union 3:{value:75001,language:})) AS EBV(BOOLEAN_AS_TERM(EBV(GT(ENC_TF(pop),ENC_TF(Struct({term_type:2,value:1000000,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))) AND EBV(EQ(ENC_TF(STR(code)),ENC_TF(Struct({term_type:2,value:75001,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))]
+    assert_plan_snapshot!(logical, @r#"
+    BasicGraphPattern: projection=[city, name], columns_to_decode=[city, code, name, pop], filters=[EBV(GT(ENC_TF(pop), Union 5:4:1000000 FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.typed-family"} })) AND EBV(EQ(ENC_TF(STR(code)), Union 3:{value:75001,language:} FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.typed-family"} })) AS EBV(BOOLEAN_AS_TERM(EBV(GT(ENC_TF(pop),ENC_TF(Struct({term_type:2,value:1000000,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))) AND EBV(EQ(ENC_TF(STR(code)),ENC_TF(Struct({term_type:2,value:75001,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))))]
       QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>]
       QuadPattern: triple_pattern=[?city <http://schema.org/population> ?pop]
       QuadPattern: triple_pattern=[?city <http://schema.org/postalCode> ?code]
       QuadPattern: triple_pattern=[?city <http://schema.org/name> ?name]
-    ");
+    "#);
     assert_plan_snapshot!(physical, @"
     ProjectionExec: expr=[city@0 as city, name@3 as name]
       DecodeObjectIdsExec: projections=[decode(city) as city, pop, code, decode(name) as name]
@@ -130,11 +130,11 @@ async fn test_bgp_planner_filter_on_join_column_bsbm_explore_5() {
     "#;
 
     let (logical, physical) = ctx.get_query_plans(query).await;
-    assert_plan_snapshot!(logical, @"
-    BasicGraphPattern: projection=[city, name], columns_to_decode=[city, name, type], filters=[EBV(EQ(ENC_TF(STR(city)), Union 3:{value:http://www.wikidata.org/entity/Q90,language:})) AND EBV(EQ(ENC_TF(STR(name)), Union 3:{value:Paris,language:})) AND EBV(EQ(ENC_TF(STR(type)), Union 3:{value:http://schema.org/City,language:})) AS EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(STR(city)),ENC_TF(Struct({term_type:2,value:http://www.wikidata.org/entity/Q90,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))) AND EBV(EQ(ENC_TF(STR(name)),ENC_TF(Struct({term_type:2,value:Paris,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))))) AND EBV(EQ(ENC_TF(STR(type)),ENC_TF(Struct({term_type:2,value:http://schema.org/City,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))))))]
+    assert_plan_snapshot!(logical, @r#"
+    BasicGraphPattern: projection=[city, name], columns_to_decode=[city, name, type], filters=[EBV(EQ(ENC_TF(STR(city)), Union 3:{value:http://www.wikidata.org/entity/Q90,language:} FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.typed-family"} })) AND EBV(EQ(ENC_TF(STR(name)), Union 3:{value:Paris,language:} FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.typed-family"} })) AND EBV(EQ(ENC_TF(STR(type)), Union 3:{value:http://schema.org/City,language:} FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.typed-family"} })) AS EBV(BOOLEAN_AS_TERM(EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(STR(city)),ENC_TF(Struct({term_type:2,value:http://www.wikidata.org/entity/Q90,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))) AND EBV(EQ(ENC_TF(STR(name)),ENC_TF(Struct({term_type:2,value:Paris,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))))) AND EBV(EQ(ENC_TF(STR(type)),ENC_TF(Struct({term_type:2,value:http://schema.org/City,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))))]
       QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type]
       QuadPattern: triple_pattern=[?city <http://schema.org/name> ?name]
-    ");
+    "#);
     assert_plan_snapshot!(physical, @"
     FilterExec: EBV(EQ(ENC_TF(STR(name@2)), 3:{value:Paris,language:})) AND EBV(EQ(ENC_TF(STR(type@1)), 3:{value:http://schema.org/City,language:})) AND EBV(EQ(ENC_TF(STR(city@0)), 3:{value:http://www.wikidata.org/entity/Q90,language:})), projection=[city@0, name@2]
       DecodeObjectIdsExec: projections=[decode(city) as city, decode(type) as type, decode(name) as name]
@@ -163,11 +163,11 @@ async fn test_bgp_planner_filter_pushdown_with_object_id() {
     "#;
 
     let (logical, physical) = ctx.get_query_plans(query).await;
-    assert_plan_snapshot!(logical, @"
-    BasicGraphPattern: projection=[city], columns_to_decode=[city], filters=[EBV(EQ(ENC_TF(city), Union 2:http://www.wikidata.org/entity/Q90)) AS EBV(EQ(ENC_TF(city),ENC_TF(Struct({term_type:0,value:http://www.wikidata.org/entity/Q90,data_type:,language_tag:}))))]
+    assert_plan_snapshot!(logical, @r#"
+    BasicGraphPattern: projection=[city], columns_to_decode=[city], filters=[EBV(EQ(ENC_TF(city), Union 2:http://www.wikidata.org/entity/Q90 FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.typed-family"} })) AS EBV(EQ(ENC_TF(city),ENC_TF(Struct({term_type:0,value:http://www.wikidata.org/entity/Q90,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))]
       QuadPattern: triple_pattern=[?city <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://schema.org/City>]
       QuadPattern: triple_pattern=[?city <http://schema.org/population> ?pop], projection=[0]
-    ");
+    "#);
     assert_plan_snapshot!(physical, @"
     FilterExec: EBV(EQ(ENC_TF(city@0), 2:http://www.wikidata.org/entity/Q90))
       DecodeObjectIdsExec: projections=[decode(city) as city]

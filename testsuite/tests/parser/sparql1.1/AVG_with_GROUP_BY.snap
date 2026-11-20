@@ -5,6 +5,6 @@ expression: snapshot
 Variant: Select
 Projection: s AS s, ENC_PT(avg) AS avg
   Projection: s, avg
-    Filter: EBV(LEQ(<guid>, ENC_TF(Struct({term_type:2,value:2.0,data_type:http://www.w3.org/2001/XMLSchema#decimal,language_tag:}))))
+    Filter: EBV(LEQ(<guid>, ENC_TF(Struct({term_type:2,value:2.0,data_type:http://www.w3.org/2001/XMLSchema#decimal,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))
       Aggregate: groupBy=[[s AS s]], aggr=[[AVG(ENC_TF(o)) AS <guid>, AVG(ENC_TF(o)) AS avg]]
         QuadPattern: triple_pattern=[?s ?p ?o]

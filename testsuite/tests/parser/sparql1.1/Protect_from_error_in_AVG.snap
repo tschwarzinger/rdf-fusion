@@ -4,5 +4,5 @@ expression: snapshot
 ---
 Variant: Select
 Projection: g, ENC_PT(avg) AS avg
-  Aggregate: groupBy=[[g AS g]], aggr=[[AVG(IF(isNUMERIC(ENC_TF(p)), ENC_TF(p), ENC_TF(COALESCE(ENC_PT(xsd:double(ENC_TF(p))), Struct({term_type:2,value:0,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))) AS avg]]
+  Aggregate: groupBy=[[g AS g]], aggr=[[AVG(IF(isNUMERIC(ENC_TF(p)), ENC_TF(p), ENC_TF(COALESCE(ENC_PT(xsd:double(ENC_TF(p))), Struct({term_type:2,value:0,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))) AS avg]]
     QuadPattern: triple_pattern=[?g <http://example.com/data/#p> ?p]

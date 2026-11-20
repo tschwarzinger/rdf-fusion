@@ -3,5 +3,5 @@ source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Filter: EBV(GEQ(ABS(ENC_TF(num)), ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
+Filter: EBV(GEQ(ABS(ENC_TF(num)), ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))
   QuadPattern: triple_pattern=[?s <http://example.org/num> ?num]

@@ -13,6 +13,7 @@ pub(crate) use changeset_manager::*;
 pub(crate) use compute_log_changes::*;
 
 use crate::error::DeltaQuadsStorageError;
+use crate::extension_type::{annotate_loaded_schema, rdf_term_struct_field};
 use crate::log::add_only_changeset::LazyInsertionOnlyChangeset;
 use crate::log::operation_log_file::OperationLogFile;
 use crate::log::operations_changeset_stream::OperationsChangesetStream;
@@ -237,10 +238,30 @@ impl DeltaQuadsStorageLog {
         let delta_columns = vec![
             StructField::new(COL_OPERATION_SEQ_ID, DeltaDataType::LONG, false),
             StructField::new(COL_OPERATION, DeltaDataType::BYTE, false),
-            StructField::new(COL_GRAPH, delta_data_type.clone(), true),
-            StructField::new(COL_SUBJECT, delta_data_type.clone(), true),
-            StructField::new(COL_PREDICATE, delta_data_type.clone(), true),
-            StructField::new(COL_OBJECT, delta_data_type, true),
+            rdf_term_struct_field(
+                COL_GRAPH,
+                delta_data_type.clone(),
+                true,
+                &quad_storage_encoding,
+            ),
+            rdf_term_struct_field(
+                COL_SUBJECT,
+                delta_data_type.clone(),
+                true,
+                &quad_storage_encoding,
+            ),
+            rdf_term_struct_field(
+                COL_PREDICATE,
+                delta_data_type.clone(),
+                true,
+                &quad_storage_encoding,
+            ),
+            rdf_term_struct_field(
+                COL_OBJECT,
+                delta_data_type,
+                true,
+                &quad_storage_encoding,
+            ),
         ];
 
         let table = CreateBuilder::new()
@@ -260,10 +281,10 @@ impl DeltaQuadsStorageLog {
         let schema = Arc::new(Schema::new(vec![
             Field::new(COL_OPERATION_SEQ_ID, DataType::Int64, false),
             Field::new(COL_OPERATION, DataType::Int8, false),
-            Field::new(COL_GRAPH, data_type.clone(), true),
-            Field::new(COL_SUBJECT, data_type.clone(), true),
-            Field::new(COL_PREDICATE, data_type.clone(), true),
-            Field::new(COL_OBJECT, data_type, true),
+            quad_storage_encoding.term_field(COL_GRAPH, true),
+            quad_storage_encoding.term_field(COL_SUBJECT, true),
+            quad_storage_encoding.term_field(COL_PREDICATE, true),
+            quad_storage_encoding.term_field(COL_OBJECT, true),
         ]));
         Ok(Self {
             table: Arc::new(RwLock::new(table)),
@@ -279,7 +300,10 @@ impl DeltaQuadsStorageLog {
         let mut table = DeltaTable::new(log_store);
         table.load().await?;
 
-        let table_schema = table.snapshot()?.snapshot().arrow_schema();
+        let table_schema = annotate_loaded_schema(
+            &table.snapshot()?.snapshot().arrow_schema(),
+            &[COL_GRAPH, COL_SUBJECT, COL_PREDICATE, COL_OBJECT],
+        );
         Ok(Self {
             table: Arc::new(RwLock::new(table)),
             table_schema,

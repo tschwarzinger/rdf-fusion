@@ -4,5 +4,5 @@ expression: snapshot
 ---
 Variant: Select
 Projection: P, ENC_PT(C) AS C
-  Aggregate: groupBy=[[P AS P]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS C]]
+  Aggregate: groupBy=[[P AS P]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }) AS C]]
     QuadPattern: triple_pattern=[?S ?P ?O]

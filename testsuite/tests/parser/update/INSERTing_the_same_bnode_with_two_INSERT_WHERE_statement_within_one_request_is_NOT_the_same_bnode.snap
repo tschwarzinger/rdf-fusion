@@ -25,7 +25,7 @@ DELETE INSERT
         GRAPH <http://example.org/g3> { <http://example.org/s> <http://example.org/p> ?count }
 
 Projection: ENC_PT(count) AS count
-  Aggregate: groupBy=[[]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS count]]
+  Aggregate: groupBy=[[]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }) AS count]]
     QuadPattern: triple_pattern=[?s ?p ?o], active_graph: <http://example.org/g2> 
 
 DROP(graph=GRAPH <http://example.org/g1>, silent=false)

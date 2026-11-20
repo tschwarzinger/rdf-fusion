@@ -10,5 +10,5 @@ Projection: id, nodeType, target
         Projection: named AS __inner__named, id AS __inner__id
           Filter: EBV(BOOLEAN_AS_TERM(NOT EBV(isIRI(ENC_TF(id)))))
             QuadPattern: triple_pattern=[?named <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?id]
-    Extend: variable=?nodeType, expression=Struct({term_type:0,value:http://www.w3.org/2002/07/owl#complementOf,data_type:,language_tag:})
+    Extend: variable=?nodeType, expression=Struct({term_type:0,value:http://www.w3.org/2002/07/owl#complementOf,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }
       QuadPattern: triple_pattern=[?id <http://www.w3.org/2002/07/owl#complementOf> ?target]

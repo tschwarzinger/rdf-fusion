@@ -8,4 +8,4 @@ Projection: s, o1, o2
     BasicGraphPattern: 
       QuadPattern: triple_pattern=[?s ?p1 ?o1]
       QuadPattern: triple_pattern=[?s ?p2 ?o2]
-    Values: (Struct({term_type:,value:,data_type:,language_tag:}), Struct({term_type:2,value:Alan,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), (Struct({term_type:0,value:http://example.org/b,data_type:,language_tag:}), Struct({term_type:,value:,data_type:,language_tag:}))
+    Values: (Struct({term_type:,value:,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }, Struct({term_type:2,value:Alan,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), (Struct({term_type:0,value:http://example.org/b,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }, Struct({term_type:,value:,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })

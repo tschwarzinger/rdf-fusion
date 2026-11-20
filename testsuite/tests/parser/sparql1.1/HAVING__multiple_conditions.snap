@@ -4,7 +4,7 @@ expression: snapshot
 ---
 Variant: Select
 Projection: s
-  Filter: EBV(LT(<guid>, ENC_TF(Struct({term_type:2,value:3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
-    Filter: EBV(GT(<guid>, ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
-      Aggregate: groupBy=[[s AS s]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS <guid>, COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})) AS <guid>]]
+  Filter: EBV(LT(<guid>, ENC_TF(Struct({term_type:2,value:3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))
+    Filter: EBV(GT(<guid>, ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))
+      Aggregate: groupBy=[[s AS s]], aggr=[[COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }) AS <guid>, COUNT(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }) AS <guid>]]
         QuadPattern: triple_pattern=[?s ?p ?o]

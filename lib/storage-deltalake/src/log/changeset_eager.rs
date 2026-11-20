@@ -149,19 +149,21 @@ impl EagerChangeset {
             return Ok(());
         }
 
-        let data_type = self
+        // Re-use the term field of the operation schema, such that metadata (e.g., the RDF term
+        // extension type) is retained.
+        let term_field = self
             .operation_schema
             .field(OperationsChangesetStream::GRAPH_IDX)
-            .data_type()
-            .clone();
+            .clone()
+            .with_nullable(true);
         let schema = Arc::new(Schema::new(vec![
             Field::new(COL_COMMIT_VERSION, DataType::Int64, true),
             Field::new(COL_OPERATION_SEQ_ID, DataType::Int64, false),
             Field::new(COL_OPERATION, DataType::Int8, false),
-            Field::new(COL_GRAPH, data_type.clone(), true),
-            Field::new(COL_SUBJECT, data_type.clone(), true),
-            Field::new(COL_PREDICATE, data_type.clone(), true),
-            Field::new(COL_OBJECT, data_type, true),
+            term_field.clone().with_name(COL_GRAPH),
+            term_field.clone().with_name(COL_SUBJECT),
+            term_field.clone().with_name(COL_PREDICATE),
+            term_field.with_name(COL_OBJECT),
         ]));
 
         let op_val = operation.as_stored();
@@ -394,11 +396,8 @@ fn enforce_non_nullable(
 
     for (idx, field) in old_schema.fields().iter().enumerate() {
         if non_nullable_cols.contains(&idx) {
-            new_fields.push(Arc::new(Field::new(
-                field.name(),
-                field.data_type().clone(),
-                false,
-            )));
+            // Keep the metadata (e.g., the RDF term extension type).
+            new_fields.push(Arc::new(field.as_ref().clone().with_nullable(false)));
         } else {
             new_fields.push(Arc::clone(field));
         }

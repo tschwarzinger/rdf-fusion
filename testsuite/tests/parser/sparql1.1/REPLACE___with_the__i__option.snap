@@ -4,5 +4,5 @@ expression: snapshot
 ---
 Variant: Select
 Projection: ENC_PT(new) AS new
-  Extend: variable=?new, expression=REPLACE(ENC_TF(Struct({term_type:2,value:aAbBaC,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:a,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:~/,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(Struct({term_type:2,value:i,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})))
+  Extend: variable=?new, expression=REPLACE(ENC_TF(Struct({term_type:2,value:aAbBaC,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), ENC_TF(Struct({term_type:2,value:a,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), ENC_TF(Struct({term_type:2,value:~/,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), ENC_TF(Struct({term_type:2,value:i,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))
     EmptyRelation: rows=1

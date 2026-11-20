@@ -7,4 +7,4 @@ Distinct:
   Projection: s
     SparqlJoin: Inner 
       QuadPattern: triple_pattern=[?s <http://example.org/p> ?o]
-      Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})), (Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))
+      Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), (Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })

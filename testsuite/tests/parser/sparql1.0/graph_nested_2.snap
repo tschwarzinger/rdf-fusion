@@ -3,5 +3,5 @@ source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Extend: variable=?g1, expression=Struct({term_type:,value:,data_type:,language_tag:})
+Extend: variable=?g1, expression=Struct({term_type:,value:,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }
   QuadPattern: graph_variable=?g0 triple_pattern=[?s <http://example.com/p> ?o], active_graph: Any Named Graph

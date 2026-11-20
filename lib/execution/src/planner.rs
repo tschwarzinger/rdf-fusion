@@ -97,16 +97,6 @@ async fn build_extension_planners(
     let mut quad_pattern_planners = snapshot.planners(context).await;
     quad_pattern_planners.push(Arc::new(QuadPatternPlanner::new(Arc::clone(snapshot))));
 
-    // Storage layers may produce plans that do not carry the RDF term extension types (e.g., when
-    // reading Parquet files). Restore them from the logical plan.
-    let quad_pattern_planners = quad_pattern_planners
-        .into_iter()
-        .map(|planner| {
-            Arc::new(RdfTermExtensionTypePlanner::new(planner))
-                as Arc<dyn ExtensionPlanner + Send + Sync>
-        })
-        .collect::<Vec<_>>();
-
     let bgp_planner = BgpPlanner::new(decoding_udf.clone())
         .with_quad_pattern_planners(quad_pattern_planners.clone());
     let mut planners: Vec<Arc<dyn ExtensionPlanner + Send + Sync>> = vec![
@@ -121,7 +111,8 @@ async fn build_extension_planners(
 
     planners.extend(quad_pattern_planners);
 
-    // Also ensure the extension types for all other extension nodes (e.g., loading RDF files).
+    // Verify that all extension planners (e.g., the scans of the storage layer) produce plans that
+    // carry the RDF term extension types.
     planners
         .into_iter()
         .map(|planner| {

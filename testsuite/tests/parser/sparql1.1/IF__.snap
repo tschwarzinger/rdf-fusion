@@ -5,5 +5,5 @@ expression: snapshot
 Variant: Select
 Projection: o AS o, ENC_PT(integer) AS integer
   Projection: o, integer
-    Extend: variable=?integer, expression=IF(EQ(ENC_TF(LANG(o)), ENC_TF(Struct({term_type:2,value:ja,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))), ENC_TF(Struct({term_type:2,value:true,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:})), ENC_TF(Struct({term_type:2,value:false,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:})))
+    Extend: variable=?integer, expression=IF(EQ(ENC_TF(LANG(o)), ENC_TF(Struct({term_type:2,value:ja,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })), ENC_TF(Struct({term_type:2,value:true,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), ENC_TF(Struct({term_type:2,value:false,data_type:http://www.w3.org/2001/XMLSchema#boolean,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))
       QuadPattern: triple_pattern=[?s ?p ?o]

@@ -270,7 +270,7 @@ fn try_replace_boolean_round_trip(
 mod tests {
     use super::*;
     use crate::RdfFusionExprBuilderContext;
-    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::arrow::datatypes::Schema;
     use datafusion::common::{DFSchema, DFSchemaRef};
     use datafusion::logical_expr::{EmptyRelation, LogicalPlan, LogicalPlanBuilder, col};
     use datafusion::optimizer::OptimizerContext;
@@ -279,9 +279,7 @@ mod tests {
     use rdf_fusion_encoding::plain_term::PLAIN_TERM_ENCODING;
     use rdf_fusion_encoding::string::STRING_ENCODING;
     use rdf_fusion_encoding::typed_family::TypedFamilyEncoding;
-    use rdf_fusion_encoding::{
-        EncodingName, QuadStorageEncoding, RdfFusionEncodings, TermEncoding,
-    };
+    use rdf_fusion_encoding::{EncodingName, QuadStorageEncoding, RdfFusionEncodings};
     use rdf_fusion_extensions::RdfFusionContextView;
     use rdf_fusion_extensions::functions::FunctionName;
     use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
@@ -311,10 +309,10 @@ mod tests {
         let rewritten = run_literal_equality_test(TermRef::NamedNode(
             NamedNodeRef::new_unchecked("http://example.com/term"),
         ));
-        assert_snapshot!(rewritten.data, @r"
-        Projection: BOOLEAN_AS_TERM(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:}) = column1) AS EQ(ENC_TF(column1),ENC_TF(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:})))
+        assert_snapshot!(rewritten.data, @r#"
+        Projection: BOOLEAN_AS_TERM(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} } = column1) AS EQ(ENC_TF(column1),ENC_TF(Struct({term_type:0,value:http://example.com/term,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))
           EmptyRelation: rows=0
-        ");
+        "#);
     }
 
     #[test]
@@ -322,20 +320,20 @@ mod tests {
         let rewritten = run_literal_equality_test(TermRef::BlankNode(
             BlankNodeRef::new_unchecked("abc"),
         ));
-        assert_snapshot!(rewritten.data, @r"
-        Projection: BOOLEAN_AS_TERM(Struct({term_type:1,value:abc,data_type:,language_tag:}) = column1) AS EQ(ENC_TF(column1),ENC_TF(Struct({term_type:1,value:abc,data_type:,language_tag:})))
+        assert_snapshot!(rewritten.data, @r#"
+        Projection: BOOLEAN_AS_TERM(Struct({term_type:1,value:abc,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} } = column1) AS EQ(ENC_TF(column1),ENC_TF(Struct({term_type:1,value:abc,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))
           EmptyRelation: rows=0
-        ");
+        "#);
     }
 
     #[test]
     fn test_equality_rewrite_to_same_term_literal() {
         let rewritten =
             run_literal_equality_test(TermRef::Literal(Literal::from(1).as_ref()));
-        assert_snapshot!(rewritten.data, @r"
-        Projection: EQ(ENC_TF(column1), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+        assert_snapshot!(rewritten.data, @r#"
+        Projection: EQ(ENC_TF(column1), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))
           EmptyRelation: rows=0
-        ");
+        "#);
     }
 
     #[test]
@@ -450,15 +448,15 @@ mod tests {
         column2_nullable: bool,
     ) -> DFSchemaRef {
         let context = create_context();
-        let data_type = match encoding {
-            EncodingName::PlainTerm => context.encodings().plain_term().data_type(),
-            EncodingName::TypedFamily => context.encodings().typed_family().data_type(),
-            _ => panic!("Unsupported encoding"),
-        };
+        let encodings = context.encodings();
         DFSchemaRef::new(
             DFSchema::try_from(Schema::new(vec![
-                Field::new("column1", data_type.clone(), column1_nullable),
-                Field::new("column2", data_type.clone(), column2_nullable),
+                encodings
+                    .field(encoding, "column1", column1_nullable)
+                    .expect("Encoding exists"),
+                encodings
+                    .field(encoding, "column2", column2_nullable)
+                    .expect("Encoding exists"),
             ]))
             .unwrap(),
         )

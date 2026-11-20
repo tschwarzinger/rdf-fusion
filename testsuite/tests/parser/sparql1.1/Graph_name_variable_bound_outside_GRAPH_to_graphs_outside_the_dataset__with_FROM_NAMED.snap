@@ -4,5 +4,5 @@ expression: snapshot
 ---
 Variant: Select
 SparqlJoin: Inner 
-  Values: (Struct({term_type:0,value:http://example.org/g1,data_type:,language_tag:})), (Struct({term_type:0,value:http://example.org/g2,data_type:,language_tag:})), (Struct({term_type:0,value:http://example.org/unknown,data_type:,language_tag:}))
-  Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))
+  Values: (Struct({term_type:0,value:http://example.org/g1,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), (Struct({term_type:0,value:http://example.org/g2,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), (Struct({term_type:0,value:http://example.org/unknown,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })
+  Values: (Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })

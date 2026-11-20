@@ -5,6 +5,6 @@ expression: snapshot
 Variant: Select
 Projection: P AS P, ENC_PT(C) AS C
   Projection: P, C
-    Filter: EBV(GT(<guid>, ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
+    Filter: EBV(GT(<guid>, ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))
       Aggregate: groupBy=[[P AS P]], aggr=[[COUNT(O) AS <guid>, COUNT(O) AS C]]
         QuadPattern: triple_pattern=[?S ?P ?O]

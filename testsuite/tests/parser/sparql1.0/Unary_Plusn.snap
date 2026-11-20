@@ -4,5 +4,5 @@ expression: snapshot
 ---
 Variant: Select
 Projection: s
-  Filter: EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:2,value:+3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}))))
+  Filter: EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:2,value:+3,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))
     QuadPattern: triple_pattern=[?s <http://example.org/p> ?o]

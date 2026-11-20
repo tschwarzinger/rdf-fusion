@@ -4,7 +4,7 @@ expression: snapshot
 ---
 Variant: Select
 Aggregate: groupBy=[[X AS X]], aggr=[[first_value(v) AS S]]
-  Extend: variable=?X, expression=COALESCE(w, Struct({term_type:2,value:1605-11-05,data_type:http://www.w3.org/2001/XMLSchema#date,language_tag:}))
+  Extend: variable=?X, expression=COALESCE(w, Struct({term_type:2,value:1605-11-05,data_type:http://www.w3.org/2001/XMLSchema#date,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })
     SparqlJoin: Left 
       QuadPattern: triple_pattern=[?s <http://example/p> ?v]
       QuadPattern: triple_pattern=[?s <http://example/q> ?w]

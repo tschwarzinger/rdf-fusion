@@ -3,6 +3,7 @@ mod update;
 mod validation;
 
 use crate::error::DeltaQuadsStorageError;
+use crate::extension_type::rdf_term_struct_field;
 use crate::log::DeltaQuadsStorageLogChangesetRef;
 use crate::quad_table::update::DeltaStorageQuadTableUpdater;
 use crate::quad_table::validation::validate_quad_table;
@@ -13,7 +14,7 @@ use deltalake::kernel::transaction::CommitProperties;
 use deltalake::kernel::{Add, Transaction};
 use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
-use deltalake::{DataType as DeltaDataType, DeltaTable, StructField, TableProperty};
+use deltalake::{DataType as DeltaDataType, DeltaTable, TableProperty};
 use futures::TryStreamExt;
 use object_store::ObjectMeta;
 use object_store::path::Path;
@@ -80,10 +81,25 @@ impl DeltaQuadsQuadTable {
             .map_err(|_| DeltaQuadsStorageError::UnsupportedArrowType(data_type))?;
 
         let delta_columns = vec![
-            StructField::new(COL_GRAPH, delta_data_type.clone(), true),
-            StructField::new(COL_SUBJECT, delta_data_type.clone(), false),
-            StructField::new(COL_PREDICATE, delta_data_type.clone(), false),
-            StructField::new(COL_OBJECT, delta_data_type, false),
+            rdf_term_struct_field(
+                COL_GRAPH,
+                delta_data_type.clone(),
+                true,
+                &storage_encoding,
+            ),
+            rdf_term_struct_field(
+                COL_SUBJECT,
+                delta_data_type.clone(),
+                false,
+                &storage_encoding,
+            ),
+            rdf_term_struct_field(
+                COL_PREDICATE,
+                delta_data_type.clone(),
+                false,
+                &storage_encoding,
+            ),
+            rdf_term_struct_field(COL_OBJECT, delta_data_type, false, &storage_encoding),
         ];
 
         let sync_txn = Transaction {

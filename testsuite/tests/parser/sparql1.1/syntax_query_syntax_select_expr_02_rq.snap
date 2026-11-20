@@ -5,6 +5,6 @@ expression: snapshot
 Variant: Select
 Projection: x AS x, y AS y, ENC_PT(z) AS z
   Extend: variable=?z, expression=ADD(ENC_TF(x), ENC_TF(y))
-    Extend: variable=?y, expression=Struct({term_type:,value:,data_type:,language_tag:})
-      Extend: variable=?x, expression=Struct({term_type:,value:,data_type:,language_tag:})
+    Extend: variable=?y, expression=Struct({term_type:,value:,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }
+      Extend: variable=?x, expression=Struct({term_type:,value:,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }
         EmptyRelation: rows=1

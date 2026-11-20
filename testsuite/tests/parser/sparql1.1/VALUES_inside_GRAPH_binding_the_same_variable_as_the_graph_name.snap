@@ -3,4 +3,4 @@ source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Values: (Struct({term_type:,value:,data_type:,language_tag:}), Struct({term_type:2,value:foo,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), (Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql11/bindings/data01.ttl,data_type:,language_tag:}), Struct({term_type:2,value:bar,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}))
+Values: (Struct({term_type:,value:,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }, Struct({term_type:2,value:foo,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), (Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql11/bindings/data01.ttl,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }, Struct({term_type:2,value:bar,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })

@@ -4,5 +4,5 @@ expression: snapshot
 ---
 Variant: Select
 Projection: s AS s, str AS str, ENC_PT(substr) AS substr
-  Extend: variable=?substr, expression=SUBSTR(ENC_TF(str), ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))
+  Extend: variable=?substr, expression=SUBSTR(ENC_TF(str), ENC_TF(Struct({term_type:2,value:2,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))
     QuadPattern: triple_pattern=[?s <http://example.org/str> ?str]

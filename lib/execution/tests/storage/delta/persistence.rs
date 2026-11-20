@@ -385,3 +385,87 @@ async fn test_parallel_encoding_streams() {
     // 100 unique subjects + 1 predicate + 10_000 objects = 10101
     assert_eq!(local_dict.len().await.unwrap(), 10101);
 }
+
+/// The RDF term extension types must be persisted in the Delta schemas and the Parquet files, such
+/// that they are available after reloading the storage.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn test_extension_types_are_persisted() {
+    use datafusion::parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use futures::TryStreamExt;
+    use object_store::ObjectStoreExt;
+    use rdf_fusion_encoding::EncodingName;
+
+    let log_store = create_test_log_store();
+    let session = SessionStateBuilder::new().build();
+
+    {
+        let storage = Arc::new(
+            DeltaQuadsStorageBuilder::new()
+                .with_log_store(Arc::clone(&log_store))
+                .with_encoding(QuadStorageEncodingName::PlainTerm)
+                .with_quad_tables(vec![QuadTableName::GSPO])
+                .build()
+                .await
+                .unwrap(),
+        );
+        populate_storage(Arc::clone(&storage), "http://example.org/s1").await;
+        let ctx = create_context(
+            Arc::clone(&storage) as Arc<dyn QuadStorage>,
+            Arc::clone(&log_store),
+        );
+        storage.optimize(&ctx.state()).await.unwrap();
+    }
+
+    // The schema of the reloaded log carries the extension types.
+    let storage = DeltaQuadsStorage::try_load(&session, Arc::clone(&log_store))
+        .await
+        .unwrap();
+    for column in [COL_GRAPH, COL_SUBJECT, COL_PREDICATE, COL_OBJECT] {
+        let field = storage.log().schema().field_with_name(column).unwrap();
+        assert_eq!(
+            EncodingName::try_from_field(field),
+            Some(EncodingName::PlainTerm),
+            "Log field {column}"
+        );
+    }
+
+    // Every Parquet file (log and quad table) carries the extension types in its Arrow schema.
+    let object_store = log_store.root_object_store(None);
+    let files = object_store
+        .list(None)
+        .try_collect::<Vec<_>>()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|meta| meta.location.as_ref().ends_with(".parquet"))
+        .filter(|meta| !meta.location.as_ref().contains("_delta_log"))
+        .collect::<Vec<_>>();
+    assert!(!files.is_empty());
+
+    let mut checked_files = 0;
+    for file in files {
+        let bytes = object_store
+            .get(&file.location)
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        let builder = ParquetRecordBatchReaderBuilder::try_new(bytes).unwrap();
+        let schema = builder.schema();
+        if schema.field_with_name(COL_SUBJECT).is_err() {
+            continue; // Not a quad file (e.g., the object id dictionary)
+        }
+        for column in [COL_GRAPH, COL_SUBJECT, COL_PREDICATE, COL_OBJECT] {
+            let field = schema.field_with_name(column).unwrap();
+            assert_eq!(
+                EncodingName::try_from_field(field),
+                Some(EncodingName::PlainTerm),
+                "File {} field {column}",
+                file.location
+            );
+        }
+        checked_files += 1;
+    }
+    assert!(checked_files >= 2, "Expected log and quad table files");
+}

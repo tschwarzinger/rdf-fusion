@@ -3,5 +3,5 @@ source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Filter: EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:})))) OR EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-query/x,data_type:,language_tag:}))))))
+Filter: EBV(BOOLEAN_AS_TERM(EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:2,value:1,data_type:http://www.w3.org/2001/XMLSchema#integer,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }))) OR EBV(EQ(ENC_TF(o), ENC_TF(Struct({term_type:0,value:https://w3c.github.io/rdf-tests/sparql/sparql11/syntax-query/x,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })))))
   QuadPattern: triple_pattern=[?s ?p ?o]

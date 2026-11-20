@@ -7,7 +7,7 @@ Template:
   ?P <http://xmlns.com/foaf/0.1/name> ?FullName
 Projection: P AS P, ENC_PT(FullName) AS FullName
   Projection: P, FullName
-    Extend: variable=?FullName, expression=CONCAT(ENC_TF(F), ENC_TF(Struct({term_type:2,value: ,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:})), ENC_TF(L))
+    Extend: variable=?FullName, expression=CONCAT(ENC_TF(F), ENC_TF(Struct({term_type:2,value: ,data_type:http://www.w3.org/2001/XMLSchema#string,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }), ENC_TF(L))
       BasicGraphPattern: 
         QuadPattern: triple_pattern=[?P <http://xmlns.com/foaf/0.1/firstName> ?F]
         QuadPattern: triple_pattern=[?P <http://xmlns.com/foaf/0.1/lastName> ?L]

@@ -20,13 +20,13 @@ use std::sync::Arc;
 /// The equality and hashing functions check for pointer equality of the underlying encodings.
 #[derive(Debug, Clone)]
 pub struct RdfFusionEncodings {
-    /// The [`PlainTermEncoding`] configuration.
+    /// The [`PlainTermEncoding`](crate::plain_term::PlainTermEncoding) configuration.
     plain_term: PlainTermEncodingRef,
     /// The [`TypedFamilyEncoding`](crate::typed_family::TypedFamilyEncoding) configuration.
     typed_family: TypedFamilyEncodingRef,
     /// The [`ObjectIdEncoding`](crate::object_id::ObjectIdEncoding) configuration.
     object_id: Option<ObjectIdEncodingRef>,
-    /// The [`StringEncoding`] configuration.
+    /// The [`StringEncoding`](crate::string::StringEncoding) configuration.
     string_encoding: StringEncodingRef,
 }
 

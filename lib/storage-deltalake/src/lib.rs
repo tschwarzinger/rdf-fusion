@@ -11,6 +11,7 @@
 mod builder;
 mod error;
 pub mod exec;
+mod extension_type;
 pub mod local_object_ids;
 mod log;
 mod objectids;

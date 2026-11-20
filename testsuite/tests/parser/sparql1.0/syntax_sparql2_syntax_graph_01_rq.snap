@@ -3,5 +3,5 @@ source: testsuite/tests/parser/mod.rs
 expression: snapshot
 ---
 Variant: Select
-Extend: variable=?g, expression=Struct({term_type:,value:,data_type:,language_tag:})
+Extend: variable=?g, expression=Struct({term_type:,value:,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} }
   EmptyRelation: rows=1

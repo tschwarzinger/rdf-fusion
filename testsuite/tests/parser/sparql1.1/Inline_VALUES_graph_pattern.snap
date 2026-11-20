@@ -4,7 +4,7 @@ expression: snapshot
 ---
 Variant: Select
 SparqlJoin: Inner 
-  Values: (Struct({term_type:0,value:http://example.org/book/book1,data_type:,language_tag:}))
+  Values: (Struct({term_type:0,value:http://example.org/book/book1,data_type:,language_tag:}) FieldMetadata { inner: {"ARROW:extension:name": "rdf-fusion.encoding.plain-term"} })
   BasicGraphPattern: 
     QuadPattern: triple_pattern=[?book <http://purl.org/dc/elements/1.1/title> ?title]
     QuadPattern: triple_pattern=[?book <http://example.org/ns#price> ?price]
