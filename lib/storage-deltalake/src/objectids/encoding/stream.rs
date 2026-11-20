@@ -15,6 +15,7 @@ use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::object_id::ObjectIdDictionary;
 use rdf_fusion_encoding::plain_term::PlainTermArray;
 use rdf_fusion_encoding::string::StringTermArray;
+use rdf_fusion_encoding::{EncodingName, with_rdf_term_extension_type};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -81,7 +82,12 @@ impl ObjectIdEncodingStream {
             .schema()
             .fields()
             .iter()
-            .map(|f| f.as_ref().clone().with_data_type(encoded_type.clone()))
+            .map(|f| {
+                with_rdf_term_extension_type(
+                    f.as_ref().clone().with_data_type(encoded_type.clone()),
+                    EncodingName::ObjectId,
+                )
+            })
             .collect::<Fields>();
         let schema = Arc::new(Schema::new(fields));
 

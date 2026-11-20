@@ -2,6 +2,7 @@ use crate::dataset::{
     DATASET_DESCRIPTION_FILE, ParquetDatasetDescription, ParquetQuadTableDescription,
 };
 use crate::reader::{ParquetMetadataFetcher, max_concurrent_files};
+use crate::scan::validate_file_term_types;
 use crate::snapshot::ParquetQuadStorageSnapshot;
 use async_trait::async_trait;
 use datafusion::arrow::datatypes::Schema;
@@ -205,6 +206,13 @@ impl ParquetQuadTable {
         let store = state.runtime_env().object_store(table_url.object_store())?;
         let files = vec![PartitionedFile::from(store.head(table_url.prefix()).await?)];
         let footers = load_footers(state, table_url, &files).await?;
+        for (file, footer) in files.iter().zip(&footers) {
+            validate_file_term_types(
+                encoding,
+                footer,
+                file.object_meta.location.as_ref(),
+            )?;
+        }
         let schema = encoding.quad_schema();
         let files = with_footer_statistics(schema.inner(), files, &footers)?;
         Ok(Self {

@@ -13,7 +13,7 @@ use crate::plain_term::decoders::DefaultPlainTermDecoder;
 use crate::plain_term::{PlainTermArray, PlainTermEncoding};
 use crate::{EncodingName, TermDecoder, TermEncoding};
 use datafusion::arrow::array::Array;
-use datafusion::arrow::datatypes::{DataType, Field, FieldRef};
+use datafusion::arrow::datatypes::{DataType, Field, FieldRef, Schema};
 use datafusion::arrow::util::display::{
     ArrayFormatter, DisplayIndex, FormatOptions, FormatResult,
 };
@@ -121,6 +121,31 @@ pub fn with_rdf_term_extension_type(field: Field, encoding: EncodingName) -> Fie
         encoding.extension_type_name().to_owned(),
     );
     field.with_metadata(metadata)
+}
+
+/// Removes the RDF Fusion extension type from `field` (if any). Other metadata is retained.
+///
+/// RDF Fusion does not persist the extension types in files. Storage layers use this function to
+/// obtain the schema of the stored data.
+pub fn without_rdf_term_extension_type(field: Field) -> Field {
+    if EncodingName::try_from_field(&field).is_none() {
+        return field;
+    }
+    let mut metadata = field.metadata().clone();
+    metadata.remove(EXTENSION_TYPE_NAME_KEY);
+    field.with_metadata(metadata)
+}
+
+/// Removes the RDF Fusion extension types from all fields of `schema`.
+///
+/// See [without_rdf_term_extension_type].
+pub fn without_rdf_term_extension_types(schema: &Schema) -> Schema {
+    let fields = schema
+        .fields()
+        .iter()
+        .map(|f| without_rdf_term_extension_type(f.as_ref().clone()))
+        .collect::<Vec<_>>();
+    Schema::new_with_metadata(fields, schema.metadata().clone())
 }
 
 /// DataFusion's extension type implementation for RDF terms.

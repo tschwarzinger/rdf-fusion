@@ -386,10 +386,10 @@ async fn test_parallel_encoding_streams() {
     assert_eq!(local_dict.len().await.unwrap(), 10101);
 }
 
-/// The RDF term extension types must be persisted in the Delta schemas and the Parquet files, such
-/// that they are available after reloading the storage.
+/// The RDF term extension types are not persisted in the Delta tables or their Parquet files.
+/// Instead, they are attached when reading, such that the files stay interoperable.
 #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-async fn test_extension_types_are_persisted() {
+async fn test_extension_types_are_not_persisted() {
     use datafusion::parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use futures::TryStreamExt;
     use object_store::ObjectStoreExt;
@@ -416,7 +416,7 @@ async fn test_extension_types_are_persisted() {
         storage.optimize(&ctx.state()).await.unwrap();
     }
 
-    // The schema of the reloaded log carries the extension types.
+    // The read schema of the reloaded log carries the extension types.
     let storage = DeltaQuadsStorage::try_load(&session, Arc::clone(&log_store))
         .await
         .unwrap();
@@ -429,7 +429,7 @@ async fn test_extension_types_are_persisted() {
         );
     }
 
-    // Every Parquet file (log and quad table) carries the extension types in its Arrow schema.
+    // No Parquet file (log and quad table) carries the extension types in its Arrow schema.
     let object_store = log_store.root_object_store(None);
     let files = object_store
         .list(None)
@@ -460,7 +460,7 @@ async fn test_extension_types_are_persisted() {
             let field = schema.field_with_name(column).unwrap();
             assert_eq!(
                 EncodingName::try_from_field(field),
-                Some(EncodingName::PlainTerm),
+                None,
                 "File {} field {column}",
                 file.location
             );

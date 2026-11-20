@@ -5,7 +5,7 @@ use crate::log::{
 };
 use crate::snapshot::DeltaQuadsStorageSnapshot;
 use crate::storage::DeltaQuadsStorage;
-use crate::writer::create_delta_writer;
+use crate::writer::{RdfDeltaWriter, create_delta_writer};
 use async_trait::async_trait;
 use datafusion::arrow::array::RecordBatch;
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
@@ -20,7 +20,6 @@ use datafusion::prelude::{Expr, SessionContext, lit};
 use deltalake::DeltaTable;
 use deltalake::kernel::Action;
 use deltalake::kernel::transaction::CommitBuilder;
-use deltalake::operations::write::writer::DeltaWriter;
 use deltalake::protocol::{DeltaOperation, SaveMode};
 use futures::StreamExt;
 use rdf_fusion_common::StorageError;
@@ -606,7 +605,7 @@ async fn create_log_writer(
     table: &RwLock<DeltaTable>,
     schema: Arc<Schema>,
     parquet_options: &TableParquetOptions,
-) -> Result<DeltaWriter, DeltaQuadsStorageError> {
+) -> Result<RdfDeltaWriter, DeltaQuadsStorageError> {
     let table = table.read().await;
     create_delta_writer(&table, schema, parquet_options, &[])
 }

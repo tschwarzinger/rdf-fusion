@@ -14,7 +14,9 @@ use object_store::{ObjectStoreExt, PutPayload};
 use rdf_fusion_common::config::RdfFusionOptions;
 use rdf_fusion_common::{NamedNode, Quad};
 use rdf_fusion_encoding::string::StringQuadsBuilder;
-use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
+use rdf_fusion_encoding::{
+    QuadStorageEncoding, QuadStorageEncodingName, without_rdf_term_extension_types,
+};
 use rdf_fusion_execution::RdfFusionContext;
 use rdf_fusion_execution::RdfFusionContextBuilder;
 use rdf_fusion_execution::results::QueryResults;
@@ -55,7 +57,10 @@ async fn test_parquet_scan_filter_pushdown_with_equality_with_named_node() {
 
     assert_snapshot!(
         displayable(plan_pushed.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[ENC_PT(subject@1) as s], file_type=parquet, predicate=predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@1 AND object_null_count@6 != row_count@3 AND object_min@4 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@5, required_guarantees=[object in (<http://example.org/o1>), predicate in (<http://example.org/p1>)]"
+        @"
+    ProjectionExec: expr=[ENC_PT(s@0) as s]
+      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[subject@1 as s], file_type=parquet, predicate=predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@1 AND object_null_count@6 != row_count@3 AND object_min@4 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@5, required_guarantees=[object in (<http://example.org/o1>), predicate in (<http://example.org/p1>)]
+    "
     );
 }
 
@@ -338,7 +343,10 @@ async fn test_parquet_multi_file_scan_prunes_files_during_planning() {
     // Only the file that contains p2 remains in the plan.
     assert_snapshot!(
         displayable(explanation.execution_plan.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o], blank_node_mode=Variable, file_groups={1 group: [[dataset/part-00001.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p2>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p2> AND <http://example.org/p2> <= predicate_max@1, required_guarantees=[predicate in (<http://example.org/p2>)]"
+        @"
+    ProjectionExec: expr=[ENC_PT(s@0) as s, ENC_PT(o@1) as o]
+      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o], blank_node_mode=Variable, file_groups={1 group: [[dataset/part-00001.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p2>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p2> AND <http://example.org/p2> <= predicate_max@1, required_guarantees=[predicate in (<http://example.org/p2>)]
+    "
     );
     assert_eq!(count_solutions(results).await, 2);
 }
@@ -357,7 +365,10 @@ async fn test_parquet_multi_file_scan_all_files() {
     // The files are spread across the two partitions.
     assert_snapshot!(
         displayable(explanation.execution_plan.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={2 groups: [[dataset/part-00000.parquet, dataset/part-00001.parquet], [dataset/part-00002.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet"
+        @"
+    ProjectionExec: expr=[ENC_PT(s@0) as s, ENC_PT(o@1) as o]
+      ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s ?p ?o], blank_node_mode=Variable, file_groups={2 groups: [[dataset/part-00000.parquet, dataset/part-00001.parquet], [dataset/part-00002.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet
+    "
     );
     assert_eq!(count_solutions(results).await, 6);
 
@@ -514,7 +525,14 @@ async fn prepare_test_store_with_options(
             .as_ref(),
         );
     }
+    // Write a plain file without the RDF term extension types, as written by other tools.
     let batch = builder.finish().into_record_batch();
+    let plain_schema = Arc::new(without_rdf_term_extension_types(&batch.schema()));
+    let batch = datafusion::arrow::array::RecordBatch::try_new(
+        plain_schema,
+        batch.columns().to_vec(),
+    )
+    .unwrap();
     let path = format!("memory:///{filename}");
 
     let mut options = TableParquetOptions::default();
@@ -813,4 +831,120 @@ async fn prepare_multi_file_test_store(
             .unwrap();
 
     (rdf_context, storage)
+}
+
+/// The Parquet files do not store the RDF term extension types. The scan attaches them, such that
+/// plain files (e.g., written by other tools) can be queried.
+#[tokio::test]
+async fn test_parquet_scan_attaches_extension_types_to_plain_files() {
+    use datafusion::parquet::arrow::parquet_to_arrow_schema;
+    use rdf_fusion_encoding::EncodingName;
+
+    let (rdf_context, storage) =
+        prepare_test_store(&BLOOM_FILTER_TEST_QUADS, false, "plain.parquet").await;
+    let state = rdf_context.session_context().state();
+
+    // The file written by DataFusion does not carry the extension types.
+    let store = state
+        .runtime_env()
+        .object_store(ObjectStoreUrl::parse("memory://").unwrap())
+        .unwrap();
+    let bytes = store
+        .get(&Path::from("plain.parquet"))
+        .await
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    let footer = ParquetMetaDataReader::new()
+        .parse_and_finish(&bytes)
+        .unwrap();
+    let file_schema = parquet_to_arrow_schema(
+        footer.file_metadata().schema_descr(),
+        footer.file_metadata().key_value_metadata(),
+    )
+    .unwrap();
+    assert!(
+        file_schema
+            .fields()
+            .iter()
+            .all(|f| EncodingName::try_from_field(f).is_none())
+    );
+
+    // The scan output carries the extension types.
+    let scan = storage
+        .snapshot()
+        .await
+        .unwrap()
+        .scan_quad_pattern(&rdf_fusion_common::QuadPattern::all_quads(), None, &state)
+        .await
+        .unwrap();
+    let schema = scan.schema();
+    assert!(!schema.fields().is_empty());
+    for field in schema.fields() {
+        assert_eq!(
+            EncodingName::try_from_field(field),
+            Some(EncodingName::String),
+            "Field {}",
+            field.name()
+        );
+    }
+
+    // The data can be queried.
+    assert_eq!(
+        execute_query(&rdf_context, "SELECT * WHERE { ?s ?p ?o }").await,
+        BLOOM_FILTER_TEST_QUADS.len()
+    );
+}
+
+/// A file whose term columns do not have the storage type of the encoding is rejected.
+#[tokio::test]
+async fn test_parquet_storage_rejects_file_with_wrong_term_type() {
+    use datafusion::arrow::array::{Int64Array, RecordBatch, StringArray};
+    use datafusion::arrow::datatypes::{DataType, Field, Schema};
+
+    let context = SessionContext::new();
+    context.runtime_env().object_store_registry.register_store(
+        &Url::parse("memory:///").unwrap(),
+        Arc::new(InMemory::new()),
+    );
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("graph", DataType::Utf8, true),
+        Field::new("subject", DataType::Int64, false),
+        Field::new("predicate", DataType::Utf8, false),
+        Field::new("object", DataType::Utf8, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(StringArray::new_null(1)),
+            Arc::new(Int64Array::from(vec![1])),
+            Arc::new(StringArray::from(vec!["<http://example.com/p>"])),
+            Arc::new(StringArray::from(vec!["<http://example.com/o>"])),
+        ],
+    )
+    .unwrap();
+    context
+        .read_batch(batch)
+        .unwrap()
+        .write_parquet(
+            "memory:///wrong.parquet",
+            DataFrameWriteOptions::new().with_single_file_output(true),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let error =
+        ParquetQuadStorage::builder(Url::parse("memory:///wrong.parquet").unwrap())
+            .with_encoding(QuadStorageEncodingName::String)
+            .build(&context.state())
+            .await
+            .unwrap_err();
+    assert!(
+        error.to_string().contains(
+            "Column 'subject' of the Parquet file wrong.parquet has data type Int64"
+        ),
+        "Unexpected error: {error}"
+    );
 }

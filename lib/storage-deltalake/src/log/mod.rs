@@ -13,7 +13,7 @@ pub(crate) use changeset_manager::*;
 pub(crate) use compute_log_changes::*;
 
 use crate::error::DeltaQuadsStorageError;
-use crate::extension_type::{annotate_loaded_schema, rdf_term_struct_field};
+use crate::extension_type::annotate_loaded_schema;
 use crate::log::add_only_changeset::LazyInsertionOnlyChangeset;
 use crate::log::operation_log_file::OperationLogFile;
 use crate::log::operations_changeset_stream::OperationsChangesetStream;
@@ -41,10 +41,9 @@ use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMerge
 use datafusion::physical_plan::{ExecutionPlan, execute_stream};
 use deltalake::delta_datafusion::engine::AsObjectStoreUrl;
 use deltalake::kernel::Action;
-use deltalake::kernel::engine::arrow_conversion::{TryFromArrow, TryIntoArrow};
+use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
 use deltalake::logstore::LogStoreRef;
 use deltalake::operations::create::CreateBuilder;
-use deltalake::table::state::DeltaTableState;
 use deltalake::{DataType as DeltaDataType, DeltaTable, StructField, TableProperty};
 use object_store::ObjectStore;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
@@ -238,30 +237,10 @@ impl DeltaQuadsStorageLog {
         let delta_columns = vec![
             StructField::new(COL_OPERATION_SEQ_ID, DeltaDataType::LONG, false),
             StructField::new(COL_OPERATION, DeltaDataType::BYTE, false),
-            rdf_term_struct_field(
-                COL_GRAPH,
-                delta_data_type.clone(),
-                true,
-                &quad_storage_encoding,
-            ),
-            rdf_term_struct_field(
-                COL_SUBJECT,
-                delta_data_type.clone(),
-                true,
-                &quad_storage_encoding,
-            ),
-            rdf_term_struct_field(
-                COL_PREDICATE,
-                delta_data_type.clone(),
-                true,
-                &quad_storage_encoding,
-            ),
-            rdf_term_struct_field(
-                COL_OBJECT,
-                delta_data_type,
-                true,
-                &quad_storage_encoding,
-            ),
+            StructField::new(COL_GRAPH, delta_data_type.clone(), true),
+            StructField::new(COL_SUBJECT, delta_data_type.clone(), true),
+            StructField::new(COL_PREDICATE, delta_data_type.clone(), true),
+            StructField::new(COL_OBJECT, delta_data_type, true),
         ];
 
         let table = CreateBuilder::new()
@@ -342,16 +321,18 @@ impl DeltaQuadsStorageLog {
 
         let table = self.table.read().await.clone();
 
-        let table_state = table.state.as_ref().ok_or_else(|| {
+        let _table_state = table.state.as_ref().ok_or_else(|| {
             DeltaQuadsStorageError::Other("Table not loaded".to_string())
         })?;
-        let table_schema: Schema = table_state.schema().as_ref().try_into_arrow()?;
+        // The read schema of the log carries the RDF term extension types, which are not
+        // persisted in the files.
+        let table_schema = Arc::clone(&self.table_schema);
 
         let added_files = load_added_files_between(&table, version_range).await?;
 
         if files_only_contain_appends(&added_files)? && files_are_large(&added_files) {
             let changeset = Arc::new(LazyInsertionOnlyChangeset::new(
-                Arc::new(table_schema),
+                Arc::clone(&table_schema),
                 table.table_url().as_object_store_url(),
                 table.object_store(),
                 version_range,
@@ -369,7 +350,7 @@ impl DeltaQuadsStorageLog {
         // Fallback to eager for complex changesets
         let cdf_scan = query_cdf(
             table.table_url(),
-            table_state,
+            &table_schema,
             &added_files,
             table.object_store(),
         )
@@ -460,7 +441,7 @@ impl DeltaQuadsStorageLog {
         /// currently required by [`ComputeLogChangesetExec`].
         pub async fn query_cdf(
             url: &Url,
-            table: &DeltaTableState,
+            file_schema: &SchemaRef,
             files: &[OperationLogFile],
             object_store: Arc<dyn ObjectStore>,
         ) -> Result<Arc<dyn ExecutionPlan>, DeltaQuadsStorageError> {
@@ -477,17 +458,12 @@ impl DeltaQuadsStorageLog {
                 partitioned_files.push(p_file);
             }
 
-            let file_schema: Schema = table
-                .schema()
-                .as_ref()
-                .try_into_arrow()
-                .map_err(|e| DeltaQuadsStorageError::Other(e.to_string()))?;
             let partition_cols = vec![Arc::new(Field::new(
                 COL_COMMIT_VERSION,
                 DataType::Int64,
                 false,
             ))];
-            let table_schema = TableSchemaBuilder::new(Arc::new(file_schema))
+            let table_schema = TableSchemaBuilder::new(Arc::clone(file_schema))
                 .with_table_partition_cols(partition_cols)
                 .build();
 

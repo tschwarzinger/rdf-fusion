@@ -61,6 +61,7 @@ use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::{
     PlainTermEncoding, PlainTermScalar, PlainTermType,
 };
+use rdf_fusion_encoding::without_rdf_term_extension_types;
 use rdf_fusion_logical::quad_pattern::{QuadPattern, compute_quad_pattern_filters};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -256,6 +257,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             .filter(|_| full_filter_is_pushable);
         let scan = Arc::new(ParquetQuadScanExec::try_new(
             pattern.clone(),
+            self.encoding.clone(),
             data_source,
             planning_metrics,
             quad_table_switch,
@@ -354,8 +356,14 @@ impl<'a> ParquetQuadScanBuilder<'a> {
         base_schema: &DFSchemaRef,
         full_filter_is_pushable: bool,
     ) -> DFResult<Arc<dyn FileSource>> {
-        let table_schema =
-            TableSchemaBuilder::new(Arc::clone(base_schema.inner())).build();
+        // The files do not store the RDF term extension types. The table schema of the inner scan
+        // must match the (plain) file schema exactly. Otherwise, DataFusion casts the columns in
+        // pushed-down predicates, which prevents evaluating them while decoding. The extension
+        // types are attached by `ParquetQuadScanExec`.
+        let table_schema = TableSchemaBuilder::new(Arc::new(
+            without_rdf_term_extension_types(base_schema.inner()),
+        ))
+        .build();
 
         let reader_factory = Arc::new(self.reader_factory(self.object_store()?));
 

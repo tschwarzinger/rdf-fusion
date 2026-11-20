@@ -24,6 +24,7 @@ use rdf_fusion_common::config::RdfFusionSessionConfigExt;
 use rdf_fusion_common::{
     RdfFormat, RdfInput, RdfInputSource, RdfSortOrder, url_to_object_store_url,
 };
+use rdf_fusion_encoding::without_rdf_term_extension_types;
 use rdf_fusion_encoding::{QuadStorageEncoding, QuadStorageEncodingName};
 use rdf_fusion_extensions::RdfFusionContextView;
 use rdf_fusion_logical::RdfFusionLogicalPlanBuilderContext;
@@ -249,7 +250,8 @@ impl RdfParquetLoader {
         if physical_plan.output_partitioning().partition_count() > 1 {
             physical_plan = Arc::new(CoalescePartitionsExec::new(physical_plan));
         }
-        let schema = physical_plan.schema();
+        // The RDF term extension types are not persisted (see `ParquetQuadScanExec`).
+        let schema = Arc::new(without_rdf_term_extension_types(&physical_plan.schema()));
 
         let page_statistics_columns = state
             .config()

@@ -1,10 +1,16 @@
 use crate::switch::{QuadTableSwitch, SwitchDecision};
-use datafusion::arrow::datatypes::SchemaRef;
-use datafusion::common::tree_node::TreeNodeRecursion;
+use datafusion::arrow::datatypes::{Schema, SchemaRef};
+use datafusion::arrow::record_batch::{RecordBatch, RecordBatchOptions};
+use datafusion::common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion::common::{Statistics, plan_err};
 use datafusion::config::ConfigOptions;
 use datafusion::datasource::source::DataSourceExec;
 use datafusion::execution::{SendableRecordBatchStream, TaskContext};
+use datafusion::parquet::arrow::parquet_to_arrow_schema;
+use datafusion::parquet::file::metadata::ParquetMetaData;
+use datafusion::physical_expr::expressions::Column;
+use datafusion::physical_expr::projection::ProjectionExpr;
+use datafusion::physical_expr::utils::collect_columns;
 use datafusion::physical_expr::{
     OrderingRequirements, PhysicalSortExpr, ScalarFunctionExpr,
 };
@@ -24,9 +30,11 @@ use datafusion::physical_plan::{
     InputDistributionRequirements, PhysicalExpr, PlanProperties, SortOrderPushdownResult,
     StatisticsArgs, StatisticsContext,
 };
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_common::config::RdfFusionSessionConfigExt;
+use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
+use rdf_fusion_encoding::{QuadStorageEncoding, with_rdf_term_extension_type};
 use rdf_fusion_logical::quad_pattern::QuadPattern;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -50,10 +58,22 @@ const SWITCH_BYTES_SCANNED_PLANNING: &str = "switch_bytes_scanned_planning";
 /// `QuadTableSwitch`). Then, the execution metrics of the alternative scan are reported instead
 /// of the ones of the planned scan. In addition, `switch_bytes_scanned_planning` reports the bytes
 /// read while planning the alternative scan.
+///
+/// # RDF Term Extension Types
+///
+/// The Parquet files do not store the RDF term extension types and the inner scan reads them with
+/// their plain schema. This wrapper validates that every output column has the storage type of the
+/// configured encoding and attaches the extension type of the encoding (zero-copy). The types of
+/// the files are validated when the storage is opened (see `validate_file_term_types`).
+///
+/// As the inner scan does not carry the extension types, no functions on RDF terms are pushed into
+/// it (neither filters nor projections).
 #[derive(Debug, Clone)]
 pub struct ParquetQuadScanExec {
     quad_pattern: QuadPattern,
+    encoding: QuadStorageEncoding,
     inner: Arc<DataSourceExec>,
+    properties: Arc<PlanProperties>,
     planning_metrics: ExecutionPlanMetricsSet,
     quad_table_switch: Option<QuadTableSwitch>,
 }
@@ -61,13 +81,17 @@ pub struct ParquetQuadScanExec {
 impl ParquetQuadScanExec {
     pub(crate) fn try_new(
         quad_pattern: QuadPattern,
+        encoding: QuadStorageEncoding,
         inner: Arc<DataSourceExec>,
         planning_metrics: ExecutionPlanMetricsSet,
         quad_table_switch: Option<QuadTableSwitch>,
     ) -> DFResult<Self> {
+        let properties = Arc::new(annotate_properties(&encoding, inner.as_ref())?);
         Ok(Self {
             quad_pattern,
+            encoding,
             inner,
+            properties,
             planning_metrics,
             quad_table_switch,
         })
@@ -79,6 +103,8 @@ impl ParquetQuadScanExec {
     }
 
     /// Provides access to the underlying execution plan that implements the actual scan.
+    ///
+    /// Note that the inner scan does not carry the RDF term extension types.
     pub(crate) fn inner_scan(&self) -> &Arc<DataSourceExec> {
         &self.inner
     }
@@ -88,18 +114,180 @@ impl ParquetQuadScanExec {
         self.quad_table_switch.as_ref()?.current_decision()
     }
 
+    /// Wraps a new inner plan. Returns `None` if `inner` is not a [`DataSourceExec`] or does not
+    /// produce RDF terms of the configured encoding (e.g., after pushing down a projection that
+    /// computes another value).
     fn wrap_inner(&self, inner: Arc<dyn ExecutionPlan>) -> Option<Arc<Self>> {
         let downcast = inner.downcast_ref::<DataSourceExec>()?;
-        Some(Arc::new(Self {
-            quad_pattern: self.quad_pattern.clone(),
-            inner: Arc::new(downcast.clone()),
-            planning_metrics: self.planning_metrics.clone(),
-            quad_table_switch: self
-                .quad_table_switch
-                .as_ref()
-                .map(QuadTableSwitch::reset),
-        }))
+        Self::try_new(
+            self.quad_pattern.clone(),
+            self.encoding.clone(),
+            Arc::new(downcast.clone()),
+            self.planning_metrics.clone(),
+            self.quad_table_switch.as_ref().map(QuadTableSwitch::reset),
+        )
+        .ok()
+        .map(Arc::new)
     }
+}
+
+impl ParquetQuadScanExec {
+    /// Pushes the columns referenced by `projection` into the scan and evaluates the
+    /// `projection` above it. Returns `None` if the projection references all columns.
+    fn push_referenced_columns(
+        &self,
+        projection: &ProjectionExec,
+    ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
+        let schema = self.schema();
+        let mut referenced = projection
+            .expr()
+            .iter()
+            .flat_map(|e| collect_columns(&e.expr))
+            .map(|c| c.index())
+            .collect::<Vec<_>>();
+        referenced.sort_unstable();
+        referenced.dedup();
+        if referenced.len() == schema.fields().len() {
+            return Ok(None);
+        }
+
+        let column_projection = ProjectionExec::try_new(
+            referenced.iter().map(|&idx| {
+                let name = schema.field(idx).name();
+                ProjectionExpr::new(
+                    Arc::new(Column::new(name, idx)) as Arc<dyn PhysicalExpr>,
+                    name.clone(),
+                )
+            }),
+            Arc::new(self.clone()) as Arc<dyn ExecutionPlan>,
+        )?;
+        let Some(scan) = self.try_swapping_with_projection(&column_projection)? else {
+            return Ok(None);
+        };
+
+        // Re-bind the columns of the projection to the schema of the new scan.
+        let scan_schema = scan.schema();
+        let exprs = projection
+            .expr()
+            .iter()
+            .map(|e| {
+                let expr = Arc::clone(&e.expr)
+                    .transform(|expr| {
+                        let Some(column) = expr.downcast_ref::<Column>() else {
+                            return Ok(Transformed::no(expr));
+                        };
+                        let index = scan_schema.index_of(column.name())?;
+                        Ok(Transformed::yes(
+                            Arc::new(Column::new(column.name(), index))
+                                as Arc<dyn PhysicalExpr>,
+                        ))
+                    })?
+                    .data;
+                Ok(ProjectionExpr::new(expr, e.alias.clone()))
+            })
+            .collect::<DFResult<Vec<_>>>()?;
+        Ok(Some(Arc::new(ProjectionExec::try_new(exprs, scan)?)))
+    }
+}
+
+/// Computes the [`PlanProperties`] of the `inner` scan with the RDF term extension types of the
+/// `encoding` attached to the schema.
+///
+/// Returns an error if a column of the `inner` scan does not have the storage type of `encoding`.
+fn annotate_properties(
+    encoding: &QuadStorageEncoding,
+    inner: &DataSourceExec,
+) -> DFResult<PlanProperties> {
+    let inner_schema = inner.schema();
+    let expected_type = encoding.term_type();
+    let fields = inner_schema
+        .fields()
+        .iter()
+        .map(|field| {
+            if field.data_type() != expected_type {
+                return plan_err!(
+                    "Column '{}' of the Parquet quad scan has data type {}, but the {} encoding \
+                    stores terms as {}.",
+                    field.name(),
+                    field.data_type(),
+                    encoding,
+                    expected_type
+                );
+            }
+            Ok(with_rdf_term_extension_type(
+                field.as_ref().clone(),
+                encoding.encoding_name(),
+            ))
+        })
+        .collect::<DFResult<Vec<_>>>()?;
+    let schema = Arc::new(Schema::new_with_metadata(
+        fields,
+        inner_schema.metadata().clone(),
+    ));
+
+    let eq_properties = inner
+        .properties()
+        .eq_properties
+        .clone()
+        .with_new_schema(schema)?;
+    Ok(inner
+        .properties()
+        .as_ref()
+        .clone()
+        .with_eq_properties(eq_properties))
+}
+
+/// Validates that the term columns of a Parquet file (described by its `footer`) have the storage
+/// type of the `encoding`. The file at `location` is only used for the error message.
+///
+/// As the extension types are not stored in the files, this ensures that the files can be read as
+/// RDF terms of the `encoding`. This also accepts files written by other tools, as long as they use
+/// the same storage types.
+pub(crate) fn validate_file_term_types(
+    encoding: &QuadStorageEncoding,
+    footer: &ParquetMetaData,
+    location: &str,
+) -> DFResult<()> {
+    let file_metadata = footer.file_metadata();
+    let file_schema = parquet_to_arrow_schema(
+        file_metadata.schema_descr(),
+        file_metadata.key_value_metadata(),
+    )?;
+    let expected_type = encoding.term_type();
+    for column in [COL_GRAPH, COL_SUBJECT, COL_PREDICATE, COL_OBJECT] {
+        let Ok(field) = file_schema.field_with_name(column) else {
+            return plan_err!("The Parquet file {location} has no column '{column}'.");
+        };
+        if !field.data_type().equals_datatype(expected_type) {
+            return plan_err!(
+                "Column '{column}' of the Parquet file {location} has data type {}, but the {} \
+                encoding stores terms as {}.",
+                field.data_type(),
+                encoding,
+                expected_type
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Replaces the schema of the batches in `stream` with `schema`, which must only differ in the
+/// field metadata. This is a zero-copy operation.
+fn with_schema(
+    stream: SendableRecordBatchStream,
+    schema: SchemaRef,
+) -> SendableRecordBatchStream {
+    let stream_schema = Arc::clone(&schema);
+    let stream = stream.map(move |batch| {
+        let batch = batch?;
+        let options = RecordBatchOptions::new().with_row_count(Some(batch.num_rows()));
+        Ok(RecordBatch::try_new_with_options(
+            Arc::clone(&stream_schema),
+            batch.columns().to_vec(),
+            &options,
+        )?)
+    });
+    Box::pin(RecordBatchStreamAdapter::new(schema, stream))
 }
 
 impl ExecutionPlan for ParquetQuadScanExec {
@@ -115,11 +303,11 @@ impl ExecutionPlan for ParquetQuadScanExec {
     }
 
     fn schema(&self) -> SchemaRef {
-        self.inner.schema()
+        Arc::clone(self.properties.eq_properties.schema())
     }
 
     fn properties(&self) -> &Arc<PlanProperties> {
-        self.inner.properties()
+        &self.properties
     }
 
     fn check_invariants(&self, check: InvariantLevel) -> DFResult<()> {
@@ -193,7 +381,10 @@ impl ExecutionPlan for ParquetQuadScanExec {
             .quad_table_switching;
         let Some(switch) = self.quad_table_switch.clone().filter(|_| switching_enabled)
         else {
-            return self.inner.execute(partition, context);
+            return Ok(with_schema(
+                self.inner.execute(partition, context)?,
+                self.schema(),
+            ));
         };
 
         // The dynamic filters are only populated once the build side of the join is complete.
@@ -214,7 +405,10 @@ impl ExecutionPlan for ParquetQuadScanExec {
                             as SendableRecordBatchStream)
                     }
                 }
-                _ => planned.inner.execute(partition, context),
+                _ => Ok(with_schema(
+                    planned.inner.execute(partition, context)?,
+                    planned.schema(),
+                )),
             }
         })
         .try_flatten();
@@ -288,6 +482,13 @@ impl ExecutionPlan for ParquetQuadScanExec {
         &self,
         projection: &ProjectionExec,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
+        // The inner scan does not carry the RDF term extension types. Hence, functions on RDF
+        // terms cannot be evaluated within the inner scan. Instead, only the referenced columns
+        // are pushed into the scan and the functions are evaluated above it.
+        if projection.expr().iter().any(|e| contains_udf(&e.expr)) {
+            return self.push_referenced_columns(projection);
+        }
+
         let inner = self.inner.try_swapping_with_projection(projection)?;
         Ok(inner.and_then(|new_inner| {
             self.wrap_inner(new_inner)

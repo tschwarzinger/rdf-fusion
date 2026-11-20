@@ -9,6 +9,7 @@ use futures::StreamExt;
 use object_store::ObjectStore;
 use object_store::buffered::BufWriter;
 use object_store::path::Path;
+use rdf_fusion_encoding::without_rdf_term_extension_types;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -29,6 +30,8 @@ impl RdfParquetDataSink {
         options: RdfParquetWriterOptions,
         schema: SchemaRef,
     ) -> Self {
+        // The RDF term extension types are not persisted (see `ParquetQuadScanExec`).
+        let schema = Arc::new(without_rdf_term_extension_types(&schema));
         Self {
             object_store,
             path,
