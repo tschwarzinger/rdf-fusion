@@ -40,9 +40,12 @@ fn test_cli_query_spiderman() {
     insta::assert_snapshot!(
         stdout,
         @r#"
-    ?name
-    "Spiderman"
-    "Человек-паук"@ru
+    +-------------------+
+    | name              |
+    +-------------------+
+    | "Spiderman"       |
+    | "Человек-паук"@ru |
+    +-------------------+
     "#
     );
 }

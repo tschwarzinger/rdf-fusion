@@ -104,10 +104,9 @@ impl ScalarUDFImpl for StringCaseSparqlUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let arg_fields = args.arg_fields;
         let encoding_name = self
             .encodings
-            .try_get_encoding_name(&arg_fields[0])
+            .try_get_encoding_name(&args.arg_fields[0])
             .ok_or_else(|| {
                 datafusion::error::DataFusionError::Plan(
                     "Unsupported input encoding".to_string(),

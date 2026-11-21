@@ -81,6 +81,9 @@ For example, to find out how many names "Spiderman" has:
 rdf-fusion --storage-type parquet --location ./examples/data/spiderman.parquet query "SELECT (COUNT(?name) AS ?count) WHERE { <http://example.org/#spiderman> <http://xmlns.com/foaf/0.1/name> ?name }"
 ```
 
+By default, the results are printed as a table with the RDF terms in N-Triples syntax.
+Use `--format` to write a SPARQL results format instead (`tsv`, `csv`, `json`, or `xml`).
+
 **Dump a DeltaQuads database into a sorted N-Quads file:**
 
 Dumps the current snapshot of a database to an RDF serialization format, such as N-Quads.

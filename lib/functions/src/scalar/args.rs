@@ -1,8 +1,7 @@
 use datafusion::logical_expr::ScalarFunctionArgs;
 use rdf_fusion_common::DFResult;
 use rdf_fusion_encoding::{
-    DowncastEncodingArgs, EncodingDatum, EncodingName, RdfFusionEncodings, TermEncoding,
-    detect_encoding_from_fields,
+    DowncastEncodingArgs, EncodingDatum, RdfFusionEncodings, TermEncoding,
 };
 use std::sync::Arc;
 
@@ -61,15 +60,4 @@ impl<'a> ScalarSparqlFunctionArgs<'a> {
     pub fn downcast_arrays(&self) -> Option<&DowncastEncodingArgs> {
         self.downcast_args.as_ref()
     }
-}
-
-/// Detects the encoding of the given arguments.
-///
-/// This function verifies that all arguments have the same encoding and returns the name of
-/// the encoding.
-pub fn detect_encoding(
-    encodings: &RdfFusionEncodings,
-    args: &ScalarFunctionArgs,
-) -> DFResult<Option<EncodingName>> {
-    detect_encoding_from_fields(encodings, &args.arg_fields)
 }

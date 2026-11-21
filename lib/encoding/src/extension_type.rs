@@ -97,8 +97,10 @@ pub fn rdf_term_field<TEncoding: TermEncoding + ?Sized>(
     encoding: &TEncoding,
     nullable: bool,
 ) -> Field {
-    Field::new(name, encoding.data_type().clone(), nullable)
-        .with_metadata(encoding.name().field_metadata())
+    with_rdf_term_extension_type(
+        Field::new(name, encoding.data_type().clone(), nullable),
+        encoding.name(),
+    )
 }
 
 /// Creates a new [FieldRef] called `name` for RDF terms in the given `encoding`.
@@ -167,11 +169,6 @@ impl RdfTermExtensionType {
             encoding,
             storage_type,
         }
-    }
-
-    /// Returns the encoding of this extension type.
-    pub fn encoding(&self) -> EncodingName {
-        self.encoding
     }
 }
 

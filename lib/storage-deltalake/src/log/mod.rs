@@ -13,7 +13,6 @@ pub(crate) use changeset_manager::*;
 pub(crate) use compute_log_changes::*;
 
 use crate::error::DeltaQuadsStorageError;
-use crate::extension_type::annotate_loaded_schema;
 use crate::log::add_only_changeset::LazyInsertionOnlyChangeset;
 use crate::log::operation_log_file::OperationLogFile;
 use crate::log::operations_changeset_stream::OperationsChangesetStream;
@@ -47,7 +46,10 @@ use deltalake::operations::create::CreateBuilder;
 use deltalake::{DataType as DeltaDataType, DeltaTable, StructField, TableProperty};
 use object_store::ObjectStore;
 use rdf_fusion_common::quads::{COL_GRAPH, COL_OBJECT, COL_PREDICATE, COL_SUBJECT};
-use rdf_fusion_encoding::QuadStorageEncoding;
+use rdf_fusion_encoding::{
+    EncodingName, QuadStorageEncoding, with_rdf_term_extension_type,
+};
+use rdf_fusion_extensions::storage::infer_encoding_from_storage_type;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -543,6 +545,32 @@ impl DeltaQuadsStorageLog {
             Ok(current_plan)
         }
     }
+}
+
+/// Attaches the RDF term extension types to the `term_columns` of a `schema` read from a Delta
+/// table.
+///
+/// RDF Fusion does not persist the extension types in the Delta tables. The encoding of each column
+/// is determined by its data type, in the same way as the encoding of the storage is detected when
+/// loading it.
+fn annotate_loaded_schema(schema: &SchemaRef, term_columns: &[&str]) -> SchemaRef {
+    let fields = schema
+        .fields()
+        .iter()
+        .map(|field| {
+            let is_term_column = term_columns.contains(&field.name().as_str());
+            if !is_term_column || EncodingName::try_from_field(field).is_some() {
+                return field.as_ref().clone();
+            }
+            match infer_encoding_from_storage_type(field) {
+                Some(encoding) => {
+                    with_rdf_term_extension_type(field.as_ref().clone(), encoding)
+                }
+                None => field.as_ref().clone(),
+            }
+        })
+        .collect::<Vec<Field>>();
+    Arc::new(Schema::new_with_metadata(fields, schema.metadata().clone()))
 }
 
 #[cfg(test)]

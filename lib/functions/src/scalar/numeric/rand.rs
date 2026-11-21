@@ -66,8 +66,7 @@ impl ScalarUDFImpl for RandSparqlUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let arg_fields = args.arg_fields;
-        if !arg_fields.is_empty() {
+        if !args.arg_fields.is_empty() {
             return exec_err!("RAND does not accept arguments");
         }
         Ok(rdf_term_field_ref(

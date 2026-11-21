@@ -74,8 +74,8 @@ impl ScalarUDFImpl for TzSparqlUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let arg_fields = args.arg_fields;
-        let encoding_name = detect_encoding_from_fields(&self.encodings, arg_fields)?;
+        let encoding_name =
+            detect_encoding_from_fields(&self.encodings, args.arg_fields)?;
         match encoding_name {
             Some(EncodingName::TypedFamily) => Ok(rdf_term_field_ref(
                 self.name(),

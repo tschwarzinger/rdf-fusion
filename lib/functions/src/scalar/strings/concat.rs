@@ -82,8 +82,7 @@ impl ScalarUDFImpl for ConcatSparqlUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let arg_fields = args.arg_fields;
-        match detect_encoding_from_fields(&self.encodings, arg_fields)? {
+        match detect_encoding_from_fields(&self.encodings, args.arg_fields)? {
             Some(EncodingName::TypedFamily) | None => Ok(rdf_term_field_ref(
                 self.name(),
                 self.encodings.typed_family().as_ref(),

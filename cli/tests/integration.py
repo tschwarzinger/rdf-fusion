@@ -100,7 +100,7 @@ class Storage:
 
     def query_count(self, query: str) -> int:
         """Runs the `query` command and returns the value of a single-solution result."""
-        stdout = self.run("query", query).stdout
+        stdout = self.run("query", "--format", "tsv", query).stdout
         lines = [line for line in stdout.splitlines() if line.strip()]
         assert len(lines) == 2, f"expected a header and a single solution, got:\n{stdout}"
         return int(lines[1].strip())
@@ -221,6 +221,26 @@ class CommandTests(TempDirTestCase):
         names = storage.run("query", SELECT_NAMES).stdout
         self.assertIn('"Spiderman"', names)
         self.assertIn('"Человек-паук"@ru', names)
+
+    def test_query_prints_table_by_default(self):
+        storage = self.loaded_delta()
+
+        stdout = storage.run("query", COUNT_ALL).stdout
+
+        # The table prints RDF terms in N-Triples syntax.
+        count = SPIDERMAN_QUADS + PARIS_QUADS
+        self.assertIn("+-", stdout)
+        self.assertIn(f'"{count}"^^<http://www.w3.org/2001/XMLSchema#integer>', stdout)
+
+    def test_query_results_format(self):
+        storage = self.loaded_delta()
+
+        stdout = storage.run("query", "--format", "json", "ASK { ?s ?p ?o }").stdout
+        self.assertEqual(json.loads(stdout)["boolean"], True)
+
+        result = storage.run("query", "--format", "unknown", COUNT_ALL, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unknown results format", result.stderr)
 
     def test_query_explain_analyze(self):
         storage = self.loaded_delta()

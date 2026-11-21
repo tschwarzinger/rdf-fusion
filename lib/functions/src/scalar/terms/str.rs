@@ -66,8 +66,7 @@ impl ScalarUDFImpl for StrSparqlUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let arg_fields = args.arg_fields;
-        if arg_fields.is_empty() {
+        if args.arg_fields.is_empty() {
             return Ok(rdf_term_field_ref(
                 self.name(),
                 self.encodings.typed_family().as_ref(),
@@ -75,7 +74,7 @@ impl ScalarUDFImpl for StrSparqlUDF {
             ));
         }
         Ok(Arc::new(
-            arg_fields[0].as_ref().clone().with_name(self.name()),
+            args.arg_fields[0].as_ref().clone().with_name(self.name()),
         ))
     }
 

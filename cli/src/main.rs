@@ -115,9 +115,11 @@ pub async fn main() -> anyhow::Result<()> {
             query,
             explain,
             analyze,
+            format,
         } => {
+            let format = commands::query::ResultsOutputFormat::from_str(format)?;
             let store = create_store(&args).await?;
-            commands::query::query(store, query.clone(), *explain, *analyze).await
+            commands::query::query(store, query.clone(), *explain, *analyze, format).await
         }
         Command::Dump {
             output,

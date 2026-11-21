@@ -76,8 +76,7 @@ impl ScalarUDFImpl for StrDtSparqlUDF {
     }
 
     fn return_field_from_args(&self, args: ReturnFieldArgs) -> DFResult<FieldRef> {
-        let arg_fields = args.arg_fields;
-        match detect_encoding_from_fields(&self.encodings, arg_fields)? {
+        match detect_encoding_from_fields(&self.encodings, args.arg_fields)? {
             Some(EncodingName::TypedFamily) => {
                 // TODO: Maybe this should return PlainTerm?
                 Ok(rdf_term_field_ref(

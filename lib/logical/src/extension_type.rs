@@ -8,15 +8,13 @@
 //! [`PreserveRdfTermExtensionTypes`] wraps such a rule and restores the extension types that were
 //! present in the schema of the plan before the rewrite.
 
-use datafusion::common::ScalarValue;
-use datafusion::common::metadata::FieldMetadata;
 use datafusion::common::tree_node::Transformed;
-use datafusion::common::{Column, DFSchema};
-use datafusion::logical_expr::{Cast, Expr, LogicalPlan, LogicalPlanBuilder};
+use datafusion::common::{DFSchema, ScalarValue};
+use datafusion::logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder};
 use datafusion::optimizer::optimizer::ApplyOrder;
 use datafusion::optimizer::{OptimizerConfig, OptimizerRule};
 use rdf_fusion_common::DFResult;
-use rdf_fusion_encoding::{EncodingName, rdf_term_lit, with_rdf_term_extension_type};
+use rdf_fusion_encoding::{EXTENSION_TYPE_NAME_KEY, EncodingName, rdf_term_lit};
 use std::sync::Arc;
 
 /// Wraps an [`OptimizerRule`] and restores RDF term extension types that the rule dropped.
@@ -54,105 +52,44 @@ impl OptimizerRule for PreserveRdfTermExtensionTypes {
             return Ok(result);
         }
 
-        result.map_data(|plan| restore_rdf_term_extension_types(plan, &expected_schema))
+        result.map_data(|plan| annotate_null_literals(plan, &expected_schema))
     }
 }
 
-/// Restores the RDF term extension types of `expected_schema` in the output of `plan`.
+/// If `plan` is a projection, annotates its NULL literals that lost the extension type of the
+/// corresponding column in `expected_schema` (e.g., `CAST(NULL AS <type>)` created by
+/// `PropagateEmptyRelation`).
 ///
-/// If `plan` already carries all extension types, it is returned unchanged. Otherwise, a projection
-/// that re-annotates the affected columns is added on top of `plan`. Columns whose data type
-/// differs from the `expected_schema` are not modified.
-pub fn restore_rdf_term_extension_types(
-    plan: LogicalPlan,
-    expected_schema: &DFSchema,
-) -> DFResult<LogicalPlan> {
-    let actual_schema = Arc::clone(plan.schema());
-    if actual_schema.fields().len() != expected_schema.fields().len() {
-        return Ok(plan);
-    }
-
-    let plan = annotate_null_literals_in_projection(plan, expected_schema)?;
-    let actual_schema = Arc::clone(plan.schema());
-
-    let mut modified = false;
-    let mut exprs = Vec::with_capacity(actual_schema.fields().len());
-    for ((qualifier, actual), expected) in
-        actual_schema.iter().zip(expected_schema.fields().iter())
-    {
-        let column = Expr::Column(Column::new(qualifier.cloned(), actual.name()));
-        let expected_encoding = EncodingName::try_from_field(expected);
-        let actual_encoding = EncodingName::try_from_field(actual);
-        match expected_encoding {
-            Some(encoding)
-                if actual_encoding.is_none()
-                    && actual.data_type() == expected.data_type() =>
-            {
-                // The cast (to the same storage type) ensures that the physical plan carries the
-                // extension type. The alias ensures that the logical plan carries it.
-                let field =
-                    with_rdf_term_extension_type(actual.as_ref().clone(), encoding);
-                let metadata = FieldMetadata::from(field.metadata());
-                let expr =
-                    Expr::Cast(Cast::new_from_field(Box::new(column), Arc::new(field)))
-                        .alias_qualified_with_metadata(
-                            qualifier.cloned(),
-                            actual.name(),
-                            Some(metadata),
-                        );
-                exprs.push(expr);
-                modified = true;
-            }
-            _ => exprs.push(column),
-        }
-    }
-
-    if !modified {
-        return Ok(plan);
-    }
-
-    LogicalPlanBuilder::from(plan).project(exprs)?.build()
-}
-
-/// If `plan` is a projection, annotates its NULL literals (e.g., `CAST(NULL AS <type>)` created by
-/// `PropagateEmptyRelation`) with the extension type of the `expected_schema`.
-///
-/// Annotating the literal itself is more robust than casting the column, as a constant cast is
-/// folded into a literal without metadata by the expression simplifier.
-fn annotate_null_literals_in_projection(
+/// The literal itself is annotated, as casting the column instead would be folded into a literal
+/// without metadata by the expression simplifier.
+fn annotate_null_literals(
     plan: LogicalPlan,
     expected_schema: &DFSchema,
 ) -> DFResult<LogicalPlan> {
     let LogicalPlan::Projection(projection) = plan else {
         return Ok(plan);
     };
+    if projection.expr.len() != expected_schema.fields().len() {
+        return Ok(LogicalPlan::Projection(projection));
+    }
 
     let mut modified = false;
     let exprs = projection
         .expr
         .iter()
-        .zip(expected_schema.fields().iter())
+        .zip(expected_schema.fields())
         .map(|(expr, expected)| {
             let Some(encoding) = EncodingName::try_from_field(expected) else {
                 return Ok(expr.clone());
             };
-            let (relation, name) = expr.qualified_name();
-            let inner = match expr {
-                Expr::Alias(alias) => alias.expr.as_ref(),
-                other => other,
-            };
-            let is_null_literal = match inner {
-                Expr::Literal(value, _) => value.is_null(),
-                Expr::Cast(cast) => {
-                    matches!(cast.expr.as_ref(), Expr::Literal(value, _) if value.is_null())
-                }
-                _ => false,
-            };
-            if !is_null_literal {
+            // The schema of the projection cannot be used for this check, as rules may create
+            // the projection with the (annotated) schema of the replaced plan.
+            if !is_unannotated_null_literal(expr) {
                 return Ok(expr.clone());
             }
 
             modified = true;
+            let (relation, name) = expr.qualified_name();
             let null = ScalarValue::try_new_null(expected.data_type())?;
             Ok(rdf_term_lit(encoding, null).alias_qualified(relation, name))
         })
@@ -165,4 +102,23 @@ fn annotate_null_literals_in_projection(
     LogicalPlanBuilder::from(Arc::unwrap_or_clone(projection.input))
         .project(exprs)?
         .build()
+}
+
+/// Returns whether `expr` is a (possibly aliased or cast) NULL literal without an RDF term
+/// extension type.
+fn is_unannotated_null_literal(expr: &Expr) -> bool {
+    match expr {
+        Expr::Alias(alias) => is_unannotated_null_literal(&alias.expr),
+        // A cast does not propagate the metadata of the literal.
+        Expr::Cast(cast) => {
+            matches!(cast.expr.as_ref(), Expr::Literal(value, _) if value.is_null())
+        }
+        Expr::Literal(value, metadata) => {
+            let is_annotated = metadata.as_ref().is_some_and(|metadata| {
+                metadata.inner().contains_key(EXTENSION_TYPE_NAME_KEY)
+            });
+            value.is_null() && !is_annotated
+        }
+        _ => false,
+    }
 }

@@ -83,6 +83,13 @@ pub enum Command {
         /// Only works in combination with --explain.
         #[arg(long, requires = "explain")]
         analyze: bool,
+        /// The format of the query results.
+        ///
+        /// `table` (the default) prints a human-readable table with the RDF terms in N-Triples
+        /// syntax. Otherwise, a SPARQL results format (`tsv`, `csv`, `json`, or `xml`) is written.
+        /// Graph results (CONSTRUCT and DESCRIBE) are always written as N-Triples.
+        #[arg(long, default_value = "table")]
+        format: String,
     },
     /// Load RDF files into a Parquet or Delta Lake storage.
     Load {

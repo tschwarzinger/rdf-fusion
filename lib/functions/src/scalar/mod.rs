@@ -6,12 +6,10 @@ pub mod dates_and_times;
 pub mod error;
 pub mod functional_form;
 pub mod numeric;
-mod renamed;
 pub mod signature;
 pub mod strings;
 pub mod terms;
 
 pub use args::*;
 pub use as_sortable_bytes::as_sortable_bytes_udf;
-pub use renamed::*;
 pub use signature::*;
