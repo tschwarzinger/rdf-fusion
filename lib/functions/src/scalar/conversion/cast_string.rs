@@ -29,12 +29,21 @@ pub fn cast_string_udf(
     )))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct CastStringSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     aliases: Vec<String>,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for CastStringSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+        self.aliases.hash(state);
+    }
 }
 
 impl Debug for CastStringSparqlUDF {

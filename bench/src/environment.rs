@@ -8,7 +8,7 @@ use datafusion::object_store::memory::InMemory;
 use datafusion::prelude::SessionConfig;
 use deltalake::logstore::{IORuntime, StorageConfig, logstore_with};
 use rdf_fusion::common::config::{RdfFusionOptions, RdfFusionSessionConfigExt};
-use rdf_fusion::common::{GraphName, RdfInput, RdfSortOrder};
+use rdf_fusion::common::{GraphName, RdfInput};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::{
     RdfFusionContextBuilder, session_config_from_env_for_rdf_fusion,
@@ -35,6 +35,9 @@ pub struct RdfFusionBenchContext {
     databases_dir: PathBuf,
     /// The path to the results dir.
     results_dir: PathBuf,
+    /// The in-memory object store (`memory://`). It is shared by all runtime environments of this
+    /// context, such that data written by one (e.g., a dumped Parquet file) can be read by another.
+    memory_object_store: Arc<InMemory>,
 }
 
 /// A builder for [`RdfFusionBenchContext`].
@@ -106,6 +109,7 @@ impl RdfFusionBenchContextBuilder {
             data_dir: self.data_dir,
             databases_dir: self.databases_dir,
             results_dir: self.results_dir,
+            memory_object_store: Arc::new(InMemory::new()),
         }
     }
 }
@@ -278,7 +282,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
         let registry = Arc::clone(&builder.object_store_registry);
         registry.register_store(
             &Url::parse("memory:///").unwrap(),
-            Arc::new(InMemory::new()),
+            Arc::clone(&self.context.memory_object_store) as _,
         );
 
         builder = builder.with_object_store_registry(registry);
@@ -291,33 +295,37 @@ impl<'ctx> BenchmarkContext<'ctx> {
         self.context.resolve_path_to_url(path)
     }
 
-    /// Dumps the given sources to a Parquet file in the database directory.
+    /// Dumps the given sources to a Parquet dataset (`dataset/`) in the database directory.
+    ///
+    /// The dataset is a directory that contains one quad table for each sort order of the RDF
+    /// Fusion options, or a single unsorted quad table if there is none (see
+    /// [`RdfParquetLoader::load_many`]).
     pub async fn dump_to_parquet(
         &self,
         sources: Vec<(GraphName, RdfFileSourceConfig)>,
-        sort_order: Option<RdfSortOrder>,
     ) -> anyhow::Result<()> {
-        let mut parquet_path = self.databases_dir();
-        parquet_path.push("dataset.parquet");
+        let sort_orders = self
+            .rdf_fusion_options()
+            .storage
+            .parquet
+            .sort_orders
+            .clone();
 
+        // The trailing `/` marks the URL as the directory of a dataset.
         let url_raw = match self.context.config.storage_location {
             QuadStorageLocationArg::InMemory => {
                 format!(
-                    "memory:///databases/{}/dataset.parquet",
+                    "memory:///databases/{}/dataset/",
                     self.benchmark_name.data_dir_name()
                 )
             }
             QuadStorageLocationArg::OnDisk => {
-                if parquet_path.exists() {
-                    std::fs::remove_file(&parquet_path)?;
-                } else {
-                    let parent = parquet_path.parent().expect("Invalid parquet path");
-                    if !parent.exists() {
-                        std::fs::create_dir_all(parent)?;
-                    }
+                let dataset_path = self.databases_dir().join("dataset");
+                if dataset_path.exists() {
+                    std::fs::remove_dir_all(&dataset_path)?;
                 }
-
-                self.resolve_path_to_url(&parquet_path)?
+                std::fs::create_dir_all(self.databases_dir())?;
+                format!("{}/", self.resolve_path_to_url(&dataset_path)?)
             }
         };
         let url = Url::parse(&url_raw).expect("Invalid URL");
@@ -335,7 +343,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
             context.session_context().clone(),
             context.create_view(),
             QuadStorageEncodingName::String,
-            sort_order.into_iter().collect(),
+            sort_orders,
         )?;
         let inputs: Vec<_> = sources
             .into_iter()
@@ -408,7 +416,7 @@ impl<'ctx> BenchmarkContext<'ctx> {
                         panic!("Parquet encoding not supported for ObjectId");
                     }
 
-                    let url = Url::parse(&format!("{base_url}/dataset.parquet")).unwrap();
+                    let url = Url::parse(&format!("{base_url}/dataset/")).unwrap();
                     let storage = ParquetQuadStorage::builder(url)
                         .with_encoding(self.context.config.storage_encoding)
                         .with_options(rdf_fusion_config.storage.parquet.clone())

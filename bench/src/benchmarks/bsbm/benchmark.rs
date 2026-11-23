@@ -14,7 +14,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use datafusion::common::runtime::SpawnedTask;
 use futures::StreamExt;
-use rdf_fusion::common::{RdfFormat, RdfSortOrder};
+use rdf_fusion::common::RdfFormat;
 use rdf_fusion::storage::rdf_files::{RdfFileScanOptions, RdfFileSourceConfig};
 use rdf_fusion::store::Store;
 use std::marker::PhantomData;
@@ -177,17 +177,7 @@ impl<TUseCase: BsbmUseCase + 'static> Benchmark for BsbmBenchmark<TUseCase> {
                 self.prepare_delta_store(ctx, print_info).await
             }
             BenchQuadStorageTypeArg::Parquet => {
-                // The benchmark uses a single Parquet file, which supports one sort order.
-                let sort_orders = &ctx.rdf_fusion_options().storage.parquet.sort_orders;
-                if sort_orders.len() > 1 {
-                    anyhow::bail!(
-                        "The BSBM benchmarks support a single sort order, but got {}",
-                        sort_orders.len()
-                    );
-                }
-                let sort_order = sort_orders.first().cloned();
-                self.prepare_parquet_store(ctx, print_info, sort_order)
-                    .await
+                self.prepare_parquet_store(ctx, print_info).await
             }
         }
     }
@@ -209,7 +199,6 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
         &self,
         ctx: &BenchmarkContext<'_>,
         print_info: bool,
-        sort_order: Option<RdfSortOrder>,
     ) -> anyhow::Result<Store> {
         if print_info {
             println!("Generating Parquet dataset ...");
@@ -221,11 +210,8 @@ impl<TUseCase: BsbmUseCase> BsbmBenchmark<TUseCase> {
             format: RdfFormat::NTriples,
         };
 
-        ctx.dump_to_parquet(
-            vec![(rdf_fusion::common::GraphName::DefaultGraph, source)],
-            sort_order,
-        )
-        .await?;
+        ctx.dump_to_parquet(vec![(rdf_fusion::common::GraphName::DefaultGraph, source)])
+            .await?;
 
         if print_info {
             println!("Parquet dataset generated.");

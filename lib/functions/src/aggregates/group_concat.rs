@@ -27,11 +27,19 @@ pub fn group_concat_typed_family(encoding: TypedFamilyEncodingRef) -> AggregateU
 ///
 /// Relevant Resources:
 /// - [SPARQL 1.1 - GROUP CONCAT](https://www.w3.org/TR/sparql11-query/#defn_aggGroupConcat)
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SparqlGroupConcat {
     encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for SparqlGroupConcat {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encoding.hash(state);
+        self.name.hash(state);
+    }
 }
 
 impl SparqlGroupConcat {
@@ -113,12 +121,21 @@ impl AggregateUDFImpl for SparqlGroupConcat {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq)]
 struct SparqlGroupConcatWithSeparator {
     encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
     separator: String,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for SparqlGroupConcatWithSeparator {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encoding.hash(state);
+        self.name.hash(state);
+        self.separator.hash(state);
+    }
 }
 
 impl SparqlGroupConcatWithSeparator {

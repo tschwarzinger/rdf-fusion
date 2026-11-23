@@ -23,7 +23,7 @@ pub fn with_string_encoding(encodings: RdfFusionEncodings) -> ScalarUDF {
 }
 
 /// Transforms RDF Terms into the [PlainTermEncoding](rdf_fusion_encoding::plain_term::PlainTermEncoding).
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq)]
 struct WithStringEncoding {
     /// The name of this function
     name: String,
@@ -31,6 +31,14 @@ struct WithStringEncoding {
     signature: Signature,
     /// The registered encodings
     encodings: RdfFusionEncodings,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl Hash for WithStringEncoding {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.encodings.hash(state);
+    }
 }
 
 impl WithStringEncoding {

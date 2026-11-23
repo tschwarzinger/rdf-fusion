@@ -27,12 +27,21 @@ pub fn sparql_sum(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
     AggregateUDF::new_from_impl(SumSparqlUDAF::new(encoding))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SumSparqlUDAF {
     name: String,
     signature: Signature,
     encoding: TypedFamilyEncodingRef,
     data_type: DataType,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for SumSparqlUDAF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.encoding.hash(state);
+        self.data_type.hash(state);
+    }
 }
 
 impl SumSparqlUDAF {

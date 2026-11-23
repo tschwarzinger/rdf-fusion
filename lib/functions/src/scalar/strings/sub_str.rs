@@ -31,11 +31,19 @@ pub fn sub_str_udf(
     Ok(ScalarUDF::new_from_impl(SubStrSparqlUDF::new(encodings)))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct SubStrSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for SubStrSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+    }
 }
 
 impl Debug for SubStrSparqlUDF {

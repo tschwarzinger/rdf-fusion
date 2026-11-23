@@ -2,8 +2,10 @@
 
 use crate::memory::MemoryQuadStorageSnapshot;
 use datafusion::arrow::array::{ArrayRef, RecordBatch, RecordBatchOptions};
+use datafusion::arrow::compute::filter_record_batch;
 use datafusion::arrow::datatypes::{Schema, SchemaRef};
 use datafusion::common::ScalarValue;
+use datafusion::common::cast::as_boolean_array;
 use datafusion::common::config::ConfigOptions;
 use datafusion::common::stats::Precision;
 use datafusion::common::tree_node::TreeNodeRecursion;
@@ -451,7 +453,7 @@ impl ExecutionPlan for MemoryQuadScanExec {
         let stream = async_stream::stream! {
             // The stream is polled after the build sides of the joins above have been collected.
             // Hence, the dynamic filters are complete at this point.
-            scan.apply_dynamic_filters(&dynamic_filters);
+            let residual_filters = scan.apply_dynamic_filters(&dynamic_filters);
             let components = scan
                 .columns
                 .iter()
@@ -462,11 +464,11 @@ impl ExecutionPlan for MemoryQuadScanExec {
             for quad in matching_quads(&snapshot, &scan) {
                 builder.append(quad);
                 if builder.is_full() {
-                    yield builder.finish();
+                    yield builder.finish().and_then(|batch| filter_batch(batch, &residual_filters));
                 }
             }
             if !builder.is_empty() {
-                yield builder.finish();
+                yield builder.finish().and_then(|batch| filter_batch(batch, &residual_filters));
             }
         };
 
@@ -577,23 +579,70 @@ impl MemoryQuadScan {
     ///
     /// A hash join pushes a dynamic filter `column IN (values)` into its probe side if the build
     /// side is small. For such a filter on a produced column, each lookup is replaced by one lookup
-    /// per value. Other filters are ignored, which is correct as the joins check every row.
-    fn apply_dynamic_filters(&mut self, filters: &[Arc<DynamicFilterPhysicalExpr>]) {
+    /// per value.
+    ///
+    /// Returns the filters that cannot be applied as lookups (e.g., a hash table lookup for large
+    /// build sides). These filters are evaluated on the produced batches, such that rows that
+    /// cannot match do not flow into the operators above the scan (e.g., other joins). This is
+    /// not necessary for correctness, as the joins check every row.
+    fn apply_dynamic_filters(
+        &mut self,
+        filters: &[Arc<DynamicFilterPhysicalExpr>],
+    ) -> Vec<Arc<dyn PhysicalExpr>> {
+        let mut residual = Vec::new();
         for filter in filters {
             let Ok(filter) = filter.current() else {
                 continue;
             };
+            if is_true_literal(&filter) {
+                continue;
+            }
+
+            // A dynamic filter of a hash join is `<bounds> AND <membership>`, where the membership
+            // check is either an `IN` list or a hash table lookup. If an `IN` list is applied as
+            // lookups, the remaining conjuncts (the bounds) are implied and the filter must not be
+            // evaluated again.
+            let mut applied = false;
             for (column, terms) in in_list_terms(&filter) {
                 let Some((component, _)) = self.columns.get(column) else {
                     continue;
                 };
+                applied = true;
                 self.lookups = std::mem::take(&mut self.lookups)
                     .into_iter()
                     .flat_map(|constants| constants.restrict(*component, &terms))
                     .collect();
             }
+
+            if !applied {
+                residual.push(filter);
+            }
         }
+        residual
     }
+}
+
+/// Returns whether `expr` is the literal `true`.
+fn is_true_literal(expr: &Arc<dyn PhysicalExpr>) -> bool {
+    expr.downcast_ref::<Literal>()
+        .is_some_and(|literal| literal.value() == &ScalarValue::Boolean(Some(true)))
+}
+
+/// Applies the `filters` to `batch`.
+fn filter_batch(
+    batch: RecordBatch,
+    filters: &[Arc<dyn PhysicalExpr>],
+) -> DFResult<RecordBatch> {
+    let mut batch = batch;
+    for filter in filters {
+        if batch.num_rows() == 0 {
+            break;
+        }
+        let mask = filter.evaluate(&batch)?.into_array(batch.num_rows())?;
+        let mask = as_boolean_array(&mask)?;
+        batch = filter_record_batch(&batch, mask)?;
+    }
+    Ok(batch)
 }
 
 impl PatternConstants {

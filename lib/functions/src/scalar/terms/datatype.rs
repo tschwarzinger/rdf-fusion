@@ -25,11 +25,19 @@ pub fn datatype_udf(
     Ok(ScalarUDF::new_from_impl(DatatypeSparqlUDF::new(encodings)))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct DatatypeSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for DatatypeSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+    }
 }
 
 impl Debug for DatatypeSparqlUDF {

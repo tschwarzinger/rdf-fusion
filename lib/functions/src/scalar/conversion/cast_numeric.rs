@@ -95,13 +95,23 @@ pub fn cast_decimal_udf(
     )))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CastNumericSparqlUdf {
     encodings: RdfFusionEncodings,
     name: String,
     aliases: Vec<String>,
     target_type: DataType,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for CastNumericSparqlUdf {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+        self.aliases.hash(state);
+        self.target_type.hash(state);
+    }
 }
 
 impl Debug for CastNumericSparqlUdf {

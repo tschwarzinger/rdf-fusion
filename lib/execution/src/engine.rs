@@ -2,9 +2,9 @@ use crate::planner::RdfFusionPlanner;
 use crate::results::QueryResults;
 use crate::sparql::QueryEvaluationError;
 use crate::sparql::{
-    OptimizationLevel, QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate,
-    UpdateOptions, create_optimizer_rules, create_pyhsical_optimizer_rules,
-    evaluate_query, evaluate_update,
+    QueryExplanation, QueryOptions, RdfFusionQuery, RdfFusionUpdate, UpdateOptions,
+    create_optimizer_rules, create_pyhsical_optimizer_rules, evaluate_query,
+    evaluate_update,
 };
 use datafusion::dataframe::DataFrame;
 use datafusion::error::DataFusionError;
@@ -75,10 +75,14 @@ impl RdfFusionContext {
             storage.encoding(),
         );
 
+        let optimization_level = config
+            .rdf_fusion_options()
+            .map(|options| options.execution.optimization_level)
+            .unwrap_or_default();
         let optimizer_rules =
-            create_optimizer_rules(context_view.clone(), OptimizationLevel::Full);
+            create_optimizer_rules(context_view.clone(), optimization_level);
         let physical_optimizer_rules =
-            create_pyhsical_optimizer_rules(OptimizationLevel::Full);
+            create_pyhsical_optimizer_rules(optimization_level);
 
         let state = SessionStateBuilder::new()
             .with_query_planner(Arc::new(RdfFusionPlanner::new(
@@ -135,7 +139,11 @@ impl RdfFusionContext {
 
     /// Returns the configuration options of this context.
     pub fn options(&self) -> RdfFusionOptions {
-        self.ctx.state().config().rdf_fusion_options_or_default()
+        self.ctx
+            .state_ref()
+            .read()
+            .config()
+            .rdf_fusion_options_or_default()
     }
 
     //

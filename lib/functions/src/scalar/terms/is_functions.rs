@@ -92,12 +92,21 @@ impl IsOpType {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct IsSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
     op_type: IsOpType,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for IsSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+        self.op_type.hash(state);
+    }
 }
 
 impl Debug for IsSparqlUDF {

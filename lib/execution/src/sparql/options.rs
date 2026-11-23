@@ -2,22 +2,7 @@ use rdf_fusion_common::sparql::QueryDataset;
 use rdf_fusion_common::{DateTime, Iri, NamedNode};
 use rdf_fusion_encoding::EncodingName;
 
-/// Defines how many optimizations the query optimizer should apply.
-///
-/// Currently, the default value is [OptimizationLevel::Full], as we are still searching for a
-/// subset that performs well on many queries. Once this subset has been identified, the default
-/// value will be [OptimizationLevel::Default].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum OptimizationLevel {
-    /// No optimizations, except rewrites that are necessary for a working query.
-    None,
-    /// A balanced default optimization level. Suitable for simple queries or those handling modest
-    /// data volumes.
-    Default,
-    /// Runs all optimizations. Ideal for complex queries or those processing large datasets.
-    #[default]
-    Full,
-}
+pub use rdf_fusion_common::config::OptimizationLevel;
 
 /// Options for a SPARQL query dataset specification.
 ///
@@ -51,8 +36,6 @@ impl DatasetOptions {
 /// Options for SPARQL query evaluation.
 #[derive(Clone, Default)]
 pub struct QueryOptions {
-    /// The defined optimization level
-    pub optimization_level: OptimizationLevel,
     /// The encoding to use for output terms
     pub output_encoding_name: Option<EncodingName>,
     /// The base IRI used to resolve relative IRIs in the query.

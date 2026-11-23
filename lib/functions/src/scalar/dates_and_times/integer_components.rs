@@ -80,12 +80,21 @@ pub fn year_udf(
     )))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct DateTimeIntegerPartSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
     part: DateTimeIntegerPart,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for DateTimeIntegerPartSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+        self.part.hash(state);
+    }
 }
 
 /// Represents the part of the date/time to extract.

@@ -36,6 +36,11 @@ pub struct ExecutionOptions {
     /// once the dynamic filter of a hash join restricts a column to a few values that the other
     /// quad table can look up efficiently.
     pub quad_table_switching: bool,
+    /// Defines how many optimizations the query optimizer applies to SPARQL queries.
+    ///
+    /// The optimizer rules are installed when the RDF Fusion context is created. Hence, changing
+    /// this option afterward has no effect.
+    pub optimization_level: OptimizationLevel,
 }
 
 impl Default for ExecutionOptions {
@@ -44,6 +49,50 @@ impl Default for ExecutionOptions {
             small_scan_threshold: 0,
             planning_bloom_filters: PlanningBloomFilters::default(),
             quad_table_switching: true,
+            optimization_level: OptimizationLevel::default(),
+        }
+    }
+}
+
+/// Defines how many optimizations the query optimizer should apply.
+///
+/// Currently, the default value is [OptimizationLevel::Full], as we are still searching for a
+/// subset that performs well on many queries. Once this subset has been identified, the default
+/// value will be [OptimizationLevel::Default].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OptimizationLevel {
+    /// No optimizations, except rewrites that are necessary for a working query.
+    None,
+    /// A balanced default optimization level. Suitable for simple queries or those handling modest
+    /// data volumes.
+    Default,
+    /// Runs all optimizations. Ideal for complex queries or those processing large datasets.
+    #[default]
+    Full,
+}
+
+impl Display for OptimizationLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            OptimizationLevel::None => "none",
+            OptimizationLevel::Default => "default",
+            OptimizationLevel::Full => "full",
+        };
+        f.write_str(value)
+    }
+}
+
+impl FromStr for OptimizationLevel {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "none" => Ok(OptimizationLevel::None),
+            "default" => Ok(OptimizationLevel::Default),
+            "full" => Ok(OptimizationLevel::Full),
+            _ => Err(format!(
+                "Expected one of \"none\", \"default\", or \"full\" but got \"{value}\""
+            )),
         }
     }
 }
@@ -229,6 +278,13 @@ impl ExtensionOptions for RdfFusionOptions {
                     ))
                 })?;
             }
+            "execution.optimization_level" => {
+                self.execution.optimization_level = value.parse().map_err(|e| {
+                    DataFusionError::Configuration(format!(
+                        "Invalid value for execution.optimization_level: {e}"
+                    ))
+                })?;
+            }
             "local.work_dir" => {
                 self.local.work_dir = Some(value.to_string());
             }
@@ -369,6 +425,11 @@ impl ExtensionOptions for RdfFusionOptions {
                 key: format!("{}.execution.quad_table_switching", Self::PREFIX),
                 value: Some(self.execution.quad_table_switching.to_string()),
                 description: "Whether a Parquet quad pattern scan may switch to another quad table at execution time, once the dynamic filter of a hash join restricts a column to a few values.",
+            },
+            ConfigEntry {
+                key: format!("{}.execution.optimization_level", Self::PREFIX),
+                value: Some(self.execution.optimization_level.to_string()),
+                description: "How many optimizations the query optimizer applies to SPARQL queries (\"none\", \"default\", or \"full\"). Only read when the RDF Fusion context is created.",
             },
             ConfigEntry {
                 key: format!("{}.local.work_dir", Self::PREFIX),
@@ -596,7 +657,7 @@ mod tests {
     #[test]
     fn test_env_mappings() {
         let mappings = RdfFusionOptions::env_mappings();
-        assert_eq!(mappings.len(), 19);
+        assert_eq!(mappings.len(), 20);
         assert!(mappings.iter().any(|(env, id)| {
             env == "RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE"
                 && id == "storage.delta.log_max_age"
@@ -698,6 +759,21 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 19);
+        assert_eq!(entries.len(), 20);
+    }
+
+    #[test]
+    fn test_set_optimization_level() {
+        let mut config = RdfFusionOptions::default();
+        assert_eq!(config.execution.optimization_level, OptimizationLevel::Full);
+        config
+            .set("rdf_fusion.execution.optimization_level", "None")
+            .unwrap();
+        assert_eq!(config.execution.optimization_level, OptimizationLevel::None);
+        assert!(
+            config
+                .set("rdf_fusion.execution.optimization_level", "some")
+                .is_err()
+        );
     }
 }

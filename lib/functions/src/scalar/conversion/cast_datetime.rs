@@ -35,12 +35,21 @@ pub fn cast_datetime_udf(
     )))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct CastDateTimeSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     aliases: Vec<String>,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for CastDateTimeSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+        self.aliases.hash(state);
+    }
 }
 
 impl Debug for CastDateTimeSparqlUDF {

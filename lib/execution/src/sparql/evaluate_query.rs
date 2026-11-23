@@ -2,11 +2,11 @@ use crate::RdfFusionContext;
 use crate::planner::RdfFusionPlanner;
 use crate::results::{QueryResults, QuerySolutionStream, QueryTripleStream};
 use crate::sparql::QueryEvaluationError;
-use crate::sparql::optimizer::{create_optimizer_rules, create_pyhsical_optimizer_rules};
 use crate::sparql::{QueryExplanation, QueryOptions, QueryVariant, RdfFusionQuery};
 use datafusion::arrow::datatypes::Schema;
 use datafusion::common::instant::Instant;
-use datafusion::execution::{SessionState, SessionStateBuilder};
+use datafusion::execution::SessionState;
+use datafusion::execution::context::QueryPlanner;
 use datafusion::logical_expr::LogicalPlan;
 use datafusion::physical_expr_common::metrics::Time;
 use datafusion::physical_plan::execute_stream;
@@ -34,22 +34,13 @@ pub async fn evaluate_query(
 pub async fn evaluate_query_with_snapshot(
     ctx: &RdfFusionContext,
     query: &RdfFusionQuery,
-    options: QueryOptions,
+    _options: QueryOptions,
     snapshot: Arc<dyn QuadStorageSnapshot>,
 ) -> Result<(QueryResults, QueryExplanation), QueryEvaluationError> {
-    let session_state = SessionStateBuilder::from(ctx.session_context().state())
-        .with_optimizer_rules(create_optimizer_rules(
-            ctx.create_view(),
-            options.optimization_level,
-        ))
-        .with_physical_optimizer_rules(create_pyhsical_optimizer_rules(
-            options.optimization_level,
-        ))
-        .with_query_planner(Arc::new(RdfFusionPlanner::new_with_snapshot(
-            ctx.create_view(),
-            snapshot,
-        )))
-        .build();
+    let session_state = QueryPlanningState {
+        state: ctx.session_context().state(),
+        planner: RdfFusionPlanner::new_with_snapshot(ctx.create_view(), snapshot),
+    };
 
     match query.variant() {
         QueryVariant::Select => {
@@ -94,11 +85,23 @@ pub async fn evaluate_query_with_snapshot(
     }
 }
 
+/// The state that is required for planning and executing a single query.
+struct QueryPlanningState {
+    /// The session state of the query. Like DataFusion's [`SessionContext`], each query uses a
+    /// clone of the session state, which carries per-query state (e.g., the alias generator).
+    ///
+    /// [`SessionContext`]: datafusion::prelude::SessionContext
+    state: SessionState,
+    /// The planner that uses the snapshot of the query.
+    planner: RdfFusionPlanner,
+}
+
 /// Converts a LogicalPlan to a stream of query solutions.
 async fn logical_plan_to_stream(
-    state: SessionState,
+    planning_state: QueryPlanningState,
     logical_plan: LogicalPlan,
 ) -> Result<(QuerySolutionStream, QueryExplanation), QueryEvaluationError> {
+    let QueryPlanningState { state, planner } = planning_state;
     let task = state.task_ctx();
 
     let planning_compute = Time::new();
@@ -108,9 +111,7 @@ async fn logical_plan_to_stream(
     let optimized_plan = state.optimize(&logical_plan)?;
     drop(handle); // Add synchronous computation to the planning time
 
-    let physical_plan_future = state
-        .query_planner()
-        .create_physical_plan(&optimized_plan, &state);
+    let physical_plan_future = planner.create_physical_plan(&optimized_plan, &state);
     let physical_plan = MeasurePoll {
         inner: Box::pin(physical_plan_future),
         time_metric: planning_compute.clone(),

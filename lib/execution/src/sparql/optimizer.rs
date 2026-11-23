@@ -77,9 +77,29 @@ fn create_essential_datafusion_optimizers() -> Vec<Arc<dyn OptimizerRule + Send 
     ]
 }
 
-/// Creates a list of optimizer rules based on the given `optimization_level`.
+/// Creates a list of physical optimizer rules based on the given `optimization_level`.
+///
+/// The list is DataFusion's default list ([`PhysicalOptimizer::new`]) without the rules that never
+/// apply to the plans created for SPARQL queries (e.g., rules for window functions) and the final
+/// sanity check. Running a rule has a fixed cost, which is significant for small queries.
 pub fn create_pyhsical_optimizer_rules(
     _optimization_level: OptimizationLevel,
 ) -> Vec<Arc<dyn PhysicalOptimizerRule + Send + Sync>> {
-    PhysicalOptimizer::new().rules
+    PhysicalOptimizer::new()
+        .rules
+        .into_iter()
+        .filter(|rule| !REMOVED_PHYSICAL_OPTIMIZER_RULES.contains(&rule.name()))
+        .collect()
 }
+
+/// The names of the physical optimizer rules that are removed from DataFusion's default list.
+///
+/// - SPARQL queries do not produce window functions (`WindowTopN`, `LimitPushPastWindows`).
+/// - `HashJoinBuffering` is a no-op unless `hash_join_buffering_capacity` is configured.
+/// - `SanityCheckPlan` only validates the plan.
+const REMOVED_PHYSICAL_OPTIMIZER_RULES: &[&str] = &[
+    "WindowTopN",
+    "LimitPushPastWindows",
+    "HashJoinBuffering",
+    "SanityCheckPlan",
+];

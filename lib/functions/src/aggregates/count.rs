@@ -24,12 +24,21 @@ pub fn sparql_count(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
     AggregateUDF::new_from_impl(SparqlCount::new(encoding))
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq)]
 struct SparqlCount {
     inner: Arc<AggregateUDF>,
     encoding: TypedFamilyEncodingRef,
     signature: Signature,
     name: String,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for SparqlCount {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.hash(state);
+        self.encoding.hash(state);
+        self.name.hash(state);
+    }
 }
 
 impl SparqlCount {

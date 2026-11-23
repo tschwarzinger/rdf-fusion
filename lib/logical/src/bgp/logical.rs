@@ -21,7 +21,7 @@ use thiserror::Error;
 ///
 /// A BGP is a collection of quad patterns that are joined together. This node groups these patterns
 /// to allow for joint optimization and planning, such as join ordering based on statistics.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq)]
 pub struct BgpNode {
     /// The patterns in the BGP.
     pub patterns: Vec<LogicalPlan>,
@@ -33,6 +33,17 @@ pub struct BgpNode {
     pub projection: Option<Vec<Column>>,
     /// The columns that need decoding.
     pub columns_to_decode: Vec<Column>,
+}
+
+// The schema is derived from the other fields. Hence, we do not hash it as hashing the (nested)
+// schema is expensive and DataFusion hashes the plan in every optimizer pass.
+impl std::hash::Hash for BgpNode {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.patterns.hash(state);
+        self.filters.hash(state);
+        self.projection.hash(state);
+        self.columns_to_decode.hash(state);
+    }
 }
 
 impl BgpNode {

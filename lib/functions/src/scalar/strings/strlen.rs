@@ -26,11 +26,19 @@ pub fn strlen_udf(
     Ok(ScalarUDF::new_from_impl(StrLenSparqlUDF::new(encodings)))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct StrLenSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for StrLenSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+    }
 }
 
 impl Debug for StrLenSparqlUDF {

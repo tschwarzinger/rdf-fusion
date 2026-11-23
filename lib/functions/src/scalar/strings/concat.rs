@@ -34,11 +34,19 @@ pub fn concat_udf(
     Ok(ScalarUDF::new_from_impl(ConcatSparqlUDF::new(encodings)))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct ConcatSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for ConcatSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+    }
 }
 
 impl Debug for ConcatSparqlUDF {

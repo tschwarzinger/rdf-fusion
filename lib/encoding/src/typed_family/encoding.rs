@@ -503,7 +503,9 @@ impl Eq for TypedFamilyEncoding {}
 
 impl Hash for TypedFamilyEncoding {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.data_type.hash(state);
+        // Hashing the (deeply nested) data type is expensive. As the data type is derived from the
+        // families, hashing the number of families is consistent with the equality.
+        self.families.len().hash(state);
     }
 }
 

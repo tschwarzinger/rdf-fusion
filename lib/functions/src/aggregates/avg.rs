@@ -25,7 +25,7 @@ pub fn sparql_avg(encoding: TypedFamilyEncodingRef) -> AggregateUDF {
     AggregateUDF::new_from_impl(SparqlAvgUDAF::new(encoding))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SparqlAvgUDAF {
     name: String,
     signature: Signature,
@@ -33,6 +33,17 @@ pub struct SparqlAvgUDAF {
     data_type: DataType,
     sum_inner: AggregateUDF,
     count_inner: AggregateUDF,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for SparqlAvgUDAF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.encoding.hash(state);
+        self.data_type.hash(state);
+        self.sum_inner.hash(state);
+        self.count_inner.hash(state);
+    }
 }
 
 impl SparqlAvgUDAF {

@@ -1,6 +1,6 @@
 use crate::expr::scalars::try_extract_scalar_term;
 use crate::expr::unwrap_encoding_changes;
-use datafusion::common::tree_node::{Transformed, TreeNode};
+use datafusion::common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion::common::{DFSchema, DFSchemaRef, plan_datafusion_err};
 use datafusion::logical_expr::expr::ScalarFunction;
 use datafusion::logical_expr::utils::merge_schema;
@@ -58,26 +58,25 @@ impl SimplifySparqlExpressionsRule {
         scalar_function: ScalarFunction,
         input_schema: &DFSchema,
     ) -> DFResult<Transformed<Expr>> {
-        let function_name = scalar_function.func.name();
-        let builtin = BuiltinName::try_from(function_name);
-        let Ok(builtin) = builtin else {
+        let Some(candidate) = RewriteCandidate::from_name(scalar_function.func.name())
+        else {
             return Ok(Transformed::no(Expr::ScalarFunction(scalar_function)));
         };
 
-        match builtin {
-            BuiltinName::IsCompatible => {
+        match candidate {
+            RewriteCandidate::IsCompatible => {
                 try_replace_is_compatible_with_equality(scalar_function, input_schema)
             }
-            BuiltinName::Equal => try_replace_equality_with_same_term(
+            RewriteCandidate::Equal => try_replace_equality_with_same_term(
                 &self.encodings,
                 self.function_registry.as_ref(),
                 input_schema,
                 scalar_function,
             ),
-            BuiltinName::EffectiveBooleanValue => {
+            RewriteCandidate::EffectiveBooleanValue => {
                 try_replace_boolean_round_trip(scalar_function)
             }
-            BuiltinName::DecodeTerm => {
+            RewriteCandidate::DecodeTerm => {
                 if let Some(arg) = scalar_function.args.first() {
                     let dt = arg.get_type(input_schema);
                     if let Ok(datafusion::arrow::datatypes::DataType::Struct(_)) = dt {
@@ -86,8 +85,62 @@ impl SimplifySparqlExpressionsRule {
                 }
                 Ok(Transformed::no(Expr::ScalarFunction(scalar_function)))
             }
-            _ => Ok(Transformed::no(Expr::ScalarFunction(scalar_function))),
         }
+    }
+}
+
+/// The built-ins that [`SimplifySparqlExpressionsRule`] may rewrite.
+///
+/// This enum is the single source of truth for the rewrite candidates. It is used for quickly
+/// checking whether a plan node must be processed at all (see [`contains_rewrite_candidate`]) and
+/// for dispatching the rewrites (see [`SimplifySparqlExpressionsRule::try_rewrite_expression`]).
+/// Adding a rewrite for another built-in requires adding a variant here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RewriteCandidate {
+    IsCompatible,
+    Equal,
+    EffectiveBooleanValue,
+    DecodeTerm,
+}
+
+impl RewriteCandidate {
+    /// All rewrite candidates.
+    const ALL: [RewriteCandidate; 4] = [
+        RewriteCandidate::IsCompatible,
+        RewriteCandidate::Equal,
+        RewriteCandidate::EffectiveBooleanValue,
+        RewriteCandidate::DecodeTerm,
+    ];
+
+    /// Returns the corresponding [`BuiltinName`].
+    #[cfg(test)]
+    fn builtin(self) -> BuiltinName {
+        match self {
+            RewriteCandidate::IsCompatible => BuiltinName::IsCompatible,
+            RewriteCandidate::Equal => BuiltinName::Equal,
+            RewriteCandidate::EffectiveBooleanValue => BuiltinName::EffectiveBooleanValue,
+            RewriteCandidate::DecodeTerm => BuiltinName::DecodeTerm,
+        }
+    }
+
+    /// Returns the name of the built-in, as used by its UDF.
+    fn name(self) -> &'static str {
+        match self {
+            RewriteCandidate::IsCompatible => "IS_COMPATIBLE",
+            RewriteCandidate::Equal => "EQ",
+            RewriteCandidate::EffectiveBooleanValue => "EBV",
+            RewriteCandidate::DecodeTerm => "DECODE_PT",
+        }
+    }
+
+    /// Returns the rewrite candidate for the UDF with the given `name`.
+    ///
+    /// Like [`BuiltinName::try_from`], the comparison ignores the case. However, it does not
+    /// allocate, as it is called for every function in every plan node.
+    fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|candidate| candidate.name().eq_ignore_ascii_case(name))
     }
 }
 
@@ -105,6 +158,12 @@ impl OptimizerRule for SimplifySparqlExpressionsRule {
         plan: LogicalPlan,
         _config: &dyn OptimizerConfig,
     ) -> DFResult<Transformed<LogicalPlan>> {
+        // Computing the input schema and preserving the names of the expressions is expensive.
+        // Hence, we first check whether the plan contains an expression that could be rewritten.
+        if !contains_rewrite_candidate(&plan)? {
+            return Ok(Transformed::no(plan));
+        }
+
         let schema = if !plan.inputs().is_empty() {
             DFSchemaRef::new(merge_schema(&plan.inputs()))
         } else if let LogicalPlan::TableScan(_) = &plan {
@@ -125,6 +184,28 @@ impl OptimizerRule for SimplifySparqlExpressionsRule {
             ))
         })
     }
+}
+
+/// Returns whether any expression of `plan` (excluding its inputs) contains a function call that
+/// may be rewritten by [`SimplifySparqlExpressionsRule`].
+fn contains_rewrite_candidate(plan: &LogicalPlan) -> DFResult<bool> {
+    let mut found = false;
+    plan.apply_expressions(|expr| {
+        found = expr.exists(|expr| {
+            Ok(match expr {
+                Expr::ScalarFunction(scalar_function) => {
+                    RewriteCandidate::from_name(scalar_function.func.name()).is_some()
+                }
+                _ => false,
+            })
+        })?;
+        Ok(if found {
+            TreeNodeRecursion::Stop
+        } else {
+            TreeNodeRecursion::Continue
+        })
+    })?;
+    Ok(found)
 }
 
 /// Replacing `IS_COMPATIBLE` with `=` is a crucial transformation for our queries as DataFusion's
@@ -284,6 +365,22 @@ mod tests {
     use rdf_fusion_extensions::RdfFusionContextView;
     use rdf_fusion_extensions::functions::FunctionName;
     use rdf_fusion_functions::registry::DefaultRdfFusionFunctionRegistry;
+
+    #[test]
+    fn test_rewrite_candidate_names_match_builtins() {
+        for candidate in RewriteCandidate::ALL {
+            assert_eq!(candidate.builtin().to_string(), candidate.name());
+            assert_eq!(
+                BuiltinName::try_from(candidate.name()).ok(),
+                Some(candidate.builtin())
+            );
+            assert_eq!(
+                RewriteCandidate::from_name(&candidate.name().to_ascii_lowercase()),
+                Some(candidate)
+            );
+        }
+        assert_eq!(RewriteCandidate::from_name("ENC_TF"), None);
+    }
 
     #[test]
     fn test_is_compatible_rewrite_when_not_nullable() {

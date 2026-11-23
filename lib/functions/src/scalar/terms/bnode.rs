@@ -26,11 +26,19 @@ pub fn bnode_udf(
     ))))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct BNodeSparqlUDF {
     encoding: TypedFamilyEncodingRef,
     name: String,
     signature: Signature,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for BNodeSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encoding.hash(state);
+        self.name.hash(state);
+    }
 }
 
 impl Debug for BNodeSparqlUDF {

@@ -47,12 +47,21 @@ pub fn str_before_udf(
     )))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct StringSplitSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
     op: StringSplitOperation,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for StringSplitSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+        self.op.hash(state);
+    }
 }
 
 impl Debug for StringSplitSparqlUDF {

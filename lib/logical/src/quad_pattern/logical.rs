@@ -30,7 +30,7 @@ use std::sync::Arc;
 /// storage layer. This is because the planner should consider storage-specific problems like
 /// sharing a snapshot across multiple scans of the quads table in a single query. The built-in
 /// storage layers of RDF Fusion provide examples.
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct QuadPatternNode {
     /// The encoding of the storage layer.
     storage_encoding: QuadStorageEncoding,
@@ -40,6 +40,16 @@ pub struct QuadPatternNode {
     schema: DFSchemaRef,
     /// The projection to apply.
     pub projection: Option<Vec<usize>>,
+}
+
+// The schema is derived from the other fields. Hence, we do not hash it as hashing the (nested)
+// schema is expensive and DataFusion hashes the plan in every optimizer pass.
+impl std::hash::Hash for QuadPatternNode {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.storage_encoding.hash(state);
+        self.pattern.hash(state);
+        self.projection.hash(state);
+    }
 }
 
 impl QuadPatternNode {

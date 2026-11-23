@@ -49,12 +49,21 @@ pub fn str_ends_udf(
     )))
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct StringAffixSparqlUDF {
     encodings: RdfFusionEncodings,
     name: String,
     signature: Signature,
     op: StringAffixOperation,
+}
+
+// The signature is derived from the other fields and expensive to hash.
+impl std::hash::Hash for StringAffixSparqlUDF {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.encodings.hash(state);
+        self.name.hash(state);
+        self.op.hash(state);
+    }
 }
 
 impl Debug for StringAffixSparqlUDF {

@@ -138,7 +138,12 @@ impl ExtensionPlanner for BgpPlanner {
         // 3. Build the Join Tree
         let mut exec = patterns.remove(0);
         while !patterns.is_empty() {
-            let next_idx = self.find_next_join_pattern(&exec, &patterns);
+            let next_idx = self.find_next_join_pattern(
+                &exec,
+                &patterns,
+                &pending_filters,
+                &bgp.columns_to_decode,
+            );
             let next = patterns.remove(next_idx);
 
             let mut needed_after_join = top_level_needs.clone();
@@ -509,22 +514,77 @@ impl BgpPlanner {
         Ok(exec)
     }
 
+    /// Returns the index of the pattern in `patterns` that should be joined next with
+    /// `current_exec`.
+    ///
+    /// 1. A small pattern that is only connected to `current_exec` via a pending filter (e.g.,
+    ///    `FILTER(?a < ?b)`) is joined as soon as the filter can be evaluated. Joining it early
+    ///    (with a nested loop join) acts as a filter. Otherwise, such patterns are only joined at
+    ///    the end, after all other (potentially large) patterns have been joined.
+    /// 2. Otherwise, the first pattern that shares a column with `current_exec` and enables
+    ///    joining such a small pattern in the next step is chosen.
+    /// 3. Otherwise, the first pattern that shares a column with `current_exec` is chosen.
+    /// 4. Otherwise, the first pattern is chosen (cross join).
     fn find_next_join_pattern(
         &self,
         current_exec: &Arc<dyn ExecutionPlan>,
         patterns: &[Arc<dyn ExecutionPlan>],
+        pending_filters: &[Expr],
+        columns_to_decode: &[Column],
     ) -> usize {
         let current_schema = current_exec.schema();
-        patterns
+        // Evaluating a filter on columns that must be decoded (object ids) decodes the columns in
+        // the join tree. Joining such columns with columns that have not been decoded would fail.
+        // Hence, filters that require decoding are not considered for joining patterns early.
+        let pending_filters = pending_filters
             .iter()
-            .position(|pattern| {
-                pattern
-                    .schema()
-                    .fields()
-                    .iter()
-                    .any(|f| current_schema.index_of(f.name()).is_ok())
+            .filter(|filter| !references_any(filter, columns_to_decode))
+            .cloned()
+            .collect::<Vec<_>>();
+        let pending_filters = pending_filters.as_slice();
+        let shares_column = |pattern: &Arc<dyn ExecutionPlan>| {
+            pattern
+                .schema()
+                .fields()
+                .iter()
+                .any(|f| current_schema.index_of(f.name()).is_ok())
+        };
+
+        let small_patterns = patterns
+            .iter()
+            .enumerate()
+            .filter(|(_, pattern)| !shares_column(pattern) && is_small_pattern(pattern))
+            .collect::<Vec<_>>();
+
+        if let Some((idx, _)) = small_patterns.iter().find(|(_, pattern)| {
+            enables_filter(&current_schema, &pattern.schema(), pending_filters)
+        }) {
+            return *idx;
+        }
+
+        // Prefer patterns that allow joining a small pattern in the next step.
+        if !small_patterns.is_empty()
+            && let Some(idx) = patterns.iter().position(|pattern| {
+                if !shares_column(pattern) {
+                    return false;
+                }
+                let joined = Schema::new(
+                    current_schema
+                        .fields()
+                        .iter()
+                        .chain(pattern.schema().fields().iter())
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                );
+                small_patterns.iter().any(|(_, small)| {
+                    enables_filter(&joined, &small.schema(), pending_filters)
+                })
             })
-            .unwrap_or(0)
+        {
+            return idx;
+        }
+
+        patterns.iter().position(shares_column).unwrap_or(0)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -919,6 +979,48 @@ impl BgpPlanner {
             decoding_udf,
         )?))
     }
+}
+
+/// The maximum number of (estimated) rows of a pattern that is joined early via a filter (see
+/// [`BgpPlanner::find_next_join_pattern`]).
+const SMALL_PATTERN_MAX_ROWS: usize = 16;
+
+/// Returns whether `exec` is estimated to produce at most [`SMALL_PATTERN_MAX_ROWS`] rows.
+fn is_small_pattern(exec: &Arc<dyn ExecutionPlan>) -> bool {
+    StatisticsContext::new()
+        .compute(exec.as_ref(), &StatisticsArgs::new())
+        .ok()
+        .and_then(|stats| stats.num_rows.get_value().copied())
+        .is_some_and(|rows| rows <= SMALL_PATTERN_MAX_ROWS)
+}
+
+/// Returns whether `expr` references any of the `columns` (by name).
+fn references_any(expr: &Expr, columns: &[Column]) -> bool {
+    let mut referenced = HashSet::new();
+    if expr_to_columns(expr, &mut referenced).is_err() {
+        return true;
+    }
+    referenced
+        .iter()
+        .any(|c| columns.iter().any(|column| column.name == c.name))
+}
+
+/// Returns whether a filter in `filters` references columns of both `left` and `right` and can be
+/// evaluated after joining them.
+fn enables_filter(left: &Schema, right: &Schema, filters: &[Expr]) -> bool {
+    filters.iter().any(|filter| {
+        let mut columns = HashSet::new();
+        if expr_to_columns(filter, &mut columns).is_err() {
+            return false;
+        }
+        let in_left = |name: &str| left.index_of(name).is_ok();
+        let in_right = |name: &str| right.index_of(name).is_ok();
+        columns.iter().any(|c| in_left(&c.name))
+            && columns.iter().any(|c| in_right(&c.name))
+            && columns
+                .iter()
+                .all(|c| in_left(&c.name) || in_right(&c.name))
+    })
 }
 
 /// Returns whether `exec` is a materialized pattern. Patterns with bound variables re-add the
