@@ -88,6 +88,29 @@ impl ParquetQuadScanExec {
         self.quad_table_switch.as_ref()?.current_decision()
     }
 
+    /// Limits the number of partitions, such that each partition is estimated to scan at least
+    /// `repartition_file_min_size` bytes.
+    ///
+    /// DataFusion does not know about eager pruning. It repartitions based on the file sizes and
+    /// splits a large file into `target_partitions` byte ranges, even if eager pruning left only a
+    /// few pages to read. As every byte range opens the file on its own, this mostly multiplies
+    /// the fixed cost of opening a file. Hence, the bytes estimated after eager pruning are used
+    /// instead, if available.
+    fn limit_partitions(
+        &self,
+        target_partitions: usize,
+        config: &ConfigOptions,
+    ) -> DFResult<usize> {
+        let statistics =
+            StatisticsContext::new().compute(self, &StatisticsArgs::new())?;
+        let Some(estimated_bytes) = statistics.total_byte_size.get_value() else {
+            return Ok(target_partitions);
+        };
+
+        let min_size = config.optimizer.repartition_file_min_size.max(1);
+        Ok(target_partitions.min((*estimated_bytes / min_size).max(1)))
+    }
+
     fn wrap_inner(&self, inner: Arc<dyn ExecutionPlan>) -> Option<Arc<Self>> {
         let downcast = inner.downcast_ref::<DataSourceExec>()?;
         Some(Arc::new(Self {
@@ -174,6 +197,13 @@ impl ExecutionPlan for ParquetQuadScanExec {
         target_partitions: usize,
         config: &ConfigOptions,
     ) -> DFResult<Option<Arc<dyn ExecutionPlan>>> {
+        let target_partitions = self.limit_partitions(target_partitions, config)?;
+        let current_partitions =
+            self.properties().output_partitioning().partition_count();
+        if target_partitions <= current_partitions {
+            return Ok(None);
+        }
+
         let inner = self.inner.repartitioned(target_partitions, config)?;
         Ok(inner.and_then(|new_inner| {
             self.wrap_inner(new_inner)

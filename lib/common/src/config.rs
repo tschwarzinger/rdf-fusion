@@ -30,8 +30,6 @@ pub struct ExecutionOptions {
     /// filters, and their exact statistics are available for planning the remaining query (e.g.,
     /// the join order). A value of `0` disables this optimization.
     pub small_scan_threshold: usize,
-    /// Whether Bloom filters are used for pruning Parquet row groups during planning.
-    pub planning_bloom_filters: PlanningBloomFilters,
     /// Whether a Parquet quad pattern scan may switch to another quad table at execution time,
     /// once the dynamic filter of a hash join restricts a column to a few values that the other
     /// quad table can look up efficiently.
@@ -47,7 +45,6 @@ impl Default for ExecutionOptions {
     fn default() -> Self {
         Self {
             small_scan_threshold: 0,
-            planning_bloom_filters: PlanningBloomFilters::default(),
             quad_table_switching: true,
             optimization_level: OptimizationLevel::default(),
         }
@@ -92,47 +89,6 @@ impl FromStr for OptimizationLevel {
             "full" => Ok(OptimizationLevel::Full),
             _ => Err(format!(
                 "Expected one of \"none\", \"default\", or \"full\" but got \"{value}\""
-            )),
-        }
-    }
-}
-
-/// Defines whether Bloom filters are used for pruning Parquet row groups during planning. Pruning
-/// during planning improves the cardinality estimates but requires reading the Bloom filters.
-/// Regardless of this option, Bloom filters are used during execution.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum PlanningBloomFilters {
-    /// Uses Bloom filters during planning if the scan caches the data it reads. Hence, the Bloom
-    /// filters are only read once.
-    #[default]
-    Auto,
-    /// Always uses Bloom filters during planning.
-    Always,
-    /// Never uses Bloom filters during planning.
-    Never,
-}
-
-impl Display for PlanningBloomFilters {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let value = match self {
-            PlanningBloomFilters::Auto => "auto",
-            PlanningBloomFilters::Always => "always",
-            PlanningBloomFilters::Never => "never",
-        };
-        f.write_str(value)
-    }
-}
-
-impl FromStr for PlanningBloomFilters {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.to_ascii_lowercase().as_str() {
-            "auto" => Ok(PlanningBloomFilters::Auto),
-            "always" => Ok(PlanningBloomFilters::Always),
-            "never" => Ok(PlanningBloomFilters::Never),
-            _ => Err(format!(
-                "Expected one of \"auto\", \"always\", or \"never\" but got \"{value}\""
             )),
         }
     }
@@ -263,13 +219,6 @@ impl ExtensionOptions for RdfFusionOptions {
             "execution.small_scan_threshold" => {
                 self.execution.small_scan_threshold =
                     SessionContext::parse_capacity_limit(key, value)?;
-            }
-            "execution.planning_bloom_filters" => {
-                self.execution.planning_bloom_filters = value.parse().map_err(|e| {
-                    DataFusionError::Configuration(format!(
-                        "Invalid value for execution.planning_bloom_filters: {e}"
-                    ))
-                })?;
             }
             "execution.quad_table_switching" => {
                 self.execution.quad_table_switching = value.parse().map_err(|e| {
@@ -415,11 +364,6 @@ impl ExtensionOptions for RdfFusionOptions {
                 key: format!("{}.execution.small_scan_threshold", Self::PREFIX),
                 value: Some(self.execution.small_scan_threshold.to_string()),
                 description: "The size in bytes below which a quad pattern scan is eagerly buffered during planning to allow parallel execution (e.g. \"1K\", \"1M\", \"1G\"; 0 disables).",
-            },
-            ConfigEntry {
-                key: format!("{}.execution.planning_bloom_filters", Self::PREFIX),
-                value: Some(self.execution.planning_bloom_filters.to_string()),
-                description: "Whether Bloom filters are used for pruning Parquet row groups during planning (\"auto\", \"always\", or \"never\"). \"auto\" only uses them if the scan caches the data it reads.",
             },
             ConfigEntry {
                 key: format!("{}.execution.quad_table_switching", Self::PREFIX),
@@ -657,7 +601,7 @@ mod tests {
     #[test]
     fn test_env_mappings() {
         let mappings = RdfFusionOptions::env_mappings();
-        assert_eq!(mappings.len(), 20);
+        assert_eq!(mappings.len(), 19);
         assert!(mappings.iter().any(|(env, id)| {
             env == "RDF_FUSION_STORAGE_DELTA_LOG_MAX_AGE"
                 && id == "storage.delta.log_max_age"
@@ -711,27 +655,6 @@ mod tests {
     }
 
     #[test]
-    fn test_set_planning_bloom_filters() {
-        let mut config = RdfFusionOptions::default();
-        assert_eq!(
-            config.execution.planning_bloom_filters,
-            PlanningBloomFilters::Auto
-        );
-        config
-            .set("rdf_fusion.execution.planning_bloom_filters", "Always")
-            .unwrap();
-        assert_eq!(
-            config.execution.planning_bloom_filters,
-            PlanningBloomFilters::Always
-        );
-        assert!(
-            config
-                .set("execution.planning_bloom_filters", "sometimes")
-                .is_err()
-        );
-    }
-
-    #[test]
     fn test_set_with_prefix() {
         let mut config = RdfFusionOptions::default();
         config
@@ -759,7 +682,7 @@ mod tests {
     fn test_config_extension_options() {
         let config = RdfFusionOptions::default();
         let entries = config.entries();
-        assert_eq!(entries.len(), 20);
+        assert_eq!(entries.len(), 19);
     }
 
     #[test]

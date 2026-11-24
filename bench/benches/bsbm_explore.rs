@@ -9,12 +9,14 @@
 mod utils;
 
 use crate::utils::verbose::{is_verbose, print_query_details};
-use crate::utils::{consume_results, setup_benchmark_env};
+use crate::utils::{
+    bench_num_products, consume_results, load_bsbm_queries, setup_benchmark_env,
+};
 use criterion::{Criterion, criterion_group, criterion_main};
 use rdf_fusion::encoding::QuadStorageEncodingName;
 use rdf_fusion::execution::sparql::QueryOptions;
 use rdf_fusion_bench::benchmarks::BenchmarkName;
-use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase, NumProducts};
+use rdf_fusion_bench::benchmarks::bsbm::{BsbmBenchmark, ExploreUseCase};
 use rdf_fusion_bench::environment::RdfFusionBenchContext;
 use std::path::PathBuf;
 
@@ -23,22 +25,22 @@ fn bench_planning(c: &mut Criterion) {
     let benchmarking_context =
         RdfFusionBenchContext::new_for_criterion(PathBuf::from("./data"), encoding, 1)
             .build();
+    let num_products = bench_num_products();
     let name = BenchmarkName::BsbmExplore {
-        num_products: NumProducts::N10_000,
+        num_products,
         max_query_count: None,
     };
     let context = benchmarking_context.create_benchmark_context(name).unwrap();
     let benchmark =
-        BsbmBenchmark::<ExploreUseCase>::try_new(&context, NumProducts::N10_000, None)
-            .unwrap();
+        BsbmBenchmark::<ExploreUseCase>::try_new(&context, num_products, None).unwrap();
 
     let (runtime, benchmark_context, store) =
         setup_benchmark_env(&benchmarking_context, &benchmark);
-    let queries = benchmark.queries(&benchmark_context).unwrap();
+    let queries = load_bsbm_queries(&benchmark, &benchmark_context, true).unwrap();
     let verbose = is_verbose();
 
     for (query_name, query_text) in queries {
-        let benchmark_name = format!("Plan BSBM Explore 10000 - {query_name}");
+        let benchmark_name = format!("Plan BSBM Explore {num_products} - {query_name}");
         if verbose {
             runtime
                 .block_on(print_query_details(
@@ -59,27 +61,25 @@ fn bench_planning(c: &mut Criterion) {
 }
 
 fn bench_full_execution(c: &mut Criterion) {
+    let num_products = bench_num_products();
     for storage_config in utils::benchmark_configs() {
         let benchmarking_context = storage_config.bench_context();
         let name = BenchmarkName::BsbmExplore {
-            num_products: NumProducts::N10_000,
+            num_products,
             max_query_count: None,
         };
         let context = benchmarking_context.create_benchmark_context(name).unwrap();
-        let benchmark = BsbmBenchmark::<ExploreUseCase>::try_new(
-            &context,
-            NumProducts::N10_000,
-            None,
-        )
-        .unwrap();
+        let benchmark =
+            BsbmBenchmark::<ExploreUseCase>::try_new(&context, num_products, None)
+                .unwrap();
 
         let (runtime, benchmark_context, store) =
             setup_benchmark_env(&benchmarking_context, &benchmark);
-        let queries = benchmark.queries(&benchmark_context).unwrap();
+        let queries = load_bsbm_queries(&benchmark, &benchmark_context, true).unwrap();
 
         for (query_name, query_text) in queries {
             let benchmark_name =
-                format!("BSBM Explore 10000 - {storage_config} - {query_name}",);
+                format!("BSBM Explore {num_products} - {storage_config} - {query_name}",);
             c.bench_function(&benchmark_name, |b| {
                 b.to_async(&runtime).iter(|| async {
                     let result = store

@@ -1,5 +1,6 @@
 use crate::bytes_estimator::estimate_scan_statistics;
 use crate::counting_store::ByteCountingObjectStore;
+use crate::pruned_predicate::PrunedPredicateExpr;
 use crate::reader::{
     BlockCachedReaderFactory, ParquetMetadataFetcher, max_concurrent_files,
 };
@@ -18,7 +19,7 @@ use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::parquet::{
     BloomFilterStatistics, PagePruningAccessPlanFilter, ParquetAccessPlan,
-    RowGroupAccessPlanFilter, can_expr_be_pushed_down_with_schemas,
+    can_expr_be_pushed_down_with_schemas,
 };
 use datafusion::datasource::physical_plan::{
     FileGroup, FileScanConfigBuilder, FileSource, ParquetFileMetrics,
@@ -33,13 +34,18 @@ use datafusion::logical_expr::expr::{BinaryExpr, InList};
 use datafusion::logical_expr::physical_planning_context::PhysicalPlanningContext;
 use datafusion::logical_expr::utils::{conjunction, split_conjunction_owned};
 use datafusion::logical_expr::{Expr, Operator, lit};
+use datafusion::parquet::arrow::arrow_reader::statistics::StatisticsConverter;
 use datafusion::parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
 use datafusion::parquet::arrow::async_reader::AsyncFileReader;
 use datafusion::parquet::arrow::{ParquetRecordBatchStreamBuilder, parquet_column};
 use datafusion::parquet::basic::Type as PhysicalType;
-use datafusion::parquet::file::metadata::{PageIndexPolicy, ParquetMetaData};
+use datafusion::parquet::file::metadata::{
+    PageIndexPolicy, ParquetMetaData, RowGroupMetaData,
+};
+use datafusion::parquet::schema::types::SchemaDescriptor;
 use datafusion::physical_expr::PhysicalExpr;
 use datafusion::physical_expr::create_physical_expr;
+use datafusion::physical_expr::utils::Guarantee;
 use datafusion::physical_expr_common::metrics::ExecutionPlanMetricsSet;
 use datafusion::physical_optimizer::pruning::{
     PruningPredicate, PruningPredicateBuilder,
@@ -56,7 +62,6 @@ use datafusion_datasource::compute_all_files_statistics;
 use futures::{StreamExt, TryStreamExt};
 use object_store::ObjectStore;
 use rdf_fusion_common::DFResult;
-use rdf_fusion_common::config::{PlanningBloomFilters, RdfFusionSessionConfigExt};
 use rdf_fusion_encoding::QuadStorageEncoding;
 use rdf_fusion_encoding::plain_term::{
     PlainTermEncoding, PlainTermScalar, PlainTermType,
@@ -373,6 +378,15 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             let predicate = self
                 .session_state
                 .create_physical_expr(filter, base_schema.as_ref())?;
+            // Eager pruning already did everything that the source would do with this predicate
+            // when opening a file. Hence, it is hidden from the pruning of the source. The only
+            // difference is that eager pruning skips the Bloom filters of row groups for which the
+            // statistics are already conclusive (see `bloom_filter_reads`).
+            let predicate = if self.eager_pruning {
+                PrunedPredicateExpr::wrap_conjuncts(&predicate)
+            } else {
+                predicate
+            };
             parquet_source = parquet_source.with_predicate(predicate);
         }
 
@@ -405,8 +419,8 @@ impl<'a> ParquetQuadScanBuilder<'a> {
     /// 1. The row groups of each file are pruned using the statistics in the footer. Files for
     ///    which no row group remains are removed from the scan.
     /// 2. The remaining row groups are pruned using Bloom filters, if the statistics are unlikely
-    ///    to be effective for some bound columns (see [`bloom_filter_columns`]). Whether this is
-    ///    done is controlled by [`PlanningBloomFilters`].
+    ///    to be conclusive for some bound columns (see [`bloom_filter_reads`]). Like in
+    ///    DataFusion, this is only done if `bloom_filter_on_read` is enabled.
     /// 3. The page index of the remaining files is loaded and used for pruning pages.
     ///
     /// Hence, the Bloom filters and the (comparatively large) page index are only loaded for files
@@ -494,7 +508,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             true,
             false,
         )?;
-        Ok((file_groups, Some(stats)))
+        Ok((without_file_statistics(file_groups), Some(stats)))
     }
 
     /// Prunes a single file in three phases (see [`Self::apply_eager_pruning`]). Returns [`None`]
@@ -526,21 +540,21 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             .fetch(&file.object_meta, PageIndexPolicy::Skip)
             .await?;
         let mut access_plan =
-            prune_row_groups(schema, &footer, filters.row_group.as_deref(), &metrics);
+            prune_row_groups(schema, &footer, filters.row_group.as_deref());
         if access_plan.row_group_indexes().is_empty() {
             return Ok(None);
         }
 
         // Phase 2: Prune row groups using the Bloom filters.
-        let (bloom_filter_predicate, bloom_filter_columns) = match &filters.row_group {
+        let (bloom_filter_predicate, bloom_filter_reads) = match &filters.row_group {
             Some(predicate) if filters.bloom_filter => (
                 Some(predicate.as_ref()),
-                bloom_filter_columns(schema, &footer, predicate),
+                bloom_filter_reads(schema, &footer, predicate, &access_plan),
             ),
-            _ => (None, Vec::new()),
+            _ => (None, BloomFilterReads::default()),
         };
         if let Some(predicate) = bloom_filter_predicate
-            && !bloom_filter_columns.is_empty()
+            && !bloom_filter_reads.is_empty()
         {
             let reader = reader_factory.create_reader(
                 0,
@@ -552,7 +566,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
                 reader,
                 &footer,
                 predicate,
-                &bloom_filter_columns,
+                &bloom_filter_reads,
                 access_plan,
                 &metrics,
             )
@@ -562,25 +576,39 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             }
         }
 
-        // Phase 3: Prune pages using the page index. The page index is not loaded if the footer
-        // already guarantees that all rows of the remaining row groups match.
-        let page_filter = filters.page.as_ref().filter(|_| {
-            !filters.full_match.as_ref().is_some_and(|full_match| {
-                all_row_groups_fully_match(schema, &footer, &access_plan, full_match)
-            })
-        });
+        // Phase 3: Prune pages using the page index. The page index cannot prune the pages of row
+        // groups whose footer statistics guarantee that all rows match. Hence, these row groups
+        // are skipped and the page index is not loaded at all if no other row group remains.
+        let fully_matched = match &filters.full_match {
+            Some(full_match) => {
+                fully_matched_row_groups(schema, &footer, &access_plan, full_match)
+            }
+            None => Vec::new(),
+        };
+        let page_filter = filters
+            .page
+            .as_ref()
+            .filter(|_| fully_matched.len() < access_plan.row_group_indexes().len());
         let (parquet_meta, access_plan) = match page_filter {
             Some(page_filter) => {
                 let parquet_meta = fetcher
                     .fetch(&file.object_meta, PageIndexPolicy::Optional)
                     .await?;
-                let access_plan = page_filter.prune_plan_with_page_index(
+                // DataFusion only allows marking row groups as fully matched internally. Hence,
+                // they are hidden from the page pruning by skipping them temporarily.
+                for &idx in &fully_matched {
+                    access_plan.skip(idx);
+                }
+                let mut access_plan = page_filter.prune_plan_with_page_index(
                     access_plan,
                     schema,
                     parquet_meta.file_metadata().schema_descr(),
                     &parquet_meta,
                     &metrics,
                 );
+                for &idx in &fully_matched {
+                    access_plan.scan(idx);
+                }
                 (parquet_meta, access_plan)
             }
             None => (footer, access_plan),
@@ -699,13 +727,9 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             .with_file_schema(Arc::clone(base_schema.inner()))
             .build(Arc::clone(&phys_expr));
 
-        let enable_page_index = self
-            .session_state
-            .table_options()
-            .parquet
-            .global
-            .enable_page_index;
-        let page = enable_page_index
+        let parquet_options = &self.session_state.table_options().parquet.global;
+        let page = parquet_options
+            .enable_page_index
             .then(|| {
                 PagePruningAccessPlanFilter::new(
                     &phys_expr,
@@ -714,7 +738,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             })
             .filter(|page_filter| page_filter.filter_number() > 0);
 
-        // The full match predicate is only required for deciding whether to load the page index.
+        // The full match predicate is only required for page pruning.
         let full_match = match (&page, negate_filter(&logical_expr)) {
             (Some(_), Some(negated)) => {
                 let negated = create_physical_expr(
@@ -730,23 +754,7 @@ impl<'a> ParquetQuadScanBuilder<'a> {
             _ => None,
         };
 
-        let planning_bloom_filters = self
-            .session_state
-            .config()
-            .rdf_fusion_options_or_default()
-            .execution
-            .planning_bloom_filters;
-        let bloom_filter = self
-            .session_state
-            .table_options()
-            .parquet
-            .global
-            .bloom_filter_on_read
-            && match planning_bloom_filters {
-                PlanningBloomFilters::Auto => self.block_cache.is_some(),
-                PlanningBloomFilters::Always => true,
-                PlanningBloomFilters::Never => false,
-            };
+        let bloom_filter = parquet_options.bloom_filter_on_read;
 
         Ok(PruningFilters {
             row_group,
@@ -764,18 +772,18 @@ struct PruningFilters {
     /// Prunes row groups based on the statistics in the footer. Also used for pruning row groups
     /// based on Bloom filters.
     row_group: Option<Arc<PruningPredicate>>,
-    /// Whether row groups should be pruned based on Bloom filters (see
-    /// [`PlanningBloomFilters`]).
+    /// Whether row groups should be pruned based on Bloom filters (`bloom_filter_on_read`).
     bloom_filter: bool,
     /// Prunes pages based on the page index. If not present (e.g., the page index is disabled or
     /// no page-level pruning is possible), the page index is never loaded.
     page: Option<PagePruningAccessPlanFilter>,
     /// The negation of the filter. A row group that is pruned by this predicate only contains
-    /// rows that match the filter. Hence, the page index cannot prune any of its pages.
+    /// rows that match the filter. Hence, the page index cannot prune any of its pages (see
+    /// [`fully_matched_row_groups`]).
     ///
-    /// Only present if `page` is present, as it is only used for deciding whether to load the
-    /// page index. If `page` is present but this is not (i.e., the filter cannot be negated), the
-    /// page index is loaded for every file with remaining row groups.
+    /// Only present if `page` is present, as it is only used for page pruning. If `page` is
+    /// present but this is not (i.e., the filter cannot be negated), the page index is loaded and
+    /// evaluated for every remaining row group.
     full_match: Option<Arc<PruningPredicate>>,
 }
 
@@ -856,29 +864,125 @@ impl PruningStatistics for FileBoundStatistics<'_> {
 }
 
 /// Prunes the row groups of a file using the statistics in its footer.
+///
+/// The predicate is evaluated directly instead of using DataFusion's `RowGroupAccessPlanFilter`.
+/// The latter also identifies the row groups that are fully matched by the predicate, for which it
+/// builds a new pruning predicate (inverting and simplifying the predicate) for every file. This is
+/// more expensive than the pruning itself and, due to `graph IS NULL`, never finds a fully matched
+/// row group for patterns on the default graph. Instead, [`fully_matched_row_groups`] uses a
+/// pruning predicate that is built once per scan.
 fn prune_row_groups(
     schema: &Schema,
     parquet_meta: &ParquetMetaData,
     predicate: Option<&PruningPredicate>,
-    metrics: &ParquetFileMetrics,
 ) -> ParquetAccessPlan {
-    let access_plan = ParquetAccessPlan::new_all(parquet_meta.num_row_groups());
+    let mut access_plan = ParquetAccessPlan::new_all(parquet_meta.num_row_groups());
     let Some(predicate) = predicate else {
         return access_plan;
     };
 
-    let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan);
-    rg_filter.prune_by_statistics(
-        schema,
-        parquet_meta.file_metadata().schema_descr(),
-        parquet_meta.row_groups(),
-        predicate,
-        metrics,
-    );
-    rg_filter.build()
+    let row_groups = access_plan.row_group_indexes();
+    let Some(may_match) =
+        row_groups_may_match(schema, parquet_meta, &row_groups, predicate)
+    else {
+        return access_plan;
+    };
+    for (row_group, may_match) in row_groups.into_iter().zip(may_match) {
+        if !may_match {
+            access_plan.skip(row_group);
+        }
+    }
+    access_plan
 }
 
-/// A Parquet column whose Bloom filters are used for pruning row groups.
+/// Evaluates the `predicate` against the footer statistics of the given `row_groups`. For each
+/// row group, the result states whether it may contain rows that match the predicate. Returns
+/// [`None`] if the predicate cannot be evaluated.
+fn row_groups_may_match(
+    schema: &Schema,
+    parquet_meta: &ParquetMetaData,
+    row_groups: &[usize],
+    predicate: &PruningPredicate,
+) -> Option<Vec<bool>> {
+    let statistics = RowGroupStatistics {
+        schema,
+        parquet_schema: parquet_meta.file_metadata().schema_descr(),
+        row_groups: row_groups
+            .iter()
+            .map(|idx| parquet_meta.row_group(*idx))
+            .collect(),
+    };
+    match predicate.prune(&statistics) {
+        Ok(may_match) => Some(may_match),
+        Err(error) => {
+            debug!("Could not evaluate the row group pruning predicate: {error}");
+            None
+        }
+    }
+}
+
+/// The [`PruningStatistics`] of some row groups of a file, based on the statistics in its footer.
+struct RowGroupStatistics<'a> {
+    schema: &'a Schema,
+    parquet_schema: &'a SchemaDescriptor,
+    row_groups: Vec<&'a RowGroupMetaData>,
+}
+
+impl<'a> RowGroupStatistics<'a> {
+    /// Like DataFusion, a missing null count is treated as zero, as older versions of the Parquet
+    /// writer did not write a null count of zero.
+    fn converter(&self, column: &Column) -> Option<StatisticsConverter<'a>> {
+        let converter =
+            StatisticsConverter::try_new(&column.name, self.schema, self.parquet_schema)
+                .ok()?;
+        Some(converter.with_missing_null_counts_as_zero(true))
+    }
+}
+
+impl PruningStatistics for RowGroupStatistics<'_> {
+    fn min_values(&self, column: &Column) -> Option<ArrayRef> {
+        self.converter(column)?
+            .row_group_mins(self.row_groups.iter().copied())
+            .ok()
+    }
+
+    fn max_values(&self, column: &Column) -> Option<ArrayRef> {
+        self.converter(column)?
+            .row_group_maxes(self.row_groups.iter().copied())
+            .ok()
+    }
+
+    fn num_containers(&self) -> usize {
+        self.row_groups.len()
+    }
+
+    fn null_counts(&self, column: &Column) -> Option<ArrayRef> {
+        let null_counts = self
+            .converter(column)?
+            .row_group_null_counts(self.row_groups.iter().copied())
+            .ok()?;
+        Some(Arc::new(null_counts))
+    }
+
+    fn row_counts(&self) -> Option<ArrayRef> {
+        let row_counts = self
+            .row_groups
+            .iter()
+            .map(|row_group| u64::try_from(row_group.num_rows()).ok())
+            .collect::<UInt64Array>();
+        Some(Arc::new(row_counts))
+    }
+
+    fn contained(
+        &self,
+        _column: &Column,
+        _values: &HashSet<ScalarValue>,
+    ) -> Option<BooleanArray> {
+        None
+    }
+}
+
+/// A Parquet column whose Bloom filters may be used for pruning row groups.
 struct BloomFilterColumn {
     /// The name of the column in the pruning predicate.
     name: String,
@@ -888,60 +992,122 @@ struct BloomFilterColumn {
     type_length: i32,
 }
 
-/// Returns the columns whose Bloom filters should be used for pruning the row groups of a file.
+/// The Bloom filters to read for pruning the row groups of a file.
+#[derive(Default)]
+struct BloomFilterReads {
+    columns: Vec<BloomFilterColumn>,
+    /// The row groups for which Bloom filters are read, each with the indices of the `columns`
+    /// whose Bloom filters are read.
+    row_groups: Vec<(usize, Vec<usize>)>,
+}
+
+impl BloomFilterReads {
+    fn is_empty(&self) -> bool {
+        self.row_groups.is_empty()
+    }
+}
+
+/// Returns the Bloom filters that should be read for pruning the row groups in `access_plan`.
 ///
-/// These are the columns that are bound to literals in the `predicate`, except the bound prefix
-/// of the file's sort order. For example, for a file sorted by GPOS and a pattern that binds G, P,
-/// and S, the row group statistics already prune G and P effectively. However, the values of S
-/// are spread across many row groups, such that only the Bloom filters of S can help. If the file
-/// has no sort order, all bound columns are considered.
-fn bloom_filter_columns(
+/// Bloom filters are considered for the columns that are bound to literals in the `predicate`.
+/// However, a Bloom filter is skipped if the statistics of the row group are already conclusive
+/// for its column. This is the case for a column of the file's sort order if all preceding sort
+/// columns are constant within the row group. Then, the values of the column are sorted within the
+/// row group and its statistics are tight bounds.
+///
+/// For example, in a file sorted by POS, the values of O are only sorted within the rows of a
+/// single predicate. A row group that contains a single predicate has tight bounds for O, while a
+/// row group that spans the border of two predicates has bounds for O that cover the values of
+/// both predicates. Only the Bloom filter can prune the latter. The leading sort column (here, P)
+/// is sorted within every row group. Hence, the writer does not create Bloom filters for it.
+fn bloom_filter_reads(
     schema: &Schema,
     parquet_meta: &ParquetMetaData,
     predicate: &PruningPredicate,
-) -> Vec<BloomFilterColumn> {
+    access_plan: &ParquetAccessPlan,
+) -> BloomFilterReads {
     let parquet_schema = parquet_meta.file_metadata().schema_descr();
-    let bound_columns = predicate
-        .literal_columns()
-        .into_iter()
-        .filter_map(|name| {
-            let (parquet_idx, _) = parquet_column(parquet_schema, schema, &name)?;
-            Some((name, parquet_idx))
-        })
-        .collect::<Vec<_>>();
-
-    let sorted_prefix = parquet_meta
+    let sort_order = parquet_meta
         .row_groups()
         .first()
         .and_then(|row_group| row_group.sorting_columns())
         .into_iter()
         .flatten()
         .map_while(|sorting_column| usize::try_from(sorting_column.column_idx).ok())
-        .take_while(|idx| bound_columns.iter().any(|(_, bound)| bound == idx))
-        .collect::<HashSet<_>>();
+        .collect::<Vec<_>>();
 
-    bound_columns
+    let mut sort_positions = Vec::new();
+    let columns = predicate
+        .literal_columns()
         .into_iter()
-        .filter(|(_, parquet_idx)| !sorted_prefix.contains(parquet_idx))
-        .map(|(name, parquet_idx)| {
+        .filter_map(|name| {
+            let (parquet_idx, _) = parquet_column(parquet_schema, schema, &name)?;
             let column = parquet_schema.column(parquet_idx);
-            BloomFilterColumn {
+            sort_positions.push(sort_order.iter().position(|idx| *idx == parquet_idx));
+            Some(BloomFilterColumn {
                 name,
                 parquet_idx,
                 physical_type: column.physical_type(),
                 type_length: column.type_length(),
-            }
+            })
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    let row_groups = access_plan
+        .row_group_indexes()
+        .into_iter()
+        .filter_map(|idx| {
+            let row_group = parquet_meta.row_group(idx);
+            let constant_prefix = sort_order
+                .iter()
+                .take_while(|column| is_constant(row_group, **column))
+                .count();
+            let columns = sort_positions
+                .iter()
+                .enumerate()
+                .filter(|(_, sort_position)| {
+                    !sort_position.is_some_and(|position| position <= constant_prefix)
+                })
+                .map(|(column, _)| column)
+                .collect::<Vec<_>>();
+            (!columns.is_empty()).then_some((idx, columns))
+        })
+        .collect();
+
+    BloomFilterReads {
+        columns,
+        row_groups,
+    }
 }
 
-/// Prunes the row groups in `access_plan` using the Bloom filters of the given `columns`. The
-/// Bloom filters are only read for the row groups in `access_plan`.
+/// Returns true if the footer statistics guarantee that all values of the column in the row group
+/// are equal (or all are null).
+fn is_constant(row_group: &RowGroupMetaData, parquet_idx: usize) -> bool {
+    let Some(statistics) = row_group.column(parquet_idx).statistics() else {
+        return false;
+    };
+    let Ok(num_rows) = u64::try_from(row_group.num_rows()) else {
+        return false;
+    };
+    match statistics.null_count_opt() {
+        Some(null_count) if null_count == num_rows => true,
+        Some(0) => {
+            statistics.min_is_exact()
+                && statistics.max_is_exact()
+                && statistics.min_bytes_opt().is_some()
+                && statistics.min_bytes_opt() == statistics.max_bytes_opt()
+        }
+        _ => false,
+    }
+}
+
+/// Prunes the row groups in `access_plan` using the given Bloom filters. The Bloom filters are only
+/// read for the row groups in `reads`.
 async fn prune_row_groups_by_bloom_filters(
     reader: Box<dyn AsyncFileReader>,
     parquet_meta: &Arc<ParquetMetaData>,
     predicate: &PruningPredicate,
-    columns: &[BloomFilterColumn],
+    reads: &BloomFilterReads,
     access_plan: ParquetAccessPlan,
     metrics: &ParquetFileMetrics,
 ) -> DFResult<ParquetAccessPlan> {
@@ -953,8 +1119,9 @@ async fn prune_row_groups_by_bloom_filters(
         ParquetRecordBatchStreamBuilder::new_with_metadata(reader, reader_metadata);
 
     let mut bloom_filters = vec![BloomFilterStatistics::new(); access_plan.len()];
-    for idx in access_plan.row_group_indexes() {
-        for column in columns {
+    for (idx, columns) in &reads.row_groups {
+        let idx = *idx;
+        for column in columns.iter().map(|column| &reads.columns[*column]) {
             let Some(sbbf) = builder
                 .get_row_group_column_bloom_filter(idx, column.parquet_idx)
                 .await?
@@ -970,9 +1137,87 @@ async fn prune_row_groups_by_bloom_filters(
         }
     }
 
-    let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan);
-    rg_filter.prune_by_bloom_filters(predicate, metrics, &bloom_filters);
-    Ok(rg_filter.build())
+    let _timer = metrics.bloom_filter_eval_time.timer();
+    let mut access_plan = access_plan;
+    for idx in reads.row_groups.iter().map(|(idx, _)| *idx) {
+        if bloom_filter_excludes_row_group(predicate, &bloom_filters[idx]) {
+            metrics.row_groups_pruned_bloom_filter.add_pruned(1);
+            access_plan.skip(idx);
+        } else {
+            metrics.row_groups_pruned_bloom_filter.add_matched(1);
+        }
+    }
+    Ok(access_plan)
+}
+
+/// Returns true if the Bloom filters of a row group prove that none of its rows match the
+/// `predicate`.
+///
+/// A Bloom filter can only prove that the values of a literal guarantee (e.g., `column IN (..)`)
+/// are not part of a row group. Hence, the guarantees are checked directly instead of calling
+/// [`PruningPredicate::prune`], which would also evaluate the entire predicate against the
+/// (non-existent) bounds of the Bloom filters.
+fn bloom_filter_excludes_row_group(
+    predicate: &PruningPredicate,
+    bloom_filters: &BloomFilterStatistics,
+) -> bool {
+    predicate.literal_guarantees().iter().any(|guarantee| {
+        // The predicate can only be true if the column has one of the values.
+        guarantee.guarantee == Guarantee::In
+            && bloom_filters
+                .contained(&guarantee.column, &guarantee.literals)
+                .is_some_and(|contained| {
+                    contained.iter().all(|contained| contained == Some(false))
+                })
+    })
+}
+
+/// Removes the statistics of the individual files from the groups that consist of a single file.
+/// The statistics of the groups are retained, so the estimates used for planning do not change.
+///
+/// When the Parquet source opens a file that has statistics, it creates a `FilePruner` for it. The
+/// pruner builds a `PruningPredicate` from the predicate of the scan (an expensive rewrite of the
+/// entire expression) and evaluates it against the statistics of the file. If the predicate
+/// contains a dynamic filter (e.g., from a hash join), this is repeated during the scan whenever
+/// the dynamic filter changes.
+///
+/// After eager pruning, this cannot prune anything:
+/// - The predicate of the scan was already used for eager pruning (see [`PrunedPredicateExpr`]).
+/// - The statistics of the remaining files are estimates for the remaining row groups. Their
+///   bounds are only inexact (see [`ParquetQuadScanBuilder::prune_file`]), while the
+///   `FilePruner` only uses exact bounds. Hence, dynamic filters cannot prune these files either.
+///
+/// However, the cost of building the pruning predicate is paid for every file that is opened (and
+/// for every byte range of it), which dominates selective scans.
+///
+/// The files of groups with more than one file keep their statistics, as DataFusion uses the
+/// bounds of the files to verify that the files within a group are ordered. Without them, the
+/// output ordering of the scan would be lost.
+fn without_file_statistics(file_groups: Vec<FileGroup>) -> Vec<FileGroup> {
+    file_groups
+        .into_iter()
+        .map(|group| {
+            if group.len() != 1 {
+                return group;
+            }
+
+            let statistics = group.file_statistics(None).cloned();
+            let files = group
+                .into_inner()
+                .into_iter()
+                .map(|mut file| {
+                    file.statistics = None;
+                    file
+                })
+                .collect();
+            match statistics {
+                Some(statistics) => {
+                    FileGroup::new(files).with_statistics(Arc::new(statistics))
+                }
+                None => FileGroup::new(files),
+            }
+        })
+        .collect()
 }
 
 /// Removes the conjuncts of `filter` that all rows of the files in `file_groups` match according
@@ -1029,30 +1274,33 @@ fn is_proven_by_statistics(
     })
 }
 
-/// Returns true if the footer statistics guarantee that all rows of the row groups in the
-/// `access_plan` match the filter (see [`PruningFilters::full_match`]).
+/// Returns the row groups of the `access_plan` for which the footer statistics guarantee that all
+/// rows match the filter (see [`PruningFilters::full_match`]).
 ///
-/// The access plan only contains the row groups that *may* contain matching rows, so this cannot
-/// be derived from it. DataFusion also marks fully matched row groups in the access plan, but it
-/// adds `OR col IS NULL` to its inverted predicate for each nullable column. As patterns on the
-/// default graph filter for `graph IS NULL`, it never considers such row groups fully matched.
-fn all_row_groups_fully_match(
+/// DataFusion's `RowGroupAccessPlanFilter` also identifies such row groups. However, it adds
+/// `OR col IS NULL` to its inverted predicate for each nullable column. As patterns on the default
+/// graph filter for `graph IS NULL`, it never considers such row groups fully matched.
+///
+/// In a sorted quad table, these are typically the row groups in the middle of a large range of a
+/// bound sort order prefix (e.g., a frequent predicate in `GPOS`). The row groups at the borders
+/// of the range also contain other values and are therefore only partially matched.
+fn fully_matched_row_groups(
     schema: &Schema,
     parquet_meta: &ParquetMetaData,
     access_plan: &ParquetAccessPlan,
     full_match: &PruningPredicate,
-) -> bool {
-    let metrics_set = ExecutionPlanMetricsSet::new();
-    let metrics = ParquetFileMetrics::new(0, "full_match", &metrics_set);
-    let mut rg_filter = RowGroupAccessPlanFilter::new(access_plan.clone());
-    rg_filter.prune_by_statistics(
-        schema,
-        parquet_meta.file_metadata().schema_descr(),
-        parquet_meta.row_groups(),
-        full_match,
-        &metrics,
-    );
-    rg_filter.remaining_row_group_count() == 0
+) -> Vec<usize> {
+    let row_groups = access_plan.row_group_indexes();
+    let Some(may_not_match) =
+        row_groups_may_match(schema, parquet_meta, &row_groups, full_match)
+    else {
+        return Vec::new();
+    };
+    row_groups
+        .into_iter()
+        .zip(may_not_match)
+        .filter_map(|(idx, may_not_match)| (!may_not_match).then_some(idx))
+        .collect()
 }
 
 /// Negates a conjunction of (in)equality and null checks, such that a row matches the result if

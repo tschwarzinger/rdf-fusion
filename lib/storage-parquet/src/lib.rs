@@ -13,6 +13,7 @@ mod counting_store;
 pub mod dataset;
 mod loader;
 mod parquet_sink;
+mod pruned_predicate;
 mod reader;
 mod scan;
 mod scan_builder;

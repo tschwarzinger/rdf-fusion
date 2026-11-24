@@ -10,29 +10,90 @@ jobs:
     runs-on: tuw-runner
     if: >
       github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/bench') &&
+      contains(github.event.comment.body, '/bench') &&
       contains(fromJson('["tschwarzinger"]'), github.actor)
 
     steps:
       - id: parse
-        name: Parse Comment for Suites
+        name: Parse Comment for Suites and Environment
         env:
           COMMENT: ${{ github.event.comment.body }}
         run: |
-          # Extract arguments after /bench (ignoring the command itself)
-          SUITES=$(echo "$COMMENT" | sed -n 's/^\/bench\s*//p' | tr -d ' ')
-          
-          # Fallback to defaults if none specified
-          if [ -z "$SUITES" ]; then
-            SUITES="bsbm-bi,bsbm-explore"
-          fi
-          
-          # Create a clean version of suites for cache key by replacing ',' with '_'
-          SUITES_CLEAN=$(echo "$SUITES" | tr ',' '_')
-          
-          echo "Target suites: $SUITES"
-          echo "suites=$SUITES" >> "$GITHUB_OUTPUT"
-          echo "suites_clean=$SUITES_CLEAN" >> "$GITHUB_OUTPUT"
+          python3 - << 'EOF'
+          import os, re, hashlib, sys
+
+          def fail(msg):
+              print(f"Error: {msg}", file=sys.stderr)
+              with open("critcmp_output.txt", "w") as f:
+                  f.write(f"Error: {msg}\n")
+              sys.exit(1)
+
+          comment = os.environ.get("COMMENT", "")
+
+          # Extract suites after /bench
+          bench_match = re.search(r"^\s*/bench(?:\s+(.+))?$", comment, re.MULTILINE)
+          if not bench_match:
+              fail("No /bench command found in comment.")
+
+          val = (bench_match.group(1) or "").strip()
+          suites = val.replace(" ", "") if val else "bsbm-bi,bsbm-explore"
+
+          # Check code blocks: at most one code block is allowed
+          backtick_count = comment.count("```")
+          if backtick_count % 2 != 0:
+              fail("Malformed comment: unclosed code block (odd number of ``` delimiters).")
+
+          if backtick_count > 2:
+              fail(f"Found {backtick_count // 2} code blocks. At most one code block is allowed for environment configuration.")
+
+          env_vars = {}
+          if backtick_count == 2:
+              m = re.search(r"```[^\n]*\n(.*?)```", comment, re.DOTALL)
+              if not m:
+                  fail("Failed to extract code block content.")
+              block = m.group(1)
+              for line in block.splitlines():
+                  line = line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  if line == "env:":
+                      continue
+                  kv_match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(.*)$", line)
+                  if not kv_match:
+                      fail(f"Invalid environment configuration line in code block: '{line}'")
+                  k = kv_match.group(1).strip()
+                  v = kv_match.group(2).strip()
+                  if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                      v = v[1:-1]
+                  env_vars[k] = v
+
+          # Export parsed environment variables to GITHUB_ENV
+          github_env_file = os.environ.get("GITHUB_ENV")
+          if github_env_file:
+              with open(github_env_file, "a") as f:
+                  for k, v in env_vars.items():
+                      f.write(f"{k}<<EOF\n{v}\nEOF\n")
+
+          # Write outputs
+          suites_clean = suites.replace(",", "_")
+          if env_vars:
+              env_summary = ", ".join(f"{k}={v}" for k, v in sorted(env_vars.items()))
+              env_hash = hashlib.sha256(env_summary.encode()).hexdigest()[:10]
+          else:
+              env_summary = "default"
+              env_hash = "default"
+
+          github_output_file = os.environ.get("GITHUB_OUTPUT")
+          if github_output_file:
+              with open(github_output_file, "a") as f:
+                  f.write(f"suites={suites}\n")
+                  f.write(f"suites_clean={suites_clean}\n")
+                  f.write(f"env_summary={env_summary}\n")
+                  f.write(f"env_hash={env_hash}\n")
+
+          print(f"Target suites: {suites}")
+          print(f"Environment variables: {env_vars}")
+          EOF
 
       - name: React to comment
         env:
@@ -75,7 +136,7 @@ jobs:
         name: Cache Main Baselines
         uses: actions/cache@v4
         with:
-          key: benchmark-main-${{ steps.base-commit.outputs.base_sha }}-${{ steps.parse.outputs.suites_clean }}
+          key: benchmark-main-${{ steps.base-commit.outputs.base_sha }}-${{ steps.parse.outputs.suites_clean }}-${{ steps.parse.outputs.env_hash }}
           path: target/criterion
 
       - if: steps.cache-main-benches.outputs.cache-hit != 'true'
@@ -117,20 +178,23 @@ jobs:
         env:
           TOKEN: ${{ secrets.BENCHMARKING_BOT_TOKEN }}
           TARGET_SUITES: ${{ steps.parse.outputs.suites }}
+          ENV_SUMMARY: ${{ steps.parse.outputs.env_summary }}
         run: |
           # 1. Construct the Markdown body for the comment
           cat << 'EOF' > comment_body.md
           ### 📊 Benchmark Results Complete
           
           **Target Suites:** `TARGET_SUITES`
+          **Environment:** `ENV_SUMMARY`
           
           <details><summary>Click to expand <code>critcmp</code> output</summary>
           
           ```text
           EOF
           
-          # Expand the target suites placeholder
+          # Expand placeholders
           sed -i "s/TARGET_SUITES/${TARGET_SUITES}/" comment_body.md
+          sed -i "s/ENV_SUMMARY/${ENV_SUMMARY}/" comment_body.md
           
           # Append the actual tool output
           if [ -f critcmp_output.txt ]; then

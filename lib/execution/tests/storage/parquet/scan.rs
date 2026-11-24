@@ -55,7 +55,7 @@ async fn test_parquet_scan_filter_pushdown_with_equality_with_named_node() {
 
     assert_snapshot!(
         displayable(plan_pushed.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[ENC_PT(subject@1) as s], file_type=parquet, predicate=predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@1 AND object_null_count@6 != row_count@3 AND object_min@4 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@5, required_guarantees=[object in (<http://example.org/o1>), predicate in (<http://example.org/p1>)]"
+        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[ENC_PT(subject@1) as s], file_type=parquet, predicate=predicate@2 = <http://example.org/p1> AND object@3 = <http://example.org/o1>, pruning_predicate=object_null_count@2 != row_count@3 AND object_min@0 <= <http://example.org/o1> AND <http://example.org/o1> <= object_max@1, required_guarantees=[object in (<http://example.org/o1>)]"
     );
 }
 
@@ -85,7 +85,7 @@ async fn test_parquet_scan_filter_pushdown_with_function_prevented() {
     assert_snapshot!(displayable(plan_not_pushed.as_ref()).indent(true), @"
     ProjectionExec: expr=[ENC_PT(s@0) as s]
       FilterExec: EBV(EQ(LCASE(ENC_TF(STR(ENC_PT(o@1)))), 3:{value:http://example.org/o1,language:})), projection=[s@0]
-        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p1>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p1> AND <http://example.org/p1> <= predicate_max@1, required_guarantees=[predicate in (<http://example.org/p1>)]
+        ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p1> ?o], blank_node_mode=Variable, file_groups={1 group: [[test.parquet]]}, projection=[subject@1 as s, object@3 as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p1>
     ");
 }
 
@@ -138,7 +138,7 @@ async fn test_parquet_bloom_filter_pruning_during_planning() {
 }
 
 #[tokio::test]
-async fn test_parquet_bloom_filter_pruning_at_execution_time_without_cache() {
+async fn test_parquet_bloom_filter_pruning_without_cache() {
     let (rdf_context, _) = prepare_test_store(
         &BLOOM_FILTER_TEST_QUADS,
         true,
@@ -146,8 +146,7 @@ async fn test_parquet_bloom_filter_pruning_at_execution_time_without_cache() {
     )
     .await;
 
-    // Without a block cache, the Bloom filters would be read twice. Hence, by default, they are
-    // only used during execution.
+    // Eager pruning uses Bloom filters during planning even without a block cache.
     let query = plan_query_from_str(
         &rdf_context,
         "SELECT ?s WHERE { ?s ?p <http://example.org/o2> . }",
@@ -158,18 +157,17 @@ async fn test_parquet_bloom_filter_pruning_at_execution_time_without_cache() {
         .unwrap();
     assert_eq!(count_solutions(results).await, 0);
 
-    let metrics =
-        DisplayableExecutionPlan::with_metrics(explanation.execution_plan.as_ref())
-            .indent(true)
-            .to_string();
+    let plan = displayable(explanation.execution_plan.as_ref())
+        .indent(true)
+        .to_string();
     assert!(
-        metrics.contains("row_groups_pruned_bloom_filter=1 total \u{2192} 0 matched"),
-        "Expected the Bloom filter to prune the row group during execution: {metrics}"
+        !plan.contains("test_bloom_no_cache.parquet"),
+        "Expected the file to be pruned during planning: {plan}"
     );
 }
 
 #[tokio::test]
-async fn test_parquet_bloom_filter_pruning_at_execution_time_for_sorted_prefix() {
+async fn test_parquet_bloom_filter_skips_leading_sort_column() {
     let cache = Arc::new(BlockCache::new(4096, 128));
     let (rdf_context, _) = prepare_test_store_with_options(
         &BLOOM_FILTER_TEST_QUADS,
@@ -181,8 +179,9 @@ async fn test_parquet_bloom_filter_pruning_at_execution_time_for_sorted_prefix()
     )
     .await;
 
-    // The object is the prefix of the sort order. Hence, the Bloom filter is not used during
-    // planning but only during execution.
+    // The object is the leading sort column, so its statistics are tight and its Bloom filter is
+    // skipped during planning. The predicate is hidden from execution pruning, so row pushdown
+    // filters the rows during execution.
     let query = plan_query_from_str(
         &rdf_context,
         "SELECT ?s WHERE { ?s ?p <http://example.org/o2> . }",
@@ -202,9 +201,57 @@ async fn test_parquet_bloom_filter_pruning_at_execution_time_for_sorted_prefix()
         "Expected the file to remain in the scan: {metrics}"
     );
     assert!(
-        // This is pruning during execution.
-        metrics.contains("row_groups_pruned_bloom_filter=1 total \u{2192} 0 matched"),
-        "Expected the Bloom filter to prune the row group: {metrics}"
+        metrics.contains("pushdown_rows_pruned=2"),
+        "Expected row pushdown to filter the rows: {metrics}"
+    );
+}
+
+#[tokio::test]
+async fn test_parquet_bloom_filter_prunes_sort_column_when_preceding_sort_columns_not_constant()
+ {
+    let cache = Arc::new(BlockCache::new(4096, 128));
+    let (rdf_context, _) = prepare_test_store_with_options(
+        &[
+            (
+                "http://example.org/s1",
+                "http://example.org/p1",
+                "http://example.org/o1",
+            ),
+            (
+                "http://example.org/s2",
+                "http://example.org/p2",
+                "http://example.org/o3",
+            ),
+        ],
+        true,
+        "test_bloom_non_constant.parquet",
+        Some(Arc::clone(&cache)),
+        0,
+        vec![
+            col("predicate").sort(true, true),
+            col("object").sort(true, true),
+        ],
+    )
+    .await;
+
+    // The predicate is not constant in the row group, so the object's Bloom filter is read during
+    // planning and prunes the file.
+    let query = plan_query_from_str(
+        &rdf_context,
+        "SELECT ?s ?p WHERE { ?s ?p <http://example.org/o2> . }",
+    );
+    let (results, explanation) = rdf_context
+        .execute_query(&query, QueryOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(count_solutions(results).await, 0);
+
+    let plan = displayable(explanation.execution_plan.as_ref())
+        .indent(true)
+        .to_string();
+    assert!(
+        !plan.contains("test_bloom_non_constant.parquet"),
+        "Expected the file to be pruned during planning: {plan}"
     );
 }
 
@@ -338,7 +385,7 @@ async fn test_parquet_multi_file_scan_prunes_files_during_planning() {
     // Only the file that contains p2 remains in the plan.
     assert_snapshot!(
         displayable(explanation.execution_plan.as_ref()).indent(true),
-        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o], blank_node_mode=Variable, file_groups={1 group: [[dataset/part-00001.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p2>, pruning_predicate=predicate_null_count@2 != row_count@3 AND predicate_min@0 <= <http://example.org/p2> AND <http://example.org/p2> <= predicate_max@1, required_guarantees=[predicate in (<http://example.org/p2>)]"
+        @"ParquetQuadScanExec: active_graph=Default Graph, triple_pattern=[?s <http://example.org/p2> ?o], blank_node_mode=Variable, file_groups={1 group: [[dataset/part-00001.parquet]]}, projection=[ENC_PT(subject@1) as s, ENC_PT(object@3) as o], file_type=parquet, predicate=predicate@2 = <http://example.org/p2>"
     );
     assert_eq!(count_solutions(results).await, 2);
 }

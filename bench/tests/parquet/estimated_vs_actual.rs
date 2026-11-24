@@ -5,7 +5,7 @@ use datafusion::physical_plan::{ExecutionPlan, StatisticsArgs, StatisticsContext
 use datafusion::prelude::SessionConfig;
 use futures::StreamExt;
 use prettytable::{Row, Table, cell};
-use rdf_fusion::common::config::{PlanningBloomFilters, RdfFusionOptions};
+use rdf_fusion::common::config::RdfFusionOptions;
 use rdf_fusion::common::sparql::{QueryVariant, RdfFusionQuery};
 use rdf_fusion::common::{
     NamedNode, NamedNodePattern, QuadComponent, RdfDumpFormat, RdfSortOrder, TermPattern,
@@ -23,47 +23,46 @@ use std::sync::Arc;
 use url::Url;
 
 /// Compares the estimated scanned bytes with the bytes actually scanned during execution for a
-/// selection of triple patterns, without using Bloom filters during planning.
+/// selection of triple patterns, without using Bloom filters (`bloom_filter_on_read = false`).
 ///
 /// Bound columns that are not part of the sort order prefix (here, the subject and the object) are
-/// barely pruned by the row group statistics. Hence, their scans are heavily overestimated, while
-/// the Bloom filters prune most row groups during execution. The actual bytes also contain the
-/// Bloom filters that are read during execution.
+/// barely pruned by the row group statistics. Hence, their estimates are high, but so are the
+/// actual bytes, as nothing else prunes these row groups.
 #[tokio::test]
-async fn test_estimated_bytes_without_planning_bloom_filters() {
-    let table = estimated_vs_actual_table(PlanningBloomFilters::Never).await;
+async fn test_estimated_bytes_without_bloom_filters() {
+    let table = estimated_vs_actual_table(false).await;
     insta::assert_snapshot!(table, @"
     +-----------------------+-----------+-----------+---------+----------+
     | Pattern               | Row Count | Estimated | Actual  | Ratio    |
     +-----------------------+-----------+-----------+---------+----------+
-    | bound-subject         | 10        | 2882052   | 1565760 | 184.07%  |
+    | bound-subject         | 10        | 2882052   | 1567757 | 183.83%  |
     +-----------------------+-----------+-----------+---------+----------+
     | bound-predicate       | 5930      | 693756    | 693488  | 100.04%  |
     +-----------------------+-----------+-----------+---------+----------+
-    | bound-object          | 47        | 1590121   | 121977  | 1303.62% |
+    | bound-object          | 47        | 1590121   | 1549947 | 102.59%  |
     +-----------------------+-----------+-----------+---------+----------+
-    | subject-and-predicate | 0         | 677878    | 8209    | 8257.74% |
+    | subject-and-predicate | 0         | 677878    | 28979   | 2339.20% |
     +-----------------------+-----------+-----------+---------+----------+
     | free                  | 374911    | 8275644   | 8262523 | 100.16%  |
     +-----------------------+-----------+-----------+---------+----------+
     ");
 }
 
-/// Same as [`test_estimated_bytes_without_planning_bloom_filters`] but with Bloom filters during
-/// planning. The row groups that are pruned by the Bloom filters are not part of the estimate,
-/// which brings the estimate close to the actual bytes.
+/// Same as [`test_estimated_bytes_without_bloom_filters`] but with Bloom filters. Eager pruning
+/// uses them during planning. The row groups that are pruned by the Bloom filters are not part of
+/// the estimate, which brings the estimate close to the actual bytes.
 #[tokio::test]
-async fn test_estimated_bytes_with_planning_bloom_filters() {
-    let table = estimated_vs_actual_table(PlanningBloomFilters::Always).await;
+async fn test_estimated_bytes_with_bloom_filters() {
+    let table = estimated_vs_actual_table(true).await;
     insta::assert_snapshot!(table, @"
     +-----------------------+-----------+-----------+---------+---------+
     | Pattern               | Row Count | Estimated | Actual  | Ratio   |
     +-----------------------+-----------+-----------+---------+---------+
-    | bound-subject         | 10        | 1545129   | 1549342 | 99.73%  |
+    | bound-subject         | 10        | 1545129   | 1475461 | 104.72% |
     +-----------------------+-----------+-----------+---------+---------+
     | bound-predicate       | 5930      | 693756    | 693488  | 100.04% |
     +-----------------------+-----------+-----------+---------+---------+
-    | bound-object          | 47        | 84060     | 83573   | 100.58% |
+    | bound-object          | 47        | 84060     | 73300   | 114.68% |
     +-----------------------+-----------+-----------+---------+---------+
     | subject-and-predicate | 0         | 0         | 0       | -       |
     +-----------------------+-----------+-----------+---------+---------+
@@ -74,9 +73,7 @@ async fn test_estimated_bytes_with_planning_bloom_filters() {
 
 /// Returns a table that compares the estimated with the actual scanned bytes for a selection of
 /// triple patterns on a POS-sorted file.
-async fn estimated_vs_actual_table(
-    planning_bloom_filters: PlanningBloomFilters,
-) -> String {
+async fn estimated_vs_actual_table(bloom_filters: bool) -> String {
     let base_store = setup_test_store().await;
 
     let config = ParquetTestConfig::new(
@@ -167,12 +164,15 @@ async fn estimated_vs_actual_table(
         .execution
         .parquet
         .pushdown_filters = true;
-    let mut rdf_fusion_options = RdfFusionOptions::default();
-    rdf_fusion_options.execution.planning_bloom_filters = planning_bloom_filters;
+    session_config
+        .options_mut()
+        .execution
+        .parquet
+        .bloom_filter_on_read = bloom_filters;
     session_config
         .options_mut()
         .extensions
-        .insert(rdf_fusion_options);
+        .insert(RdfFusionOptions::default());
 
     let context = RdfFusionContextBuilder::new(Arc::new(storage))
         .with_session_config(Some(session_config))
