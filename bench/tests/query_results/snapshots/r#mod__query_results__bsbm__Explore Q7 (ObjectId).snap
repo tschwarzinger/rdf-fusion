@@ -25,31 +25,31 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "seems retentiveness repressiveness"
         },
-        "review": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review628"
-        },
-        "revTitle": {
+        "rating1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "encamps freestanding alcaldes rebids admonisher overproducing unhorses gastroscopic scrags caboodle sexiest etherized"
+          "value": "4"
         },
-        "reviewer": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer32"
+        "rating2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "3"
         },
         "revName": {
           "type": "literal",
           "value": "Anasooya"
         },
-        "rating1": {
+        "revTitle": {
           "type": "literal",
-          "value": "4",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "encamps freestanding alcaldes rebids admonisher overproducing unhorses gastroscopic scrags caboodle sexiest etherized"
         },
-        "rating2": {
-          "type": "literal",
-          "value": "3",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+        "review": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review628"
+        },
+        "reviewer": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer32"
         }
       },
       {
@@ -57,31 +57,31 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "seems retentiveness repressiveness"
         },
-        "review": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review7349"
-        },
-        "revTitle": {
+        "rating1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "sons illustrates prognose huskiest bouse"
+          "value": "5"
         },
-        "reviewer": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer361"
+        "rating2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "4"
         },
         "revName": {
           "type": "literal",
           "value": "Guy-Yasuyuki"
         },
-        "rating1": {
+        "revTitle": {
           "type": "literal",
-          "value": "5",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "sons illustrates prognose huskiest bouse"
         },
-        "rating2": {
-          "type": "literal",
-          "value": "4",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+        "review": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review7349"
+        },
+        "reviewer": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer361"
         }
       },
       {
@@ -89,31 +89,31 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "seems retentiveness repressiveness"
         },
-        "review": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review7761"
-        },
-        "revTitle": {
+        "rating1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "intendeds doorstops chryslers glamorously pyrometers corruptibleness mounded"
+          "value": "2"
         },
-        "reviewer": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer383"
+        "rating2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "10"
         },
         "revName": {
           "type": "literal",
           "value": "Kaori-Gratia"
         },
-        "rating1": {
+        "revTitle": {
           "type": "literal",
-          "value": "2",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "intendeds doorstops chryslers glamorously pyrometers corruptibleness mounded"
         },
-        "rating2": {
-          "type": "literal",
-          "value": "10",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+        "review": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review7761"
+        },
+        "reviewer": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer383"
         }
       },
       {
@@ -121,31 +121,31 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "seems retentiveness repressiveness"
         },
-        "review": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review7913"
-        },
-        "revTitle": {
+        "rating1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "discrowned rankish grandams hetaerae gassiness slagging lakiest deselect basswoods investiture neglecting"
+          "value": "5"
         },
-        "reviewer": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer391"
+        "rating2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1"
         },
         "revName": {
           "type": "literal",
           "value": "Nali-Amphiaraus"
         },
-        "rating1": {
+        "revTitle": {
           "type": "literal",
-          "value": "5",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "discrowned rankish grandams hetaerae gassiness slagging lakiest deselect basswoods investiture neglecting"
         },
-        "rating2": {
-          "type": "literal",
-          "value": "1",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+        "review": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Review7913"
+        },
+        "reviewer": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromRatingSite1/Reviewer391"
         }
       }
     ]

@@ -12,13 +12,13 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
   "results": {
     "bindings": [
       {
-        "product": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product568"
-        },
         "label": {
           "type": "literal",
           "value": "primas"
+        },
+        "product": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer12/Product568"
         }
       }
     ]

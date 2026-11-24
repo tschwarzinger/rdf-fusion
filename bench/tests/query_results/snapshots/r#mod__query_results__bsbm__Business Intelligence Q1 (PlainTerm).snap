@@ -17,9 +17,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType1"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "108",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "108"
         }
       },
       {
@@ -28,9 +28,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType4"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "29",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "29"
         }
       },
       {
@@ -39,9 +39,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType2"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "26",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "26"
         }
       },
       {
@@ -50,9 +50,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType3"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "24",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "24"
         }
       },
       {
@@ -61,9 +61,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType5"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "19",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "19"
         }
       },
       {
@@ -72,9 +72,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType14"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "12",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "12"
         }
       },
       {
@@ -83,9 +83,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType104"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "11",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "11"
         }
       },
       {
@@ -94,9 +94,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType19"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "11",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "11"
         }
       },
       {
@@ -105,9 +105,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType32"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "11",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "11"
         }
       },
       {
@@ -116,9 +116,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductType10"
         },
         "reviewCount": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "type": "literal",
-          "value": "10",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
+          "value": "10"
         }
       }
     ]

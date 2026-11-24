@@ -12,23 +12,23 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
   "results": {
     "bindings": [
       {
-        "product": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer11/Product528"
-        },
         "label": {
           "type": "literal",
           "value": "coughs"
+        },
+        "product": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer11/Product528"
         }
       },
       {
-        "product": {
-          "type": "uri",
-          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer9/Product433"
-        },
         "label": {
           "type": "literal",
           "value": "marooning"
+        },
+        "product": {
+          "type": "uri",
+          "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromProducer9/Product433"
         }
       }
     ]

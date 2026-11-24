@@ -17,9 +17,9 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor7/Offer12927"
         },
         "price": {
+          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD",
           "type": "literal",
-          "value": "3271.15",
-          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD"
+          "value": "3271.15"
         }
       },
       {
@@ -28,9 +28,9 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor7/Offer12345"
         },
         "price": {
+          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD",
           "type": "literal",
-          "value": "3432.61",
-          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD"
+          "value": "3432.61"
         }
       },
       {
@@ -39,9 +39,9 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/dataFromVendor2/Offer4263"
         },
         "price": {
+          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD",
           "type": "literal",
-          "value": "4515.96",
-          "datatype": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/USD"
+          "value": "4515.96"
         }
       }
     ]

@@ -17,9 +17,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature107"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1874901",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1874901"
         }
       },
       {
@@ -28,9 +28,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4293"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1874901",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1874901"
         }
       },
       {
@@ -39,9 +39,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4295"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1874901",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1874901"
         }
       },
       {
@@ -50,9 +50,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4299"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1874901",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1874901"
         }
       },
       {
@@ -61,9 +61,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4301"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1874901",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1874901"
         }
       },
       {
@@ -72,9 +72,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature99"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.186319",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.186319"
         }
       },
       {
@@ -83,9 +83,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1388"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1813655",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1813655"
         }
       },
       {
@@ -94,9 +94,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature117"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1295546",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1295546"
         }
       },
       {
@@ -105,9 +105,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature4265"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.1218349",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.1218349"
         }
       },
       {
@@ -116,9 +116,9 @@ expression: "run_select_query(&store, &query_str).await"
           "value": "http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/instances/ProductFeature1387"
         },
         "priceRatio": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#float",
           "type": "literal",
-          "value": "1.0916777",
-          "datatype": "http://www.w3.org/2001/XMLSchema#float"
+          "value": "1.0916777"
         }
       }
     ]

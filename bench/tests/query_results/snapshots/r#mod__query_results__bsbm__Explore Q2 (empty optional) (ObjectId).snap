@@ -22,13 +22,13 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
   "results": {
     "bindings": [
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -38,6 +38,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "adjustment"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -50,29 +60,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -82,6 +82,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "exteriorizing pannier tsunamic"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -94,29 +104,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -126,6 +126,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "graciousness flunkeys knave"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -138,29 +148,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -170,6 +170,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "grudges"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -182,29 +192,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -214,6 +214,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "intrusions tantalizers hesitating"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -226,29 +236,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -258,6 +258,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "orthoepist brats"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -270,29 +280,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -302,6 +302,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "paralyzed"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -314,29 +324,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -346,6 +346,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "sistrums"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -358,29 +368,19 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "massagist softballs collies"
         },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
         "propertyTextual5": {
           "type": "literal",
           "value": "polyvinyl legalized penthouses expires"
         }
       },
       {
-        "label": {
-          "type": "literal",
-          "value": "vesseled venose"
-        },
         "comment": {
           "type": "literal",
           "value": "unlearn cowshed baldhead secularism transferror chastiser bries fiducially coacted unreplaced hockeys overachieving septettes luteum mooter benefactrix analemmas demises sponsoring homesite clairvoyance tonuses students unescapably twinship revisionist identifers sapphisms folderol finalization saleswomen vivants bookrack hairlines prickles besot unwaveringly headlights waterborne crosspatches bouts hunting isomerize monkeyshine delfts subpoenas boob praised villainies beguines darvon weirdies midlines estimations lacerable postfaces restamping occasionally opiates ticktock bugbane ineptness hydrofoils hissing treatment excommunicated fistulas corotate grooves legitimist corruptness fiefs paramedical nodding misidentifying chromaticity triced florentines expatriated hatefulness claps grapefruits ensure dissipates shelling pawns hangnails gills pantywaist reimprisoning blah announcer unhorse pointy compositions tens regerminated bushwack expansions vernacularly sarcasms remeasuring lineate polypous rewritten backslapping segmentary vaunters callosities airier fortifying oversides"
+        },
+        "label": {
+          "type": "literal",
+          "value": "vesseled venose"
         },
         "producer": {
           "type": "literal",
@@ -390,6 +390,16 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
           "type": "literal",
           "value": "stewing existence countermands"
         },
+        "propertyNumeric1": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "432"
+        },
+        "propertyNumeric2": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "type": "literal",
+          "value": "1646"
+        },
         "propertyTextual1": {
           "type": "literal",
           "value": "vacillated alienated cardiometer tittle chromizes obsoleting mahout warrens bestirred quadruplicating"
@@ -401,16 +411,6 @@ expression: "if name == \"explore-q9\" || name == \"explore-q12\"\n{ run_graph_r
         "propertyTextual3": {
           "type": "literal",
           "value": "massagist softballs collies"
-        },
-        "propertyNumeric1": {
-          "type": "literal",
-          "value": "432",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
-        },
-        "propertyNumeric2": {
-          "type": "literal",
-          "value": "1646",
-          "datatype": "http://www.w3.org/2001/XMLSchema#integer"
         },
         "propertyTextual5": {
           "type": "literal",
