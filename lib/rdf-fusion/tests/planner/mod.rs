@@ -20,6 +20,7 @@ use url::Url;
 mod bgp;
 mod exists;
 mod memory;
+mod minus;
 
 /// Encapsulates all setup and data manipulation via the public `Store` API.
 pub struct StoreTestContext {

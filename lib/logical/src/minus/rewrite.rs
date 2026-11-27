@@ -6,7 +6,7 @@ use datafusion::common::{
 use datafusion::logical_expr::{Expr, LogicalPlan, LogicalPlanBuilder, and};
 use rdf_fusion_common::DFResult;
 use rdf_fusion_extensions::RdfFusionContextView;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
 /// The lowering for a [MinusNode] into a left-anti join.
@@ -61,7 +61,7 @@ impl<'a> MinusLowering<'a> {
         &self,
         lhs_schema: &DFSchemaRef,
         rhs_schema: &DFSchemaRef,
-        overlapping_keys: &HashSet<String>,
+        overlapping_keys: &BTreeSet<String>,
     ) -> DFResult<Option<Expr>> {
         let mut join_schema = lhs_schema.as_ref().clone();
         join_schema.merge(rhs_schema);
@@ -114,7 +114,10 @@ impl<'a> MinusLowering<'a> {
 }
 
 /// Computes the overlapping columns between the lhs and rhs of the minus.
-fn compute_join_keys(node: &MinusNode) -> HashSet<String> {
+///
+/// The columns are sorted, such that the plans (e.g., the order of the join keys) are
+/// deterministic.
+fn compute_join_keys(node: &MinusNode) -> BTreeSet<String> {
     let lhs_keys: HashSet<_> = node
         .lhs()
         .schema()
@@ -133,5 +136,5 @@ fn compute_join_keys(node: &MinusNode) -> HashSet<String> {
     lhs_keys
         .intersection(&rhs_keys)
         .cloned()
-        .collect::<HashSet<String>>()
+        .collect::<BTreeSet<String>>()
 }
